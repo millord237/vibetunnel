@@ -99,6 +99,8 @@
 
         .tab:hover {
             background-color: var(--tab-active-bg);
+            color: var(--text-primary);
+            transition: all 0.2s ease;
         }
 
         .tab.active {
@@ -148,6 +150,26 @@
             to {
                 opacity: 1;
                 transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        @keyframes glow {
+            0%, 100% { 
+                filter: drop-shadow(0 4px 12px var(--shadow-color)) brightness(1);
+            }
+            50% { 
+                filter: drop-shadow(0 8px 24px var(--accent-color)) brightness(1.1);
             }
         }
 
@@ -224,6 +246,26 @@
             transition: all 0.2s ease;
             background-color: var(--accent-color);
             color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .button:active::before {
+            width: 300px;
+            height: 300px;
         }
 
         .button:hover {
@@ -278,6 +320,27 @@
             padding: 4px 8px;
             border-radius: 4px;
             margin-left: 8px;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .status-dot.success {
+            background-color: var(--success-color);
+        }
+
+        .status-dot.error {
+            background-color: var(--error-color);
+        }
+
+        .status-dot.warning {
+            background-color: var(--warning-color);
         }
 
         .status.success {
@@ -357,6 +420,9 @@
             );
             background-size: 200% 100%;
             animation: shimmer 1.5s ease-in-out infinite;
+            border-radius: 4px;
+            height: 20px;
+            width: 100%;
         }
 
         @keyframes shimmer {
@@ -393,12 +459,23 @@
             height: 16px;
         }
 
+        .permission-icon {
+            transition: all 0.3s ease;
+        }
+
         .permission-icon.granted {
             color: var(--success-color);
+            animation: checkmark 0.5s ease-out;
         }
 
         .permission-icon.denied {
             color: var(--error-color);
+        }
+
+        @keyframes checkmark {
+            0% { transform: scale(0) rotate(45deg); opacity: 0; }
+            50% { transform: scale(1.2) rotate(45deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
         }
 
         /* About Section */
@@ -413,6 +490,18 @@
             margin-bottom: 20px;
             border-radius: 27.6%;
             filter: drop-shadow(0 4px 12px var(--shadow-color));
+            transition: all 0.3s ease;
+            cursor: pointer;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .app-icon-large:hover {
+            animation: glow 2s ease-in-out infinite, float 3s ease-in-out infinite;
+            transform: scale(1.05);
+        }
+
+        .app-icon-large:active {
+            transform: scale(0.95);
         }
 
         .app-name {
@@ -465,6 +554,18 @@
         .copy-button:hover {
             background-color: var(--accent-color);
             color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+        }
+
+        .copy-button:active {
+            transform: translateY(0);
+        }
+
+        .copy-button.copied {
+            background-color: var(--success-color);
+            color: white;
+            border-color: var(--success-color);
         }
 
         /* Terminal List */
@@ -795,7 +896,7 @@
             <!-- About Tab -->
             <div class="tab-content" id="about">
                 <div class="about-content">
-                    <img src="icon.png" alt="VibeTunnel" class="app-icon-large">
+                    <img src="icon.png" alt="VibeTunnel" class="app-icon-large" onclick="openWebsite()" title="Click to visit website">
                     <h1 class="app-name">VibeTunnel</h1>
                     <p class="app-version">Version <span id="appVersion">1.0.0</span></p>
                     
@@ -917,22 +1018,22 @@
             button.disabled = true;
             status.style.display = 'inline-flex';
             status.className = 'status';
-            status.innerHTML = '<span class="spinner"></span> Checking...';
+            status.innerHTML = '<span class="spinner"></span> Checking for updates...';
             
             try {
                 const result = await invoke('check_for_updates');
                 if (result.available) {
                     status.className = 'status warning';
-                    status.textContent = 'Update available!';
+                    status.innerHTML = '<span class="status-dot warning"></span>Update available!';
                     // Trigger update download
                     await invoke('download_update');
                 } else {
                     status.className = 'status success';
-                    status.textContent = 'Up to date';
+                    status.innerHTML = '<span class="status-dot success"></span>Up to date';
                 }
             } catch (error) {
                 status.className = 'status error';
-                status.textContent = 'Check failed';
+                status.innerHTML = '<span class="status-dot error"></span>Check failed';
             } finally {
                 button.disabled = false;
                 setTimeout(() => {
@@ -1011,11 +1112,11 @@
             try {
                 await invoke('install_cli');
                 status.className = 'status success';
-                status.textContent = 'Installed';
+                status.innerHTML = '<span class="status-dot success"></span>Installed';
                 await checkCLIStatus();
             } catch (error) {
                 status.className = 'status error';
-                status.textContent = 'Failed';
+                status.innerHTML = '<span class="status-dot error"></span>Failed';
             }
             
             setTimeout(() => {
@@ -1032,11 +1133,11 @@
             try {
                 await invoke('uninstall_cli');
                 status.className = 'status success';
-                status.textContent = 'Uninstalled';
+                status.innerHTML = '<span class="status-dot success"></span>Uninstalled';
                 await checkCLIStatus();
             } catch (error) {
                 status.className = 'status error';
-                status.textContent = 'Failed';
+                status.innerHTML = '<span class="status-dot error"></span>Failed';
             }
             
             setTimeout(() => {
@@ -1123,14 +1224,14 @@
                             <svg class="permission-icon granted" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
                             </svg>
-                            <span>Granted</span>
+                            <span style="color: var(--success-color)">Granted</span>
                         `;
                     } else {
                         statusEl.innerHTML = `
                             <svg class="permission-icon denied" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                             </svg>
-                            <button class="button" onclick="requestPermission('${name}')">Grant</button>
+                            <button class="button" onclick="requestPermission('${name}')">Grant Permission</button>
                         `;
                     }
                     
@@ -1198,8 +1299,10 @@
             const button = event.target;
             const originalText = button.textContent;
             button.textContent = 'Copied!';
+            button.classList.add('copied');
             setTimeout(() => {
                 button.textContent = originalText;
+                button.classList.remove('copied');
             }, 1500);
         }
 
