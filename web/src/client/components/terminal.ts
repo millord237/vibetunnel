@@ -800,13 +800,21 @@ export class Terminal extends LitElement {
         // Swap foreground and background colors
         const tempFg = style.match(/color: ([^;]+);/)?.[1];
         const tempBg = style.match(/background-color: ([^;]+);/)?.[1];
-        if (tempFg && tempBg) {
-          style = style.replace(/color: [^;]+;/, `color: ${tempBg};`);
-          style = style.replace(/background-color: [^;]+;/, `background-color: ${tempFg};`);
-        } else if (tempFg) {
-          style = style.replace(/color: [^;]+;/, 'color: #1e1e1e;');
-          style += `background-color: ${tempFg};`;
-        }
+
+        // Default terminal colors
+        const defaultFg = '#e4e4e4';
+        const defaultBg = '#0a0a0a';
+
+        // Determine actual foreground and background
+        const actualFg = tempFg || defaultFg;
+        const actualBg = tempBg || defaultBg;
+
+        // Clear existing style and rebuild with swapped colors
+        style = '';
+
+        // Set swapped colors
+        style += `color: ${actualBg};`;
+        style += `background-color: ${actualFg};`;
       }
 
       // Handle invisible text
