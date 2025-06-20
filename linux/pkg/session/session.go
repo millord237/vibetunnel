@@ -17,7 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/process"
-	"github.com/vibetunnel/linux/pkg/terminal"
+	terminal "github.com/vibetunnel/linux/pkg/terminal"
 )
 
 // GenerateID generates a new unique session ID
@@ -61,15 +61,16 @@ type Info struct {
 }
 
 type Session struct {
-	ID           string
-	controlPath  string
-	info         *Info
-	pty          *PTY
-	stdinPipe    *os.File
-	stdinMutex   sync.Mutex
-	mu           sync.RWMutex
-	manager      *Manager // Reference to manager for accessing global settings
-	terminalBuffer *terminal.Buffer // Terminal buffer for screen content
+	ID                    string
+	controlPath           string
+	info                  *Info
+	pty                   *PTY
+	stdinPipe             *os.File
+	stdinMutex            sync.Mutex
+	mu                    sync.RWMutex
+	manager               *Manager // Reference to manager for accessing global settings
+	terminalBuffer        *terminal.TerminalBuffer // Terminal buffer for screen content
+	bufferChangeCallbacks []func(sessionID string) // Callbacks for buffer changes
 }
 
 func newSession(controlPath string, config Config, manager *Manager) (*Session, error) {
@@ -158,11 +159,15 @@ func newSessionWithID(controlPath string, id string, config Config, manager *Man
 		return nil, fmt.Errorf("failed to save session info: %w", err)
 	}
 
+	// Create terminal buffer with the configured dimensions
+	termBuffer := terminal.NewTerminalBuffer(width, height)
+
 	return &Session{
-		ID:          id,
-		controlPath: controlPath,
-		info:        info,
-		manager:     manager,
+		ID:             id,
+		controlPath:    controlPath,
+		info:           info,
+		manager:        manager,
+		terminalBuffer: termBuffer,
 	}, nil
 }
 
@@ -173,11 +178,15 @@ func loadSession(controlPath, id string, manager *Manager) (*Session, error) {
 		return nil, err
 	}
 
+	// Create terminal buffer with the dimensions from info
+	termBuffer := terminal.NewTerminalBuffer(info.Width, info.Height)
+
 	session := &Session{
-		ID:          id,
-		controlPath: controlPath,
-		info:        info,
-		manager:     manager,
+		ID:             id,
+		controlPath:    controlPath,
+		info:           info,
+		manager:        manager,
+		terminalBuffer: termBuffer,
 	}
 
 	// Validate that essential session files exist
@@ -522,6 +531,11 @@ func (s *Session) Resize(width, height int) error {
 	// Update session info
 	s.info.Width = width
 	s.info.Height = height
+	
+	// Resize terminal buffer if available
+	if s.terminalBuffer != nil {
+		s.terminalBuffer.Resize(width, height)
+	}
 
 	// Save updated session info
 	if err := s.info.Save(s.Path()); err != nil {
@@ -637,10 +651,29 @@ func (s *Session) GetInfo() *Info {
 }
 
 // GetTerminalBuffer returns the terminal buffer for the session
-func (s *Session) GetTerminalBuffer() *terminal.Buffer {
+func (s *Session) GetTerminalBuffer() *terminal.TerminalBuffer {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.terminalBuffer
+}
+
+// AddBufferChangeCallback adds a callback to be notified when the buffer changes
+func (s *Session) AddBufferChangeCallback(callback func(sessionID string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bufferChangeCallbacks = append(s.bufferChangeCallbacks, callback)
+}
+
+// NotifyBufferChange notifies all callbacks that the buffer has changed
+func (s *Session) NotifyBufferChange() {
+	s.mu.RLock()
+	callbacks := s.bufferChangeCallbacks
+	sessionID := s.ID
+	s.mu.RUnlock()
+	
+	for _, callback := range callbacks {
+		callback(sessionID)
+	}
 }
 
 func (i *Info) Save(sessionPath string) error {

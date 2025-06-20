@@ -193,3 +193,34 @@ func (sw *StreamWatcher) sendToClient(client *StreamClient, data []byte) {
 	fmt.Fprintf(client.Writer, "data: %s\n\n", encoded)
 	client.Flusher.Flush()
 }
+// Stop stops all stream watchers
+func (sw *StreamWatcher) Stop() {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+	
+	// Stop all watchers
+	for _, watcher := range sw.watchers {
+		if watcher.stopChan != nil {
+			close(watcher.stopChan)
+		}
+	}
+	
+	// Clear maps
+	sw.watchers = make(map[string]*FileWatcher)
+	sw.clients = make(map[string][]*StreamClient)
+}
+
+// StopWatching stops watching a specific session
+func (sw *StreamWatcher) StopWatching(sessionID string) {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+	
+	if watcher, exists := sw.watchers[sessionID]; exists {
+		if watcher.stopChan != nil {
+			close(watcher.stopChan)
+		}
+		delete(sw.watchers, sessionID)
+	}
+	
+	delete(sw.clients, sessionID)
+}

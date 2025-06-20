@@ -13,7 +13,17 @@ export class AppHeader extends LitElement {
   @property({ type: Boolean }) hideExited = true;
   @state() private killingAll = false;
 
-  private handleCreateSession() {
+  private handleCreateSession(e: MouseEvent) {
+    // Capture button position for view transition
+    const button = e.currentTarget as HTMLButtonElement;
+    const rect = button.getBoundingClientRect();
+
+    // Store position in CSS custom properties for the transition
+    document.documentElement.style.setProperty('--vt-button-x', `${rect.left + rect.width / 2}px`);
+    document.documentElement.style.setProperty('--vt-button-y', `${rect.top + rect.height / 2}px`);
+    document.documentElement.style.setProperty('--vt-button-width', `${rect.width}px`);
+    document.documentElement.style.setProperty('--vt-button-height', `${rect.height}px`);
+
     this.dispatchEvent(new CustomEvent('create-session'));
   }
 
@@ -107,8 +117,9 @@ export class AppHeader extends LitElement {
 
             <div class="flex gap-2">
               <button
-                class="btn-primary font-mono text-xs px-4 py-2"
+                class="btn-primary font-mono text-xs px-4 py-2 vt-create-button"
                 @click=${this.handleCreateSession}
+                style="view-transition-name: create-session-button"
               >
                 Create
               </button>
@@ -170,8 +181,9 @@ export class AppHeader extends LitElement {
                   `
                 : ''}
               <button
-                class="btn-primary font-mono text-xs px-4 py-2"
+                class="btn-primary font-mono text-xs px-4 py-2 vt-create-button"
                 @click=${this.handleCreateSession}
+                style="view-transition-name: create-session-button"
               >
                 Create Session
               </button>

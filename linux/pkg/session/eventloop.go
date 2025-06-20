@@ -111,6 +111,16 @@ func (h *PTYEventHandler) handlePTYEvent(event Event) {
 				if err := h.pty.streamWriter.WriteOutput(h.outputBuffer[:n]); err != nil {
 					debugLog("[ERROR] Failed to write PTY output: %v", err)
 				}
+				
+				// Also write to terminal buffer if available
+				if h.pty.terminalBuffer != nil {
+					if _, err := h.pty.terminalBuffer.Write(h.outputBuffer[:n]); err != nil {
+						debugLog("[ERROR] Failed to write to terminal buffer: %v", err)
+					} else {
+						// Notify buffer change
+						h.pty.session.NotifyBufferChange()
+					}
+				}
 			}
 
 			if err != nil {

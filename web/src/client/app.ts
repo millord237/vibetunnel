@@ -188,11 +188,25 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private handleCreateSession() {
-    this.showCreateModal = true;
+    // Check if View Transitions API is supported
+    if ('startViewTransition' in document && typeof document.startViewTransition === 'function') {
+      document.startViewTransition(() => {
+        this.showCreateModal = true;
+      });
+    } else {
+      this.showCreateModal = true;
+    }
   }
 
   private handleCreateModalClose() {
-    this.showCreateModal = false;
+    // Check if View Transitions API is supported
+    if ('startViewTransition' in document && typeof document.startViewTransition === 'function') {
+      document.startViewTransition(() => {
+        this.showCreateModal = false;
+      });
+    } else {
+      this.showCreateModal = false;
+    }
   }
 
   private async handleNavigateToSession(e: CustomEvent): Promise<void> {

@@ -137,6 +137,16 @@ func (p *PTY) pollWithSelect() error {
 					if err := p.streamWriter.WriteOutput(buf[:n]); err != nil {
 						log.Printf("[ERROR] Failed to write to stream: %v", err)
 					}
+					
+					// Also write to terminal buffer if available
+					if p.terminalBuffer != nil {
+						if _, err := p.terminalBuffer.Write(buf[:n]); err != nil {
+							log.Printf("[ERROR] Failed to write to terminal buffer: %v", err)
+						} else {
+							// Notify buffer change
+							p.session.NotifyBufferChange()
+						}
+					}
 				}
 
 			case stdinFd:

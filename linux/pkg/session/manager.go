@@ -41,6 +41,11 @@ func (m *Manager) GetDoNotAllowColumnSet() bool {
 	return m.doNotAllowColumnSet
 }
 
+// GetControlPath returns the control path
+func (m *Manager) GetControlPath() string {
+	return m.controlPath
+}
+
 func (m *Manager) CreateSession(config Config) (*Session, error) {
 	if err := os.MkdirAll(m.controlPath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create control directory: %w", err)
@@ -265,4 +270,28 @@ func (m *Manager) RemoveSession(id string) error {
 
 	sessionPath := filepath.Join(m.controlPath, id)
 	return os.RemoveAll(sessionPath)
+}
+
+// LoadSessionFromDisk loads a session from disk into the manager
+func (m *Manager) LoadSessionFromDisk(sessionID string) error {
+	// Check if already loaded
+	m.mutex.RLock()
+	if _, exists := m.runningSessions[sessionID]; exists {
+		m.mutex.RUnlock()
+		return nil
+	}
+	m.mutex.RUnlock()
+	
+	// Load the session
+	sess, err := loadSession(m.controlPath, sessionID, m)
+	if err != nil {
+		return err
+	}
+	
+	// Add to running sessions
+	m.mutex.Lock()
+	m.runningSessions[sessionID] = sess
+	m.mutex.Unlock()
+	
+	return nil
 }

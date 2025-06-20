@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/binary"
 	"fmt"
 	"log"
 	"os"
@@ -13,16 +12,6 @@ import (
 	"github.com/vibetunnel/linux/pkg/terminal"
 	"github.com/vibetunnel/linux/pkg/termsocket"
 )
-
-// BufferSnapshot represents a terminal buffer snapshot
-type BufferSnapshot struct {
-	Cols    int
-	Rows    int
-	CursorX int
-	CursorY int
-	Lines   [][]rune
-	Styles  [][]uint32 // Style information for each cell
-}
 
 // TerminalManager handles terminal session management
 type TerminalManager struct {
@@ -80,7 +69,17 @@ func (tm *TerminalManager) CreateSession(config SessionConfig) (*session.Session
 	}
 
 	// Create regular (detached) session
-	return tm.sessionManager.CreateSession(sessionConfig)
+	sess, err := tm.sessionManager.CreateSession(sessionConfig)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Add buffer change callback
+	sess.AddBufferChangeCallback(func(sessionID string) {
+		tm.NotifyBufferChange(sessionID)
+	})
+	
+	return sess, nil
 }
 
 // createSpawnedSession creates a session that will be spawned in a terminal
@@ -127,6 +126,12 @@ func (tm *TerminalManager) createSpawnedSession(config session.Config, terminalT
 		}
 
 		log.Printf("[INFO] Successfully spawned terminal session via Mac app: %s", sessionID)
+		
+		// Add buffer change callback
+		sess.AddBufferChangeCallback(func(sessionID string) {
+			tm.NotifyBufferChange(sessionID)
+		})
+		
 		return sess, nil
 	}
 
@@ -137,6 +142,11 @@ func (tm *TerminalManager) createSpawnedSession(config session.Config, terminalT
 	if err != nil {
 		return nil, err
 	}
+	
+	// Add buffer change callback
+	sess.AddBufferChangeCallback(func(sessionID string) {
+		tm.NotifyBufferChange(sessionID)
+	})
 
 	vtPath := tm.findVTBinary()
 	if vtPath == "" {
@@ -238,7 +248,7 @@ func (tm *TerminalManager) ResizeSession(sessionID string, cols, rows int) error
 }
 
 // GetBufferSnapshot gets a snapshot of the terminal buffer for a session
-func (tm *TerminalManager) GetBufferSnapshot(sessionID string) (*BufferSnapshot, error) {
+func (tm *TerminalManager) GetBufferSnapshot(sessionID string) ([]byte, error) {
 	sess, err := tm.sessionManager.GetSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -250,82 +260,11 @@ func (tm *TerminalManager) GetBufferSnapshot(sessionID string) (*BufferSnapshot,
 		return nil, fmt.Errorf("no terminal buffer available")
 	}
 
-	// Convert to snapshot
-	snapshot := &BufferSnapshot{
-		Cols:    buffer.Cols,
-		Rows:    buffer.Rows,
-		CursorX: buffer.CursorX,
-		CursorY: buffer.CursorY,
-		Lines:   make([][]rune, buffer.Rows),
-		Styles:  make([][]uint32, buffer.Rows),
-	}
-
-	// Copy lines and styles
-	for i := 0; i < buffer.Rows; i++ {
-		snapshot.Lines[i] = make([]rune, buffer.Cols)
-		snapshot.Styles[i] = make([]uint32, buffer.Cols)
-		for j := 0; j < buffer.Cols; j++ {
-			if i < len(buffer.Lines) && j < len(buffer.Lines[i]) {
-				snapshot.Lines[i][j] = buffer.Lines[i][j]
-				if i < len(buffer.Styles) && j < len(buffer.Styles[i]) {
-					snapshot.Styles[i][j] = buffer.Styles[i][j]
-				}
-			} else {
-				snapshot.Lines[i][j] = ' '
-			}
-		}
-	}
-
-	return snapshot, nil
+	// Get snapshot and encode it
+	snapshot := buffer.GetSnapshot()
+	return snapshot.SerializeToBinary(), nil
 }
 
-// EncodeSnapshot encodes a buffer snapshot into binary format
-func (tm *TerminalManager) EncodeSnapshot(snapshot *BufferSnapshot) ([]byte, error) {
-	// Binary format:
-	// 4 bytes: cols (little-endian)
-	// 4 bytes: rows (little-endian)
-	// 4 bytes: cursorX (little-endian)
-	// 4 bytes: cursorY (little-endian)
-	// For each cell: 4 bytes (UTF-32 character) + 4 bytes (style)
-
-	bufferSize := 16 + (snapshot.Cols * snapshot.Rows * 8)
-	buffer := make([]byte, bufferSize)
-
-	offset := 0
-
-	// Write dimensions and cursor
-	binary.LittleEndian.PutUint32(buffer[offset:], uint32(snapshot.Cols))
-	offset += 4
-	binary.LittleEndian.PutUint32(buffer[offset:], uint32(snapshot.Rows))
-	offset += 4
-	binary.LittleEndian.PutUint32(buffer[offset:], uint32(snapshot.CursorX))
-	offset += 4
-	binary.LittleEndian.PutUint32(buffer[offset:], uint32(snapshot.CursorY))
-	offset += 4
-
-	// Write cells
-	for row := 0; row < snapshot.Rows; row++ {
-		for col := 0; col < snapshot.Cols; col++ {
-			// Character (UTF-32)
-			char := ' '
-			if row < len(snapshot.Lines) && col < len(snapshot.Lines[row]) {
-				char = snapshot.Lines[row][col]
-			}
-			binary.LittleEndian.PutUint32(buffer[offset:], uint32(char))
-			offset += 4
-
-			// Style
-			style := uint32(0)
-			if row < len(snapshot.Styles) && col < len(snapshot.Styles[row]) {
-				style = snapshot.Styles[row][col]
-			}
-			binary.LittleEndian.PutUint32(buffer[offset:], style)
-			offset += 4
-		}
-	}
-
-	return buffer, nil
-}
 
 // SubscribeToBufferChanges subscribes to buffer changes for a session
 func (tm *TerminalManager) SubscribeToBufferChanges(sessionID string, callback func([]byte)) func() {
@@ -365,14 +304,8 @@ func (tm *TerminalManager) NotifyBufferChange(sessionID string) {
 		return
 	}
 
-	// Get current snapshot
-	snapshot, err := tm.GetBufferSnapshot(sessionID)
-	if err != nil {
-		return
-	}
-
-	// Encode snapshot
-	buffer, err := tm.EncodeSnapshot(snapshot)
+	// Get encoded buffer snapshot
+	buffer, err := tm.GetBufferSnapshot(sessionID)
 	if err != nil {
 		return
 	}

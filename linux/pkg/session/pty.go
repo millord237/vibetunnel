@@ -15,6 +15,7 @@ import (
 
 	"github.com/creack/pty"
 	"github.com/vibetunnel/linux/pkg/protocol"
+	"github.com/vibetunnel/linux/pkg/terminal"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
@@ -52,6 +53,7 @@ type PTY struct {
 	stdinPipe           *os.File
 	useEventDrivenStdin bool
 	resizeMutex         sync.Mutex
+	terminalBuffer      *terminal.TerminalBuffer
 }
 
 func NewPTY(session *Session) (*PTY, error) {
@@ -253,10 +255,11 @@ func NewPTY(session *Session) (*PTY, error) {
 	}
 
 	ptyObj := &PTY{
-		session:      session,
-		cmd:          cmd,
-		pty:          ptmx,
-		streamWriter: streamWriter,
+		session:        session,
+		cmd:            cmd,
+		pty:            ptmx,
+		streamWriter:   streamWriter,
+		terminalBuffer: session.terminalBuffer,
 	}
 
 	// For spawned sessions that will be attached, disable echo immediately
@@ -759,6 +762,11 @@ func (p *PTY) Resize(width, height int) error {
 		return fmt.Errorf("failed to resize PTY: %w", err)
 	}
 
+	// Resize terminal buffer if available
+	if p.terminalBuffer != nil {
+		p.terminalBuffer.Resize(width, height)
+	}
+	
 	// Write resize event to stream if streamWriter is available
 	if p.streamWriter != nil {
 		if err := p.streamWriter.WriteResize(uint32(width), uint32(height)); err != nil {

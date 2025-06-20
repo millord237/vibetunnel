@@ -249,7 +249,10 @@ export class SessionCreateForm extends LitElement {
 
     return html`
       <div class="modal-backdrop flex items-center justify-center">
-        <div class="modal-content font-mono text-sm w-96 lg:w-[576px] max-w-full mx-4">
+        <div
+          class="modal-content font-mono text-sm w-96 lg:w-[576px] max-w-full mx-4"
+          style="view-transition-name: create-session-modal"
+        >
           <div class="pb-6 mb-6 border-b border-dark-border">
             <h2 class="text-accent-green text-lg font-bold">New Session</h2>
           </div>

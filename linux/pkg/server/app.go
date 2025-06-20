@@ -2,12 +2,12 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"path/filepath"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/vibetunnel/linux/pkg/api"
 	"github.com/vibetunnel/linux/pkg/ngrok"
 	"github.com/vibetunnel/linux/pkg/server/middleware"
 	"github.com/vibetunnel/linux/pkg/server/routes"
@@ -25,6 +25,7 @@ type App struct {
 	ngrokService     *ngrok.Service
 	remoteRegistry   *services.RemoteRegistry
 	streamWatcher    *services.StreamWatcher
+	controlWatcher   *services.ControlDirectoryWatcher
 	config           *Config
 }
 
@@ -70,12 +71,26 @@ func NewApp(config *Config) *App {
 	app.terminalManager.SetNoSpawn(config.NoSpawn)
 	app.terminalManager.SetDoNotAllowColumnSet(config.DoNotAllowColumnSet)
 
-	// Initialize buffer aggregator with remote registry
+	// Initialize buffer aggregator after terminal manager
 	app.bufferAggregator = services.NewBufferAggregator(&services.BufferAggregatorConfig{
 		TerminalManager: app.terminalManager,
 		RemoteRegistry:  app.remoteRegistry,
 		IsHQMode:        config.IsHQMode,
 	})
+	
+	// Initialize control directory watcher
+	controlPath := ""
+	if config.SessionManager != nil {
+		controlPath = config.SessionManager.GetControlPath()
+	}
+	if controlPath != "" {
+		if watcher, err := services.NewControlDirectoryWatcher(controlPath, config.SessionManager, app.streamWatcher); err == nil {
+			app.controlWatcher = watcher
+			app.controlWatcher.Start()
+		} else {
+			log.Printf("[WARNING] Failed to create control directory watcher: %v", err)
+		}
+	}
 
 	// Configure routes
 	app.configureRoutes()
@@ -117,7 +132,7 @@ func (app *App) configureRoutes() {
 	}
 
 	// WebSocket endpoint for binary buffer streaming
-	app.router.HandleFunc("/", app.handleWebSocket).Methods("GET").Headers("Upgrade", "websocket")
+	app.router.HandleFunc("/buffers", app.handleWebSocket).Methods("GET").Headers("Upgrade", "websocket")
 
 	// Static file serving
 	if app.config.StaticPath != "" {
@@ -142,7 +157,15 @@ func (app *App) GetBufferAggregator() *services.BufferAggregator {
 
 // Stop gracefully stops the application
 func (app *App) Stop() {
-	app.bufferAggregator.Stop()
+	if app.bufferAggregator != nil {
+		app.bufferAggregator.Stop()
+	}
+	if app.controlWatcher != nil {
+		app.controlWatcher.Stop()
+	}
+	if app.streamWatcher != nil {
+		app.streamWatcher.Stop()
+	}
 }
 
 func (app *App) handleHealth(w http.ResponseWriter, r *http.Request) {

@@ -746,4 +746,76 @@ body {
       opacity: 1;
     }
   }
+
+  /* View Transitions for Create Session */
+  ::view-transition-old(create-session-button),
+  ::view-transition-new(create-session-button) {
+    animation-duration: 0.15s;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  ::view-transition-old(create-session-modal),
+  ::view-transition-new(create-session-modal) {
+    animation-duration: 0.15s;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Custom morph animation from button to modal */
+  @keyframes expand-from-button {
+    from {
+      transform: scale(0) translate(
+        calc(var(--vt-button-x) - 50vw),
+        calc(var(--vt-button-y) - 50vh)
+      );
+      opacity: 0;
+      border-radius: 0.5rem;
+    }
+    to {
+      transform: scale(1) translate(0, 0);
+      opacity: 1;
+      border-radius: 0.75rem;
+    }
+  }
+
+  @keyframes shrink-to-button {
+    from {
+      transform: scale(1) translate(0, 0);
+      opacity: 1;
+    }
+    to {
+      transform: scale(0) translate(
+        calc(var(--vt-button-x) - 50vw),
+        calc(var(--vt-button-y) - 50vh)
+      );
+      opacity: 0;
+    }
+  }
+
+  /* Apply the custom animations */
+  ::view-transition-new(create-session-modal) {
+    animation: expand-from-button 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  ::view-transition-old(create-session-button) {
+    animation: shrink-to-button 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Make button invisible during transition */
+  .vt-create-button {
+    contain: layout;
+  }
+
+  /* Ensure smooth backdrop fade */
+  .modal-backdrop {
+    animation: fade-in 0.15s ease-out;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }

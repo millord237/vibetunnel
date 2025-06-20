@@ -1,10 +1,7 @@
 package services
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -168,10 +165,8 @@ func (ba *BufferAggregator) subscribeToLocalSession(conn *websocket.Conn, sessio
 	ba.mu.Unlock()
 
 	// Send initial buffer
-	if snapshot, err := ba.config.TerminalManager.GetBufferSnapshot(sessionID); err == nil {
-		if buffer, err := ba.config.TerminalManager.EncodeSnapshot(snapshot); err == nil {
-			ba.sendBufferToClient(conn, sessionID, buffer)
-		}
+	if buffer, err := ba.config.TerminalManager.GetBufferSnapshot(sessionID); err == nil {
+		ba.sendBufferToClient(conn, sessionID, buffer)
 	}
 }
 

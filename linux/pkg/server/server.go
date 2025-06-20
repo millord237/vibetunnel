@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/vibetunnel/linux/pkg/api"
+	"github.com/vibetunnel/linux/pkg/server/services"
 	"github.com/vibetunnel/linux/pkg/session"
 )
 
@@ -22,11 +23,18 @@ type Server struct {
 
 // NewServer creates a new VibeTunnel server
 func NewServer(manager *session.Manager, staticPath, password string, port int) *Server {
+	return NewServerWithHQMode(manager, staticPath, password, port, false, "")
+}
+
+// NewServerWithHQMode creates a new VibeTunnel server with HQ mode support
+func NewServerWithHQMode(manager *session.Manager, staticPath, password string, port int, isHQMode bool, bearerToken string) *Server {
 	config := &Config{
 		SessionManager: manager,
 		StaticPath:     staticPath,
-		Password:       password,
+		BasicAuthPassword: password,
 		Port:           port,
+		IsHQMode:       isHQMode,
+		BearerToken:    bearerToken,
 	}
 
 	app := NewApp(config)
@@ -96,6 +104,18 @@ func (s *Server) StartNgrok(authToken string) error {
 // StopNgrok stops the ngrok tunnel
 func (s *Server) StopNgrok() error {
 	return s.app.GetNgrokService().Stop()
+}
+
+// RegisterWithHQ registers this server as a remote with an HQ server
+func (s *Server) RegisterWithHQ(hqURL, hqToken string) error {
+	// Create HQ client
+	hostname, _ := os.Hostname()
+	remoteURL := fmt.Sprintf("http://localhost:%d", s.app.config.Port)
+	hqClient := services.NewHQClient(hqURL, "", "", hostname, remoteURL, hqToken)
+	s.app.config.HQClient = hqClient
+	
+	// Register with HQ
+	return hqClient.Register()
 }
 
 // GetNgrokStatus returns the current ngrok status

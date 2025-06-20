@@ -132,6 +132,12 @@ func init() {
 	rootCmd.Flags().StringVar(&updateChannel, "update-channel", "stable", "Update channel (stable, prerelease)")
 	rootCmd.Flags().BoolVar(&noSpawn, "no-spawn", false, "Disable terminal spawning")
 	rootCmd.Flags().BoolVar(&doNotAllowColumnSet, "do-not-allow-column-set", true, "Disable terminal resizing for all sessions (spawned and detached)")
+	
+	// HQ mode flags
+	rootCmd.Flags().Bool("hq", false, "Run as HQ (headquarters) server")
+	rootCmd.Flags().String("hq-url", "", "HQ server URL (for remote mode)")
+	rootCmd.Flags().String("hq-token", "", "HQ server token (for remote mode)")
+	rootCmd.Flags().String("bearer-token", "", "Bearer token for authentication (in HQ mode)")
 
 	// Configuration file
 	rootCmd.Flags().StringVarP(&configFile, "config", "c", defaultConfigPath, "Configuration file path")
@@ -232,7 +238,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	// Handle server mode
 	if serve {
-		return startServer(cfg, manager)
+		return startServer(cmd, cfg, manager)
 	}
 
 	// Handle direct command execution (create new session)
@@ -256,7 +262,7 @@ func run(cmd *cobra.Command, args []string) error {
 	return sess.Attach()
 }
 
-func startServer(cfg *config.Config, manager *session.Manager) error {
+func startServer(cmd *cobra.Command, cfg *config.Config, manager *session.Manager) error {
 	// Terminal spawning behavior:
 	// 1. When spawn_terminal=true in API requests, we first try to connect to the Mac app's socket
 	// 2. If Mac app is running, it handles the terminal spawn via TerminalSpawnService
@@ -292,10 +298,25 @@ func startServer(cfg *config.Config, manager *session.Manager) error {
 	// Set the resize flag on the manager
 	manager.SetDoNotAllowColumnSet(doNotAllowColumnSet)
 
-	// Create and configure server
-	srv := server.NewServer(manager, staticPath, serverPassword, portInt)
+	// Check HQ mode flags
+	isHQMode, _ := cmd.Flags().GetBool("hq")
+	hqURL, _ := cmd.Flags().GetString("hq-url")
+	hqToken, _ := cmd.Flags().GetString("hq-token")
+	bearerToken, _ := cmd.Flags().GetString("bearer-token")
+
+	// Create server
+	srv := server.NewServerWithHQMode(manager, staticPath, serverPassword, portInt, isHQMode, bearerToken)
 	srv.SetNoSpawn(noSpawn)
 	srv.SetDoNotAllowColumnSet(doNotAllowColumnSet)
+	
+	// If HQ URL and token are provided, register with HQ
+	if hqURL != "" && hqToken != "" && !isHQMode {
+		if err := srv.RegisterWithHQ(hqURL, hqToken); err != nil {
+			fmt.Printf("Warning: Failed to register with HQ server: %v\n", err)
+		} else {
+			fmt.Printf("Registered with HQ server at %s\n", hqURL)
+		}
+	}
 
 	// Configure ngrok if enabled
 	var ngrokURL string

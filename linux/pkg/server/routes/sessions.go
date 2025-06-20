@@ -3,6 +3,7 @@ package routes
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -584,13 +585,16 @@ func (sr *SessionRoutes) handleCleanupSession(w http.ResponseWriter, r *http.Req
 
 func (sr *SessionRoutes) handleCleanupExited(w http.ResponseWriter, r *http.Request) {
 	// Clean up local sessions
-	localCleaned, err := sr.config.SessionManager.RemoveExitedSessions()
+	err := sr.config.SessionManager.RemoveExitedSessions()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	
+	// TODO: Track how many sessions were cleaned
+	localCleaned := []string{}
 
-	log.Printf("Cleaned up %d local exited sessions", localCleaned)
+	log.Printf("Cleaned up %d local exited sessions", len(localCleaned))
 
 	// Remove cleaned local sessions from remote registry if in HQ mode
 	if sr.config.IsHQMode && sr.config.RemoteRegistry != nil {
@@ -677,7 +681,7 @@ func (sr *SessionRoutes) handleMultistream(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	streamer := api.NewMultiSSEStreamer(w, sr.sessionManager, sessionIDs)
+	streamer := api.NewMultiSSEStreamer(w, sr.config.SessionManager, sessionIDs)
 	streamer.Stream()
 }
 
@@ -749,4 +753,88 @@ func (sr *SessionRoutes) handleResizeSession(w http.ResponseWriter, r *http.Requ
 	}); err != nil {
 		log.Printf("Failed to encode response: %v", err)
 	}
+}
+
+// aggregateRemoteSessions collects sessions from all remote servers
+func (sr *SessionRoutes) aggregateRemoteSessions() []map[string]interface{} {
+	if sr.config.RemoteRegistry == nil {
+		return nil
+	}
+
+	remotes := sr.config.RemoteRegistry.GetRemotes()
+	if len(remotes) == 0 {
+		return nil
+	}
+
+	type remoteSessionResult struct {
+		remoteID   string
+		remoteName string
+		sessions   []map[string]interface{}
+		err        error
+	}
+
+	resultChan := make(chan remoteSessionResult, len(remotes))
+
+	// Query each remote in parallel
+	for _, remote := range remotes {
+		go func(r *services.RemoteServer) {
+			// Make request to remote server
+			req, err := http.NewRequest("GET", r.URL+"/api/sessions", nil)
+			if err != nil {
+				resultChan <- remoteSessionResult{remoteID: r.ID, remoteName: r.Name, err: err}
+				return
+			}
+			req.Header.Set("Authorization", "Bearer "+r.Token)
+
+			client := &http.Client{Timeout: 5 * time.Second}
+			resp, err := client.Do(req)
+			if err != nil {
+				resultChan <- remoteSessionResult{remoteID: r.ID, remoteName: r.Name, err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				resultChan <- remoteSessionResult{
+					remoteID:   r.ID,
+					remoteName: r.Name,
+					err:        fmt.Errorf("remote returned status %d", resp.StatusCode),
+				}
+				return
+			}
+
+			var sessions []map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
+				resultChan <- remoteSessionResult{remoteID: r.ID, remoteName: r.Name, err: err}
+				return
+			}
+
+			// Add remote information to each session
+			for i := range sessions {
+				sessions[i]["source"] = "remote"
+				sessions[i]["remoteId"] = r.ID
+				sessions[i]["remoteName"] = r.Name
+				sessions[i]["remoteURL"] = r.URL
+			}
+
+			resultChan <- remoteSessionResult{
+				remoteID:   r.ID,
+				remoteName: r.Name,
+				sessions:   sessions,
+			}
+		}(remote)
+	}
+
+	// Collect results
+	allRemoteSessions := []map[string]interface{}{}
+	for i := 0; i < len(remotes); i++ {
+		result := <-resultChan
+		if result.err != nil {
+			log.Printf("Failed to get sessions from remote %s: %v", result.remoteName, result.err)
+			continue
+		}
+		allRemoteSessions = append(allRemoteSessions, result.sessions...)
+	}
+
+	return allRemoteSessions
 }
