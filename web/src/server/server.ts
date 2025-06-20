@@ -2,22 +2,19 @@ import chalk from 'chalk';
 import { createApp } from './app.js';
 import { setShuttingDown } from './services/shutdown-state.js';
 
-// Create and configure the app
-const appInstance = createApp();
-const { startServer, server, terminalManager, remoteRegistry, hqClient, controlDirWatcher } =
-  appInstance;
+// Export a function to start the server
+export function startVibeTunnelServer() {
+  // Create and configure the app
+  const appInstance = createApp();
+  const { startServer, server, terminalManager, remoteRegistry, hqClient, controlDirWatcher } =
+    appInstance;
 
-// Only start server if this is the main module
-// When running with tsx, the main module check is different
-const isMainModule =
-  process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server/index.ts');
-if (isMainModule) {
   startServer();
 
   // Cleanup old terminals every 5 minutes
   setInterval(
     () => {
-      terminalManager.cleanup(30 * 60 * 1000); // 30 minutes
+      terminalManager.cleanup(5 * 60 * 1000); // 5 minutes
     },
     5 * 60 * 1000
   );
@@ -67,6 +64,17 @@ if (isMainModule) {
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+}
+
+// Only start server if this is the main module (for backward compatibility)
+// When running with tsx, the main module check is different
+const isMainModule =
+  process.argv[1]?.endsWith('server.ts') ||
+  process.argv[1]?.endsWith('server/index.ts') ||
+  process.argv[1]?.endsWith('vibetunnel') ||
+  process.argv[0]?.endsWith('vibetunnel');
+if (isMainModule) {
+  startVibeTunnelServer();
 }
 
 // Export for testing

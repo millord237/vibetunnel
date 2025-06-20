@@ -13,7 +13,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { PtyManager } from './server/pty/index.js';
+import { PtyManager } from './pty/index.js';
 
 function showUsage() {
   console.log('VibeTunnel Forward (fwd.ts)');
@@ -35,10 +35,8 @@ function showUsage() {
   console.log('and managed through the VibeTunnel PTY infrastructure.');
 }
 
-async function main() {
+export async function startVibeTunnelForward(args: string[]) {
   // Parse command line arguments
-  const args = process.argv.slice(2);
-
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
     showUsage();
     process.exit(0);
@@ -476,20 +474,3 @@ async function main() {
     process.exit(1);
   }
 }
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled rejection at:', promise, 'reason:', reason);
-  process.exit(1);
-});
-
-// Run the main function
-main().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
