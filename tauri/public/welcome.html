@@ -271,6 +271,26 @@
             background-color: var(--tab-bg) !important;
             transform: translateX(4px);
         }
+        
+        .credits {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .credits p {
+            margin: 4px 0;
+        }
+        
+        .credits a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+        
+        .credits a:hover {
+            text-decoration: underline;
+        }
 
         .success-checkmark {
             color: var(--success-color);
@@ -399,6 +419,14 @@
                             Learn about Tailscale
                         </button>
                     </div>
+                    <div class="credits">
+                        <p>Made with ❤️ by</p>
+                        <p>
+                            <a href="#" onclick="openURL('https://twitter.com/badlogic'); return false;">@badlogic</a>, 
+                            <a href="#" onclick="openURL('https://twitter.com/mitsuhiko'); return false;">@mitsuhiko</a> & 
+                            <a href="#" onclick="openURL('https://twitter.com/steipete'); return false;">@steipete</a>
+                        </p>
+                    </div>
                 </div>
             </div>
 
@@ -468,6 +496,14 @@
                 await open('https://tailscale.com/');
             } catch (error) {
                 console.error('Failed to open Tailscale:', error);
+            }
+        }
+        
+        async function openURL(url) {
+            try {
+                await open(url);
+            } catch (error) {
+                console.error('Failed to open URL:', error);
             }
         }
 

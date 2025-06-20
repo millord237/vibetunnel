@@ -84,6 +84,90 @@ fn open_settings_window(app: AppHandle, tab: Option<String>) -> Result<(), Strin
     Ok(())
 }
 
+#[tauri::command]
+fn focus_terminal_window(session_id: String) -> Result<(), String> {
+    // Focus the terminal window for the given session
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        
+        // Use AppleScript to focus the terminal window
+        let script = format!(
+            r#"tell application "System Events"
+                set allProcesses to name of every process
+                if "Terminal" is in allProcesses then
+                    tell application "Terminal"
+                        activate
+                        repeat with w in windows
+                            if name of w contains "{}" then
+                                set index of w to 1
+                                return
+                            end if
+                        end repeat
+                    end tell
+                end if
+            end tell"#,
+            session_id
+        );
+        
+        let output = Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .output()
+            .map_err(|e| format!("Failed to execute AppleScript: {}", e))?;
+            
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("AppleScript failed: {}", error));
+        }
+    }
+    
+    #[cfg(not(target_os = "macos"))]
+    {
+        // On other platforms, we can try to use wmctrl or similar tools
+        // For now, just return an error
+        return Err("Terminal window focus not implemented for this platform".to_string());
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+fn open_session_detail_window(app: AppHandle, session_id: String) -> Result<(), String> {
+    // Build URL with session ID parameter
+    let url = format!("session-detail.html?id={}", session_id);
+    let window_id = format!("session-detail-{}", session_id);
+    
+    // Check if session detail window already exists for this session
+    if let Some(window) = app.get_webview_window(&window_id) {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+    } else {
+        // Create new session detail window
+        let window = tauri::WebviewWindowBuilder::new(
+            &app,
+            window_id,
+            tauri::WebviewUrl::App(url.into()),
+        )
+        .title("Session Details")
+        .inner_size(600.0, 450.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+        // Handle close event to destroy the window
+        let window_clone = window.clone();
+        window.on_window_event(move |event| {
+            if let WindowEvent::CloseRequested { .. } = event {
+                let _ = window_clone.close();
+            }
+        });
+    }
+    Ok(())
+}
+
 fn update_tray_menu_status(app: &AppHandle, port: u16, session_count: usize) {
     // Update tray menu status using the tray menu manager
     let app_handle = app.clone();
@@ -134,6 +218,8 @@ fn main() {
             update_dock_icon_visibility,
             show_main_window,
             open_settings_window,
+            open_session_detail_window,
+            focus_terminal_window,
             quit_app,
             settings::get_settings,
             settings::save_settings,
@@ -470,8 +556,7 @@ fn handle_tray_menu_event(app: &AppHandle, event_id: &str) {
         "show_tutorial" => {
             // Show welcome window instead
             let state = app.state::<AppState>();
-            let welcome_manager = &state.welcome_manager;
-            let app_clone = app.clone();
+            let welcome_manager = state.welcome_manager.clone();
             tauri::async_runtime::spawn(async move {
                 let _ = welcome_manager.show_welcome_window().await;
             });
@@ -497,7 +582,16 @@ fn handle_tray_menu_event(app: &AppHandle, event_id: &str) {
         "quit" => {
             quit_app(app.clone());
         }
-        _ => {}
+        _ => {
+            // Handle session clicks (format: "session_<id>")
+            if event_id.starts_with("session_") {
+                let session_id = event_id.strip_prefix("session_").unwrap_or("");
+                if !session_id.is_empty() {
+                    // Open session detail window
+                    let _ = open_session_detail_window(app.clone(), session_id.to_string());
+                }
+            }
+        }
     }
 }
 

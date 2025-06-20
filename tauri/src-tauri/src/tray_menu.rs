@@ -1,6 +1,8 @@
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Manager};
 
+use crate::session_monitor::SessionInfo;
+
 pub struct TrayMenuManager;
 
 impl TrayMenuManager {
@@ -14,6 +16,17 @@ impl TrayMenuManager {
         port: u16,
         session_count: usize,
         access_mode: Option<String>,
+    ) -> Result<Menu<tauri::Wry>, tauri::Error> {
+        Self::create_menu_with_sessions(app, server_running, port, session_count, access_mode, None)
+    }
+    
+    pub fn create_menu_with_sessions(
+        app: &AppHandle,
+        server_running: bool,
+        port: u16,
+        session_count: usize,
+        access_mode: Option<String>,
+        sessions: Option<Vec<SessionInfo>>,
     ) -> Result<Menu<tauri::Wry>, tauri::Error> {
         // Server status
         let status_text = if server_running {
@@ -47,7 +60,7 @@ impl TrayMenuManager {
             .id("dashboard")
             .build(app)?;
 
-        // Session info
+        // Session info header
         let session_text = match session_count {
             0 => "0 active sessions".to_string(),
             1 => "1 active session".to_string(),
@@ -57,6 +70,45 @@ impl TrayMenuManager {
             .id("sessions_info")
             .enabled(false)
             .build(app)?;
+        
+        // Individual session items (if provided)
+        let mut session_items = Vec::new();
+        if let Some(sessions_list) = sessions {
+            // Show up to 5 most recent active sessions
+            let active_sessions: Vec<_> = sessions_list
+                .iter()
+                .filter(|s| s.is_active)
+                .take(5)
+                .collect();
+                
+            for session in active_sessions {
+                // Use session name for display
+                let dir_name = &session.name;
+                    
+                // Truncate long names
+                let display_name = if dir_name.len() > 30 {
+                    format!("{}...{}", &dir_name[..15], &dir_name[dir_name.len()-10..])
+                } else {
+                    dir_name.to_string()
+                };
+                
+                let session_text = format!("  • {} (PID: {})", display_name, session.pid);
+                let session_item = MenuItemBuilder::new(&session_text)
+                    .id(&format!("session_{}", session.id))
+                    .build(app)?;
+                    
+                session_items.push(session_item);
+            }
+            
+            // Add ellipsis if there are more active sessions
+            if sessions_list.iter().filter(|s| s.is_active).count() > 5 {
+                let more_item = MenuItemBuilder::new("  • ...")
+                    .id("sessions_more")
+                    .enabled(false)
+                    .build(app)?;
+                session_items.push(more_item);
+            }
+        }
 
         // Help submenu
         let show_tutorial = MenuItemBuilder::new("Show Tutorial")
@@ -114,10 +166,18 @@ impl TrayMenuManager {
             menu_builder = menu_builder.item(&network_item);
         }
 
-        let menu = menu_builder
+        // Build menu with sessions
+        let mut menu_builder = menu_builder
             .item(&dashboard)
             .separator()
-            .item(&sessions_info)
+            .item(&sessions_info);
+            
+        // Add individual session items
+        for session_item in session_items {
+            menu_builder = menu_builder.item(&session_item);
+        }
+        
+        let menu = menu_builder
             .separator()
             .item(&help_menu)
             .item(&settings)
@@ -130,9 +190,13 @@ impl TrayMenuManager {
 
     pub async fn update_server_status(app: &AppHandle, port: u16, running: bool) {
         if let Some(tray) = app.tray_by_id("main") {
-            // Get current session count from state
+            // Get current session count and list from state
             let state = app.state::<crate::state::AppState>();
-            let session_count = state.terminal_manager.list_sessions().await.len();
+            let terminals = state.terminal_manager.list_sessions().await;
+            let session_count = terminals.len();
+            
+            // Get monitored sessions for detailed info
+            let sessions = state.session_monitor.get_sessions().await;
 
             // Get access mode from settings
             let access_mode = if running {
@@ -145,9 +209,9 @@ impl TrayMenuManager {
                 None
             };
 
-            // Rebuild menu with new state
+            // Rebuild menu with new state and sessions
             if let Ok(menu) =
-                Self::create_menu_with_state(app, running, port, session_count, access_mode)
+                Self::create_menu_with_sessions(app, running, port, session_count, access_mode, Some(sessions))
             {
                 if let Err(e) = tray.set_menu(Some(menu)) {
                     tracing::error!("Failed to update tray menu: {}", e);
@@ -167,6 +231,9 @@ impl TrayMenuManager {
                 (false, 4020)
             };
             drop(server_guard);
+            
+            // Get monitored sessions for detailed info
+            let sessions = state.session_monitor.get_sessions().await;
 
             // Get access mode from settings
             let access_mode = if running {
@@ -179,8 +246,8 @@ impl TrayMenuManager {
                 None
             };
 
-            // Rebuild menu with new state
-            if let Ok(menu) = Self::create_menu_with_state(app, running, port, count, access_mode) {
+            // Rebuild menu with new state and sessions
+            if let Ok(menu) = Self::create_menu_with_sessions(app, running, port, count, access_mode, Some(sessions)) {
                 if let Err(e) = tray.set_menu(Some(menu)) {
                     tracing::error!("Failed to update tray menu: {}", e);
                 }
