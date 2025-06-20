@@ -385,7 +385,7 @@ func encodeCell(buffer []byte, offset int, cell BufferCell) int {
 			attrs |= 0x08
 		}
 		// Note: Node.js has additional attributes we don't support yet
-		
+
 		if hasAttrs || hasFg || hasBg {
 			buffer[offset] = attrs
 			offset++

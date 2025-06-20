@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/process"
+	"github.com/vibetunnel/linux/pkg/terminal"
 )
 
 // GenerateID generates a new unique session ID
@@ -60,14 +61,15 @@ type Info struct {
 }
 
 type Session struct {
-	ID          string
-	controlPath string
-	info        *Info
-	pty         *PTY
-	stdinPipe   *os.File
-	stdinMutex  sync.Mutex
-	mu          sync.RWMutex
-	manager     *Manager // Reference to manager for accessing global settings
+	ID           string
+	controlPath  string
+	info         *Info
+	pty          *PTY
+	stdinPipe    *os.File
+	stdinMutex   sync.Mutex
+	mu           sync.RWMutex
+	manager      *Manager // Reference to manager for accessing global settings
+	terminalBuffer *terminal.Buffer // Terminal buffer for screen content
 }
 
 func newSession(controlPath string, config Config, manager *Manager) (*Session, error) {
@@ -278,7 +280,7 @@ func (s *Session) AttachSpawnedSession() error {
 	// Update session status
 	s.info.Status = string(StatusRunning)
 	s.info.Pid = pty.Pid()
-	
+
 	if err := s.info.Save(s.Path()); err != nil {
 		if err := pty.Close(); err != nil {
 			log.Printf("[ERROR] Failed to close PTY: %v", err)
@@ -288,7 +290,7 @@ func (s *Session) AttachSpawnedSession() error {
 
 	// Create a channel to signal when PTY.Run() completes
 	ptyDone := make(chan struct{})
-	
+
 	// Start the PTY I/O loop in a goroutine (like Start() does)
 	go func() {
 		defer close(ptyDone)
@@ -310,7 +312,7 @@ func (s *Session) AttachSpawnedSession() error {
 
 	// Attach to the PTY to connect stdin/stdout
 	attachErr := s.pty.Attach()
-	
+
 	// Wait a moment for PTY cleanup to complete
 	select {
 	case <-ptyDone:
@@ -319,7 +321,7 @@ func (s *Session) AttachSpawnedSession() error {
 		// Give it a bit more time to update status
 		s.UpdateStatus()
 	}
-	
+
 	return attachErr
 }
 
@@ -632,6 +634,13 @@ func (s *Session) GetInfo() *Info {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.info
+}
+
+// GetTerminalBuffer returns the terminal buffer for the session
+func (s *Session) GetTerminalBuffer() *terminal.Buffer {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.terminalBuffer
 }
 
 func (i *Info) Save(sessionPath string) error {

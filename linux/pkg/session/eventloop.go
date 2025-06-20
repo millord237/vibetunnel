@@ -31,22 +31,22 @@ type EventHandler func(event Event)
 type EventLoop interface {
 	// Add registers a file descriptor for event monitoring
 	Add(fd int, events EventType, data interface{}) error
-	
+
 	// Remove unregisters a file descriptor
 	Remove(fd int) error
-	
+
 	// Modify changes the events to monitor for a file descriptor
 	Modify(fd int, events EventType) error
-	
+
 	// Run starts the event loop, blocking until Stop is called
 	Run(handler EventHandler) error
-	
+
 	// RunOnce processes events once with optional timeout (-1 for blocking)
 	RunOnce(handler EventHandler, timeoutMs int) error
-	
+
 	// Stop terminates the event loop
 	Stop() error
-	
+
 	// Close releases all resources
 	Close() error
 }
@@ -70,24 +70,24 @@ func NewPTYEventHandler(pty *PTY) (*PTYEventHandler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create event loop: %w", err)
 	}
-	
+
 	handler := &PTYEventHandler{
 		pty:          pty,
 		eventLoop:    eventLoop,
 		outputBuffer: make([]byte, 4096),
 		handlers:     make(map[int]func(Event)),
 	}
-	
+
 	// Register PTY for read events
 	ptyFD := int(pty.pty.Fd())
 	if err := eventLoop.Add(ptyFD, EventRead|EventHup, "pty"); err != nil {
 		eventLoop.Close()
 		return nil, fmt.Errorf("failed to add PTY to event loop: %w", err)
 	}
-	
+
 	// Set up handlers
 	handler.handlers[ptyFD] = handler.handlePTYEvent
-	
+
 	return handler, nil
 }
 
@@ -112,7 +112,7 @@ func (h *PTYEventHandler) handlePTYEvent(event Event) {
 					debugLog("[ERROR] Failed to write PTY output: %v", err)
 				}
 			}
-			
+
 			if err != nil {
 				if err == io.EOF || err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
 					// No more data available
@@ -123,14 +123,14 @@ func (h *PTYEventHandler) handlePTYEvent(event Event) {
 				h.eventLoop.Stop()
 				break
 			}
-			
+
 			// Continue reading if we filled the buffer
 			if n < len(h.outputBuffer) {
 				break
 			}
 		}
 	}
-	
+
 	if event.Events&EventHup != 0 {
 		// PTY closed
 		debugLog("[DEBUG] PTY closed (HUP event)")
@@ -141,20 +141,20 @@ func (h *PTYEventHandler) handlePTYEvent(event Event) {
 // AddStdinPipe adds stdin pipe monitoring to the event loop
 func (h *PTYEventHandler) AddStdinPipe(stdinPipe *os.File) error {
 	stdinFD := int(stdinPipe.Fd())
-	
+
 	// Set non-blocking mode
 	if err := syscall.SetNonblock(stdinFD, true); err != nil {
 		return fmt.Errorf("failed to set stdin non-blocking: %w", err)
 	}
-	
+
 	// Add to event loop
 	if err := h.eventLoop.Add(stdinFD, EventRead, "stdin"); err != nil {
 		return fmt.Errorf("failed to add stdin to event loop: %w", err)
 	}
-	
+
 	// Set up handler
 	h.handlers[stdinFD] = h.handleStdinEvent
-	
+
 	return nil
 }
 
@@ -168,13 +168,13 @@ func (h *PTYEventHandler) handleStdinEvent(event Event) {
 			if _, err := h.pty.pty.Write(buf[:n]); err != nil {
 				debugLog("[ERROR] Failed to write to PTY: %v", err)
 			}
-			
+
 			// Also write to asciinema stream
 			if err := h.pty.streamWriter.WriteInput(buf[:n]); err != nil {
 				debugLog("[ERROR] Failed to write input to stream: %v", err)
 			}
 		}
-		
+
 		if err != nil && err != syscall.EAGAIN && err != syscall.EWOULDBLOCK {
 			debugLog("[ERROR] Stdin read error: %v", err)
 			h.eventLoop.Remove(event.FD)

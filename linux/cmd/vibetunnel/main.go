@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vibetunnel/linux/pkg/api"
 	"github.com/vibetunnel/linux/pkg/config"
+	"github.com/vibetunnel/linux/pkg/server"
 	"github.com/vibetunnel/linux/pkg/session"
 )
 
@@ -292,9 +293,9 @@ func startServer(cfg *config.Config, manager *session.Manager) error {
 	manager.SetDoNotAllowColumnSet(doNotAllowColumnSet)
 
 	// Create and configure server
-	server := api.NewServer(manager, staticPath, serverPassword, portInt)
-	server.SetNoSpawn(noSpawn)
-	server.SetDoNotAllowColumnSet(doNotAllowColumnSet)
+	srv := server.NewServer(manager, staticPath, serverPassword, portInt)
+	srv.SetNoSpawn(noSpawn)
+	srv.SetDoNotAllowColumnSet(doNotAllowColumnSet)
 
 	// Configure ngrok if enabled
 	var ngrokURL string
@@ -305,7 +306,7 @@ func startServer(cfg *config.Config, manager *session.Manager) error {
 		}
 		if authToken != "" {
 			// Start ngrok through the server's service
-			if err := server.StartNgrok(authToken); err != nil {
+			if err := srv.StartNgrok(authToken); err != nil {
 				fmt.Printf("Warning: ngrok failed to start: %v\n", err)
 			} else {
 				fmt.Printf("Ngrok tunnel starting...\n")
@@ -335,7 +336,7 @@ func startServer(cfg *config.Config, manager *session.Manager) error {
 		}
 
 		// Create TLS server
-		tlsServer := api.NewTLSServer(server, tlsConfig)
+		tlsServer := server.NewTLSServer(srv, tlsConfig)
 
 		// Print startup information for TLS
 		fmt.Printf("Starting VibeTunnel HTTPS server on %s:%s\n", bindAddress, tlsPort)
@@ -392,7 +393,7 @@ func startServer(cfg *config.Config, manager *session.Manager) error {
 		fmt.Printf("Debug mode enabled\n")
 	}
 
-	return server.Start(fmt.Sprintf("%s:%s", bindAddress, port))
+	return srv.Start(fmt.Sprintf("%s:%s", bindAddress, port))
 }
 
 func determineBind(cfg *config.Config) string {
