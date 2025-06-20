@@ -69,7 +69,7 @@ fn open_settings_window(app: AppHandle, tab: Option<String>) -> Result<(), Strin
             tauri::WebviewUrl::App(url.into()),
         )
         .title("VibeTunnel Settings")
-        .inner_size(800.0, 600.0)
+        .inner_size(950.0, 720.0)
         .resizable(true)
         .decorations(true)
         .center()

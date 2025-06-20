@@ -1,2184 +1,1563 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VibeTunnel Settings</title>
-    <style>
-        :root {
-            /* Light mode colors */
-            --bg-color: #f0f4f3;
-            --window-bg: #ffffff;
-            --text-primary: #0a1612;
-            --text-secondary: #506e61;
-            --text-tertiary: #8fa89f;
-            --accent-color: #10b981;
-            --accent-hover: #059669;
-            --accent-light: #34d399;
-            --accent-dark: #047857;
-            --border-color: rgba(16, 185, 129, 0.15);
-            --shadow-color: rgba(16, 185, 129, 0.1);
-            --tab-bg: #f9fdfb;
-            --tab-active-bg: #ffffff;
-            --input-bg: #ffffff;
-            --input-border: rgba(16, 185, 129, 0.2);
-            --success-color: #10b981;
-            --error-color: #ef4444;
-            --warning-color: #f59e0b;
-            --glass-bg: rgba(255, 255, 255, 0.8);
-            --glass-border: rgba(16, 185, 129, 0.1);
-            --gradient-start: #ecfdf5;
-            --gradient-end: #f0fdf4;
-        }
-
-        [data-theme="dark"] {
-            /* Dark mode colors */
-            --bg-color: #0a0f0d;
-            --window-bg: #111918;
-            --text-primary: #ecfdf5;
-            --text-secondary: #86efac;
-            --text-tertiary: #4ade80;
-            --accent-color: #10b981;
-            --accent-hover: #34d399;
-            --accent-light: #4ade80;
-            --accent-dark: #059669;
-            --border-color: rgba(16, 185, 129, 0.2);
-            --shadow-color: rgba(16, 185, 129, 0.3);
-            --tab-bg: #0f1715;
-            --tab-active-bg: #162320;
-            --input-bg: #1a2723;
-            --input-border: rgba(16, 185, 129, 0.3);
-            --glass-bg: rgba(17, 25, 24, 0.7);
-            --glass-border: rgba(16, 185, 129, 0.2);
-            --gradient-start: #0a0f0d;
-            --gradient-end: #0f1715;
-        }
-        
-        @media (prefers-color-scheme: dark) {
-            :root:not([data-theme]) {
-                /* Dark mode colors */
-                --bg-color: #0a0f0d;
-                --window-bg: #111918;
-                --text-primary: #ecfdf5;
-                --text-secondary: #86efac;
-                --text-tertiary: #4ade80;
-                --accent-color: #10b981;
-                --accent-hover: #34d399;
-                --accent-light: #4ade80;
-                --accent-dark: #059669;
-                --border-color: rgba(16, 185, 129, 0.2);
-                --shadow-color: rgba(16, 185, 129, 0.3);
-                --tab-bg: #0f1715;
-                --tab-active-bg: #162320;
-                --input-bg: #1a2723;
-                --input-border: rgba(16, 185, 129, 0.3);
-                --glass-bg: rgba(17, 25, 24, 0.7);
-                --glass-border: rgba(16, 185, 129, 0.2);
-                --gradient-start: #0a0f0d;
-                --gradient-end: #0f1715;
-            }
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
-            background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
-            color: var(--text-primary);
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            -webkit-user-select: none;
-            user-select: none;
-            position: relative;
-        }
-        
-        body::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, var(--accent-color) 0%, transparent 70%);
-            opacity: 0.05;
-            animation: float 20s ease-in-out infinite;
-            pointer-events: none;
-        }
-
-        .container {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            background: var(--glass-bg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--glass-border);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .container::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, var(--accent-color) 0%, transparent 50%);
-            opacity: 0.03;
-            pointer-events: none;
-        }
-
-        /* Tab Bar */
-        .tab-bar {
-            display: flex;
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border-color);
-            padding: 0 52px 0 0;
-            height: 52px;
-            position: relative;
-            z-index: 100;
-            box-shadow: 0 2px 20px var(--shadow-color);
-        }
-        
-        /* Theme Toggle */
-        .theme-toggle {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: var(--glass-bg);
-            border: 2px solid var(--border-color);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            z-index: 102;
-        }
-        
-        .theme-toggle:hover {
-            border-color: var(--accent-color);
-            transform: translateY(-50%) scale(1.1);
-            box-shadow: 0 4px 15px var(--shadow-color);
-        }
-        
-        .theme-toggle svg {
-            width: 20px;
-            height: 20px;
-            transition: all 0.3s ease;
-            color: var(--accent-color);
-        }
-        
-        .theme-toggle:hover svg {
-            transform: rotate(180deg);
-        }
-        
-        [data-theme="dark"] .theme-toggle .sun-icon {
-            display: block;
-        }
-        
-        [data-theme="dark"] .theme-toggle .moon-icon {
-            display: none;
-        }
-        
-        [data-theme="light"] .theme-toggle .sun-icon,
-        :root:not([data-theme]) .theme-toggle .sun-icon {
-            display: none;
-        }
-        
-        [data-theme="light"] .theme-toggle .moon-icon,
-        :root:not([data-theme]) .theme-toggle .moon-icon {
-            display: block;
-        }
-        
-        @media (prefers-color-scheme: dark) {
-            :root:not([data-theme]) .theme-toggle .sun-icon {
-                display: block;
-            }
-            
-            :root:not([data-theme]) .theme-toggle .moon-icon {
-                display: none;
-            }
-        }
-
-        .tab {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 14px 20px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            border-right: 1px solid var(--border-color);
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            position: relative;
-            -webkit-user-select: none;
-            user-select: none;
-            z-index: 101;
-            overflow: hidden;
-        }
-        
-        .tab::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: radial-gradient(circle at center, var(--accent-color), transparent);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            pointer-events: none;
-        }
-
-        .tab:last-child {
-            border-right: none;
-        }
-
-        .tab:hover {
-            background-color: rgba(16, 185, 129, 0.05);
-            color: var(--accent-color);
-            transform: translateY(-1px);
-        }
-        
-        .tab:hover::before {
-            opacity: 0.1;
-        }
-
-        .tab:active {
-            transform: scale(0.98);
-        }
-
-        .tab.active {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
-            color: var(--accent-color);
-            font-weight: 600;
-        }
-
-        .tab.active::after {
-            content: '';
-            position: absolute;
-            bottom: -1px;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        @keyframes slideIn {
-            from {
-                transform: translateX(-100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        .tab-icon {
-            width: 16px;
-            height: 16px;
-            margin-right: 8px;
-            color: currentColor;
-            pointer-events: none;
-        }
-
-        /* Content Area */
-        .content {
-            flex: 1;
-            padding: 24px;
-            overflow-y: auto;
-            background-color: var(--window-bg);
-        }
-
-        .tab-content {
-            display: none;
-            animation: fadeIn 0.2s ease-out;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px) scale(0.95);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-
-        @keyframes float {
-            0%, 100% { 
-                transform: translateY(0px) rotate(0deg); 
-            }
-            33% { 
-                transform: translateY(-10px) rotate(1deg); 
-            }
-            66% { 
-                transform: translateY(5px) rotate(-1deg); 
-            }
-        }
-
-        @keyframes glow {
-            0%, 100% { 
-                filter: drop-shadow(0 4px 12px var(--shadow-color)) brightness(1);
-                transform: scale(1);
-            }
-            50% { 
-                filter: drop-shadow(0 0 30px var(--accent-color)) brightness(1.2);
-                transform: scale(1.05);
-            }
-        }
-
-        /* Form Styles */
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group:last-child {
-            margin-bottom: 0;
-        }
-
-        label {
-            display: block;
-            font-size: 13px;
-            font-weight: 500;
-            margin-bottom: 6px;
-            color: var(--text-primary);
-        }
-
-        .help-text {
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-top: 4px;
-            line-height: 1.4;
-        }
-
-        input[type="text"],
-        input[type="password"],
-        input[type="number"],
-        select {
-            width: 100%;
-            padding: 8px 12px;
-            font-size: 13px;
-            border: 1px solid var(--input-border);
-            border-radius: 6px;
-            background-color: var(--input-bg);
-            color: var(--text-primary);
-            transition: all 0.2s ease;
-            -webkit-user-select: text;
-            user-select: text;
-        }
-
-        input[type="text"]:focus,
-        input[type="password"]:focus,
-        input[type="number"]:focus,
-        select:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
-        }
-
-        input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-            margin-right: 8px;
-            cursor: pointer;
-        }
-
-        .checkbox-label {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            font-size: 13px;
-        }
-
-        .button {
-            padding: 8px 16px;
-            font-size: 13px;
-            font-weight: 500;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background-color: var(--accent-color);
-            color: white;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .button::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 0;
-            height: 0;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.2);
-            transform: translate(-50%, -50%);
-            transition: width 0.6s, height 0.6s;
-        }
-
-        .button:active::before {
-            width: 300px;
-            height: 300px;
-        }
-
-        .button:hover {
-            background-color: var(--accent-hover);
-        }
-
-        .button:active {
-            transform: scale(0.98);
-        }
-
-        .button.secondary {
-            background-color: transparent;
-            color: var(--accent-color);
-            border: 1px solid var(--accent-color);
-        }
-
-        .button.secondary:hover {
-            background-color: var(--accent-color);
-            color: white;
-        }
-
-        .button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* Section Styles */
-        .section {
-            margin-bottom: 32px;
-            padding-bottom: 24px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .section:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-            padding-bottom: 0;
-        }
-
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            color: var(--text-primary);
-        }
-
-        /* Status Indicators */
-        .status {
-            display: inline-flex;
-            align-items: center;
-            font-size: 12px;
-            padding: 4px 8px;
-            border-radius: 4px;
-            margin-left: 8px;
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 6px;
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        .status-dot.success {
-            background-color: var(--success-color);
-        }
-
-        .status-dot.error {
-            background-color: var(--error-color);
-        }
-
-        .status-dot.warning {
-            background-color: var(--warning-color);
-        }
-
-        .status.success {
-            background-color: rgba(52, 199, 89, 0.1);
-            color: var(--success-color);
-        }
-
-        .status.error {
-            background-color: rgba(255, 59, 48, 0.1);
-            color: var(--error-color);
-        }
-
-        .status.warning {
-            background-color: rgba(255, 149, 0, 0.1);
-            color: var(--warning-color);
-        }
-
-        /* Button Group */
-        .button-group {
-            display: flex;
-            gap: 8px;
-            margin-top: 12px;
-        }
-
-        /* Info Box */
-        .info-box {
-            background-color: var(--tab-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 16px;
-            font-size: 12px;
-            line-height: 1.5;
-            color: var(--text-secondary);
-        }
-
-        .info-box.warning {
-            background-color: rgba(255, 149, 0, 0.1);
-            border-color: var(--warning-color);
-            color: var(--text-primary);
-        }
-
-        /* Console */
-        .console {
-            background: var(--input-bg);
-            border: 2px solid var(--input-border);
-            border-radius: 10px;
-            padding: 16px;
-            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-            font-size: 11px;
-            line-height: 1.6;
-            max-height: 300px;
-            overflow-y: auto;
-            -webkit-user-select: text;
-            user-select: text;
-            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-        
-        .console::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        .console::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        
-        .console::-webkit-scrollbar-thumb {
-            background: var(--accent-color);
-            border-radius: 4px;
-        }
-
-        .console-line {
-            margin-bottom: 4px;
-        }
-
-        .console-line.error {
-            color: var(--error-color);
-        }
-
-        .console-line.success {
-            color: var(--success-color);
-        }
-
-        /* Loading Shimmer */
-        .shimmer {
-            background: linear-gradient(
-                90deg,
-                var(--tab-bg) 0%,
-                var(--bg-color) 50%,
-                var(--tab-bg) 100%
-            );
-            background-size: 200% 100%;
-            animation: shimmer 1.5s ease-in-out infinite;
-            border-radius: 4px;
-            height: 20px;
-            width: 100%;
-        }
-
-        @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-        }
-
-        /* Permission Status */
-        .permission-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .permission-item:last-child {
-            border-bottom: none;
-        }
-
-        .permission-name {
-            font-size: 13px;
-            font-weight: 500;
-        }
-
-        .permission-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .permission-icon {
-            width: 16px;
-            height: 16px;
-        }
-
-        .permission-icon {
-            transition: all 0.3s ease;
-        }
-
-        .permission-icon.granted {
-            color: var(--success-color);
-            animation: checkmark 0.5s ease-out;
-            filter: drop-shadow(0 2px 4px var(--shadow-color));
-        }
-
-        .permission-icon.denied {
-            color: var(--error-color);
-            filter: drop-shadow(0 2px 4px rgba(239, 68, 68, 0.3));
-        }
-
-        @keyframes checkmark {
-            0% { transform: scale(0) rotate(45deg); opacity: 0; }
-            50% { transform: scale(1.2) rotate(45deg); }
-            100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-
-        /* About Section */
-        .about-content {
-            text-align: center;
-            padding: 40px 0;
-        }
-
-        .app-icon-large {
-            width: 128px;
-            height: 128px;
-            margin-bottom: 20px;
-            border-radius: 27.6%;
-            filter: drop-shadow(0 4px 12px var(--shadow-color));
-            transition: all 0.3s ease;
-            cursor: pointer;
-            animation: float 3s ease-in-out infinite;
-        }
-
-        .app-icon-large:hover {
-            animation: glow 2s ease-in-out infinite, float 3s ease-in-out infinite;
-            transform: scale(1.05);
-        }
-
-        .app-icon-large:active {
-            transform: scale(0.95);
-        }
-
-        .app-name {
-            font-size: 28px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-light) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .app-version {
-            font-size: 14px;
-            color: var(--text-secondary);
-            margin-bottom: 32px;
-            font-weight: 500;
-        }
-
-        .copyright {
-            font-size: 12px;
-            color: var(--text-tertiary);
-            margin-top: 32px;
-        }
-
-        /* IP Address Display */
-        .ip-display {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 8px;
-        }
-
-        .ip-address {
-            font-family: 'SF Mono', Monaco, monospace;
-            font-size: 13px;
-            padding: 4px 8px;
-            background-color: var(--tab-bg);
-            border-radius: 4px;
-            -webkit-user-select: text;
-            user-select: text;
-        }
-
-        .copy-button {
-            padding: 4px 8px;
-            font-size: 11px;
-            background-color: transparent;
-            color: var(--accent-color);
-            border: 1px solid var(--accent-color);
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .copy-button:hover {
-            background-color: var(--accent-color);
-            color: white;
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
-        }
-
-        .copy-button:active {
-            transform: translateY(0);
-        }
-
-        .copy-button.copied {
-            background-color: var(--success-color);
-            color: white;
-            border-color: var(--success-color);
-        }
-
-        /* Terminal List */
-        .terminal-list {
-            margin-top: 12px;
-        }
-
-        .terminal-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 12px;
-            background-color: var(--tab-bg);
-            border-radius: 6px;
-            margin-bottom: 8px;
-            font-size: 13px;
-        }
-
-        .terminal-icon {
-            width: 24px;
-            height: 24px;
-            margin-right: 12px;
-        }
-
-        /* Loading Spinner */
-        .spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid var(--border-color);
-            border-top-color: var(--accent-color);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            display: inline-block;
-            margin-left: 8px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Update UI Styles */
-        .update-status-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 2px solid var(--border-color);
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 24px;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .update-status-card::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, var(--accent-color) 0%, transparent 70%);
-            opacity: 0.05;
-            animation: float 15s ease-in-out infinite;
-            pointer-events: none;
-        }
-
-        .update-status-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px var(--shadow-color);
-            border-color: var(--accent-color);
-        }
-
-        .update-status-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-        
-        @media (max-width: 480px) {
-            .update-status-header {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .update-check-button {
-                width: 100%;
-                justify-content: center;
-                margin-top: 12px;
-            }
-        }
-
-        .update-status-info {
-            flex: 1;
-        }
-
-        .update-version-info {
-            display: flex;
-            gap: 12px;
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-        }
-
-        .update-current-version {
-            font-weight: 500;
-        }
-
-        .update-latest-version {
-            color: var(--accent-color);
-            font-weight: 500;
-        }
-
-        .update-status-text {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--text-primary);
-        }
-
-        .update-check-button {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 20px;
-            font-size: 13px;
-            font-weight: 500;
-            background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-dark) 100%);
-            box-shadow: 0 4px 15px var(--shadow-color);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .button-icon {
-            transition: transform 0.3s ease;
-            display: inline-block;
-            vertical-align: middle;
-        }
-
-        .update-check-button:hover .button-icon {
-            transform: rotate(180deg);
-        }
-
-        .update-check-button:disabled .button-icon {
-            animation: spin 1s linear infinite;
-        }
-        
-        .update-check-button:active {
-            transform: scale(0.98);
-        }
-
-        /* Update Progress */
-        .update-progress {
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid var(--border-color);
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        .update-progress-bar {
-            width: 100%;
-            height: 6px;
-            background-color: rgba(0, 0, 0, 0.1);
-            border-radius: 3px;
-            overflow: hidden;
-            margin-bottom: 8px;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            .update-progress-bar {
-                background-color: rgba(255, 255, 255, 0.1);
-            }
-        }
-
-        .update-progress-fill {
-            height: 100%;
-            background-color: var(--accent-color);
-            border-radius: 3px;
-            width: 0%;
-            transition: width 0.3s ease;
-            background-image: linear-gradient(
-                45deg,
-                rgba(255, 255, 255, 0.15) 25%,
-                transparent 25%,
-                transparent 50%,
-                rgba(255, 255, 255, 0.15) 50%,
-                rgba(255, 255, 255, 0.15) 75%,
-                transparent 75%,
-                transparent
-            );
-            background-size: 20px 20px;
-            animation: progress-stripes 1s linear infinite;
-        }
-
-        @keyframes progress-stripes {
-            0% { background-position: 0 0; }
-            100% { background-position: 20px 0; }
-        }
-
-        .update-progress-text {
-            font-size: 12px;
-            color: var(--text-secondary);
-            text-align: center;
-        }
-
-        /* Update Actions */
-        .update-actions {
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid var(--border-color);
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        .button-primary {
-            background-color: var(--accent-color);
-            color: white;
-            font-weight: 500;
-        }
-
-        .button-primary:hover {
-            background-color: var(--accent-hover);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
-        }
-
-        /* Update Settings */
-        .update-settings {
-            margin-top: 24px;
-        }
-
-        .setting-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border-color);
-            transition: background-color 0.2s ease;
-        }
-
-        .setting-row:last-child {
-            border-bottom: none;
-        }
-
-        .setting-row:hover {
-            background-color: rgba(0, 0, 0, 0.02);
-            margin: 0 -12px;
-            padding: 12px 12px;
-            border-radius: 6px;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            .setting-row:hover {
-                background-color: rgba(255, 255, 255, 0.02);
-            }
-        }
-
-        .setting-label {
-            flex: 1;
-        }
-
-        .setting-label label {
-            font-size: 13px;
-            font-weight: 500;
-            margin-bottom: 2px;
-        }
-
-        .setting-description {
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin: 0;
-        }
-
-        .setting-control {
-            min-width: 120px;
-            font-size: 13px;
-            padding: 6px 10px;
-            height: 32px;
-            background-color: var(--input-bg);
-            border: 1px solid var(--input-border);
-            border-radius: 6px;
-            color: var(--text-primary);
-            transition: all 0.2s ease;
-            cursor: pointer;
-            -webkit-appearance: none;
-            appearance: none;
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M1 1L5 5L9 1' stroke='%2386868b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            padding-right: 32px;
-        }
-        
-        .setting-control:hover {
-            border-color: var(--accent-color);
-        }
-        
-        .setting-control:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
-        }
-
-        /* Toggle Switch */
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-        }
-
-        .toggle-input {
-            position: absolute;
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .toggle-label {
-            display: block;
-            width: 48px;
-            height: 28px;
-            background-color: var(--input-bg);
-            border: 1px solid var(--input-border);
-            border-radius: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .toggle-label::after {
-            content: '';
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 22px;
-            height: 22px;
-            background-color: white;
-            border-radius: 50%;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-
-        .toggle-input:checked + .toggle-label {
-            background-color: var(--accent-color);
-            border-color: var(--accent-color);
-        }
-
-        .toggle-input:checked + .toggle-label::after {
-            transform: translateX(20px);
-        }
-
-        .toggle-input:disabled + .toggle-label {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* Update Status States */
-        .update-status-card.checking .update-status-text {
-            color: var(--text-secondary);
-        }
-
-        .update-status-card.available {
-            background-color: rgba(255, 149, 0, 0.05);
-            border-color: var(--warning-color);
-        }
-
-        .update-status-card.available .update-status-text {
-            color: var(--warning-color);
-        }
-
-        .update-status-card.downloading {
-            background-color: rgba(0, 122, 255, 0.05);
-            border-color: var(--accent-color);
-        }
-
-        .update-status-card.error {
-            background-color: rgba(255, 59, 48, 0.05);
-            border-color: var(--error-color);
-        }
-
-        .update-status-card.error .update-status-text {
-            color: var(--error-color);
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VibeTunnel Preferences</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    /* Theme Variables */
+    :root {
+      /* Dark theme (default) */
+      --bg-primary: #000;
+      --bg-secondary: rgba(20, 20, 20, 0.95);
+      --bg-tertiary: rgba(15, 15, 15, 0.95);
+      --bg-titlebar: rgba(28, 28, 28, 0.95);
+      --bg-hover: rgba(255, 255, 255, 0.05);
+      --bg-active: rgba(16, 185, 129, 0.1);
+      --bg-input: rgba(255, 255, 255, 0.05);
+      --bg-input-hover: rgba(255, 255, 255, 0.08);
+      --bg-button: rgba(255, 255, 255, 0.1);
+      --bg-button-hover: rgba(255, 255, 255, 0.15);
+      --bg-card: rgba(255, 255, 255, 0.03);
+      
+      --text-primary: #fff;
+      --text-secondary: rgba(255, 255, 255, 0.6);
+      --text-tertiary: rgba(255, 255, 255, 0.4);
+      --text-titlebar: rgba(255, 255, 255, 0.85);
+      
+      --border-primary: rgba(255, 255, 255, 0.08);
+      --border-secondary: rgba(255, 255, 255, 0.12);
+      
+      --accent: #10b981;
+      --accent-hover: #0ea671;
+      --accent-glow: rgba(16, 185, 129, 0.5);
+      
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+    }
+
+    /* Light theme */
+    html.light {
+      --bg-primary: #ffffff;
+      --bg-secondary: rgba(249, 250, 251, 0.95);
+      --bg-tertiary: rgba(243, 244, 246, 0.95);
+      --bg-titlebar: rgba(255, 255, 255, 0.95);
+      --bg-hover: rgba(0, 0, 0, 0.05);
+      --bg-active: rgba(16, 185, 129, 0.1);
+      --bg-input: rgba(0, 0, 0, 0.05);
+      --bg-input-hover: rgba(0, 0, 0, 0.08);
+      --bg-button: rgba(0, 0, 0, 0.05);
+      --bg-button-hover: rgba(0, 0, 0, 0.1);
+      --bg-card: rgba(0, 0, 0, 0.02);
+      
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --text-tertiary: #9ca3af;
+      --text-titlebar: #374151;
+      
+      --border-primary: rgba(0, 0, 0, 0.08);
+      --border-secondary: rgba(0, 0, 0, 0.12);
+      
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --accent-glow: rgba(16, 185, 129, 0.3);
+      
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      color: var(--text-primary);
+      background: var(--bg-primary);
+      user-select: none;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Custom Titlebar Spacer */
+    .titlebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 38px;
+      background: transparent;
+      -webkit-app-region: drag;
+      z-index: 1000;
+    }
+
+    /* Main Window */
+    .window {
+      display: flex;
+      height: 100vh;
+      padding-top: 38px;
+      background: var(--bg-primary);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 200px;
+      background: var(--bg-secondary);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+      border-right: 1px solid var(--border-primary);
+      padding: 24px 0;
+      position: relative;
+      z-index: 10;
+    }
+
+    .tabs {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: block;
+    }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      padding: 12px 24px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      font-size: 13px;
+      position: relative;
+      user-select: none;
+      -webkit-user-select: none;
+      color: var(--text-secondary);
+      font-weight: 500;
+      letter-spacing: 0.2px;
+    }
+
+    .tab:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .tab.active {
+      background: var(--bg-active);
+      color: var(--text-primary);
+    }
+
+    .tab.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    .tab .icon {
+      width: 18px;
+      height: 18px;
+      margin-right: 12px;
+      fill: var(--text-secondary);
+      flex-shrink: 0;
+      pointer-events: none;
+      transition: all 0.2s;
+    }
+
+    .tab:hover .icon {
+      fill: var(--text-primary);
+    }
+
+    .tab.active .icon {
+      fill: var(--accent);
+      filter: drop-shadow(0 0 4px var(--accent-glow));
+    }
+
+    .tab span {
+      pointer-events: none;
+    }
+
+    /* Content Area */
+    .content {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+      background: var(--bg-tertiary);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+    }
+
+    .content::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .content::-webkit-scrollbar-track {
+      background: var(--bg-card);
+      border-radius: 4px;
+    }
+
+    .content::-webkit-scrollbar-thumb {
+      background: var(--bg-button);
+      border-radius: 4px;
+    }
+
+    .content::-webkit-scrollbar-thumb:hover {
+      background: var(--bg-button-hover);
+    }
+
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    h2 {
+      margin: 0 0 32px 0;
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.5px;
+    }
+
+    h3 {
+      margin: 0 0 20px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.2px;
+    }
+
+    /* Settings Grid */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+
+    .setting-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-primary);
+      border-radius: 12px;
+      padding: 24px;
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      animation: fadeInUp 0.5s ease forwards;
+      opacity: 0;
+    }
+
+    .setting-card:hover {
+      background: var(--bg-card);
+      border-color: var(--border-secondary);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .setting-card:nth-child(1) { animation-delay: 0.1s; }
+    .setting-card:nth-child(2) { animation-delay: 0.15s; }
+    .setting-card:nth-child(3) { animation-delay: 0.2s; }
+    .setting-card:nth-child(4) { animation-delay: 0.25s; }
+    .setting-card:nth-child(5) { animation-delay: 0.3s; }
+    .setting-card:nth-child(6) { animation-delay: 0.35s; }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Settings */
+    .setting {
+      display: block;
+      margin-bottom: 16px;
+    }
+
+    .setting:last-child {
+      margin-bottom: 0;
+    }
+
+    .setting .label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: var(--text-primary);
+      letter-spacing: 0.1px;
+    }
+
+    .setting .help {
+      display: block;
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    /* Inputs */
+    .input, .select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      font-size: 13px;
+      transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
+    }
+
+    .input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .input:hover, .select:hover {
+      background: var(--bg-input-hover);
+      border-color: var(--border-secondary);
+    }
+
+    .input:focus, .select:focus {
+      background: var(--bg-button);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .select {
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.6)' d='M10.293 3.293L6 7.586 1.707 3.293A1 1 0 00.293 4.707l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+
+    /* Checkboxes */
+    .setting.checkbox {
+      display: flex;
+      align-items: flex-start;
+      cursor: pointer;
+      padding: 8px 0;
+      position: relative;
+    }
+
+    .setting.checkbox input[type="checkbox"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .checkbox-indicator {
+      width: 20px;
+      height: 20px;
+      background: var(--bg-hover);
+      border: 2px solid var(--border-secondary);
+      border-radius: 6px;
+      transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      position: relative;
+      flex-shrink: 0;
+      margin-right: 12px;
+      margin-top: 2px;
+    }
+
+    .setting.checkbox:hover .checkbox-indicator {
+      background: var(--bg-input-hover);
+      border-color: var(--text-tertiary);
+    }
+
+    .setting.checkbox input[type="checkbox"]:checked + .checkbox-indicator {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .setting.checkbox input[type="checkbox"]:checked + .checkbox-indicator::after {
+      content: '✓';
+      position: absolute;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: bold;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .setting-info {
+      flex: 1;
+    }
+
+    .setting-info .label {
+      margin-bottom: 4px;
+    }
+
+    /* Buttons */
+    .button {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+      color: var(--text-primary);
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      margin-right: 8px;
+      margin-bottom: 8px;
+      letter-spacing: 0.3px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .button::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      background: var(--bg-button);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+
+    .button:active::before {
+      width: 300px;
+      height: 300px;
+    }
+
+    .button:hover {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px var(--accent-glow);
+    }
+
+    .button.secondary {
+      background: var(--bg-button);
+      color: var(--text-primary);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .button.secondary:hover {
+      background: var(--bg-button-hover);
+      box-shadow: 0 4px 15px rgba(255, 255, 255, 0.1);
+    }
+
+    .button.primary {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+    }
+
+    .button.small {
+      padding: 6px 14px;
+      font-size: 12px;
+    }
+
+    .button.danger {
+      background: linear-gradient(135deg, var(--danger) 0%, var(--danger-hover) 100%);
+    }
+
+    .button.danger:hover {
+      background: linear-gradient(135deg, var(--danger-hover) 0%, var(--danger) 100%);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+    }
+
+    .button-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .button-group.vertical {
+      flex-direction: column;
+    }
+
+    /* Sub-settings */
+    .sub-settings {
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--bg-card);
+      border-radius: 8px;
+      border: 1px solid var(--border-primary);
+    }
+
+    .sub-settings .input {
+      margin-bottom: 12px;
+    }
+
+    /* Info and Status Boxes */
+    .info-box, .status-box {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: var(--bg-active);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+
+    .status-box {
+      background: var(--bg-hover);
+      border-color: var(--border-primary);
+    }
+
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .status-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .status-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-left: 8px;
+    }
+
+    /* Debug Info */
+    .debug-info {
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .debug-info.small {
+      font-size: 12px;
+    }
+
+    .debug-info .info-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      align-items: baseline;
+    }
+
+    .debug-info .info-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .debug-info .info-item span {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .debug-info .info-item strong {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .debug-info .info-item code {
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 11px;
+      color: var(--accent);
+      background: var(--bg-active);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--accent);
+      word-break: break-all;
+    }
+
+    .debug-info .info-item a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .debug-info .info-item a:hover {
+      text-decoration: underline;
+    }
+
+    /* About Section */
+    .about-content {
+      text-align: center;
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 40px 0;
+    }
+
+    .app-icon {
+      margin-bottom: 24px;
+      filter: drop-shadow(0 10px 30px var(--accent-glow));
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-10px);
+      }
+    }
+
+    .about-content h1 {
+      font-size: 36px;
+      font-weight: 600;
+      margin: 0 0 8px 0;
+      color: var(--text-primary);
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .version {
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .tagline {
+      font-size: 16px;
+      color: var(--text-secondary);
+      margin-bottom: 40px;
+      font-weight: 400;
+      letter-spacing: 0.5px;
+    }
+
+    .system-info {
+      background: var(--bg-hover);
+      border: 1px solid var(--border-primary);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 32px;
+      display: flex;
+      justify-content: space-around;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .system-info .info-item {
+      text-align: center;
+    }
+
+    .system-info .info-item span {
+      display: block;
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-bottom: 4px;
+    }
+
+    .system-info .info-item strong {
+      display: block;
+      font-size: 14px;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .action-buttons {
+      margin-bottom: 40px;
+    }
+
+    .credits {
+      padding-top: 40px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .credits p {
+      color: var(--text-tertiary);
+      margin: 8px 0;
+      font-size: 13px;
+    }
+
+    .copyright {
+      font-size: 12px;
+      margin-top: 16px;
+    }
+
+    .team-credits {
+      margin: 20px 0;
+    }
+
+    .brought-by {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-bottom: 8px;
+    }
+
+    .team-members {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .credit-link {
+      color: var(--accent);
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .credit-link:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
+
+    .separator {
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+
+    /* Links */
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    a:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 1024px) {
+      .settings-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Tab Bar -->
-        <div class="tab-bar">
-            <!-- Theme Toggle -->
-            <button class="theme-toggle" id="themeToggle" title="Toggle theme">
-                <svg class="sun-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
-                </svg>
-                <svg class="moon-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                </svg>
-            </button>
-            <div class="tab active" data-tab="general">
-                <svg class="tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                General
-            </div>
-            <div class="tab" data-tab="dashboard">
-                <svg class="tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path>
-                </svg>
-                Dashboard
-            </div>
-            <div class="tab" data-tab="advanced">
-                <svg class="tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
-                </svg>
-                Advanced
-            </div>
-            <div class="tab" data-tab="debug" id="debugTab" style="display: none;">
-                <svg class="tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
-                </svg>
-                Debug
-            </div>
-            <div class="tab" data-tab="about">
-                <svg class="tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                About
-            </div>
-        </div>
+  <!-- Custom titlebar spacer for macOS native controls -->
+  <div class="titlebar"></div>
 
-        <!-- Content Area -->
-        <div class="content">
-            <!-- General Tab -->
-            <div class="tab-content active" id="general">
-                <div class="section">
-                    <h2 class="section-title">Startup</h2>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="launchAtLogin">
-                            Launch VibeTunnel at login
-                        </label>
-                        <p class="help-text">Automatically start VibeTunnel when you log in to your computer</p>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">Updates</h2>
-                    
-                    <!-- Update Status Card -->
-                    <div class="update-status-card">
-                        <div class="update-status-header">
-                            <div class="update-status-info">
-                                <div class="update-version-info">
-                                    <span class="update-current-version">Current Version: <span id="currentVersion">1.0.0</span></span>
-                                    <span class="update-latest-version" id="latestVersionInfo" style="display: none;">
-                                        Latest: <span id="latestVersion">1.0.1</span>
-                                    </span>
-                                </div>
-                                <div class="update-status-text" id="updateStatusText">
-                                    <span class="status-dot success"></span>
-                                    VibeTunnel is up to date
-                                </div>
-                            </div>
-                            <button class="button update-check-button" id="checkUpdates">
-                                <svg class="button-icon" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                                </svg>
-                                Check Now
-                            </button>
-                        </div>
-                        
-                        <!-- Update Progress (hidden by default) -->
-                        <div class="update-progress" id="updateProgress" style="display: none;">
-                            <div class="update-progress-bar">
-                                <div class="update-progress-fill" id="updateProgressFill"></div>
-                            </div>
-                            <div class="update-progress-text" id="updateProgressText">Downloading update...</div>
-                        </div>
-                        
-                        <!-- Update Actions (hidden by default) -->
-                        <div class="update-actions" id="updateActions" style="display: none;">
-                            <button class="button button-primary" id="installUpdate">Install Update</button>
-                            <button class="button secondary" id="postponeUpdate">Later</button>
-                        </div>
-                    </div>
-                    
-                    <!-- Update Settings -->
-                    <div class="update-settings">
-                        <div class="setting-row">
-                            <div class="setting-label">
-                                <label for="updateChannel">Update Channel</label>
-                                <p class="setting-description">Choose which releases to receive</p>
-                            </div>
-                            <select id="updateChannel" class="setting-control">
-                                <option value="stable">Stable</option>
-                                <option value="beta">Beta</option>
-                                <option value="nightly">Nightly</option>
-                            </select>
-                        </div>
-                        
-                        <div class="setting-row">
-                            <div class="setting-label">
-                                <label for="autoCheck">Automatic Updates</label>
-                                <p class="setting-description">Check for updates automatically</p>
-                            </div>
-                            <div class="toggle-switch">
-                                <input type="checkbox" id="autoCheck" class="toggle-input">
-                                <label for="autoCheck" class="toggle-label"></label>
-                            </div>
-                        </div>
-                        
-                        <div class="setting-row">
-                            <div class="setting-label">
-                                <label for="autoDownload">Download Updates</label>
-                                <p class="setting-description">Download updates in the background</p>
-                            </div>
-                            <div class="toggle-switch">
-                                <input type="checkbox" id="autoDownload" class="toggle-input">
-                                <label for="autoDownload" class="toggle-label"></label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">System Permissions</h2>
-                    <div class="info-box">
-                        VibeTunnel requires certain permissions to function properly. Grant these permissions to enable all features.
-                    </div>
-                    <div id="permissionsList">
-                        <!-- Permissions will be populated here -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Dashboard Tab -->
-            <div class="tab-content" id="dashboard">
-                <div class="section">
-                    <h2 class="section-title">Dashboard Security</h2>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="enablePassword">
-                            Password protect the dashboard
-                        </label>
-                        <p class="help-text">Require a password to access the terminal dashboard</p>
-                    </div>
-                    <div class="form-group" id="passwordGroup" style="display: none;">
-                        <label for="dashboardPassword">Dashboard Password</label>
-                        <input type="password" id="dashboardPassword" placeholder="Enter password">
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">Server Configuration</h2>
-                    <div class="form-group">
-                        <label for="serverPort">Server Port</label>
-                        <input type="number" id="serverPort" min="1024" max="65535" placeholder="4020">
-                        <p class="help-text">The port VibeTunnel's HTTP server will listen on</p>
-                    </div>
-                    <div class="form-group">
-                        <label for="accessMode">Access Mode</label>
-                        <select id="accessMode">
-                            <option value="localhost">Localhost Only (127.0.0.1)</option>
-                            <option value="network">Network Access (0.0.0.0)</option>
-                        </select>
-                        <p class="help-text">Control who can access your terminal dashboard</p>
-                    </div>
-                    <div id="networkInfo" style="display: none;">
-                        <div class="form-group">
-                            <label>Local IP Address</label>
-                            <div class="ip-display">
-                                <span class="ip-address" id="localIP">192.168.1.100</span>
-                                <button class="copy-button" onclick="copyIP()">Copy</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">Remote Access</h2>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="enableNgrok">
-                            Enable ngrok tunnel
-                        </label>
-                        <p class="help-text">Create a secure tunnel to access your terminals from anywhere</p>
-                    </div>
-                    <div id="ngrokConfig" style="display: none;">
-                        <div class="form-group">
-                            <label for="ngrokToken">ngrok Auth Token</label>
-                            <input type="password" id="ngrokToken" placeholder="Enter your ngrok auth token">
-                            <p class="help-text">Get your token from <a href="#" onclick="openNgrokDashboard()">ngrok.com</a></p>
-                        </div>
-                        <div class="form-group">
-                            <label for="ngrokRegion">Region</label>
-                            <select id="ngrokRegion">
-                                <option value="us">United States</option>
-                                <option value="eu">Europe</option>
-                                <option value="ap">Asia Pacific</option>
-                                <option value="au">Australia</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Advanced Tab -->
-            <div class="tab-content" id="advanced">
-                <div class="section">
-                    <h2 class="section-title">Terminal Settings</h2>
-                    <div class="form-group">
-                        <label for="defaultTerminal">Default Terminal</label>
-                        <select id="defaultTerminal">
-                            <option value="system">System Default</option>
-                        </select>
-                        <p class="help-text">Choose your preferred terminal emulator</p>
-                    </div>
-                    <div class="form-group">
-                        <label for="defaultShell">Default Shell</label>
-                        <input type="text" id="defaultShell" placeholder="/bin/zsh">
-                        <p class="help-text">Shell to use for new terminal sessions</p>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">CLI Tool</h2>
-                    <div class="info-box">
-                        The <code>vt</code> command lets you quickly create terminal sessions from your existing terminal.
-                    </div>
-                    <div class="form-group">
-                        <div class="button-group">
-                            <button class="button" id="installCLI">Install CLI</button>
-                            <button class="button secondary" id="uninstallCLI">Uninstall</button>
-                        </div>
-                        <span id="cliStatus" class="status" style="display: none;"></span>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">Session Management</h2>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="cleanupOnStartup">
-                            Clean up sessions on startup
-                        </label>
-                        <p class="help-text">Remove all terminal sessions when VibeTunnel starts</p>
-                    </div>
-                    <div class="form-group">
-                        <label for="sessionTimeout">Session Timeout (minutes)</label>
-                        <input type="number" id="sessionTimeout" min="0" placeholder="0">
-                        <p class="help-text">Automatically close idle sessions (0 = disabled)</p>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">Display</h2>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="showInDock">
-                            Show VibeTunnel in Dock
-                        </label>
-                        <p class="help-text">Display the VibeTunnel icon in the macOS Dock</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="debugMode">
-                            Enable Debug Mode
-                        </label>
-                        <p class="help-text">Show debug options and additional logging</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Debug Tab -->
-            <div class="tab-content" id="debug">
-                <div class="section">
-                    <h2 class="section-title">Server Status</h2>
-                    <div class="info-box">
-                        <div>Server: <span id="serverStatus">Running</span></div>
-                        <div>Port: <span id="serverPortStatus">4020</span></div>
-                        <div>Sessions: <span id="sessionCount">0</span></div>
-                    </div>
-                    <div class="button-group">
-                        <button class="button" id="restartServer">Restart Server</button>
-                        <button class="button secondary" id="stopServer">Stop Server</button>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">API Testing</h2>
-                    <div class="form-group">
-                        <label for="apiEndpoint">Test Endpoint</label>
-                        <select id="apiEndpoint">
-                            <option value="/health">Health Check</option>
-                            <option value="/sessions">List Sessions</option>
-                            <option value="/terminal/list">List Terminals</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <button class="button" id="testAPI">Test API</button>
-                    </div>
-                    <div class="console" id="apiResponse" style="display: none;">
-                        <!-- API response will be shown here -->
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">Server Console</h2>
-                    <div class="button-group">
-                        <button class="button secondary" id="clearConsole">Clear</button>
-                        <button class="button secondary" id="exportLogs">Export Logs</button>
-                    </div>
-                    <div class="console" id="serverConsole">
-                        <div class="console-line">Server started on port 4020</div>
-                        <div class="console-line success">Health check: OK</div>
-                        <!-- More log lines will be added here -->
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2 class="section-title">Developer Tools</h2>
-                    <div class="form-group">
-                        <label for="logLevel">Log Level</label>
-                        <select id="logLevel">
-                            <option value="error">Error</option>
-                            <option value="warn">Warning</option>
-                            <option value="info">Info</option>
-                            <option value="debug">Debug</option>
-                            <option value="trace">Trace</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="enableTelemetry">
-                            Enable anonymous telemetry
-                        </label>
-                        <p class="help-text">Help improve VibeTunnel by sending anonymous usage data</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- About Tab -->
-            <div class="tab-content" id="about">
-                <div class="about-content">
-                    <img src="icon.png" alt="VibeTunnel" class="app-icon-large" onclick="openWebsite()" title="Click to visit website">
-                    <h1 class="app-name">VibeTunnel</h1>
-                    <p class="app-version">Version <span id="appVersion">1.0.0</span></p>
-                    
-                    <div class="button-group" style="justify-content: center;">
-                        <button class="button secondary" onclick="openWebsite()">Website</button>
-                        <button class="button secondary" onclick="openGitHub()">GitHub</button>
-                        <button class="button secondary" onclick="openChangelog()">Changelog</button>
-                    </div>
-
-                    <p class="copyright">
-                        © 2024 VibeTunnel. All rights reserved.<br>
-                        Built with ❤️ for developers
-                    </p>
-                </div>
-            </div>
-        </div>
+  <div class="window">
+    <div class="sidebar">
+      <ul class="tabs">
+        <li class="tab active" data-tab="general">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97c0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1c0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66Z"/>
+          </svg>
+          <span>General</span>
+        </li>
+        <li class="tab" data-tab="dashboard">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M13,3V9H21V3M13,21H21V11H13M3,21H11V15H3M3,13H11V3H3V13Z"/>
+          </svg>
+          <span>Dashboard</span>
+        </li>
+        <li class="tab" data-tab="advanced">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8M12,10A2,2 0 0,0 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12A2,2 0 0,0 12,10M10,22C9.75,22 9.54,21.82 9.5,21.58L9.13,18.93C8.5,18.68 7.96,18.34 7.44,17.94L4.95,18.95C4.73,19.03 4.46,18.95 4.34,18.73L2.34,15.27C2.21,15.05 2.27,14.78 2.46,14.63L4.57,12.97L4.5,12L4.57,11L2.46,9.37C2.27,9.22 2.21,8.95 2.34,8.73L4.34,5.27C4.46,5.05 4.73,4.96 4.95,5.05L7.44,6.05C7.96,5.66 8.5,5.32 9.13,5.07L9.5,2.42C9.54,2.18 9.75,2 10,2H14C14.25,2 14.46,2.18 14.5,2.42L14.87,5.07C15.5,5.32 16.04,5.66 16.56,6.05L19.05,5.05C19.27,4.96 19.54,5.05 19.66,5.27L21.66,8.73C21.79,8.95 21.73,9.22 21.54,9.37L19.43,11L19.5,12L19.43,13L21.54,14.63C21.73,14.78 21.79,15.05 21.66,15.27L19.66,18.73C19.54,18.95 19.27,19.04 19.05,18.95L16.56,17.95C16.04,18.34 15.5,18.68 14.87,18.93L14.5,21.58C14.46,21.82 14.25,22 14,22H10Z"/>
+          </svg>
+          <span>Advanced</span>
+        </li>
+        <li class="tab" data-tab="about">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/>
+          </svg>
+          <span>About</span>
+        </li>
+        <li class="tab" data-tab="debug" id="debugTab" style="display: none;">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M12,1.5A2.5,2.5 0 0,1 14.5,4A2.5,2.5 0 0,1 12,6.5A2.5,2.5 0 0,1 9.5,4A2.5,2.5 0 0,1 12,1.5M8.41,18.82C8,18.56 8,18.06 8.41,17.8L11,16.2V14A1,1 0 0,0 10,13H8A1,1 0 0,0 7,14V16.17C7,16.64 6.76,17.09 6.37,17.35L2.81,19.83C2.3,20.16 2,20.74 2,21.35V22H7.86C7.86,21.89 7.88,21.78 7.93,21.68L8.67,20.07L7,19M15.59,17.8C16,18.06 16,18.56 15.59,18.82L14.91,19.23L16.29,22H22V21.35C22,20.74 21.7,20.16 21.19,19.83L17.63,17.35C17.24,17.09 17,16.64 17,16.17V14A1,1 0 0,0 16,13H14A1,1 0 0,0 13,14V16.2L15.59,17.8M10.76,20L9.93,21.73C9.79,22.04 9.91,22.4 10.17,22.56C10.25,22.6 10.34,22.63 10.43,22.63C10.64,22.63 10.83,22.5 10.93,22.31L12,20.25L13.07,22.31C13.17,22.5 13.36,22.63 13.57,22.63C13.66,22.63 13.75,22.6 13.83,22.56C14.09,22.4 14.21,22.04 14.07,21.73L13.24,20M14.59,12H14V10H13V8H14V6.31C13.42,6.75 12.72,7 12,7C11.28,7 10.58,6.75 10,6.31V8H11V10H10V12H9.41C9.77,11.71 10.24,11.5 10.76,11.5H13.24C13.76,11.5 14.23,11.71 14.59,12Z"/>
+          </svg>
+          <span>Debug</span>
+        </li>
+      </ul>
     </div>
-
-    <script>
-        // Theme management
-        function initTheme() {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme) {
-                document.documentElement.setAttribute('data-theme', savedTheme);
-            }
-        }
+    
+    <div class="content">
+      <!-- General Tab -->
+      <div class="tab-content active" id="general">
+        <h2>General</h2>
         
-        // Initialize theme before DOM loads to prevent flash
-        initTheme();
+        <div class="settings-grid">
+          <div class="setting-card">
+            <h3>Startup</h3>
+            <label class="setting checkbox">
+              <input type="checkbox" id="launchAtLogin">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Launch at Login</span>
+                <span class="help">Start VibeTunnel when you log in</span>
+              </div>
+            </label>
+            <label class="setting checkbox">
+              <input type="checkbox" id="showWelcomeOnStartup">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Show Welcome Guide</span>
+                <span class="help">Display welcome screen on startup</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="setting-card">
+            <h3>Appearance</h3>
+            <label class="setting checkbox">
+              <input type="checkbox" id="showDockIcon">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Show Dock Icon</span>
+                <span class="help">Display in dock or taskbar</span>
+              </div>
+            </label>
+            <label class="setting">
+              <span class="label">Theme</span>
+              <span class="help">Application appearance</span>
+              <select id="theme" class="select">
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="setting-card">
+            <h3>Terminal</h3>
+            <label class="setting">
+              <span class="label">Default Terminal</span>
+              <span class="help">Preferred terminal emulator</span>
+              <select id="defaultTerminal" class="select">
+                <option value="terminal">Terminal.app</option>
+                <option value="iterm2">iTerm2</option>
+                <option value="ghostty">Ghostty</option>
+                <option value="warp">Warp</option>
+                <option value="alacritty">Alacritty</option>
+                <option value="wezterm">WezTerm</option>
+              </select>
+            </label>
+            <label class="setting">
+              <span class="label">Default Shell</span>
+              <span class="help">Shell for new terminals</span>
+              <select id="defaultShell" class="select">
+                <option value="/bin/zsh">Zsh</option>
+                <option value="/bin/bash">Bash</option>
+                <option value="/usr/local/bin/fish">Fish</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="setting-card">
+            <h3>Updates</h3>
+            <label class="setting checkbox">
+              <input type="checkbox" id="checkUpdatesAutomatically" checked>
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Check Automatically</span>
+                <span class="help">Check for updates on startup</span>
+              </div>
+            </label>
+            <div class="status-box" style="margin-bottom: 16px;">
+              <div class="status-item">
+                <span>Current Version:</span>
+                <strong id="currentVersion">1.0.0</strong>
+              </div>
+              <div class="status-item">
+                <span>Status:</span>
+                <strong id="updateStatus">Up to date</strong>
+              </div>
+            </div>
+            <button class="button primary" id="checkNowBtn">Check for Updates</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Dashboard Tab -->
+      <div class="tab-content" id="dashboard">
+        <h2>Dashboard</h2>
         
-        // Wait for Tauri API to be available
-        window.addEventListener('DOMContentLoaded', async () => {
-            // Theme toggle handler
-            const themeToggle = document.getElementById('themeToggle');
-            themeToggle.addEventListener('click', () => {
-                const currentTheme = document.documentElement.getAttribute('data-theme');
-                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-                
-                // If no explicit theme is set, check system preference
-                if (!currentTheme) {
-                    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                    const newTheme = systemPrefersDark ? 'light' : 'dark';
-                    document.documentElement.setAttribute('data-theme', newTheme);
-                    localStorage.setItem('theme', newTheme);
-                } else {
-                    document.documentElement.setAttribute('data-theme', newTheme);
-                    localStorage.setItem('theme', newTheme);
-                }
-            });
-            
-            // Check if Tauri API is available
-            if (!window.__TAURI__) {
-                console.error('Tauri API not available. Running in browser mode.');
-                return;
-            }
-            
-            const { invoke } = window.__TAURI__.tauri;
-            const { open } = window.__TAURI__.shell;
-            const { appWindow } = window.__TAURI__.window;
+        <div class="settings-grid">
+          <div class="setting-card">
+            <h3>Server Configuration</h3>
+            <label class="setting">
+              <span class="label">Server Port</span>
+              <span class="help">Port for VibeTunnel server</span>
+              <input type="number" id="serverPort" min="1024" max="65535" class="input" placeholder="4020">
+            </label>
+            <label class="setting checkbox">
+              <input type="checkbox" id="autoCleanup">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Auto Cleanup Sessions</span>
+                <span class="help">Remove inactive sessions automatically</span>
+              </div>
+            </label>
+          </div>
 
-            // Tab switching function
-        function switchToTab(tabName) {
-            // Remove active class from all tabs and contents
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
-            // Find and activate the requested tab
-            const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
-            if (tab) {
-                tab.classList.add('active');
-                const content = document.getElementById(tabName);
-                if (content) {
-                    content.classList.add('active');
-                }
-            }
-        }
+          <div class="setting-card">
+            <h3>Access Control</h3>
+            <label class="setting">
+              <span class="label">Access Mode</span>
+              <span class="help">How dashboard can be accessed</span>
+              <select id="accessMode" class="select">
+                <option value="localhost">Localhost Only</option>
+                <option value="network">Network Access</option>
+                <option value="ngrok">Ngrok Tunnel</option>
+              </select>
+            </label>
+            <div id="networkInfo" class="info-box" style="display: none;">
+              <div class="status-item">
+                <span>Local IP:</span>
+                <strong id="localIP">detecting...</strong>
+              </div>
+              <div class="status-item">
+                <span>Dashboard URL:</span>
+                <strong id="dashboardURL">-</strong>
+              </div>
+            </div>
+          </div>
 
-        // Tab switching event handlers
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const tabId = tab.getAttribute('data-tab');
-                console.log('Tab clicked:', tabId);
-                switchToTab(tabId);
-            });
-        });
+          <div class="setting-card">
+            <h3>Security</h3>
+            <label class="setting checkbox">
+              <input type="checkbox" id="enablePassword">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Password Protection</span>
+                <span class="help">Require password for dashboard access</span>
+              </div>
+            </label>
+            <div id="passwordFields" class="sub-settings" style="display: none;">
+              <input type="password" id="dashboardPassword" class="input" placeholder="Enter password">
+              <input type="password" id="confirmPassword" class="input" placeholder="Confirm password">
+              <button class="button primary small" id="savePasswordBtn">Save Password</button>
+            </div>
+          </div>
 
-            // Check URL parameters on load
-            const urlParams = new URLSearchParams(window.location.search);
-            const tabParam = urlParams.get('tab');
-            if (tabParam) {
-                switchToTab(tabParam);
-            }
-
-        // Load settings on startup
-        async function loadSettings() {
-            try {
-                const settings = await invoke('get_all_settings');
-                
-                // General settings
-                document.getElementById('launchAtLogin').checked = settings.general?.launch_at_login || false;
-                document.getElementById('updateChannel').value = settings.general?.update_channel || 'stable';
-                
-                // Dashboard settings
-                document.getElementById('enablePassword').checked = settings.dashboard?.password_enabled || false;
-                document.getElementById('dashboardPassword').value = settings.dashboard?.password || '';
-                document.getElementById('serverPort').value = settings.dashboard?.server_port || '4020';
-                document.getElementById('accessMode').value = settings.dashboard?.access_mode || 'localhost';
-                document.getElementById('enableNgrok').checked = settings.dashboard?.ngrok?.enabled || false;
-                document.getElementById('ngrokToken').value = settings.dashboard?.ngrok?.auth_token || '';
-                document.getElementById('ngrokRegion').value = settings.dashboard?.ngrok?.region || 'us';
-                
-                // Advanced settings
-                document.getElementById('defaultTerminal').value = settings.advanced?.default_terminal || 'system';
-                document.getElementById('defaultShell').value = settings.advanced?.default_shell || '/bin/zsh';
-                document.getElementById('cleanupOnStartup').checked = settings.advanced?.cleanup_on_startup || false;
-                document.getElementById('sessionTimeout').value = settings.advanced?.session_timeout || 0;
-                document.getElementById('showInDock').checked = settings.advanced?.show_in_dock ?? true;
-                document.getElementById('debugMode').checked = settings.advanced?.debug_mode || false;
-                
-                // Debug settings
-                document.getElementById('logLevel').value = settings.debug?.log_level || 'info';
-                document.getElementById('enableTelemetry').checked = settings.debug?.enable_telemetry || false;
-                
-                // Update UI based on settings
-                updatePasswordVisibility();
-                updateNgrokVisibility();
-                updateNetworkInfo();
-                updateDebugTabVisibility();
-                
-                // Load permissions - wrapped in try-catch to prevent errors from blocking settings load
-                try {
-                    await loadPermissions();
-                } catch (permError) {
-                    console.warn('Failed to load permissions:', permError);
-                }
-                
-                // Load terminal list
-                await loadTerminals();
-                
-                // Check CLI status
-                await checkCLIStatus();
-                
-                // Get app version
-                const version = await invoke('get_app_version');
-                document.getElementById('appVersion').textContent = version;
-                document.getElementById('currentVersion').textContent = version;
-                
-                // Initialize update settings
-                document.getElementById('autoCheck').checked = settings.general?.auto_check_updates ?? true;
-                document.getElementById('autoDownload').checked = settings.general?.auto_download_updates ?? false;
-                
-            } catch (error) {
-                console.error('Failed to load settings:', error);
-            }
-        }
-
-        // Save settings helper
-        async function saveSetting(section, key, value) {
-            try {
-                await invoke('update_setting', { section, key, value: JSON.stringify(value) });
-            } catch (error) {
-                console.error(`Failed to save ${section}.${key}:`, error);
-            }
-        }
-
-        // General tab handlers
-        document.getElementById('launchAtLogin').addEventListener('change', async (e) => {
-            await saveSetting('general', 'launch_at_login', e.target.checked);
-            if (e.target.checked) {
-                await invoke('enable_auto_launch');
-            } else {
-                await invoke('disable_auto_launch');
-            }
-        });
-
-        document.getElementById('updateChannel').addEventListener('change', async (e) => {
-            await saveSetting('general', 'update_channel', e.target.value);
-        });
-
-        // Update UI handlers
-        document.getElementById('checkUpdates').addEventListener('click', async () => {
-            const button = document.getElementById('checkUpdates');
-            const statusCard = document.querySelector('.update-status-card');
-            const statusText = document.getElementById('updateStatusText');
-            const latestVersionInfo = document.getElementById('latestVersionInfo');
-            const updateProgress = document.getElementById('updateProgress');
-            const updateActions = document.getElementById('updateActions');
-            
-            // Reset UI
-            button.disabled = true;
-            statusCard.className = 'update-status-card checking';
-            statusText.innerHTML = '<span class="spinner"></span> Checking for updates...';
-            latestVersionInfo.style.display = 'none';
-            updateProgress.style.display = 'none';
-            updateActions.style.display = 'none';
-            
-            try {
-                const result = await invoke('check_for_updates');
-                
-                if (result && result.available) {
-                    // Update available
-                    statusCard.className = 'update-status-card available';
-                    statusText.innerHTML = '<span class="status-dot warning"></span> Update available!';
-                    
-                    // Show latest version
-                    document.getElementById('latestVersion').textContent = result.latest_version || '1.0.1';
-                    latestVersionInfo.style.display = 'inline';
-                    
-                    // Show actions
-                    updateActions.style.display = 'flex';
-                    
-                    // Auto-download if enabled
-                    if (document.getElementById('autoDownload').checked) {
-                        await startUpdateDownload();
-                    }
-                } else {
-                    // No update
-                    statusCard.className = 'update-status-card';
-                    statusText.innerHTML = '<span class="status-dot success"></span> VibeTunnel is up to date';
-                }
-            } catch (error) {
-                statusCard.className = 'update-status-card error';
-                statusText.innerHTML = '<span class="status-dot error"></span> Failed to check for updates';
-                console.error('Update check failed:', error);
-            } finally {
-                button.disabled = false;
-            }
-        });
+          <div class="setting-card" id="ngrokSettings" style="display: none;">
+            <h3>Ngrok Configuration</h3>
+            <label class="setting">
+              <span class="label">Auth Token</span>
+              <span class="help">Get from <a href="#" id="ngrokLink">ngrok.com</a></span>
+              <input type="password" id="ngrokAuthToken" class="input" placeholder="Enter ngrok auth token">
+            </label>
+            <label class="setting">
+              <span class="label">Region</span>
+              <span class="help">Ngrok tunnel region</span>
+              <select id="ngrokRegion" class="select">
+                <option value="">Auto</option>
+                <option value="us">United States</option>
+                <option value="eu">Europe</option>
+                <option value="ap">Asia/Pacific</option>
+              </select>
+            </label>
+            <div id="ngrokStatus" class="status-box" style="display: none;">
+              <div class="status-item">
+                <span>Status:</span>
+                <strong id="tunnelStatus">Disconnected</strong>
+              </div>
+              <div class="status-item">
+                <span>URL:</span>
+                <strong id="tunnelURL">-</strong>
+                <button class="button small" id="copyURLBtn" style="display: none;">Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Advanced Tab -->
+      <div class="tab-content" id="advanced">
+        <h2>Advanced</h2>
         
-        // Install update handler
-        document.getElementById('installUpdate').addEventListener('click', async () => {
-            await startUpdateDownload();
-        });
+        <div class="settings-grid">
+          <div class="setting-card">
+            <h3>Session Management</h3>
+            <label class="setting">
+              <span class="label">Session Timeout</span>
+              <span class="help">Minutes before idle cleanup (0 = disabled)</span>
+              <input type="number" id="sessionTimeout" min="0" max="1440" class="input" placeholder="30">
+            </label>
+            <label class="setting">
+              <span class="label">Session Limit</span>
+              <span class="help">Maximum concurrent sessions (0 = unlimited)</span>
+              <input type="number" id="sessionLimit" min="0" max="100" class="input" placeholder="0">
+            </label>
+          </div>
+
+          <div class="setting-card">
+            <h3>Recording</h3>
+            <label class="setting checkbox">
+              <input type="checkbox" id="recordingEnabled">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Enable Recording</span>
+                <span class="help">Record terminal sessions</span>
+              </div>
+            </label>
+            <label class="setting">
+              <span class="label">Recording Format</span>
+              <span class="help">Output format for recordings</span>
+              <select id="recordingFormat" class="select">
+                <option value="asciinema">Asciinema</option>
+                <option value="typescript">TypeScript</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="setting-card">
+            <h3>Terminal Colors</h3>
+            <label class="setting">
+              <span class="label">Color Scheme</span>
+              <span class="help">Terminal color theme</span>
+              <select id="terminalTheme" class="select">
+                <option value="vscode-dark">VS Code Dark</option>
+                <option value="solarized-dark">Solarized Dark</option>
+                <option value="monokai">Monokai</option>
+                <option value="nord">Nord</option>
+                <option value="dracula">Dracula</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="setting-card">
+            <h3>Developer</h3>
+            <label class="setting checkbox">
+              <input type="checkbox" id="debugMode">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Debug Mode</span>
+                <span class="help">Enable verbose logging and debug tab</span>
+              </div>
+            </label>
+            <label class="setting">
+              <span class="label">Log Level</span>
+              <span class="help">Console output verbosity</span>
+              <select id="logLevel" class="select">
+                <option value="error">Error</option>
+                <option value="warning">Warning</option>
+                <option value="info">Info</option>
+                <option value="debug">Debug</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="setting-card">
+            <h3>API Testing</h3>
+            <label class="setting checkbox">
+              <input type="checkbox" id="enableApiTesting">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Enable API Testing</span>
+                <span class="help">Allow API testing features</span>
+              </div>
+            </label>
+            <button class="button secondary" id="openApiTestingBtn">Open API Tester</button>
+          </div>
+
+          <div class="setting-card">
+            <h3>Maintenance</h3>
+            <div class="button-group">
+              <button class="button secondary" id="openLogsBtn">Open Logs</button>
+              <button class="button secondary" id="openDataDirBtn">Open Data Directory</button>
+              <button class="button secondary" id="clearCacheBtn">Clear Cache</button>
+              <button class="button danger" id="resetSettingsBtn">Reset All Settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- About Tab -->
+      <div class="tab-content" id="about">
+        <div class="about-content">
+          <img src="icon.png" class="app-icon" width="128" height="128" alt="VibeTunnel">
+          <h1>VibeTunnel</h1>
+          <p class="version">Version <span id="appVersion">1.0.0</span></p>
+          <p class="tagline">Turn any browser into your terminal</p>
+          
+          <div class="system-info">
+            <div class="info-item">
+              <span>Platform</span>
+              <strong id="platform">-</strong>
+            </div>
+            <div class="info-item">
+              <span>Tauri</span>
+              <strong id="tauriVersion">-</strong>
+            </div>
+            <div class="info-item">
+              <span>WebView</span>
+              <strong id="webviewVersion">-</strong>
+            </div>
+          </div>
+          
+          <div class="action-buttons">
+            <button class="button primary" id="checkUpdatesAboutBtn">Check for Updates</button>
+            <button class="button secondary" id="openWebsiteBtn">Visit Website</button>
+            <button class="button secondary" id="viewChangelogBtn">View Changelog</button>
+          </div>
+          
+          <div class="credits">
+            <p>Built with Tauri, Rust, and TypeScript</p>
+            <p>Powered by xterm.js and Axum</p>
+            <div class="team-credits">
+              <p class="brought-by">Brought to you by</p>
+              <div class="team-members">
+                <a href="https://mariozechner.at/" target="_blank" class="credit-link">@badlogic</a>
+                <span class="separator">•</span>
+                <a href="https://lucumr.pocoo.org/" target="_blank" class="credit-link">@mitsuhiko</a>
+                <span class="separator">•</span>
+                <a href="https://steipete.me" target="_blank" class="credit-link">@steipete</a>
+              </div>
+            </div>
+            <p class="copyright">© 2025 • MIT Licensed</p>
+            <p><a href="https://github.com/amantus-ai/vibetunnel" target="_blank" id="openGithubBtn">View on GitHub</a></p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Debug Tab (Hidden by default) -->
+      <div class="tab-content" id="debug">
+        <h2>Debug</h2>
         
-        // Postpone update handler
-        document.getElementById('postponeUpdate').addEventListener('click', () => {
-            const updateActions = document.getElementById('updateActions');
-            updateActions.style.display = 'none';
-        });
+        <div class="settings-grid">
+          <div class="setting-card">
+            <h3>Server Status</h3>
+            <div class="debug-info">
+              <div class="info-item">
+                <span>Status</span>
+                <strong id="debugServerStatus">-</strong>
+              </div>
+              <div class="info-item">
+                <span>Port</span>
+                <strong id="debugServerPort">-</strong>
+              </div>
+              <div class="info-item">
+                <span>URL</span>
+                <a href="#" id="debugServerURL">-</a>
+              </div>
+              <div class="info-item">
+                <span>Sessions</span>
+                <strong id="debugSessionCount">0</strong>
+              </div>
+            </div>
+            <button class="button secondary" id="restartServerBtn">Restart Server</button>
+          </div>
+
+          <div class="setting-card">
+            <h3>Developer Tools</h3>
+            <div class="button-group vertical">
+              <button class="button secondary" id="openDevToolsBtn">Open DevTools</button>
+              <button class="button secondary" id="showWelcomeBtn">Show Welcome Screen</button>
+              <button class="button secondary" id="showConsoleBtn">Server Console</button>
+              <button class="button secondary" id="testNotificationBtn">Test Notification</button>
+              <button class="button secondary" id="openAppDataBtn">Show App Data</button>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <h3>System Paths</h3>
+            <div class="debug-info small">
+              <div class="info-item">
+                <span>App Dir</span>
+                <code id="appPath">-</code>
+              </div>
+              <div class="info-item">
+                <span>Config</span>
+                <code id="configPath">-</code>
+              </div>
+              <div class="info-item">
+                <span>Data</span>
+                <code id="dataPath">-</code>
+              </div>
+              <div class="info-item">
+                <span>Cache</span>
+                <code id="cachePath">-</code>
+              </div>
+              <div class="info-item">
+                <span>Logs</span>
+                <code id="logPath">-</code>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <h3>Feature Flags</h3>
+            <label class="setting checkbox">
+              <input type="checkbox" id="experimentalFeatures">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Experimental Features</span>
+                <span class="help">Enable beta functionality</span>
+              </div>
+            </label>
+            <label class="setting checkbox">
+              <input type="checkbox" id="enableTelemetry">
+              <span class="checkbox-indicator"></span>
+              <div class="setting-info">
+                <span class="label">Telemetry</span>
+                <span class="help">Send anonymous usage data</span>
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', async () => {
+      console.log('Settings page loaded');
+      
+      // Check if Tauri API is available
+      let tauriAvailable = false;
+      let invoke, open, appWindow;
+      
+      try {
+        if (window.__TAURI__) {
+          tauriAvailable = true;
+          invoke = window.__TAURI__.tauri.invoke;
+          open = window.__TAURI__.shell.open;
+          appWindow = window.__TAURI__.window.appWindow;
+          console.log('Tauri API available');
+        }
+      } catch (error) {
+        console.warn('Tauri API not available:', error);
+      }
+
+      // Theme application function
+      function applyTheme(theme) {
+        const html = document.documentElement;
         
-        // Auto-check handler
-        document.getElementById('autoCheck').addEventListener('change', async (e) => {
-            await saveSetting('general', 'auto_check_updates', e.target.checked);
-        });
+        if (theme === 'dark') {
+          html.classList.add('dark');
+          html.classList.remove('light');
+        } else if (theme === 'light') {
+          html.classList.remove('dark');
+          html.classList.add('light');
+        } else {
+          // System theme - detect preference
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (prefersDark) {
+            html.classList.add('dark');
+            html.classList.remove('light');
+          } else {
+            html.classList.remove('dark');
+            html.classList.add('light');
+          }
+        }
+      }
+
+      // Tab switching
+      const tabs = document.querySelectorAll('.tab');
+      const tabContents = document.querySelectorAll('.tab-content');
+
+      function switchToTab(tabName) {
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
         
-        // Auto-download handler
-        document.getElementById('autoDownload').addEventListener('change', async (e) => {
-            await saveSetting('general', 'auto_download_updates', e.target.checked);
-        });
+        const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+        const content = document.getElementById(tabName);
         
-        // Helper function to start update download
-        async function startUpdateDownload() {
-            const statusCard = document.querySelector('.update-status-card');
-            const statusText = document.getElementById('updateStatusText');
-            const updateProgress = document.getElementById('updateProgress');
-            const updateActions = document.getElementById('updateActions');
-            const progressFill = document.getElementById('updateProgressFill');
-            const progressText = document.getElementById('updateProgressText');
-            
-            // Show download progress
-            statusCard.className = 'update-status-card downloading';
-            statusText.innerHTML = '<span class="status-dot warning"></span> Downloading update...';
-            updateProgress.style.display = 'block';
-            updateActions.style.display = 'none';
-            
-            // Simulate download progress
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += Math.random() * 15;
-                if (progress > 100) progress = 100;
-                
-                progressFill.style.width = progress + '%';
-                progressText.textContent = `Downloading update... ${Math.round(progress)}%`;
-                
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    
-                    // Download complete
-                    progressText.textContent = 'Download complete! Ready to install.';
-                    statusText.innerHTML = '<span class="status-dot success"></span> Update ready to install';
-                    
-                    // Show install button
-                    updateActions.style.display = 'flex';
-                    document.getElementById('installUpdate').textContent = 'Restart and Install';
-                    document.getElementById('installUpdate').onclick = async () => {
-                        await invoke('install_update');
-                    };
-                }
-            }, 500);
-            
+        if (tab && content) {
+          tab.classList.add('active');
+          content.classList.add('active');
+        }
+      }
+
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const tabName = tab.getAttribute('data-tab');
+          switchToTab(tabName);
+        });
+      });
+
+      // Apply theme from system preference initially
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.add('light');
+      }
+      
+      // Check for tab parameter in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam) {
+        switchToTab(tabParam);
+      }
+
+      // Load settings if Tauri is available
+      if (tauriAvailable) {
+        try {
+          const settings = await invoke('get_settings');
+          console.log('Settings loaded:', settings);
+          
+          // General settings
+          if (settings.general) {
+            // Load launch at login state from backend
             try {
-                await invoke('download_update');
+              const autoLaunchEnabled = await invoke('get_auto_launch');
+              document.getElementById('launchAtLogin').checked = autoLaunchEnabled;
             } catch (error) {
-                clearInterval(interval);
-                statusCard.className = 'update-status-card error';
-                statusText.innerHTML = '<span class="status-dot error"></span> Download failed';
-                updateProgress.style.display = 'none';
-                console.error('Update download failed:', error);
-            }
-        }
-
-        // Dashboard tab handlers
-        document.getElementById('enablePassword').addEventListener('change', async (e) => {
-            updatePasswordVisibility();
-            await saveSetting('dashboard', 'password_enabled', e.target.checked);
-        });
-
-        document.getElementById('dashboardPassword').addEventListener('blur', async (e) => {
-            if (e.target.value) {
-                await saveSetting('dashboard', 'password', e.target.value);
-                await invoke('set_dashboard_password', { password: e.target.value });
-            }
-        });
-
-        document.getElementById('serverPort').addEventListener('blur', async (e) => {
-            const port = parseInt(e.target.value);
-            if (port >= 1024 && port <= 65535) {
-                await saveSetting('dashboard', 'server_port', port);
-                // Restart server with new port
-                await invoke('restart_server_with_port', { port });
-            }
-        });
-
-        document.getElementById('accessMode').addEventListener('change', async (e) => {
-            await saveSetting('dashboard', 'access_mode', e.target.value);
-            updateNetworkInfo();
-            // Update server bind address
-            const bindAddress = e.target.value === 'localhost' ? '127.0.0.1' : '0.0.0.0';
-            await invoke('update_server_bind_address', { address: bindAddress });
-        });
-
-        document.getElementById('enableNgrok').addEventListener('change', async (e) => {
-            updateNgrokVisibility();
-            await saveSetting('dashboard', 'ngrok.enabled', e.target.checked);
-            if (e.target.checked) {
-                await invoke('start_ngrok');
-            } else {
-                await invoke('stop_ngrok');
-            }
-        });
-
-        // Advanced tab handlers
-        document.getElementById('cleanupOnStartup').addEventListener('change', async (e) => {
-            await saveSetting('advanced', 'cleanup_on_startup', e.target.checked);
-        });
-
-        document.getElementById('sessionTimeout').addEventListener('blur', async (e) => {
-            const timeout = parseInt(e.target.value) || 0;
-            await saveSetting('advanced', 'session_timeout', timeout);
-        });
-
-        document.getElementById('showInDock').addEventListener('change', async (e) => {
-            await saveSetting('advanced', 'show_in_dock', e.target.checked);
-            await invoke('set_dock_icon_visibility', { visible: e.target.checked });
-        });
-
-        document.getElementById('debugMode').addEventListener('change', async (e) => {
-            await saveSetting('advanced', 'debug_mode', e.target.checked);
-            updateDebugTabVisibility();
-        });
-
-        // CLI handlers
-        document.getElementById('installCLI').addEventListener('click', async () => {
-            const status = document.getElementById('cliStatus');
-            status.style.display = 'inline-flex';
-            status.className = 'status';
-            status.innerHTML = '<span class="spinner"></span> Installing...';
-            
-            try {
-                await invoke('install_cli');
-                status.className = 'status success';
-                status.innerHTML = '<span class="status-dot success"></span>Installed';
-                await checkCLIStatus();
-            } catch (error) {
-                status.className = 'status error';
-                status.innerHTML = '<span class="status-dot error"></span>Failed';
+              console.error('Failed to get auto launch status:', error);
+              document.getElementById('launchAtLogin').checked = settings.general.launch_at_login || false;
             }
             
-            setTimeout(() => {
-                status.style.display = 'none';
-            }, 3000);
-        });
-
-        document.getElementById('uninstallCLI').addEventListener('click', async () => {
-            const status = document.getElementById('cliStatus');
-            status.style.display = 'inline-flex';
-            status.className = 'status';
-            status.innerHTML = '<span class="spinner"></span> Uninstalling...';
+            document.getElementById('showDockIcon').checked = settings.general.show_dock_icon !== false;
+            document.getElementById('showWelcomeOnStartup').checked = settings.general.show_welcome_on_startup !== false;
+            document.getElementById('defaultTerminal').value = settings.general.default_terminal || 'terminal';
+            document.getElementById('defaultShell').value = settings.general.default_shell || '/bin/zsh';
+            document.getElementById('theme').value = settings.general.theme || 'system';
+            document.getElementById('checkUpdatesAutomatically').checked = settings.general.check_updates_automatically !== false;
             
-            try {
-                await invoke('uninstall_cli');
-                status.className = 'status success';
-                status.innerHTML = '<span class="status-dot success"></span>Uninstalled';
-                await checkCLIStatus();
-            } catch (error) {
-                status.className = 'status error';
-                status.innerHTML = '<span class="status-dot error"></span>Failed';
-            }
-            
-            setTimeout(() => {
-                status.style.display = 'none';
-            }, 3000);
-        });
-
-        // Debug tab handlers
-        document.getElementById('logLevel').addEventListener('change', async (e) => {
-            await saveSetting('debug', 'log_level', e.target.value);
-            await invoke('set_log_level', { level: e.target.value });
-        });
-
-        document.getElementById('restartServer').addEventListener('click', async () => {
-            await invoke('restart_server');
-        });
-
-        document.getElementById('stopServer').addEventListener('click', async () => {
-            await invoke('stop_server');
-        });
-
-        document.getElementById('testAPI').addEventListener('click', async () => {
-            const endpoint = document.getElementById('apiEndpoint').value;
-            const response = document.getElementById('apiResponse');
-            
-            response.style.display = 'block';
-            response.innerHTML = '<div class="console-line">Testing ' + endpoint + '...</div>';
-            
-            try {
-                const result = await invoke('test_api_endpoint', { endpoint });
-                response.innerHTML += '<div class="console-line success">' + JSON.stringify(result, null, 2) + '</div>';
-            } catch (error) {
-                response.innerHTML += '<div class="console-line error">Error: ' + error + '</div>';
-            }
-        });
-
-        // Helper functions
-        function updatePasswordVisibility() {
-            const enabled = document.getElementById('enablePassword').checked;
-            document.getElementById('passwordGroup').style.display = enabled ? 'block' : 'none';
+            // Apply the loaded theme
+            applyTheme(settings.general.theme || 'system');
+          }
+          
+          // Dashboard settings
+          if (settings.dashboard) {
+            document.getElementById('serverPort').value = settings.dashboard.server_port || 4020;
+            document.getElementById('autoCleanup').checked = settings.dashboard.auto_cleanup !== false;
+            document.getElementById('accessMode').value = settings.dashboard.access_mode || 'localhost';
+            document.getElementById('enablePassword').checked = settings.dashboard.enable_password || false;
+            document.getElementById('sessionTimeout').value = settings.dashboard.idle_timeout_minutes || 30;
+            document.getElementById('sessionLimit').value = settings.dashboard.session_limit || 0;
+          }
+          
+          // Advanced settings
+          if (settings.advanced) {
+            document.getElementById('debugMode').checked = settings.advanced.debug_mode || false;
+            document.getElementById('logLevel').value = settings.advanced.log_level || 'info';
+            document.getElementById('ngrokAuthToken').value = settings.advanced.ngrok_auth_token || '';
+            document.getElementById('ngrokRegion').value = settings.advanced.ngrok_region || '';
+            document.getElementById('experimentalFeatures').checked = settings.advanced.experimental_features || false;
+            document.getElementById('enableTelemetry').checked = settings.advanced.enable_telemetry !== false;
+          }
+          
+          // Recording settings
+          if (settings.recording) {
+            document.getElementById('recordingEnabled').checked = settings.recording.enabled || false;
+            document.getElementById('recordingFormat').value = settings.recording.format || 'asciinema';
+          }
+          
+          // Show/hide debug tab based on debug mode
+          if (settings.advanced && settings.advanced.debug_mode) {
+            document.getElementById('debugTab').style.display = 'flex';
+          }
+          
+          // Update password fields visibility
+          updatePasswordFieldsVisibility();
+          
+          // Update access mode dependent fields
+          updateAccessModeFields();
+          
+        } catch (error) {
+          console.error('Failed to load settings:', error);
         }
 
-        function updateNgrokVisibility() {
-            const enabled = document.getElementById('enableNgrok').checked;
-            document.getElementById('ngrokConfig').style.display = enabled ? 'block' : 'none';
+        // Get system info
+        try {
+          const info = await invoke('get_system_info');
+          document.getElementById('appVersion').textContent = info.version || '1.0.0';
+          document.getElementById('currentVersion').textContent = info.version || '1.0.0';
+          document.getElementById('platform').textContent = info.os || 'Unknown';
+          document.getElementById('tauriVersion').textContent = info.tauri_version || 'Unknown';
+          document.getElementById('webviewVersion').textContent = info.webview_version || 'Unknown';
+        } catch (error) {
+          console.error('Failed to get system info:', error);
         }
 
-        function updateNetworkInfo() {
-            const mode = document.getElementById('accessMode').value;
-            document.getElementById('networkInfo').style.display = mode === 'network' ? 'block' : 'none';
-            
-            if (mode === 'network') {
-                // Get local IP
-                invoke('get_local_ip').then(ip => {
-                    document.getElementById('localIP').textContent = ip;
-                });
-            }
+        // Get server status for debug tab
+        if (document.getElementById('debugTab').style.display !== 'none') {
+          updateDebugInfo();
+          setInterval(updateDebugInfo, 5000);
         }
+      }
 
-        function updateDebugTabVisibility() {
-            const enabled = document.getElementById('debugMode').checked;
-            document.getElementById('debugTab').style.display = enabled ? 'flex' : 'none';
-        }
+      // Helper functions
+      function updatePasswordFieldsVisibility() {
+        const enablePassword = document.getElementById('enablePassword').checked;
+        document.getElementById('passwordFields').style.display = enablePassword ? 'block' : 'none';
+      }
 
-        async function loadPermissions() {
-            try {
-                const permissions = await invoke('get_all_permissions');
-                const container = document.getElementById('permissionsList');
-                if (!container) {
-                    console.warn('Permissions container not found');
-                    return;
-                }
-                container.innerHTML = '';
-                
-                // Handle empty or invalid permissions response
-                if (!permissions || (Array.isArray(permissions) && permissions.length === 0)) {
-                    container.innerHTML = '<p class="help-text">No permissions to display</p>';
-                    return;
-                }
-                
-                // Convert array to object format if needed
-                const permissionsObj = Array.isArray(permissions) 
-                    ? permissions.reduce((acc, perm) => {
-                        acc[perm.permission_type] = perm.status;
-                        return acc;
-                    }, {})
-                    : permissions;
-                
-                for (const [name, status] of Object.entries(permissionsObj)) {
-                    const item = document.createElement('div');
-                    item.className = 'permission-item';
-                    
-                    const nameEl = document.createElement('div');
-                    nameEl.className = 'permission-name';
-                    nameEl.textContent = formatPermissionName(name);
-                    
-                    const statusEl = document.createElement('div');
-                    statusEl.className = 'permission-status';
-                    
-                    if (status === 'granted') {
-                        statusEl.innerHTML = `
-                            <svg class="permission-icon granted" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                            </svg>
-                            <span style="color: var(--success-color)">Granted</span>
-                        `;
-                    } else {
-                        statusEl.innerHTML = `
-                            <svg class="permission-icon denied" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                            </svg>
-                            <button class="button" onclick="requestPermission('${name}')">Grant Permission</button>
-                        `;
-                    }
-                    
-                    item.appendChild(nameEl);
-                    item.appendChild(statusEl);
-                    container.appendChild(item);
-                }
-            } catch (error) {
-                console.error('Failed to load permissions:', error);
-            }
-        }
-
-        async function loadTerminals() {
-            try {
-                const terminals = await invoke('detect_terminals');
-                const select = document.getElementById('defaultTerminal');
-                
-                // Clear existing options except system default
-                select.innerHTML = '<option value="system">System Default</option>';
-                
-                terminals.forEach(terminal => {
-                    const option = document.createElement('option');
-                    option.value = terminal.id;
-                    option.textContent = terminal.name;
-                    select.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Failed to load terminals:', error);
-            }
-        }
-
-        async function checkCLIStatus() {
-            try {
-                const installed = await invoke('is_cli_installed');
-                const installBtn = document.getElementById('installCLI');
-                const uninstallBtn = document.getElementById('uninstallCLI');
-                
-                installBtn.disabled = installed;
-                uninstallBtn.disabled = !installed;
-            } catch (error) {
-                console.error('Failed to check CLI status:', error);
-            }
-        }
-
-        function formatPermissionName(name) {
-            return name.split('_').map(word => 
-                word.charAt(0).toUpperCase() + word.slice(1)
-            ).join(' ');
-        }
-
-        async function requestPermission(permission) {
-            try {
-                await invoke('request_permission', { permission });
-                await loadPermissions();
-            } catch (error) {
-                console.error('Failed to request permission:', error);
-            }
-        }
-
-        function copyIP() {
-            const ip = document.getElementById('localIP').textContent;
-            navigator.clipboard.writeText(ip);
-            
-            // Show feedback
-            const button = event.target;
-            const originalText = button.textContent;
-            button.textContent = 'Copied!';
-            button.classList.add('copied');
-            setTimeout(() => {
-                button.textContent = originalText;
-                button.classList.remove('copied');
-            }, 1500);
-        }
-
-        // External links
-        async function openWebsite() {
-            await open('https://vibetunnel.com');
-        }
-
-        async function openGitHub() {
-            await open('https://github.com/vibetunnel/vibetunnel');
-        }
-
-        async function openChangelog() {
-            await open('https://github.com/vibetunnel/vibetunnel/releases');
-        }
-
-        async function openNgrokDashboard() {
-            await open('https://dashboard.ngrok.com');
-        }
-
-        // Server console updates
-        let consoleLines = [];
+      function updateAccessModeFields() {
+        const accessMode = document.getElementById('accessMode').value;
+        document.getElementById('networkInfo').style.display = accessMode === 'network' ? 'block' : 'none';
+        document.getElementById('ngrokSettings').style.display = accessMode === 'ngrok' ? 'block' : 'none';
         
-        async function updateServerConsole() {
-            try {
-                const logs = await invoke('get_server_logs', { limit: 100 });
-                const console = document.getElementById('serverConsole');
-                
-                console.innerHTML = logs.map(log => {
-                    let className = 'console-line';
-                    if (log.level === 'error') className += ' error';
-                    else if (log.level === 'success') className += ' success';
-                    
-                    return `<div class="${className}">${log.message}</div>`;
-                }).join('');
-                
-                console.scrollTop = console.scrollHeight;
-            } catch (error) {
-                console.error('Failed to update server console:', error);
-            }
+        if (accessMode === 'network' && tauriAvailable) {
+          invoke('get_local_ip').then(ip => {
+            document.getElementById('localIP').textContent = ip || 'Unable to detect';
+            const port = document.getElementById('serverPort').value || 4020;
+            document.getElementById('dashboardURL').textContent = `http://${ip}:${port}`;
+          });
         }
+      }
 
-        document.getElementById('clearConsole').addEventListener('click', () => {
-            document.getElementById('serverConsole').innerHTML = '';
-            consoleLines = [];
-        });
-
-        document.getElementById('exportLogs').addEventListener('click', async () => {
-            try {
-                await invoke('export_logs');
-            } catch (error) {
-                console.error('Failed to export logs:', error);
-            }
-        });
-
-        // Update server status periodically
-        async function updateServerStatus() {
-            try {
-                const status = await invoke('get_server_status');
-                document.getElementById('serverStatus').textContent = status.running ? 'Running' : 'Stopped';
-                document.getElementById('serverPortStatus').textContent = status.port;
-                document.getElementById('sessionCount').textContent = status.session_count;
-            } catch (error) {
-                console.error('Failed to update server status:', error);
-            }
+      async function updateDebugInfo() {
+        if (!tauriAvailable) return;
+        
+        try {
+          const status = await invoke('get_server_status');
+          document.getElementById('debugServerStatus').textContent = status.running ? 'Running' : 'Stopped';
+          document.getElementById('debugServerPort').textContent = status.port || '-';
+          document.getElementById('debugServerURL').textContent = status.url || '-';
+          document.getElementById('debugServerURL').href = status.url || '#';
+          
+          const sessions = await invoke('list_terminals');
+          document.getElementById('debugSessionCount').textContent = sessions.length;
+        } catch (error) {
+          console.error('Failed to update debug info:', error);
         }
+      }
 
-        // Initialize
-        loadSettings();
-        
-        // Update server status every 5 seconds
-        setInterval(updateServerStatus, 5000);
-        
-        // Update console if debug tab is active
-        setInterval(() => {
-            if (document.getElementById('debug').classList.contains('active')) {
-                updateServerConsole();
+      // Event listeners
+      document.getElementById('enablePassword').addEventListener('change', updatePasswordFieldsVisibility);
+      document.getElementById('accessMode').addEventListener('change', updateAccessModeFields);
+      
+      document.getElementById('debugMode').addEventListener('change', (e) => {
+        document.getElementById('debugTab').style.display = e.target.checked ? 'flex' : 'none';
+      });
+
+      // Save settings on change
+      const settingsInputs = document.querySelectorAll('input, select');
+      settingsInputs.forEach(input => {
+        input.addEventListener('change', async () => {
+          if (!tauriAvailable) return;
+          
+          const settings = {
+            general: {
+              launch_at_login: document.getElementById('launchAtLogin').checked,
+              show_dock_icon: document.getElementById('showDockIcon').checked,
+              show_welcome_on_startup: document.getElementById('showWelcomeOnStartup').checked,
+              default_terminal: document.getElementById('defaultTerminal').value,
+              default_shell: document.getElementById('defaultShell').value,
+              theme: document.getElementById('theme').value,
+              check_updates_automatically: document.getElementById('checkUpdatesAutomatically').checked
+            },
+            dashboard: {
+              server_port: parseInt(document.getElementById('serverPort').value) || 4020,
+              auto_cleanup: document.getElementById('autoCleanup').checked,
+              access_mode: document.getElementById('accessMode').value,
+              enable_password: document.getElementById('enablePassword').checked,
+              idle_timeout_minutes: parseInt(document.getElementById('sessionTimeout').value) || 30,
+              session_limit: parseInt(document.getElementById('sessionLimit').value) || 0
+            },
+            advanced: {
+              debug_mode: document.getElementById('debugMode').checked,
+              log_level: document.getElementById('logLevel').value,
+              ngrok_auth_token: document.getElementById('ngrokAuthToken').value,
+              ngrok_region: document.getElementById('ngrokRegion').value,
+              experimental_features: document.getElementById('experimentalFeatures').checked,
+              enable_telemetry: document.getElementById('enableTelemetry').checked
+            },
+            recording: {
+              enabled: document.getElementById('recordingEnabled').checked,
+              format: document.getElementById('recordingFormat').value
             }
-        }, 1000);
-        
-        }); // End of DOMContentLoaded
-    </script>
+          };
+          
+          try {
+            await invoke('save_settings', { settings });
+            
+            // Apply theme immediately if it changed
+            if (input.id === 'theme') {
+              applyTheme(input.value);
+            }
+            
+            // Handle launch at login separately
+            if (input.id === 'launchAtLogin') {
+              try {
+                await invoke('set_auto_launch', { enabled: input.checked });
+              } catch (error) {
+                console.error('Failed to set auto launch:', error);
+              }
+            }
+            console.log('Settings saved');
+          } catch (error) {
+            console.error('Failed to save settings:', error);
+          }
+        });
+      });
+
+      // Button click handlers
+      const buttonHandlers = {
+        'checkNowBtn': () => invoke('check_for_updates'),
+        'checkUpdatesAboutBtn': () => invoke('check_for_updates'),
+        'openWebsiteBtn': () => open('https://vibetunnel.sh'),
+        'openSourceBtn': () => open('https://github.com/amantus-ai/vibetunnel'),
+        'viewChangelogBtn': () => open('https://github.com/amantus-ai/vibetunnel/releases'),
+        'ngrokLink': () => open('https://ngrok.com'),
+        'savePasswordBtn': async () => {
+          const password = document.getElementById('dashboardPassword').value;
+          const confirm = document.getElementById('confirmPassword').value;
+          
+          if (password !== confirm) {
+            alert('Passwords do not match');
+            return;
+          }
+          
+          if (password.length < 6) {
+            alert('Password must be at least 6 characters');
+            return;
+          }
+          
+          await invoke('set_dashboard_password', { password });
+          alert('Password saved successfully');
+          document.getElementById('dashboardPassword').value = '';
+          document.getElementById('confirmPassword').value = '';
+        },
+        'openLogsBtn': () => invoke('open_logs_directory'),
+        'openDataDirBtn': () => invoke('open_data_directory'),
+        'clearCacheBtn': async () => {
+          if (confirm('Are you sure you want to clear the cache?')) {
+            await invoke('clear_cache');
+            alert('Cache cleared successfully');
+          }
+        },
+        'resetSettingsBtn': async () => {
+          if (confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
+            await invoke('reset_settings');
+            window.location.reload();
+          }
+        },
+        'openApiTestingBtn': () => invoke('open_api_testing_window'),
+        'restartServerBtn': () => invoke('restart_server'),
+        'openDevToolsBtn': () => appWindow && appWindow.openDevtools(),
+        'showWelcomeBtn': () => invoke('show_welcome_window'),
+        'showConsoleBtn': () => invoke('open_server_console'),
+        'testNotificationBtn': () => invoke('test_notification'),
+        'openAppDataBtn': () => invoke('open_app_data_directory')
+      };
+
+      // Attach button click handlers
+      Object.entries(buttonHandlers).forEach(([id, handler]) => {
+        const button = document.getElementById(id);
+        if (button && tauriAvailable) {
+          button.addEventListener('click', async (e) => {
+            e.preventDefault();
+            try {
+              await handler();
+            } catch (error) {
+              console.error(`Error handling ${id} click:`, error);
+            }
+          });
+        }
+      });
+    });
+  </script>
 </body>
 </html>
