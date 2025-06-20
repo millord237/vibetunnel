@@ -13,7 +13,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { PtyService } from './pty/index.js';
+import { PtyManager } from './server/pty/index.js';
 
 function showUsage() {
   console.log('VibeTunnel Forward (fwd.ts)');
@@ -58,20 +58,16 @@ async function main() {
   console.log(`Starting command: ${command.join(' ')}`);
   console.log(`Working directory: ${cwd}`);
 
-  // Initialize PTY service - fwd.ts should always use node-pty directly
+  // Initialize PTY manager
   const controlPath = path.join(os.homedir(), '.vibetunnel', 'control');
-  const ptyService = new PtyService({
-    implementation: 'node-pty', // Always use node-pty, never tty-fwd
-    controlPath,
-    fallbackToTtyFwd: false, // Disable fallback - fwd.ts replaces tty-fwd
-  });
+  const ptyManager = new PtyManager(controlPath);
 
   try {
     // Create the session
     const sessionName = `fwd_${command[0]}_${Date.now()}`;
     console.log(`Creating session: ${sessionName}`);
 
-    const result = await ptyService.createSession(command, {
+    const result = await ptyManager.createSession(command, {
       sessionName,
       workingDir: cwd,
       term: process.env.TERM || 'xterm-256color',
@@ -80,24 +76,30 @@ async function main() {
     });
 
     console.log(`Session created with ID: ${result.sessionId}`);
-    console.log(`Implementation: ${ptyService.getCurrentImplementation()}`);
 
     // Track all intervals and streams for cleanup
     const intervals: NodeJS.Timeout[] = [];
-    const streams: any[] = [];
+    const streams: (fs.ReadStream | NodeJS.ReadWriteStream)[] = [];
 
     // Get session info
-    const session = ptyService.getSession(result.sessionId);
+    const session = ptyManager.getSession(result.sessionId);
     if (!session) {
       throw new Error('Session not found after creation');
     }
 
     // Get direct access to PTY process for faster input and exit detection
-    let directPtyProcess: any = null;
+    interface PtyProcess {
+      write: (data: string) => void;
+      onExit: (callback: (info: { exitCode: number; signal?: number }) => void) => void;
+    }
+    let directPtyProcess: PtyProcess | null = null;
     try {
-      const ptyManager = (ptyService as any).ptyManager;
-      const internalSession = ptyManager?.sessions?.get(result.sessionId);
-      directPtyProcess = internalSession?.ptyProcess;
+      // Access internal sessions map from the ptyManager instance
+      const ptyManagerWithSessions = ptyManager as unknown as {
+        sessions?: Map<string, { ptyProcess?: PtyProcess }>;
+      };
+      const internalSession = ptyManagerWithSessions.sessions?.get(result.sessionId);
+      directPtyProcess = internalSession?.ptyProcess || null;
       if (directPtyProcess) {
         console.log('Got direct PTY process access for faster input and exit detection');
 
@@ -109,7 +111,9 @@ async function main() {
           intervals.forEach((interval) => clearInterval(interval));
           streams.forEach((stream) => {
             try {
-              stream.destroy?.();
+              if ('destroy' in stream && typeof stream.destroy === 'function') {
+                stream.destroy();
+              }
             } catch (_e) {
               // Ignore cleanup errors
             }
@@ -268,7 +272,7 @@ async function main() {
           console.log(`Received resize command: ${message.cols}x${message.rows}`);
           // Get current session from PTY service and resize if possible
           try {
-            ptyService.resizeSession(result.sessionId, message.cols, message.rows);
+            ptyManager.resizeSession(result.sessionId, message.cols, message.rows);
           } catch (error) {
             console.warn('Failed to resize session:', error);
           }
@@ -280,7 +284,7 @@ async function main() {
           console.log(`Received kill command: ${signal}`);
           // The session monitoring will detect the exit and handle cleanup
           try {
-            ptyService.killSession(result.sessionId, signal);
+            ptyManager.killSession(result.sessionId, signal);
           } catch (error) {
             console.warn('Failed to kill session:', error);
           }
@@ -327,7 +331,7 @@ async function main() {
           const data = chunk.toString('utf8');
           try {
             // Forward data from web server to PTY
-            ptyService.sendInput(result.sessionId, { text: data });
+            ptyManager.sendInput(result.sessionId, { text: data });
           } catch (error) {
             console.error('Failed to forward stdin data to PTY:', error);
           }
@@ -437,7 +441,7 @@ async function main() {
       console.log(`\n\nReceived ${signal}, checking session status...`);
 
       try {
-        const currentSession = ptyService.getSession(result.sessionId);
+        const currentSession = ptyManager.getSession(result.sessionId);
         if (currentSession && currentSession.status === 'running') {
           console.log('Session is still running. Leaving it active.');
           console.log(`Session ID: ${result.sessionId}`);

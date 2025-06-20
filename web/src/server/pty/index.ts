@@ -9,13 +9,12 @@
 export * from './types.js';
 
 // Main service interface
-export { PtyService } from './PtyService.js';
+export { PtyManager } from './pty-manager.js';
 
 // Individual components (for advanced usage)
-export { PtyManager } from './PtyManager.js';
-export { AsciinemaWriter } from './AsciinemaWriter.js';
-export { SessionManager } from './SessionManager.js';
-export { ProcessUtils } from './ProcessUtils.js';
+export { AsciinemaWriter } from './asciinema-writer.js';
+export { SessionManager } from './session-manager.js';
+export { ProcessUtils } from './process-utils.js';
 
 // Re-export for convenience
 export { PtyError } from './types.js';

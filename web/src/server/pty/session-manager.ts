@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { SessionInfo, SessionEntryWithId, PtyError } from './types.js';
-import { ProcessUtils } from './ProcessUtils.js';
+import { ProcessUtils } from './process-utils.js';
 
 export class SessionManager {
   private controlPath: string;

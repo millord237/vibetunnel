@@ -138,8 +138,8 @@ export type SpecialKey =
 export interface PtySession {
   id: string;
   sessionInfo: SessionInfo;
-  ptyProcess?: any; // node-pty IPty instance (typed as any to avoid import dependency)
-  asciinemaWriter?: any; // AsciinemaWriter instance (typed as any to avoid import dependency)
+  ptyProcess?: import('@homebridge/node-pty-prebuilt-multiarch').IPty;
+  asciinemaWriter?: import('./asciinema-writer.js').AsciinemaWriter;
   controlDir: string;
   streamOutPath: string;
   stdinPath: string;

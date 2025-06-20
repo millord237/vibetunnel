@@ -95,6 +95,26 @@ export class RemoteRegistry {
     }
   }
 
+  addSessionToRemote(remoteId: string, sessionId: string): void {
+    const remote = this.remotes.get(remoteId);
+    if (!remote) return;
+
+    remote.sessionIds.add(sessionId);
+    this.sessionToRemote.set(sessionId, remoteId);
+  }
+
+  removeSessionFromRemote(sessionId: string): void {
+    const remoteId = this.sessionToRemote.get(sessionId);
+    if (!remoteId) return;
+
+    const remote = this.remotes.get(remoteId);
+    if (remote) {
+      remote.sessionIds.delete(sessionId);
+    }
+
+    this.sessionToRemote.delete(sessionId);
+  }
+
   private async checkRemoteHealth(remote: RemoteServer): Promise<void> {
     try {
       const controller = new AbortController();
@@ -105,31 +125,16 @@ export class RemoteRegistry {
         Authorization: `Bearer ${remote.token}`,
       };
 
-      // First try health endpoint, fall back to sessions
-      let response = await fetch(`${remote.url}/api/health`, {
+      // Only check health endpoint - all remotes MUST have it
+      const response = await fetch(`${remote.url}/api/health`, {
         headers,
         signal: controller.signal,
-      }).catch(() => null);
-
-      // If health endpoint doesn't exist, try sessions
-      if (!response || response.status === 404) {
-        response = await fetch(`${remote.url}/api/sessions`, {
-          headers,
-          signal: controller.signal,
-        });
-      }
+      });
 
       clearTimeout(timeoutId);
 
       if (response.ok) {
         remote.lastHeartbeat = new Date();
-
-        // If we got sessions, update the session tracking
-        if (response.url.endsWith('/api/sessions')) {
-          const sessions = await response.json();
-          const sessionIds = Array.isArray(sessions) ? sessions.map((s: any) => s.id) : [];
-          this.updateRemoteSessions(remote.id, sessionIds);
-        }
       } else {
         throw new Error(`HTTP ${response.status}`);
       }

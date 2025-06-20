@@ -21,9 +21,9 @@ import {
   ResizeControlMessage,
   KillControlMessage,
 } from './types.js';
-import { AsciinemaWriter } from './AsciinemaWriter.js';
-import { SessionManager } from './SessionManager.js';
-import { ProcessUtils } from './ProcessUtils.js';
+import { AsciinemaWriter } from './asciinema-writer.js';
+import { SessionManager } from './session-manager.js';
+import { ProcessUtils } from './process-utils.js';
 
 export class PtyManager {
   private sessions = new Map<string, PtySession>();
@@ -173,7 +173,7 @@ export class PtyManager {
     const { ptyProcess, asciinemaWriter, sessionJsonPath } = session;
 
     // Handle PTY data output
-    ptyProcess.onData((data: string) => {
+    ptyProcess?.onData((data: string) => {
       try {
         // Write to asciinema file
         asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
@@ -183,7 +183,7 @@ export class PtyManager {
     });
 
     // Handle PTY exit
-    ptyProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+    ptyProcess?.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
       try {
         console.log(`Session ${session.id} exited with code ${exitCode}, signal ${signal}`);
 
@@ -205,15 +205,6 @@ export class PtyManager {
         this.sessions.delete(session.id);
       } catch (_error) {
         console.error(`Error handling exit for session ${session.id}:`, _error);
-      }
-    });
-
-    // Handle resize events
-    ptyProcess.onResize?.(({ cols, rows }: { cols: number; rows: number }) => {
-      try {
-        asciinemaWriter?.writeResize(cols, rows);
-      } catch (error) {
-        console.error(`Error writing resize event for session ${session.id}:`, error);
       }
     });
 

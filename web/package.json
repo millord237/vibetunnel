@@ -14,7 +14,7 @@
     "ensure:dirs": "node scripts/ensure-dirs.js",
     "bundle": "npm run clean && npm run bundle:assets && npm run bundle:css && npm run bundle:client && npm run bundle:test",
     "bundle:assets": "node scripts/copy-assets.js",
-    "bundle:css": "npm run ensure:dirs && npx tailwindcss -i ./src/input.css -o ./public/bundle/output.css --minify",
+    "bundle:css": "npm run ensure:dirs && npx tailwindcss -i ./src/client/styles.css -o ./public/bundle/styles.css --minify",
     "bundle:client": "npm run ensure:dirs && esbuild src/client/app-entry.ts --bundle --outfile=public/bundle/client-bundle.js --format=esm --sourcemap",
     "bundle:test": "npm run ensure:dirs && esbuild src/client/test-terminals-entry.ts --bundle --outfile=public/bundle/terminal.js --format=esm --sourcemap",
     "start": "node dist/server.js",
@@ -27,16 +27,15 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:unit": "vitest run src/test/unit",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:critical": "vitest run src/test/critical.test.ts src/test/smoke.test.ts",
-    "test:all": "npm run test:unit && npm run test:integration && npm run test:critical"
+    "test:e2e": "vitest run --config vitest.config.e2e.ts",
+    "test:all": "npm run test:run"
   },
   "dependencies": {
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.12.0",
     "@xterm/headless": "^5.5.0",
+    "chalk": "^5.4.1",
     "express": "^4.19.2",
     "lit": "^3.3.0",
-    "@homebridge/node-pty-prebuilt-multiarch": "^0.12.0",
     "signal-exit": "^4.1.0",
     "ws": "^8.18.2"
   },

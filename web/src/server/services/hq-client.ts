@@ -7,14 +7,23 @@ export class HQClient {
   private readonly token: string;
   private readonly hqUsername: string;
   private readonly hqPassword: string;
+  private readonly remoteUrl: string;
 
-  constructor(hqUrl: string, hqUsername: string, hqPassword: string, remoteName: string) {
+  constructor(
+    hqUrl: string,
+    hqUsername: string,
+    hqPassword: string,
+    remoteName: string,
+    remoteUrl: string,
+    bearerToken: string
+  ) {
     this.hqUrl = hqUrl;
     this.remoteId = uuidv4();
     this.remoteName = remoteName;
-    this.token = uuidv4();
+    this.token = bearerToken;
     this.hqUsername = hqUsername;
     this.hqPassword = hqPassword;
+    this.remoteUrl = remoteUrl;
   }
 
   async register(): Promise<void> {
@@ -28,7 +37,7 @@ export class HQClient {
         body: JSON.stringify({
           id: this.remoteId,
           name: this.remoteName,
-          url: `http://localhost:${process.env.PORT || 4020}`,
+          url: this.remoteUrl,
           token: this.token, // Token for HQ to authenticate with this remote
         }),
       });
@@ -68,5 +77,18 @@ export class HQClient {
 
   getToken(): string {
     return this.token;
+  }
+
+  getHQUrl(): string {
+    return this.hqUrl;
+  }
+
+  getHQAuth(): string {
+    const credentials = Buffer.from(`${this.hqUsername}:${this.hqPassword}`).toString('base64');
+    return `Basic ${credentials}`;
+  }
+
+  getName(): string {
+    return this.remoteName;
   }
 }

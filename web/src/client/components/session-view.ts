@@ -420,12 +420,26 @@ export class SessionView extends LitElement {
 
     // Send the input to the session
     try {
+      // Determine if we should send as key or text
+      const body = [
+        'enter',
+        'escape',
+        'arrow_up',
+        'arrow_down',
+        'arrow_left',
+        'arrow_right',
+        'ctrl_enter',
+        'shift_enter',
+      ].includes(inputText)
+        ? { key: inputText }
+        : { text: inputText };
+
       const response = await fetch(`/api/sessions/${this.session.id}/input`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: inputText }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -837,12 +851,26 @@ export class SessionView extends LitElement {
     if (!this.session) return;
 
     try {
+      // Determine if we should send as key or text
+      const body = [
+        'enter',
+        'escape',
+        'arrow_up',
+        'arrow_down',
+        'arrow_left',
+        'arrow_right',
+        'ctrl_enter',
+        'shift_enter',
+      ].includes(text)
+        ? { key: text }
+        : { text };
+
       const response = await fetch(`/api/sessions/${this.session.id}/input`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

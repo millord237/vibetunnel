@@ -608,7 +608,10 @@ export class TerminalManager {
       this.bufferListeners.set(sessionId, new Set());
     }
 
-    this.bufferListeners.get(sessionId)!.add(listener);
+    const listeners = this.bufferListeners.get(sessionId);
+    if (listeners) {
+      listeners.add(listener);
+    }
 
     // Return unsubscribe function
     return () => {

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 
 interface StreamClient {
-  response: any; // Express Response type
+  response: import('express').Response;
   startTime: number;
 }
 
@@ -18,7 +18,7 @@ export class StreamWatcher {
   /**
    * Add a client to watch a stream file
    */
-  addClient(sessionId: string, streamPath: string, response: any): void {
+  addClient(sessionId: string, streamPath: string, response: import('express').Response): void {
     const startTime = Date.now() / 1000;
     const client: StreamClient = { response, startTime };
 
@@ -59,7 +59,7 @@ export class StreamWatcher {
   /**
    * Remove a client
    */
-  removeClient(sessionId: string, response: any): void {
+  removeClient(sessionId: string, response: import('express').Response): void {
     const watcherInfo = this.activeWatchers.get(sessionId);
     if (!watcherInfo) return;
 
