@@ -442,6 +442,7 @@ fn main() {
             // Auto-start server with monitoring
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
+                tracing::info!("Starting server with monitoring...");
                 start_server_with_monitoring(app_handle).await;
             });
 

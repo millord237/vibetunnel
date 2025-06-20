@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tracing::{error, info};
 
@@ -26,33 +26,40 @@ pub struct SpawnResponse {
 
 pub struct UnixSocketServer {
     request_tx: mpsc::Sender<SpawnRequest>,
+    request_rx: Arc<Mutex<Option<mpsc::Receiver<SpawnRequest>>>>,
+    terminal_spawn_service: Arc<crate::terminal_spawn_service::TerminalSpawnService>,
 }
 
 impl UnixSocketServer {
     pub fn new(
         terminal_spawn_service: Arc<crate::terminal_spawn_service::TerminalSpawnService>,
     ) -> Self {
-        let (tx, mut rx) = mpsc::channel::<SpawnRequest>(100);
-
-        // Spawn handler for requests
-        let spawn_service = terminal_spawn_service.clone();
-        tokio::spawn(async move {
-            while let Some(request) = rx.recv().await {
-                let service = spawn_service.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = handle_spawn_request(request, service).await {
-                        error!("Failed to handle spawn request: {}", e);
-                    }
-                });
-            }
-        });
+        let (tx, rx) = mpsc::channel::<SpawnRequest>(100);
 
         Self {
             request_tx: tx,
+            request_rx: Arc::new(Mutex::new(Some(rx))),
+            terminal_spawn_service,
         }
     }
 
     pub fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // Spawn the handler for requests now that runtime is available
+        let rx = self.request_rx.lock().unwrap().take();
+        if let Some(mut rx) = rx {
+            let spawn_service = self.terminal_spawn_service.clone();
+            tokio::spawn(async move {
+                while let Some(request) = rx.recv().await {
+                    let service = spawn_service.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = handle_spawn_request(request, service).await {
+                            error!("Failed to handle spawn request: {}", e);
+                        }
+                    });
+                }
+            });
+        }
+
         // Remove existing socket if it exists
         if Path::new(SOCKET_PATH).exists() {
             std::fs::remove_file(SOCKET_PATH)?;

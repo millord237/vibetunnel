@@ -18,6 +18,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::time::{interval, Duration};
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::ServeDir;
 use tracing::{debug, error, info};
 
 use crate::auth::{auth_middleware, check_auth, login, AuthConfig};
@@ -215,8 +216,8 @@ impl HttpServer {
             session_monitor: self.session_monitor.clone(),
         };
 
-        // Don't serve static files in Tauri - the frontend is served by Tauri itself
-        // This server is only for the terminal API
+        // Serve the web terminal UI from the web/public directory
+        // This is needed for the dashboard to work when opened in a browser
 
         // Create auth routes that use auth config
         let auth_routes = Router::new()
@@ -251,9 +252,33 @@ impl HttpServer {
             ))
             .with_state(app_state);
 
+        // Find the web assets directory
+        let web_dir = std::env::current_dir()
+            .ok()
+            .and_then(|mut path| {
+                // Try to find the web/public directory relative to the current directory
+                // This works whether we're in src-tauri or the project root
+                if path.ends_with("src-tauri") {
+                    path.pop(); // Go to tauri/
+                    path.pop(); // Go to project root
+                }
+                path.push("web");
+                path.push("public");
+                if path.exists() {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| PathBuf::from("../../web/public"));
+
+        info!("Serving web assets from: {:?}", web_dir);
+        let serve_dir = ServeDir::new(web_dir);
+
         Router::new()
             .merge(auth_routes)
             .merge(protected_routes)
+            .fallback_service(serve_dir)
             .layer(
                 CorsLayer::new()
                     .allow_origin(Any)
