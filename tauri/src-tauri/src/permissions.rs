@@ -239,9 +239,12 @@ impl PermissionsManager {
 
         status
     }
-    
+
     /// Check specific permission silently (without triggering any prompts or notifications)
-    pub async fn check_permission_silent(&self, permission_type: PermissionType) -> PermissionStatus {
+    pub async fn check_permission_silent(
+        &self,
+        permission_type: PermissionType,
+    ) -> PermissionStatus {
         // Just check the status without updating or notifying
         self.check_permission_internal(permission_type).await
     }

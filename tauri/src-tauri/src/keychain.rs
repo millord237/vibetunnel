@@ -82,17 +82,17 @@ impl KeychainManager {
     /// Get all stored credentials (returns keys only, not passwords)
     pub fn list_stored_keys() -> Vec<String> {
         let mut keys = Vec::new();
-        
+
         // Check if dashboard password exists
         if Self::get_dashboard_password().unwrap_or(None).is_some() {
             keys.push(DASHBOARD_PASSWORD_KEY.to_string());
         }
-        
+
         // Check if ngrok token exists
         if Self::get_ngrok_auth_token().unwrap_or(None).is_some() {
             keys.push(NGROK_AUTH_TOKEN_KEY.to_string());
         }
-        
+
         keys
     }
 

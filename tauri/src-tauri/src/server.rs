@@ -256,13 +256,11 @@ impl HttpServer {
         let web_dir = std::env::current_dir()
             .ok()
             .and_then(|mut path| {
-                // Try to find the web/public directory relative to the current directory
-                // This works whether we're in src-tauri or the project root
+                // Try to find the public directory relative to the current directory
+                // For Tauri, we use the tauri/public directory
                 if path.ends_with("src-tauri") {
                     path.pop(); // Go to tauri/
-                    path.pop(); // Go to project root
                 }
-                path.push("web");
                 path.push("public");
                 if path.exists() {
                     Some(path)
@@ -270,7 +268,7 @@ impl HttpServer {
                     None
                 }
             })
-            .unwrap_or_else(|| PathBuf::from("../../web/public"));
+            .unwrap_or_else(|| PathBuf::from("../public"));
 
         info!("Serving web assets from: {:?}", web_dir);
         let serve_dir = ServeDir::new(web_dir);

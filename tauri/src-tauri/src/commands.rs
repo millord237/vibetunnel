@@ -49,11 +49,11 @@ pub async fn create_terminal(
             options.shell,
         )
         .await?;
-    
+
     // Update menu bar session count
     let session_count = terminal_manager.list_sessions().await.len();
     crate::tray_menu::TrayMenuManager::update_session_count(&app, session_count).await;
-    
+
     Ok(result)
 }
 
@@ -64,14 +64,18 @@ pub async fn list_terminals(state: State<'_, AppState>) -> Result<Vec<Terminal>,
 }
 
 #[tauri::command]
-pub async fn close_terminal(id: String, state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+pub async fn close_terminal(
+    id: String,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     let terminal_manager = &state.terminal_manager;
     terminal_manager.close_session(&id).await?;
-    
+
     // Update menu bar session count
     let session_count = terminal_manager.list_sessions().await.len();
     crate::tray_menu::TrayMenuManager::update_session_count(&app, session_count).await;
-    
+
     Ok(())
 }
 
@@ -94,12 +98,12 @@ pub async fn write_to_terminal(
 ) -> Result<(), String> {
     let terminal_manager = &state.terminal_manager;
     let result = terminal_manager.write_to_session(&id, &data).await;
-    
+
     // Notify session monitor of activity
     if result.is_ok() {
         state.session_monitor.notify_activity(&id).await;
     }
-    
+
     result
 }
 
@@ -107,17 +111,20 @@ pub async fn write_to_terminal(
 pub async fn read_from_terminal(id: String, state: State<'_, AppState>) -> Result<Vec<u8>, String> {
     let terminal_manager = &state.terminal_manager;
     let result = terminal_manager.read_from_session(&id).await;
-    
+
     // Notify session monitor of activity
     if result.is_ok() {
         state.session_monitor.notify_activity(&id).await;
     }
-    
+
     result
 }
 
 #[tauri::command]
-pub async fn start_server(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<ServerStatus, String> {
+pub async fn start_server(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<ServerStatus, String> {
     let mut server = state.http_server.write().await;
 
     if let Some(http_server) = server.as_ref() {
@@ -128,7 +135,7 @@ pub async fn start_server(state: State<'_, AppState>, app: tauri::AppHandle) -> 
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
             ngrok_tunnel.url
         } else {
-            format!("http://localhost:{}", port)
+            format!("http://127.0.0.1:{}", port)
         };
 
         return Ok(ServerStatus {
@@ -192,7 +199,7 @@ pub async fn start_server(state: State<'_, AppState>, app: tauri::AppHandle) -> 
         }
         _ => {
             let port = http_server.start_with_mode("localhost").await?;
-            (port, format!("http://localhost:{}", port))
+            (port, format!("http://127.0.0.1:{}", port))
         }
     };
 
@@ -240,7 +247,7 @@ pub async fn get_server_status(state: State<'_, AppState>) -> Result<ServerStatu
             let settings = crate::settings::Settings::load().unwrap_or_default();
             match settings.dashboard.access_mode.as_str() {
                 "network" => format!("http://0.0.0.0:{}", port),
-                _ => format!("http://localhost:{}", port),
+                _ => format!("http://127.0.0.1:{}", port),
             }
         };
 
@@ -264,33 +271,15 @@ pub fn get_app_version() -> String {
 }
 
 #[tauri::command]
-pub async fn restart_server(state: State<'_, AppState>) -> Result<(), String> {
-    // Stop the current server
-    let mut server = state.http_server.write().await;
+pub async fn restart_server(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<ServerStatus, String> {
+    // First stop the server
+    stop_server(state.clone(), app.clone()).await?;
 
-    if let Some(mut http_server) = server.take() {
-        http_server.stop().await?;
-    }
-
-    // Wait a moment
+    // Wait a moment for clean shutdown
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-    // Start a new server
-    let terminal_manager = state.terminal_manager.clone();
-    let session_monitor = state.session_monitor.clone();
-    let settings = crate::settings::Settings::load().unwrap_or_default();
-
-    let mut new_server = HttpServer::new(terminal_manager, session_monitor);
-    new_server
-        .start_with_mode(match settings.dashboard.access_mode.as_str() {
-            "network" => "network",
-            _ => "localhost",
-        })
-        .await?;
-
-    *server = Some(new_server);
-
-    Ok(())
+    // Start the server again
+    start_server(state, app).await
 }
 
 #[tauri::command]
@@ -366,102 +355,6 @@ pub async fn update_dock_icon_visibility(app_handle: tauri::AppHandle) -> Result
     Ok(())
 }
 
-// Terminal Recording Commands
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StartRecordingOptions {
-    pub session_id: String,
-    pub title: Option<String>,
-    pub output_path: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RecordingStatus {
-    pub is_recording: bool,
-    pub duration: f64,
-}
-
-#[tauri::command]
-pub async fn start_terminal_recording(
-    options: StartRecordingOptions,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let cast_manager = &state.cast_manager;
-
-    // Get terminal info for metadata
-    let terminal_manager = &state.terminal_manager;
-    let sessions = terminal_manager.list_sessions().await;
-    let session = sessions
-        .iter()
-        .find(|s| s.id == options.session_id)
-        .ok_or_else(|| "Session not found".to_string())?;
-
-    // Create recorder if it doesn't exist
-    cast_manager
-        .create_recorder(
-            options.session_id.clone(),
-            session.cols,
-            session.rows,
-            options.title.or(Some(session.name.clone())),
-            None, // command
-        )
-        .await
-        .ok(); // Ignore if already exists
-
-    // Start recording
-    if let Some(path) = options.output_path {
-        cast_manager
-            .start_recording(&options.session_id, path)
-            .await
-    } else {
-        // Use default path with timestamp
-        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-        let filename = format!("vibetunnel_recording_{}.cast", timestamp);
-        let path = std::env::temp_dir().join(filename);
-        cast_manager
-            .start_recording(&options.session_id, path)
-            .await
-    }
-}
-
-#[tauri::command]
-pub async fn stop_terminal_recording(
-    session_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let cast_manager = &state.cast_manager;
-    cast_manager.stop_recording(&session_id).await
-}
-
-#[tauri::command]
-pub async fn save_terminal_recording(
-    session_id: String,
-    output_path: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let cast_manager = &state.cast_manager;
-    cast_manager.save_recording(&session_id, output_path).await
-}
-
-#[tauri::command]
-pub async fn get_recording_status(
-    session_id: String,
-    state: State<'_, AppState>,
-) -> Result<RecordingStatus, String> {
-    let cast_manager = &state.cast_manager;
-    let is_recording = cast_manager.is_recording(&session_id).await;
-
-    let duration = if let Some(recorder) = cast_manager.get_recorder(&session_id).await {
-        let rec = recorder.lock().await;
-        rec.get_duration().await
-    } else {
-        0.0
-    };
-
-    Ok(RecordingStatus {
-        is_recording,
-        duration,
-    })
-}
 
 // TTY Forwarding Commands
 #[derive(Debug, Serialize, Deserialize)]
@@ -817,31 +710,6 @@ pub async fn show_welcome_window(state: State<'_, AppState>) -> Result<(), Strin
 }
 
 // Advanced Settings Commands
-#[tauri::command]
-pub async fn get_recording_settings() -> Result<crate::settings::RecordingSettings, String> {
-    let settings = crate::settings::Settings::load().unwrap_or_default();
-    Ok(settings
-        .recording
-        .unwrap_or(crate::settings::RecordingSettings {
-            enabled: true,
-            output_directory: None,
-            format: "asciinema".to_string(),
-            include_timing: true,
-            compress_output: false,
-            max_file_size_mb: Some(100),
-            auto_save: false,
-            filename_template: Some("vibetunnel_%Y%m%d_%H%M%S".to_string()),
-        }))
-}
-
-#[tauri::command]
-pub async fn save_recording_settings(
-    recording: crate::settings::RecordingSettings,
-) -> Result<(), String> {
-    let mut settings = crate::settings::Settings::load().unwrap_or_default();
-    settings.recording = Some(recording);
-    settings.save()
-}
 
 #[tauri::command]
 pub async fn get_all_advanced_settings() -> Result<HashMap<String, serde_json::Value>, String> {
@@ -849,10 +717,6 @@ pub async fn get_all_advanced_settings() -> Result<HashMap<String, serde_json::V
     let mut all_settings = HashMap::new();
 
     // Convert all settings sections to JSON values
-    all_settings.insert(
-        "recording".to_string(),
-        serde_json::to_value(&settings.recording).unwrap_or(serde_json::Value::Null),
-    );
     all_settings.insert(
         "tty_forward".to_string(),
         serde_json::to_value(&settings.tty_forward).unwrap_or(serde_json::Value::Null),
@@ -901,10 +765,6 @@ pub async fn update_advanced_settings(
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
 
     match section.as_str() {
-        "recording" => {
-            settings.recording = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid recording settings: {}", e))?;
-        }
         "tty_forward" => {
             settings.tty_forward = serde_json::from_value(value)
                 .map_err(|e| format!("Invalid TTY forward settings: {}", e))?;
@@ -953,7 +813,6 @@ pub async fn reset_settings_section(section: String) -> Result<(), String> {
     let defaults = crate::settings::Settings::default();
 
     match section.as_str() {
-        "recording" => settings.recording = defaults.recording,
         "tty_forward" => settings.tty_forward = defaults.tty_forward,
         "monitoring" => settings.monitoring = defaults.monitoring,
         "network" => settings.network = defaults.network,
@@ -1007,7 +866,9 @@ pub async fn check_permission_silent(
     state: State<'_, AppState>,
 ) -> Result<crate::permissions::PermissionStatus, String> {
     let permissions_manager = &state.permissions_manager;
-    Ok(permissions_manager.check_permission_silent(permission_type).await)
+    Ok(permissions_manager
+        .check_permission_silent(permission_type)
+        .await)
 }
 
 #[tauri::command]
@@ -1841,10 +1702,6 @@ pub async fn get_all_settings() -> Result<HashMap<String, serde_json::Value>, St
         serde_json::to_value(&settings.advanced).unwrap_or(serde_json::Value::Null),
     );
     all_settings.insert(
-        "recording".to_string(),
-        serde_json::to_value(&settings.recording).unwrap_or(serde_json::Value::Null),
-    );
-    all_settings.insert(
         "tty_forward".to_string(),
         serde_json::to_value(&settings.tty_forward).unwrap_or(serde_json::Value::Null),
     );
@@ -2020,6 +1877,7 @@ pub async fn update_setting(section: String, key: String, value: String) -> Resu
 pub async fn set_dashboard_password(
     password: String,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     // Update settings
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
@@ -2032,21 +1890,22 @@ pub async fn set_dashboard_password(
     if server.is_some() {
         drop(server);
         // Restart server to apply new auth settings
-        restart_server(state).await?;
+        restart_server(state, app).await?;
     }
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn restart_server_with_port(port: u16, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn restart_server_with_port(port: u16, state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
     // Update settings with new port
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
     settings.dashboard.server_port = port;
     settings.save()?;
 
     // Restart the server
-    restart_server(state).await
+    restart_server(state, app).await?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2069,7 +1928,8 @@ pub async fn update_server_bind_address(
     crate::tray_menu::TrayMenuManager::update_access_mode(&app_handle, access_mode).await;
 
     // Restart server to apply new bind address
-    restart_server(state).await
+    restart_server(state, app_handle).await?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2108,7 +1968,7 @@ pub async fn test_api_endpoint(
 
     if let Some(http_server) = server.as_ref() {
         let port = http_server.port();
-        let url = format!("http://localhost:{}{}", port, endpoint);
+        let url = format!("http://127.0.0.1:{}{}", port, endpoint);
 
         // Create a simple HTTP client request
         let client = reqwest::Client::new();
@@ -2213,56 +2073,47 @@ pub async fn detect_terminals() -> Result<crate::terminal_detector::DetectedTerm
 // Keychain commands
 #[tauri::command]
 pub async fn keychain_set_password(key: String, password: String) -> Result<(), String> {
-    crate::keychain::KeychainManager::set_password(&key, &password)
-        .map_err(|e| e.message)
+    crate::keychain::KeychainManager::set_password(&key, &password).map_err(|e| e.message)
 }
 
 #[tauri::command]
 pub async fn keychain_get_password(key: String) -> Result<Option<String>, String> {
-    crate::keychain::KeychainManager::get_password(&key)
-        .map_err(|e| e.message)
+    crate::keychain::KeychainManager::get_password(&key).map_err(|e| e.message)
 }
 
 #[tauri::command]
 pub async fn keychain_delete_password(key: String) -> Result<(), String> {
-    crate::keychain::KeychainManager::delete_password(&key)
-        .map_err(|e| e.message)
+    crate::keychain::KeychainManager::delete_password(&key).map_err(|e| e.message)
 }
 
 #[tauri::command]
 pub async fn keychain_set_dashboard_password(password: String) -> Result<(), String> {
-    crate::keychain::KeychainManager::set_dashboard_password(&password)
-        .map_err(|e| e.message)
+    crate::keychain::KeychainManager::set_dashboard_password(&password).map_err(|e| e.message)
 }
 
 #[tauri::command]
 pub async fn keychain_get_dashboard_password() -> Result<Option<String>, String> {
-    crate::keychain::KeychainManager::get_dashboard_password()
-        .map_err(|e| e.message)
+    crate::keychain::KeychainManager::get_dashboard_password().map_err(|e| e.message)
 }
 
 #[tauri::command]
 pub async fn keychain_delete_dashboard_password() -> Result<(), String> {
-    crate::keychain::KeychainManager::delete_dashboard_password()
-        .map_err(|e| e.message)
+    crate::keychain::KeychainManager::delete_dashboard_password().map_err(|e| e.message)
 }
 
 #[tauri::command]
 pub async fn keychain_set_ngrok_auth_token(token: String) -> Result<(), String> {
-    crate::keychain::KeychainManager::set_ngrok_auth_token(&token)
-        .map_err(|e| e.message)
+    crate::keychain::KeychainManager::set_ngrok_auth_token(&token).map_err(|e| e.message)
 }
 
 #[tauri::command]
 pub async fn keychain_get_ngrok_auth_token() -> Result<Option<String>, String> {
-    crate::keychain::KeychainManager::get_ngrok_auth_token()
-        .map_err(|e| e.message)
+    crate::keychain::KeychainManager::get_ngrok_auth_token().map_err(|e| e.message)
 }
 
 #[tauri::command]
 pub async fn keychain_delete_ngrok_auth_token() -> Result<(), String> {
-    crate::keychain::KeychainManager::delete_ngrok_auth_token()
-        .map_err(|e| e.message)
+    crate::keychain::KeychainManager::delete_ngrok_auth_token().map_err(|e| e.message)
 }
 
 #[tauri::command]
@@ -2271,18 +2122,24 @@ pub async fn keychain_list_keys() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-pub async fn request_all_permissions(state: State<'_, AppState>) -> Result<Vec<crate::permissions::PermissionRequestResult>, String> {
+pub async fn request_all_permissions(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::permissions::PermissionRequestResult>, String> {
     let permissions_manager = &state.permissions_manager;
     let mut results = Vec::new();
-    
+
     // Get all permissions that need to be requested
     let all_permissions = permissions_manager.get_all_permissions().await;
-    
+
     for permission_info in all_permissions {
         // Only request permissions that are not already granted
-        if permission_info.status != crate::permissions::PermissionStatus::Granted 
-            && permission_info.status != crate::permissions::PermissionStatus::NotApplicable {
-            match permissions_manager.request_permission(permission_info.permission_type).await {
+        if permission_info.status != crate::permissions::PermissionStatus::Granted
+            && permission_info.status != crate::permissions::PermissionStatus::NotApplicable
+        {
+            match permissions_manager
+                .request_permission(permission_info.permission_type)
+                .await
+            {
                 Ok(result) => results.push(result),
                 Err(e) => {
                     results.push(crate::permissions::PermissionRequestResult {
@@ -2296,14 +2153,15 @@ pub async fn request_all_permissions(state: State<'_, AppState>) -> Result<Vec<c
             }
         }
     }
-    
+
     Ok(results)
 }
 
 #[tauri::command]
 pub async fn test_terminal(terminal: String, state: State<'_, AppState>) -> Result<(), String> {
     // Use the terminal spawn service to test launching a terminal
-    state.terminal_spawn_service
+    state
+        .terminal_spawn_service
         .spawn_terminal(crate::terminal_spawn_service::TerminalSpawnRequest {
             session_id: "test".to_string(),
             terminal_type: Some(terminal),
@@ -2313,6 +2171,6 @@ pub async fn test_terminal(terminal: String, state: State<'_, AppState>) -> Resu
         })
         .await
         .map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }

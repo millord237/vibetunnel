@@ -48,7 +48,7 @@ impl TerminalSpawnService {
         let rx = self.request_rx.lock().await.take();
         if let Some(mut rx) = rx {
             let manager_clone = self.terminal_integrations_manager.clone();
-            
+
             tokio::spawn(async move {
                 while let Some(request) = rx.recv().await {
                     let manager = manager_clone.clone();

@@ -1,7 +1,6 @@
 use crate::api_testing::APITestingManager;
 use crate::auth_cache::AuthCacheManager;
 use crate::backend_manager::BackendManager;
-use crate::cast::CastManager;
 use crate::debug_features::DebugFeaturesManager;
 use crate::ngrok::NgrokManager;
 use crate::notification_manager::NotificationManager;
@@ -12,10 +11,10 @@ use crate::terminal::TerminalManager;
 use crate::terminal_integrations::TerminalIntegrationsManager;
 use crate::terminal_spawn_service::TerminalSpawnService;
 use crate::tty_forward::TTYForwardManager;
-use crate::updater::UpdateManager;
-use crate::welcome::WelcomeManager;
 #[cfg(unix)]
 use crate::unix_socket_server::UnixSocketServer;
+use crate::updater::UpdateManager;
+use crate::welcome::WelcomeManager;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -27,7 +26,6 @@ pub struct AppState {
     pub ngrok_manager: Arc<NgrokManager>,
     pub server_monitoring: Arc<AtomicBool>,
     pub server_target_port: Arc<RwLock<Option<u16>>>,
-    pub cast_manager: Arc<CastManager>,
     pub tty_forward_manager: Arc<TTYForwardManager>,
     pub session_monitor: Arc<SessionMonitor>,
     pub notification_manager: Arc<NotificationManager>,
@@ -46,13 +44,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
-        let mut terminal_manager = TerminalManager::new();
-        let cast_manager = Arc::new(CastManager::new());
-
-        // Connect terminal manager to cast manager
-        terminal_manager.set_cast_manager(cast_manager.clone());
-
-        let terminal_manager = Arc::new(terminal_manager);
+        let terminal_manager = Arc::new(TerminalManager::new());
         let session_monitor = Arc::new(SessionMonitor::new(terminal_manager.clone()));
         let notification_manager = Arc::new(NotificationManager::new());
         let mut permissions_manager = PermissionsManager::new();
@@ -91,7 +83,6 @@ impl AppState {
             ngrok_manager: Arc::new(NgrokManager::new()),
             server_monitoring: Arc::new(AtomicBool::new(true)),
             server_target_port: Arc::new(RwLock::new(None)),
-            cast_manager,
             tty_forward_manager: Arc::new(TTYForwardManager::new()),
             session_monitor,
             notification_manager,

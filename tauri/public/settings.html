@@ -83,24 +83,12 @@
       -moz-osx-font-smoothing: grayscale;
     }
 
-    /* Custom Titlebar Spacer */
-    .titlebar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 38px;
-      background: transparent;
-      -webkit-app-region: drag;
-      z-index: 1000;
-    }
-
     /* Main Window */
     .window {
       display: flex;
       height: 100vh;
-      padding-top: 38px;
       background: var(--bg-primary);
+      -webkit-app-region: no-drag;
     }
 
     /* Sidebar */
@@ -748,9 +736,6 @@
   </style>
 </head>
 <body>
-  <!-- Custom titlebar spacer for macOS native controls -->
-  <div class="titlebar"></div>
-
   <div class="window">
     <div class="sidebar">
       <ul class="tabs">
@@ -997,40 +982,7 @@
             </label>
           </div>
 
-          <div class="setting-card">
-            <h3>Recording</h3>
-            <label class="setting checkbox">
-              <input type="checkbox" id="recordingEnabled">
-              <span class="checkbox-indicator"></span>
-              <div class="setting-info">
-                <span class="label">Enable Recording</span>
-                <span class="help">Record terminal sessions</span>
-              </div>
-            </label>
-            <label class="setting">
-              <span class="label">Recording Format</span>
-              <span class="help">Output format for recordings</span>
-              <select id="recordingFormat" class="select">
-                <option value="asciinema">Asciinema</option>
-                <option value="typescript">TypeScript</option>
-              </select>
-            </label>
-          </div>
 
-          <div class="setting-card">
-            <h3>Terminal Colors</h3>
-            <label class="setting">
-              <span class="label">Color Scheme</span>
-              <span class="help">Terminal color theme</span>
-              <select id="terminalTheme" class="select">
-                <option value="vscode-dark">VS Code Dark</option>
-                <option value="solarized-dark">Solarized Dark</option>
-                <option value="monokai">Monokai</option>
-                <option value="nord">Nord</option>
-                <option value="dracula">Dracula</option>
-              </select>
-            </label>
-          </div>
 
           <div class="setting-card">
             <h3>Developer</h3>
@@ -1054,18 +1006,6 @@
             </label>
           </div>
 
-          <div class="setting-card">
-            <h3>API Testing</h3>
-            <label class="setting checkbox">
-              <input type="checkbox" id="enableApiTesting">
-              <span class="checkbox-indicator"></span>
-              <div class="setting-info">
-                <span class="label">Enable API Testing</span>
-                <span class="help">Allow API testing features</span>
-              </div>
-            </label>
-            <button class="button secondary" id="openApiTestingBtn">Open API Tester</button>
-          </div>
 
           <div class="setting-card">
             <h3>Maintenance</h3>
@@ -1192,25 +1132,6 @@
             </div>
           </div>
 
-          <div class="setting-card">
-            <h3>Feature Flags</h3>
-            <label class="setting checkbox">
-              <input type="checkbox" id="experimentalFeatures">
-              <span class="checkbox-indicator"></span>
-              <div class="setting-info">
-                <span class="label">Experimental Features</span>
-                <span class="help">Enable beta functionality</span>
-              </div>
-            </label>
-            <label class="setting checkbox">
-              <input type="checkbox" id="enableTelemetry">
-              <span class="checkbox-indicator"></span>
-              <div class="setting-info">
-                <span class="label">Telemetry</span>
-                <span class="help">Send anonymous usage data</span>
-              </div>
-            </label>
-          </div>
         </div>
       </div>
     </div>
@@ -1347,11 +1268,6 @@
             document.getElementById('enableTelemetry').checked = settings.advanced.enable_telemetry !== false;
           }
           
-          // Recording settings
-          if (settings.recording) {
-            document.getElementById('recordingEnabled').checked = settings.recording.enabled || false;
-            document.getElementById('recordingFormat').value = settings.recording.format || 'asciinema';
-          }
           
           // Show/hide debug tab based on debug mode
           if (settings.advanced && settings.advanced.debug_mode) {
@@ -1384,6 +1300,8 @@
         if (document.getElementById('debugTab').style.display !== 'none') {
           updateDebugInfo();
           setInterval(updateDebugInfo, 5000);
+          // Load system paths
+          loadSystemPaths();
         }
       }
 
@@ -1421,6 +1339,23 @@
           document.getElementById('debugSessionCount').textContent = sessions.length;
         } catch (error) {
           console.error('Failed to update debug info:', error);
+        }
+      }
+
+      async function loadSystemPaths() {
+        if (!tauriAvailable) return;
+        
+        try {
+          const { appDataDir, appConfigDir, appCacheDir, appLogDir, resourceDir } = window.__TAURI__.path;
+          
+          // Load each path
+          document.getElementById('appPath').textContent = await resourceDir() || '-';
+          document.getElementById('configPath').textContent = await appConfigDir() || '-';
+          document.getElementById('dataPath').textContent = await appDataDir() || '-';
+          document.getElementById('cachePath').textContent = await appCacheDir() || '-';
+          document.getElementById('logPath').textContent = await appLogDir() || '-';
+        } catch (error) {
+          console.error('Failed to load system paths:', error);
         }
       }
 
@@ -1464,10 +1399,6 @@
               experimental_features: document.getElementById('experimentalFeatures').checked,
               enable_telemetry: document.getElementById('enableTelemetry').checked
             },
-            recording: {
-              enabled: document.getElementById('recordingEnabled').checked,
-              format: document.getElementById('recordingFormat').value
-            }
           };
           
           try {
@@ -1534,13 +1465,35 @@
             window.location.reload();
           }
         },
-        'openApiTestingBtn': () => invoke('open_api_testing_window'),
-        'restartServerBtn': () => invoke('restart_server'),
-        'openDevToolsBtn': () => appWindow && appWindow.openDevtools(),
+        'restartServerBtn': async () => {
+          try {
+            const status = await invoke('restart_server');
+            if (status.running) {
+              await updateDebugInfo();
+              alert('Server restarted successfully');
+            }
+          } catch (error) {
+            alert('Failed to restart server: ' + error);
+          }
+        },
+        'openDevToolsBtn': async () => {
+          if (appWindow) {
+            appWindow.openDevtools();
+          }
+        },
         'showWelcomeBtn': () => invoke('show_welcome_window'),
-        'showConsoleBtn': () => invoke('open_server_console'),
-        'testNotificationBtn': () => invoke('test_notification'),
-        'openAppDataBtn': () => invoke('open_app_data_directory')
+        'showConsoleBtn': () => invoke('show_server_console'),
+        'testNotificationBtn': () => invoke('show_notification', {
+          title: 'Test Notification',
+          body: 'This is a test notification from VibeTunnel',
+          severity: 'info'
+        }),
+        'openAppDataBtn': async () => {
+          const { open } = window.__TAURI__.shell;
+          const { appDataDir } = window.__TAURI__.path;
+          const dataPath = await appDataDir();
+          await open(dataPath);
+        }
       };
 
       // Attach button click handlers

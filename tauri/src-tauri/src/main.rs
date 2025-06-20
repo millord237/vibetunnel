@@ -14,7 +14,6 @@ mod auth;
 mod auth_cache;
 mod auto_launch;
 mod backend_manager;
-mod cast;
 mod cli_installer;
 mod commands;
 mod debug_features;
@@ -53,28 +52,26 @@ fn open_settings_window(app: AppHandle, tab: Option<String>) -> Result<(), Strin
     } else {
         "settings.html".to_string()
     };
-    
+
     // Check if settings window already exists
     if let Some(window) = app.get_webview_window("settings") {
         // Navigate to the URL with the tab parameter if window exists
-        window.eval(&format!("window.location.href = '{}'", url))
+        window
+            .eval(&format!("window.location.href = '{}'", url))
             .map_err(|e| e.to_string())?;
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
     } else {
         // Create new settings window
-        let window = tauri::WebviewWindowBuilder::new(
-            &app,
-            "settings",
-            tauri::WebviewUrl::App(url.into()),
-        )
-        .title("VibeTunnel Settings")
-        .inner_size(950.0, 720.0)
-        .resizable(true)
-        .decorations(true)
-        .center()
-        .build()
-        .map_err(|e| e.to_string())?;
+        let window =
+            tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App(url.into()))
+                .title("VibeTunnel Settings")
+                .inner_size(1200.0, 800.0)
+                .resizable(true)
+                .decorations(true)
+                .center()
+                .build()
+                .map_err(|e| e.to_string())?;
 
         // Handle close event to destroy the window
         let window_clone = window.clone();
@@ -114,8 +111,9 @@ fn main() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            let _ = show_main_window(app.app_handle().clone());
+        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
+            // Don't show main window on startup - app runs in system tray
+            // let _ = show_main_window(app.app_handle().clone());
         }))
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
@@ -149,10 +147,6 @@ fn main() {
             cli_installer::install_cli,
             cli_installer::uninstall_cli,
             cli_installer::check_cli_installed,
-            start_terminal_recording,
-            stop_terminal_recording,
-            save_terminal_recording,
-            get_recording_status,
             start_tty_forward,
             stop_tty_forward,
             list_tty_forwards,
@@ -190,8 +184,6 @@ fn main() {
             reset_tutorial,
             get_tutorial_progress,
             show_welcome_window,
-            get_recording_settings,
-            save_recording_settings,
             get_all_advanced_settings,
             update_advanced_settings,
             reset_settings_section,
@@ -320,18 +312,18 @@ fn main() {
             let app_handle3 = app.handle().clone();
             let app_handle4 = app.handle().clone();
             let app_handle_for_move = app.handle().clone();
-            
+
             tauri::async_runtime::spawn(async move {
                 let state = state_clone;
                 state.notification_manager.set_app_handle(app_handle).await;
                 state.welcome_manager.set_app_handle(app_handle2).await;
                 state.permissions_manager.set_app_handle(app_handle3).await;
                 state.update_manager.set_app_handle(app_handle4).await;
-                
+
                 // Start background workers now that we have a runtime
                 state.terminal_spawn_service.clone().start_worker().await;
                 state.auth_cache_manager.start_cleanup_task().await;
-                
+
                 // Start Unix socket server for terminal spawning (macOS/Linux)
                 #[cfg(unix)]
                 {
@@ -339,7 +331,7 @@ fn main() {
                         tracing::error!("Failed to start Unix socket server: {}", e);
                     }
                 }
-                
+
                 // Start session monitoring
                 state.session_monitor.start_monitoring().await;
 
@@ -376,7 +368,7 @@ fn main() {
                 } else {
                     "menu-bar-icon.png"
                 };
-                
+
                 let icon_path = resource_dir.join(icon_name);
                 if let Ok(icon_data) = std::fs::read(&icon_path) {
                     tauri::image::Image::from_bytes(&icon_data).ok()
@@ -420,7 +412,7 @@ fn main() {
                             let state = app.state::<AppState>();
                             let server_guard = state.http_server.blocking_read();
                             if let Some(server) = server_guard.as_ref() {
-                                let url = format!("http://localhost:{}", server.port());
+                                let url = format!("http://127.0.0.1:{}", server.port());
                                 let _ = open::that(url);
                             }
                         }
@@ -471,16 +463,18 @@ fn handle_tray_menu_event(app: &AppHandle, event_id: &str) {
             let state = app.state::<AppState>();
             let server_guard = state.http_server.blocking_read();
             if let Some(server) = server_guard.as_ref() {
-                let url = format!("http://localhost:{}", server.port());
+                let url = format!("http://127.0.0.1:{}", server.port());
                 let _ = open::that(url);
             }
         }
         "show_tutorial" => {
-            // Show onboarding/tutorial
-            let _ = show_main_window(app.clone());
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.emit("menu:show-tutorial", ());
-            }
+            // Show welcome window instead
+            let state = app.state::<AppState>();
+            let welcome_manager = &state.welcome_manager;
+            let app_clone = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = welcome_manager.show_welcome_window().await;
+            });
         }
         "website" => {
             let _ = open::that("https://vibetunnel.sh");
@@ -510,18 +504,17 @@ fn handle_tray_menu_event(app: &AppHandle, event_id: &str) {
 fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     match event.id.as_ref() {
         "settings" => {
-            // Show main window and emit settings event
-            let _ = show_main_window(app.clone());
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.emit("menu:settings", ());
-            }
+            // Open native settings window instead of main window
+            let _ = open_settings_window(app.clone(), None);
         }
         "new-terminal" => {
-            // Show main window first
-            let _ = show_main_window(app.clone());
-            // Emit event to frontend to create new terminal
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.emit("menu:new-terminal", ());
+            // Terminal creation should be done via the web dashboard
+            // Open dashboard in browser
+            let state = app.state::<AppState>();
+            let server_guard = state.http_server.blocking_read();
+            if let Some(server) = server_guard.as_ref() {
+                let url = format!("http://127.0.0.1:{}", server.port());
+                let _ = open::that(url);
             }
         }
         "reload" => {
@@ -530,7 +523,13 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             }
         }
         "show-dashboard" => {
-            let _ = show_main_window(app.clone());
+            // Open dashboard in browser instead of showing main window
+            let state = app.state::<AppState>();
+            let server_guard = state.http_server.blocking_read();
+            if let Some(server) = server_guard.as_ref() {
+                let url = format!("http://127.0.0.1:{}", server.port());
+                let _ = open::that(url);
+            }
         }
         "quit" => {
             quit_app(app.clone());
@@ -582,18 +581,14 @@ fn show_main_window(app: AppHandle) -> Result<(), String> {
         window
     } else {
         // Create main window if it doesn't exist
-        tauri::WebviewWindowBuilder::new(
-            &app,
-            "main",
-            tauri::WebviewUrl::App("index.html".into()),
-        )
-        .title("VibeTunnel")
-        .inner_size(1200.0, 800.0)
-        .center()
-        .resizable(true)
-        .decorations(true)
-        .build()
-        .map_err(|e| e.to_string())?
+        tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::App("index.html".into()))
+            .title("VibeTunnel")
+            .inner_size(1200.0, 800.0)
+            .center()
+            .resizable(true)
+            .decorations(true)
+            .build()
+            .map_err(|e| e.to_string())?
     };
 
     window.show().map_err(|e| e.to_string())?;
@@ -786,7 +781,7 @@ async fn perform_server_health_check(state: &AppState) -> bool {
         Ok(status) if status.running => {
             // Server reports as running, perform additional check
             // by trying to access the API endpoint
-            let url = format!("http://localhost:{}/api/sessions", status.port);
+            let url = format!("http://127.0.0.1:{}/api/sessions", status.port);
 
             match reqwest::Client::new()
                 .get(&url)
@@ -814,7 +809,7 @@ async fn start_server_internal(state: &AppState) -> Result<ServerStatus, String>
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
             ngrok_tunnel.url
         } else {
-            format!("http://localhost:{}", port)
+            format!("http://127.0.0.1:{}", port)
         };
 
         return Ok(ServerStatus {
@@ -878,7 +873,7 @@ async fn start_server_internal(state: &AppState) -> Result<ServerStatus, String>
         }
         _ => {
             let port = http_server.start_with_mode("localhost").await?;
-            (port, format!("http://localhost:{}", port))
+            (port, format!("http://127.0.0.1:{}", port))
         }
     };
 
@@ -918,7 +913,7 @@ async fn get_server_status_internal(state: &AppState) -> Result<ServerStatus, St
             let settings = crate::settings::Settings::load().unwrap_or_default();
             match settings.dashboard.access_mode.as_str() {
                 "network" => format!("http://0.0.0.0:{}", port),
-                _ => format!("http://localhost:{}", port),
+                _ => format!("http://127.0.0.1:{}", port),
             }
         };
 

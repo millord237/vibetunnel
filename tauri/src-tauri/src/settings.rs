@@ -43,17 +43,6 @@ pub struct AdvancedSettings {
     pub experimental_features: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct RecordingSettings {
-    pub enabled: bool,
-    pub output_directory: Option<String>,
-    pub format: String,
-    pub include_timing: bool,
-    pub compress_output: bool,
-    pub max_file_size_mb: Option<u32>,
-    pub auto_save: bool,
-    pub filename_template: Option<String>,
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TTYForwardSettings {
@@ -173,7 +162,6 @@ pub struct Settings {
     pub general: GeneralSettings,
     pub dashboard: DashboardSettings,
     pub advanced: AdvancedSettings,
-    pub recording: Option<RecordingSettings>,
     pub tty_forward: Option<TTYForwardSettings>,
     pub monitoring: Option<MonitoringSettings>,
     pub network: Option<NetworkSettings>,
@@ -237,16 +225,6 @@ impl Default for Settings {
                 enable_telemetry: Some(false),
                 experimental_features: Some(false),
             },
-            recording: Some(RecordingSettings {
-                enabled: true,
-                output_directory: None,
-                format: "asciinema".to_string(),
-                include_timing: true,
-                compress_output: false,
-                max_file_size_mb: Some(100),
-                auto_save: false,
-                filename_template: Some("vibetunnel_%Y%m%d_%H%M%S".to_string()),
-            }),
             tty_forward: Some(TTYForwardSettings {
                 enabled: false,
                 default_port: 8022,
@@ -363,18 +341,24 @@ impl Settings {
 
         // Clone settings to remove sensitive data before saving
         let mut settings_to_save = self.clone();
-        
+
         // Save passwords to keychain and remove from TOML
         if !self.dashboard.password.is_empty() {
             crate::keychain::KeychainManager::set_dashboard_password(&self.dashboard.password)
-                .map_err(|e| format!("Failed to save dashboard password to keychain: {}", e.message))?;
+                .map_err(|e| {
+                    format!(
+                        "Failed to save dashboard password to keychain: {}",
+                        e.message
+                    )
+                })?;
             settings_to_save.dashboard.password = String::new();
         }
 
         if let Some(ref token) = self.advanced.ngrok_auth_token {
             if !token.is_empty() {
-                crate::keychain::KeychainManager::set_ngrok_auth_token(token)
-                    .map_err(|e| format!("Failed to save ngrok token to keychain: {}", e.message))?;
+                crate::keychain::KeychainManager::set_ngrok_auth_token(token).map_err(|e| {
+                    format!("Failed to save ngrok token to keychain: {}", e.message)
+                })?;
                 settings_to_save.advanced.ngrok_auth_token = None;
             }
         }
@@ -414,8 +398,10 @@ impl Settings {
 
         // Migrate dashboard password if present in file
         if !raw_settings.dashboard.password.is_empty() {
-            crate::keychain::KeychainManager::set_dashboard_password(&raw_settings.dashboard.password)
-                .map_err(|e| format!("Failed to migrate dashboard password: {}", e.message))?;
+            crate::keychain::KeychainManager::set_dashboard_password(
+                &raw_settings.dashboard.password,
+            )
+            .map_err(|e| format!("Failed to migrate dashboard password: {}", e.message))?;
             migrated = true;
         }
 

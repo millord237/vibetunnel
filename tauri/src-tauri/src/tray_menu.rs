@@ -7,13 +7,13 @@ impl TrayMenuManager {
     pub fn create_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, tauri::Error> {
         Self::create_menu_with_state(app, false, 4020, 0, None)
     }
-    
+
     pub fn create_menu_with_state(
-        app: &AppHandle, 
-        server_running: bool, 
-        port: u16, 
+        app: &AppHandle,
+        server_running: bool,
+        port: u16,
         session_count: usize,
-        access_mode: Option<String>
+        access_mode: Option<String>,
     ) -> Result<Menu<tauri::Wry>, tauri::Error> {
         // Server status
         let status_text = if server_running {
@@ -25,14 +25,16 @@ impl TrayMenuManager {
             .id("server_status")
             .enabled(false)
             .build(app)?;
-        
+
         // Network info (if in network mode)
         let network_info = if server_running && access_mode.as_deref() == Some("network") {
             if let Some(ip) = crate::network_utils::NetworkUtils::get_local_ip_address() {
-                Some(MenuItemBuilder::new(&format!("Local IP: {}", ip))
-                    .id("network_info")
-                    .enabled(false)
-                    .build(app)?)
+                Some(
+                    MenuItemBuilder::new(&format!("Local IP: {}", ip))
+                        .id("network_info")
+                        .enabled(false)
+                        .build(app)?,
+                )
             } else {
                 None
             }
@@ -105,14 +107,13 @@ impl TrayMenuManager {
         let quit = MenuItemBuilder::new("Quit").id("quit").build(app)?;
 
         // Build the complete menu - matching Mac app exactly
-        let mut menu_builder = MenuBuilder::new(app)
-            .item(&server_status);
-        
+        let mut menu_builder = MenuBuilder::new(app).item(&server_status);
+
         // Add network info if available
         if let Some(network_item) = network_info {
             menu_builder = menu_builder.item(&network_item);
         }
-        
+
         let menu = menu_builder
             .item(&dashboard)
             .separator()
@@ -132,7 +133,7 @@ impl TrayMenuManager {
             // Get current session count from state
             let state = app.state::<crate::state::AppState>();
             let session_count = state.terminal_manager.list_sessions().await.len();
-            
+
             // Get access mode from settings
             let access_mode = if running {
                 if let Ok(settings) = crate::settings::Settings::load() {
@@ -143,9 +144,11 @@ impl TrayMenuManager {
             } else {
                 None
             };
-            
+
             // Rebuild menu with new state
-            if let Ok(menu) = Self::create_menu_with_state(app, running, port, session_count, access_mode) {
+            if let Ok(menu) =
+                Self::create_menu_with_state(app, running, port, session_count, access_mode)
+            {
                 if let Err(e) = tray.set_menu(Some(menu)) {
                     tracing::error!("Failed to update tray menu: {}", e);
                 }
@@ -164,7 +167,7 @@ impl TrayMenuManager {
                 (false, 4020)
             };
             drop(server_guard);
-            
+
             // Get access mode from settings
             let access_mode = if running {
                 if let Ok(settings) = crate::settings::Settings::load() {
@@ -175,7 +178,7 @@ impl TrayMenuManager {
             } else {
                 None
             };
-            
+
             // Rebuild menu with new state
             if let Ok(menu) = Self::create_menu_with_state(app, running, port, count, access_mode) {
                 if let Err(e) = tray.set_menu(Some(menu)) {

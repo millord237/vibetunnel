@@ -4,7 +4,6 @@ pub mod auth;
 pub mod auth_cache;
 pub mod auto_launch;
 pub mod backend_manager;
-pub mod cast;
 pub mod cli_installer;
 pub mod commands;
 pub mod debug_features;
