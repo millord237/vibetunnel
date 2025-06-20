@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
@@ -5,7 +6,6 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use chrono::{DateTime, Utc};
 
 /// Asciinema cast v2 format header
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,12 +62,7 @@ pub struct CastRecorder {
 
 impl CastRecorder {
     /// Create a new cast recorder
-    pub fn new(
-        width: u16,
-        height: u16,
-        title: Option<String>,
-        command: Option<String>,
-    ) -> Self {
+    pub fn new(width: u16, height: u16, title: Option<String>, command: Option<String>) -> Self {
         let now = Utc::now();
         let header = CastHeader {
             version: 2,
@@ -114,7 +109,8 @@ impl CastRecorder {
             self.write_event_to_file(&mut writer, event)?;
         }
 
-        writer.flush()
+        writer
+            .flush()
             .map_err(|e| format!("Failed to flush writer: {}", e))?;
 
         self.file_writer = Some(Arc::new(Mutex::new(writer)));
@@ -131,7 +127,8 @@ impl CastRecorder {
 
         if let Some(writer_arc) = self.file_writer.take() {
             let mut writer = writer_arc.lock().await;
-            writer.flush()
+            writer
+                .flush()
                 .map_err(|e| format!("Failed to flush final data: {}", e))?;
         }
 
@@ -153,7 +150,8 @@ impl CastRecorder {
     async fn add_event(&self, event_type: EventType, data: &[u8]) -> Result<(), String> {
         let timestamp = Utc::now()
             .signed_duration_since(self.start_time)
-            .num_milliseconds() as f64 / 1000.0;
+            .num_milliseconds() as f64
+            / 1000.0;
 
         // Convert data to string (handling potential UTF-8 errors)
         let data_string = String::from_utf8_lossy(data).to_string();
@@ -168,7 +166,8 @@ impl CastRecorder {
         if let Some(writer_arc) = &self.file_writer {
             let mut writer = writer_arc.lock().await;
             self.write_event_to_file(&mut writer, &event)?;
-            writer.flush()
+            writer
+                .flush()
                 .map_err(|e| format!("Failed to flush event: {}", e))?;
         }
 
@@ -186,14 +185,10 @@ impl CastRecorder {
         event: &CastEvent,
     ) -> Result<(), String> {
         // Format: [timestamp, event_type, data]
-        let event_array = serde_json::json!([
-            event.timestamp,
-            event.event_type.as_str(),
-            event.data
-        ]);
+        let event_array =
+            serde_json::json!([event.timestamp, event.event_type.as_str(), event.data]);
 
-        writeln!(writer, "{}", event_array)
-            .map_err(|e| format!("Failed to write event: {}", e))?;
+        writeln!(writer, "{}", event_array).map_err(|e| format!("Failed to write event: {}", e))?;
 
         Ok(())
     }
@@ -207,7 +202,7 @@ impl CastRecorder {
         // Calculate duration
         let events = self.events.lock().await;
         let duration = events.last().map(|e| e.timestamp);
-        
+
         // Update header with duration
         let mut header = self.header.clone();
         header.duration = duration;
@@ -223,7 +218,8 @@ impl CastRecorder {
             self.write_event_to_file(&mut writer, event)?;
         }
 
-        writer.flush()
+        writer
+            .flush()
             .map_err(|e| format!("Failed to flush file: {}", e))?;
 
         Ok(())

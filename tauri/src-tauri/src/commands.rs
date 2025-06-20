@@ -1,8 +1,8 @@
+use crate::server::HttpServer;
+use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::{Manager, State};
-use crate::server::HttpServer;
-use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Terminal {
@@ -37,30 +37,27 @@ pub async fn create_terminal(
     state: State<'_, AppState>,
 ) -> Result<Terminal, String> {
     let terminal_manager = &state.terminal_manager;
-    
-    terminal_manager.create_session(
-        options.name.unwrap_or_else(|| "Terminal".to_string()),
-        options.rows.unwrap_or(24),
-        options.cols.unwrap_or(80),
-        options.cwd,
-        options.env,
-        options.shell,
-    ).await
+
+    terminal_manager
+        .create_session(
+            options.name.unwrap_or_else(|| "Terminal".to_string()),
+            options.rows.unwrap_or(24),
+            options.cols.unwrap_or(80),
+            options.cwd,
+            options.env,
+            options.shell,
+        )
+        .await
 }
 
 #[tauri::command]
-pub async fn list_terminals(
-    state: State<'_, AppState>,
-) -> Result<Vec<Terminal>, String> {
+pub async fn list_terminals(state: State<'_, AppState>) -> Result<Vec<Terminal>, String> {
     let terminal_manager = &state.terminal_manager;
     Ok(terminal_manager.list_sessions().await)
 }
 
 #[tauri::command]
-pub async fn close_terminal(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn close_terminal(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let terminal_manager = &state.terminal_manager;
     terminal_manager.close_session(&id).await
 }
@@ -87,63 +84,70 @@ pub async fn write_to_terminal(
 }
 
 #[tauri::command]
-pub async fn read_from_terminal(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<u8>, String> {
+pub async fn read_from_terminal(id: String, state: State<'_, AppState>) -> Result<Vec<u8>, String> {
     let terminal_manager = &state.terminal_manager;
     terminal_manager.read_from_session(&id).await
 }
 
 #[tauri::command]
-pub async fn start_server(
-    state: State<'_, AppState>,
-) -> Result<ServerStatus, String> {
+pub async fn start_server(state: State<'_, AppState>) -> Result<ServerStatus, String> {
     let mut server = state.http_server.write().await;
-    
+
     if let Some(http_server) = server.as_ref() {
         // Get actual port from running server
         let port = http_server.port();
-        
+
         // Check if ngrok is active
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
             ngrok_tunnel.url
         } else {
             format!("http://localhost:{}", port)
         };
-        
+
         return Ok(ServerStatus {
             running: true,
             port,
             url,
         });
     }
-    
+
     // Load settings to check if password is enabled
     let settings = crate::settings::Settings::load().unwrap_or_default();
-    
+
     // Start HTTP server with auth if configured
-    let mut http_server = if settings.dashboard.enable_password && !settings.dashboard.password.is_empty() {
-        let auth_config = crate::auth::AuthConfig::new(true, Some(settings.dashboard.password));
-        HttpServer::with_auth(state.terminal_manager.clone(), state.session_monitor.clone(), auth_config)
-    } else {
-        HttpServer::new(state.terminal_manager.clone(), state.session_monitor.clone())
-    };
-    
+    let mut http_server =
+        if settings.dashboard.enable_password && !settings.dashboard.password.is_empty() {
+            let auth_config = crate::auth::AuthConfig::new(true, Some(settings.dashboard.password));
+            HttpServer::with_auth(
+                state.terminal_manager.clone(),
+                state.session_monitor.clone(),
+                auth_config,
+            )
+        } else {
+            HttpServer::new(
+                state.terminal_manager.clone(),
+                state.session_monitor.clone(),
+            )
+        };
+
     // Start server with appropriate access mode
     let (port, url) = match settings.dashboard.access_mode.as_str() {
         "network" => {
             let port = http_server.start_with_mode("network").await?;
             (port, format!("http://0.0.0.0:{}", port))
-        },
+        }
         "ngrok" => {
             // For ngrok mode, start in localhost and let ngrok handle the tunneling
             let port = http_server.start_with_mode("localhost").await?;
-            
+
             // Try to start ngrok tunnel if auth token is configured
             let url = if let Some(auth_token) = settings.advanced.ngrok_auth_token {
                 if !auth_token.is_empty() {
-                    match state.ngrok_manager.start_tunnel(port, Some(auth_token)).await {
+                    match state
+                        .ngrok_manager
+                        .start_tunnel(port, Some(auth_token))
+                        .await
+                    {
                         Ok(tunnel) => tunnel.url,
                         Err(e) => {
                             tracing::error!("Failed to start ngrok tunnel: {}", e);
@@ -156,17 +160,17 @@ pub async fn start_server(
             } else {
                 return Err("Ngrok auth token is required for ngrok access mode".to_string());
             };
-            
+
             (port, url)
-        },
+        }
         _ => {
             let port = http_server.start_with_mode("localhost").await?;
             (port, format!("http://localhost:{}", port))
         }
     };
-    
+
     *server = Some(http_server);
-    
+
     Ok(ServerStatus {
         running: true,
         port,
@@ -175,30 +179,26 @@ pub async fn start_server(
 }
 
 #[tauri::command]
-pub async fn stop_server(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn stop_server(state: State<'_, AppState>) -> Result<(), String> {
     let mut server = state.http_server.write().await;
-    
+
     if let Some(mut http_server) = server.take() {
         http_server.stop().await?;
     }
-    
+
     // Also stop ngrok tunnel if active
     let _ = state.ngrok_manager.stop_tunnel().await;
-    
+
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_server_status(
-    state: State<'_, AppState>,
-) -> Result<ServerStatus, String> {
+pub async fn get_server_status(state: State<'_, AppState>) -> Result<ServerStatus, String> {
     let server = state.http_server.read().await;
-    
+
     if let Some(http_server) = server.as_ref() {
         let port = http_server.port();
-        
+
         // Check if ngrok is active and return its URL
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
             ngrok_tunnel.url
@@ -210,7 +210,7 @@ pub async fn get_server_status(
                 _ => format!("http://localhost:{}", port),
             }
         };
-        
+
         Ok(ServerStatus {
             running: true,
             port,
@@ -231,39 +231,37 @@ pub fn get_app_version() -> String {
 }
 
 #[tauri::command]
-pub async fn restart_server(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn restart_server(state: State<'_, AppState>) -> Result<(), String> {
     // Stop the current server
     let mut server = state.http_server.write().await;
-    
+
     if let Some(mut http_server) = server.take() {
         http_server.stop().await?;
     }
-    
+
     // Wait a moment
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    
+
     // Start a new server
     let terminal_manager = state.terminal_manager.clone();
     let session_monitor = state.session_monitor.clone();
     let settings = crate::settings::Settings::load().unwrap_or_default();
-    
+
     let mut new_server = HttpServer::new(terminal_manager, session_monitor);
-    new_server.start_with_mode(match settings.dashboard.access_mode.as_str() {
-        "network" => "network",
-        _ => "localhost"
-    }).await?;
-    
+    new_server
+        .start_with_mode(match settings.dashboard.access_mode.as_str() {
+            "network" => "network",
+            _ => "localhost",
+        })
+        .await?;
+
     *server = Some(new_server);
-    
+
     Ok(())
 }
 
 #[tauri::command]
-pub async fn show_server_console(
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn show_server_console(app_handle: tauri::AppHandle) -> Result<(), String> {
     // Check if server console window already exists
     if let Some(window) = app_handle.get_webview_window("server-console") {
         window.show().map_err(|e| e.to_string())?;
@@ -273,7 +271,7 @@ pub async fn show_server_console(
         tauri::WebviewWindowBuilder::new(
             &app_handle,
             "server-console",
-            tauri::WebviewUrl::App("server-console.html".into())
+            tauri::WebviewUrl::App("server-console.html".into()),
         )
         .title("Server Console - VibeTunnel")
         .inner_size(900.0, 600.0)
@@ -283,14 +281,12 @@ pub async fn show_server_console(
         .build()
         .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
 #[tauri::command]
-pub async fn show_welcome_screen(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn show_welcome_screen(state: State<'_, AppState>) -> Result<(), String> {
     let welcome_manager = &state.welcome_manager;
     welcome_manager.show_welcome_window().await
 }
@@ -303,13 +299,13 @@ pub async fn purge_all_settings(
     // Create default settings and save to clear the file
     let default_settings = crate::settings::Settings::default();
     default_settings.save().map_err(|e| e.to_string())?;
-    
+
     // Quit the app after a short delay
     tokio::spawn(async move {
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         app_handle.exit(0);
     });
-    
+
     Ok(())
 }
 
@@ -318,8 +314,11 @@ pub async fn update_dock_icon_visibility(app_handle: tauri::AppHandle) -> Result
     #[cfg(target_os = "macos")]
     {
         let settings = crate::settings::Settings::load().unwrap_or_default();
-        let has_visible_windows = app_handle.windows().values().any(|w| w.is_visible().unwrap_or(false));
-        
+        let has_visible_windows = app_handle
+            .windows()
+            .values()
+            .any(|w| w.is_visible().unwrap_or(false));
+
         if has_visible_windows {
             // Always show dock icon when windows are visible
             let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular);
@@ -354,32 +353,40 @@ pub async fn start_terminal_recording(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let cast_manager = &state.cast_manager;
-    
+
     // Get terminal info for metadata
     let terminal_manager = &state.terminal_manager;
     let sessions = terminal_manager.list_sessions().await;
-    let session = sessions.iter()
+    let session = sessions
+        .iter()
         .find(|s| s.id == options.session_id)
         .ok_or_else(|| "Session not found".to_string())?;
-    
+
     // Create recorder if it doesn't exist
-    cast_manager.create_recorder(
-        options.session_id.clone(),
-        session.cols,
-        session.rows,
-        options.title.or(Some(session.name.clone())),
-        None, // command
-    ).await.ok(); // Ignore if already exists
-    
+    cast_manager
+        .create_recorder(
+            options.session_id.clone(),
+            session.cols,
+            session.rows,
+            options.title.or(Some(session.name.clone())),
+            None, // command
+        )
+        .await
+        .ok(); // Ignore if already exists
+
     // Start recording
     if let Some(path) = options.output_path {
-        cast_manager.start_recording(&options.session_id, path).await
+        cast_manager
+            .start_recording(&options.session_id, path)
+            .await
     } else {
         // Use default path with timestamp
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let filename = format!("vibetunnel_recording_{}.cast", timestamp);
         let path = std::env::temp_dir().join(filename);
-        cast_manager.start_recording(&options.session_id, path).await
+        cast_manager
+            .start_recording(&options.session_id, path)
+            .await
     }
 }
 
@@ -409,14 +416,14 @@ pub async fn get_recording_status(
 ) -> Result<RecordingStatus, String> {
     let cast_manager = &state.cast_manager;
     let is_recording = cast_manager.is_recording(&session_id).await;
-    
+
     let duration = if let Some(recorder) = cast_manager.get_recorder(&session_id).await {
         let rec = recorder.lock().await;
         rec.get_duration().await
     } else {
         0.0
     };
-    
+
     Ok(RecordingStatus {
         is_recording,
         duration,
@@ -448,42 +455,39 @@ pub async fn start_tty_forward(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let tty_forward_manager = &state.tty_forward_manager;
-    
-    let remote_host = options.remote_host.unwrap_or_else(|| "localhost".to_string());
+
+    let remote_host = options
+        .remote_host
+        .unwrap_or_else(|| "localhost".to_string());
     let remote_port = options.remote_port.unwrap_or(22);
-    
-    tty_forward_manager.start_forward(
-        options.local_port,
-        remote_host,
-        remote_port,
-        options.shell,
-    ).await
+
+    tty_forward_manager
+        .start_forward(options.local_port, remote_host, remote_port, options.shell)
+        .await
 }
 
 #[tauri::command]
-pub async fn stop_tty_forward(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn stop_tty_forward(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let tty_forward_manager = &state.tty_forward_manager;
     tty_forward_manager.stop_forward(&id).await
 }
 
 #[tauri::command]
-pub async fn list_tty_forwards(
-    state: State<'_, AppState>,
-) -> Result<Vec<TTYForwardInfo>, String> {
+pub async fn list_tty_forwards(state: State<'_, AppState>) -> Result<Vec<TTYForwardInfo>, String> {
     let tty_forward_manager = &state.tty_forward_manager;
     let forwards = tty_forward_manager.list_forwards().await;
-    
-    Ok(forwards.into_iter().map(|f| TTYForwardInfo {
-        id: f.id,
-        local_port: f.local_port,
-        remote_host: f.remote_host,
-        remote_port: f.remote_port,
-        connected: f.connected,
-        client_count: f.client_count,
-    }).collect())
+
+    Ok(forwards
+        .into_iter()
+        .map(|f| TTYForwardInfo {
+            id: f.id,
+            local_port: f.local_port,
+            remote_host: f.remote_host,
+            remote_port: f.remote_port,
+            connected: f.connected,
+            client_count: f.client_count,
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -492,15 +496,18 @@ pub async fn get_tty_forward(
     state: State<'_, AppState>,
 ) -> Result<Option<TTYForwardInfo>, String> {
     let tty_forward_manager = &state.tty_forward_manager;
-    
-    Ok(tty_forward_manager.get_forward(&id).await.map(|f| TTYForwardInfo {
-        id: f.id,
-        local_port: f.local_port,
-        remote_host: f.remote_host,
-        remote_port: f.remote_port,
-        connected: f.connected,
-        client_count: f.client_count,
-    }))
+
+    Ok(tty_forward_manager
+        .get_forward(&id)
+        .await
+        .map(|f| TTYForwardInfo {
+            id: f.id,
+            local_port: f.local_port,
+            remote_host: f.remote_host,
+            remote_port: f.remote_port,
+            connected: f.connected,
+            client_count: f.client_count,
+        }))
 }
 
 // Session Monitoring Commands
@@ -521,9 +528,7 @@ pub async fn get_monitored_sessions(
 }
 
 #[tauri::command]
-pub async fn start_session_monitoring(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn start_session_monitoring(state: State<'_, AppState>) -> Result<(), String> {
     let session_monitor = &state.session_monitor;
     session_monitor.start_monitoring().await;
     Ok(())
@@ -531,9 +536,7 @@ pub async fn start_session_monitoring(
 
 // Port Conflict Resolution Commands
 #[tauri::command]
-pub async fn check_port_availability(
-    port: u16,
-) -> Result<bool, String> {
+pub async fn check_port_availability(port: u16) -> Result<bool, String> {
     Ok(crate::port_conflict::PortConflictResolver::is_port_available(port).await)
 }
 
@@ -559,23 +562,22 @@ pub async fn force_kill_process(
 }
 
 #[tauri::command]
-pub async fn find_available_ports(
-    near_port: u16,
-    count: usize,
-) -> Result<Vec<u16>, String> {
+pub async fn find_available_ports(near_port: u16, count: usize) -> Result<Vec<u16>, String> {
     let mut available_ports = Vec::new();
     let start = near_port.saturating_sub(10).max(1024);
     let end = near_port.saturating_add(100).min(65535);
-    
+
     for port in start..=end {
-        if port != near_port && crate::port_conflict::PortConflictResolver::is_port_available(port).await {
+        if port != near_port
+            && crate::port_conflict::PortConflictResolver::is_port_available(port).await
+        {
             available_ports.push(port);
             if available_ports.len() >= count {
                 break;
             }
         }
     }
-    
+
     Ok(available_ports)
 }
 
@@ -591,7 +593,8 @@ pub async fn get_all_ip_addresses() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-pub async fn get_network_interfaces() -> Result<Vec<crate::network_utils::NetworkInterface>, String> {
+pub async fn get_network_interfaces() -> Result<Vec<crate::network_utils::NetworkInterface>, String>
+{
     Ok(crate::network_utils::NetworkUtils::get_all_interfaces())
 }
 
@@ -601,10 +604,7 @@ pub async fn get_hostname() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-pub async fn test_network_connectivity(
-    host: String,
-    port: u16,
-) -> Result<bool, String> {
+pub async fn test_network_connectivity(host: String, port: u16) -> Result<bool, String> {
     Ok(crate::network_utils::NetworkUtils::test_connectivity(&host, port).await)
 }
 
@@ -631,14 +631,16 @@ pub async fn show_notification(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let notification_manager = &state.notification_manager;
-    notification_manager.show_notification(
-        options.notification_type,
-        options.priority,
-        options.title,
-        options.body,
-        options.actions,
-        options.metadata,
-    ).await
+    notification_manager
+        .show_notification(
+            options.notification_type,
+            options.priority,
+            options.title,
+            options.body,
+            options.actions,
+            options.metadata,
+        )
+        .await
 }
 
 #[tauri::command]
@@ -668,9 +670,7 @@ pub async fn mark_notification_as_read(
 }
 
 #[tauri::command]
-pub async fn mark_all_notifications_as_read(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn mark_all_notifications_as_read(state: State<'_, AppState>) -> Result<(), String> {
     let notification_manager = &state.notification_manager;
     notification_manager.mark_all_as_read().await
 }
@@ -681,21 +681,19 @@ pub async fn clear_notification(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let notification_manager = &state.notification_manager;
-    notification_manager.clear_notification(&notification_id).await
+    notification_manager
+        .clear_notification(&notification_id)
+        .await
 }
 
 #[tauri::command]
-pub async fn clear_all_notifications(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn clear_all_notifications(state: State<'_, AppState>) -> Result<(), String> {
     let notification_manager = &state.notification_manager;
     notification_manager.clear_all_notifications().await
 }
 
 #[tauri::command]
-pub async fn get_unread_notification_count(
-    state: State<'_, AppState>,
-) -> Result<usize, String> {
+pub async fn get_unread_notification_count(state: State<'_, AppState>) -> Result<usize, String> {
     let notification_manager = &state.notification_manager;
     Ok(notification_manager.get_unread_count().await)
 }
@@ -728,9 +726,7 @@ pub async fn get_welcome_state(
 }
 
 #[tauri::command]
-pub async fn should_show_welcome(
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+pub async fn should_show_welcome(state: State<'_, AppState>) -> Result<bool, String> {
     let welcome_manager = &state.welcome_manager;
     Ok(welcome_manager.should_show_welcome().await)
 }
@@ -762,17 +758,13 @@ pub async fn complete_tutorial_step(
 }
 
 #[tauri::command]
-pub async fn skip_tutorial(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn skip_tutorial(state: State<'_, AppState>) -> Result<(), String> {
     let welcome_manager = &state.welcome_manager;
     welcome_manager.skip_tutorial().await
 }
 
 #[tauri::command]
-pub async fn reset_tutorial(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn reset_tutorial(state: State<'_, AppState>) -> Result<(), String> {
     let welcome_manager = &state.welcome_manager;
     welcome_manager.reset_tutorial().await
 }
@@ -786,9 +778,7 @@ pub async fn get_tutorial_progress(
 }
 
 #[tauri::command]
-pub async fn show_welcome_window(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn show_welcome_window(state: State<'_, AppState>) -> Result<(), String> {
     let welcome_manager = &state.welcome_manager;
     welcome_manager.show_welcome_window().await
 }
@@ -797,16 +787,18 @@ pub async fn show_welcome_window(
 #[tauri::command]
 pub async fn get_recording_settings() -> Result<crate::settings::RecordingSettings, String> {
     let settings = crate::settings::Settings::load().unwrap_or_default();
-    Ok(settings.recording.unwrap_or(crate::settings::RecordingSettings {
-        enabled: true,
-        output_directory: None,
-        format: "asciinema".to_string(),
-        include_timing: true,
-        compress_output: false,
-        max_file_size_mb: Some(100),
-        auto_save: false,
-        filename_template: Some("vibetunnel_%Y%m%d_%H%M%S".to_string()),
-    }))
+    Ok(settings
+        .recording
+        .unwrap_or(crate::settings::RecordingSettings {
+            enabled: true,
+            output_directory: None,
+            format: "asciinema".to_string(),
+            include_timing: true,
+            compress_output: false,
+            max_file_size_mb: Some(100),
+            auto_save: false,
+            filename_template: Some("vibetunnel_%Y%m%d_%H%M%S".to_string()),
+        }))
 }
 
 #[tauri::command]
@@ -822,29 +814,49 @@ pub async fn save_recording_settings(
 pub async fn get_all_advanced_settings() -> Result<HashMap<String, serde_json::Value>, String> {
     let settings = crate::settings::Settings::load().unwrap_or_default();
     let mut all_settings = HashMap::new();
-    
+
     // Convert all settings sections to JSON values
-    all_settings.insert("recording".to_string(), 
-        serde_json::to_value(&settings.recording).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("tty_forward".to_string(), 
-        serde_json::to_value(&settings.tty_forward).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("monitoring".to_string(), 
-        serde_json::to_value(&settings.monitoring).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("network".to_string(), 
-        serde_json::to_value(&settings.network).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("port".to_string(), 
-        serde_json::to_value(&settings.port).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("notifications".to_string(), 
-        serde_json::to_value(&settings.notifications).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("terminal_integrations".to_string(), 
-        serde_json::to_value(&settings.terminal_integrations).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("updates".to_string(), 
-        serde_json::to_value(&settings.updates).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("security".to_string(), 
-        serde_json::to_value(&settings.security).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("debug".to_string(), 
-        serde_json::to_value(&settings.debug).unwrap_or(serde_json::Value::Null));
-    
+    all_settings.insert(
+        "recording".to_string(),
+        serde_json::to_value(&settings.recording).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "tty_forward".to_string(),
+        serde_json::to_value(&settings.tty_forward).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "monitoring".to_string(),
+        serde_json::to_value(&settings.monitoring).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "network".to_string(),
+        serde_json::to_value(&settings.network).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "port".to_string(),
+        serde_json::to_value(&settings.port).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "notifications".to_string(),
+        serde_json::to_value(&settings.notifications).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "terminal_integrations".to_string(),
+        serde_json::to_value(&settings.terminal_integrations).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "updates".to_string(),
+        serde_json::to_value(&settings.updates).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "security".to_string(),
+        serde_json::to_value(&settings.security).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "debug".to_string(),
+        serde_json::to_value(&settings.debug).unwrap_or(serde_json::Value::Null),
+    );
+
     Ok(all_settings)
 }
 
@@ -854,7 +866,7 @@ pub async fn update_advanced_settings(
     value: serde_json::Value,
 ) -> Result<(), String> {
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
-    
+
     match section.as_str() {
         "recording" => {
             settings.recording = serde_json::from_value(value)
@@ -898,7 +910,7 @@ pub async fn update_advanced_settings(
         }
         _ => return Err(format!("Unknown settings section: {}", section)),
     }
-    
+
     settings.save()
 }
 
@@ -906,7 +918,7 @@ pub async fn update_advanced_settings(
 pub async fn reset_settings_section(section: String) -> Result<(), String> {
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
     let defaults = crate::settings::Settings::default();
-    
+
     match section.as_str() {
         "recording" => settings.recording = defaults.recording,
         "tty_forward" => settings.tty_forward = defaults.tty_forward,
@@ -921,21 +933,20 @@ pub async fn reset_settings_section(section: String) -> Result<(), String> {
         "all" => settings = defaults,
         _ => return Err(format!("Unknown settings section: {}", section)),
     }
-    
+
     settings.save()
 }
 
 #[tauri::command]
 pub async fn export_settings() -> Result<String, String> {
     let settings = crate::settings::Settings::load().unwrap_or_default();
-    toml::to_string_pretty(&settings)
-        .map_err(|e| format!("Failed to export settings: {}", e))
+    toml::to_string_pretty(&settings).map_err(|e| format!("Failed to export settings: {}", e))
 }
 
 #[tauri::command]
 pub async fn import_settings(toml_content: String) -> Result<(), String> {
-    let settings: crate::settings::Settings = toml::from_str(&toml_content)
-        .map_err(|e| format!("Failed to parse settings: {}", e))?;
+    let settings: crate::settings::Settings =
+        toml::from_str(&toml_content).map_err(|e| format!("Failed to parse settings: {}", e))?;
     settings.save()
 }
 
@@ -963,7 +974,9 @@ pub async fn request_permission(
     state: State<'_, AppState>,
 ) -> Result<crate::permissions::PermissionRequestResult, String> {
     let permissions_manager = &state.permissions_manager;
-    permissions_manager.request_permission(permission_type).await
+    permissions_manager
+        .request_permission(permission_type)
+        .await
 }
 
 #[tauri::command]
@@ -972,7 +985,9 @@ pub async fn get_permission_info(
     state: State<'_, AppState>,
 ) -> Result<Option<crate::permissions::PermissionInfo>, String> {
     let permissions_manager = &state.permissions_manager;
-    Ok(permissions_manager.get_permission_info(permission_type).await)
+    Ok(permissions_manager
+        .get_permission_info(permission_type)
+        .await)
 }
 
 #[tauri::command]
@@ -1000,9 +1015,7 @@ pub async fn get_missing_required_permissions(
 }
 
 #[tauri::command]
-pub async fn all_required_permissions_granted(
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+pub async fn all_required_permissions_granted(state: State<'_, AppState>) -> Result<bool, String> {
     let permissions_manager = &state.permissions_manager;
     Ok(permissions_manager.all_required_permissions_granted().await)
 }
@@ -1013,7 +1026,9 @@ pub async fn open_system_permission_settings(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let permissions_manager = &state.permissions_manager;
-    permissions_manager.open_system_settings(permission_type).await
+    permissions_manager
+        .open_system_settings(permission_type)
+        .await
 }
 
 #[tauri::command]
@@ -1022,16 +1037,25 @@ pub async fn get_permission_stats(
 ) -> Result<crate::permissions::PermissionStats, String> {
     let permissions_manager = &state.permissions_manager;
     let all_permissions = permissions_manager.get_all_permissions().await;
-    
+
     let stats = crate::permissions::PermissionStats {
         total_permissions: all_permissions.len(),
-        granted_permissions: all_permissions.iter().filter(|p| p.status == crate::permissions::PermissionStatus::Granted).count(),
-        denied_permissions: all_permissions.iter().filter(|p| p.status == crate::permissions::PermissionStatus::Denied).count(),
+        granted_permissions: all_permissions
+            .iter()
+            .filter(|p| p.status == crate::permissions::PermissionStatus::Granted)
+            .count(),
+        denied_permissions: all_permissions
+            .iter()
+            .filter(|p| p.status == crate::permissions::PermissionStatus::Denied)
+            .count(),
         required_permissions: all_permissions.iter().filter(|p| p.required).count(),
-        missing_required: all_permissions.iter().filter(|p| p.required && p.status != crate::permissions::PermissionStatus::Granted).count(),
+        missing_required: all_permissions
+            .iter()
+            .filter(|p| p.required && p.status != crate::permissions::PermissionStatus::Granted)
+            .count(),
         platform: std::env::consts::OS.to_string(),
     };
-    
+
     Ok(stats)
 }
 
@@ -1045,25 +1069,19 @@ pub async fn check_for_updates(
 }
 
 #[tauri::command]
-pub async fn download_update(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn download_update(state: State<'_, AppState>) -> Result<(), String> {
     let update_manager = &state.update_manager;
     update_manager.download_update().await
 }
 
 #[tauri::command]
-pub async fn install_update(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn install_update(state: State<'_, AppState>) -> Result<(), String> {
     let update_manager = &state.update_manager;
     update_manager.install_update().await
 }
 
 #[tauri::command]
-pub async fn cancel_update(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn cancel_update(state: State<'_, AppState>) -> Result<(), String> {
     let update_manager = &state.update_manager;
     update_manager.cancel_update().await
 }
@@ -1157,10 +1175,7 @@ pub async fn start_backend(
 }
 
 #[tauri::command]
-pub async fn stop_backend(
-    instance_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn stop_backend(instance_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let backend_manager = &state.backend_manager;
     backend_manager.stop_backend(&instance_id).await
 }
@@ -1204,27 +1219,33 @@ pub async fn get_backend_stats(
     state: State<'_, AppState>,
 ) -> Result<crate::backend_manager::BackendStats, String> {
     let backend_manager = &state.backend_manager;
-    
+
     let backends = backend_manager.get_available_backends().await;
     let instances = backend_manager.get_backend_instances().await;
     let active_backend = backend_manager.get_active_backend().await;
-    
+
     let mut health_summary = std::collections::HashMap::new();
     for instance in &instances {
         *health_summary.entry(instance.health_status).or_insert(0) += 1;
     }
-    
+
     let mut installed_count = 0;
     for backend in &backends {
-        if backend_manager.is_backend_installed(backend.backend_type).await {
+        if backend_manager
+            .is_backend_installed(backend.backend_type)
+            .await
+        {
             installed_count += 1;
         }
     }
-    
+
     Ok(crate::backend_manager::BackendStats {
         total_backends: backends.len(),
         installed_backends: installed_count,
-        running_instances: instances.iter().filter(|i| i.status == crate::backend_manager::BackendStatus::Running).count(),
+        running_instances: instances
+            .iter()
+            .filter(|i| i.status == crate::backend_manager::BackendStatus::Running)
+            .count(),
         active_backend,
         health_summary,
     })
@@ -1263,12 +1284,14 @@ pub async fn log_debug_message(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let debug_features_manager = &state.debug_features_manager;
-    debug_features_manager.log(
-        options.level,
-        &options.component,
-        &options.message,
-        options.metadata,
-    ).await;
+    debug_features_manager
+        .log(
+            options.level,
+            &options.component,
+            &options.message,
+            options.metadata,
+        )
+        .await;
     Ok(())
 }
 
@@ -1281,7 +1304,9 @@ pub async fn record_performance_metric(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let debug_features_manager = &state.debug_features_manager;
-    debug_features_manager.record_metric(&name, value, &unit, tags).await;
+    debug_features_manager
+        .record_metric(&name, value, &unit, tags)
+        .await;
     Ok(())
 }
 
@@ -1414,9 +1439,7 @@ pub async fn get_api_test_history(
 }
 
 #[tauri::command]
-pub async fn clear_api_test_history(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn clear_api_test_history(state: State<'_, AppState>) -> Result<(), String> {
     let api_testing_manager = &state.api_testing_manager;
     api_testing_manager.clear_test_history().await;
     Ok(())
@@ -1428,7 +1451,9 @@ pub async fn import_postman_collection(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let api_testing_manager = &state.api_testing_manager;
-    api_testing_manager.import_postman_collection(&json_data).await
+    api_testing_manager
+        .import_postman_collection(&json_data)
+        .await
 }
 
 #[tauri::command]
@@ -1458,19 +1483,14 @@ pub async fn generate_diagnostic_report(
 }
 
 #[tauri::command]
-pub async fn clear_debug_data(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn clear_debug_data(state: State<'_, AppState>) -> Result<(), String> {
     let debug_features_manager = &state.debug_features_manager;
     debug_features_manager.clear_all_data().await;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn set_debug_mode(
-    enabled: bool,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn set_debug_mode(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
     let debug_features_manager = &state.debug_features_manager;
     debug_features_manager.set_debug_mode(enabled).await;
     Ok(())
@@ -1481,18 +1501,18 @@ pub async fn get_debug_stats(
     state: State<'_, AppState>,
 ) -> Result<crate::debug_features::DebugStats, String> {
     let debug_features_manager = &state.debug_features_manager;
-    
+
     let logs = debug_features_manager.get_logs(None, None).await;
     let mut logs_by_level = HashMap::new();
     for log in &logs {
         let level = format!("{:?}", log.level);
         *logs_by_level.entry(level).or_insert(0) += 1;
     }
-    
+
     let metrics = debug_features_manager.get_performance_metrics(None).await;
     let snapshots = debug_features_manager.get_memory_snapshots(None).await;
     let requests = debug_features_manager.get_network_requests(None).await;
-    
+
     Ok(crate::debug_features::DebugStats {
         total_logs: logs.len(),
         logs_by_level,
@@ -1500,7 +1520,7 @@ pub async fn get_debug_stats(
         total_snapshots: snapshots.len(),
         total_requests: requests.len(),
         total_test_results: 0, // TODO: Track test results
-        total_benchmarks: 0, // TODO: Track benchmarks
+        total_benchmarks: 0,   // TODO: Track benchmarks
     })
 }
 
@@ -1547,7 +1567,9 @@ pub async fn store_auth_token(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let auth_cache_manager = &state.auth_cache_manager;
-    auth_cache_manager.store_token(&options.key, options.token).await
+    auth_cache_manager
+        .store_token(&options.key, options.token)
+        .await
 }
 
 #[tauri::command]
@@ -1556,7 +1578,9 @@ pub async fn get_auth_token(
     state: State<'_, AppState>,
 ) -> Result<Option<crate::auth_cache::CachedToken>, String> {
     let auth_cache_manager = &state.auth_cache_manager;
-    Ok(auth_cache_manager.get_token(&options.key, &options.scope).await)
+    Ok(auth_cache_manager
+        .get_token(&options.key, &options.scope)
+        .await)
 }
 
 #[tauri::command]
@@ -1565,7 +1589,9 @@ pub async fn store_auth_credential(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let auth_cache_manager = &state.auth_cache_manager;
-    auth_cache_manager.store_credential(&options.key, options.credential).await
+    auth_cache_manager
+        .store_credential(&options.key, options.credential)
+        .await
 }
 
 #[tauri::command]
@@ -1578,19 +1604,14 @@ pub async fn get_auth_credential(
 }
 
 #[tauri::command]
-pub async fn clear_auth_cache_entry(
-    key: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn clear_auth_cache_entry(key: String, state: State<'_, AppState>) -> Result<(), String> {
     let auth_cache_manager = &state.auth_cache_manager;
     auth_cache_manager.clear_entry(&key).await;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn clear_all_auth_cache(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn clear_all_auth_cache(state: State<'_, AppState>) -> Result<(), String> {
     let auth_cache_manager = &state.auth_cache_manager;
     auth_cache_manager.clear_all().await;
     Ok(())
@@ -1613,9 +1634,7 @@ pub async fn list_auth_cache_entries(
 }
 
 #[tauri::command]
-pub async fn export_auth_cache(
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+pub async fn export_auth_cache(state: State<'_, AppState>) -> Result<String, String> {
     let auth_cache_manager = &state.auth_cache_manager;
     auth_cache_manager.export_cache().await
 }
@@ -1640,11 +1659,7 @@ pub fn create_auth_cache_key(
     username: Option<String>,
     resource: Option<String>,
 ) -> String {
-    crate::auth_cache::create_cache_key(
-        &service,
-        username.as_deref(),
-        resource.as_deref(),
-    )
+    crate::auth_cache::create_cache_key(&service, username.as_deref(), resource.as_deref())
 }
 
 // Terminal Integrations Commands
@@ -1670,7 +1685,9 @@ pub async fn set_default_terminal(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let terminal_integrations_manager = &state.terminal_integrations_manager;
-    terminal_integrations_manager.set_default_terminal(emulator).await
+    terminal_integrations_manager
+        .set_default_terminal(emulator)
+        .await
 }
 
 #[tauri::command]
@@ -1680,7 +1697,9 @@ pub async fn launch_terminal_emulator(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let terminal_integrations_manager = &state.terminal_integrations_manager;
-    terminal_integrations_manager.launch_terminal(emulator, options).await
+    terminal_integrations_manager
+        .launch_terminal(emulator, options)
+        .await
 }
 
 #[tauri::command]
@@ -1689,7 +1708,9 @@ pub async fn get_terminal_config(
     state: State<'_, AppState>,
 ) -> Result<Option<crate::terminal_integrations::TerminalConfig>, String> {
     let terminal_integrations_manager = &state.terminal_integrations_manager;
-    Ok(terminal_integrations_manager.get_terminal_config(emulator).await)
+    Ok(terminal_integrations_manager
+        .get_terminal_config(emulator)
+        .await)
 }
 
 #[tauri::command]
@@ -1698,7 +1719,9 @@ pub async fn update_terminal_config(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let terminal_integrations_manager = &state.terminal_integrations_manager;
-    terminal_integrations_manager.update_terminal_config(config).await;
+    terminal_integrations_manager
+        .update_terminal_config(config)
+        .await;
     Ok(())
 }
 
@@ -1707,7 +1730,9 @@ pub async fn list_detected_terminals(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::terminal_integrations::TerminalIntegrationInfo>, String> {
     let terminal_integrations_manager = &state.terminal_integrations_manager;
-    Ok(terminal_integrations_manager.list_detected_terminals().await)
+    Ok(terminal_integrations_manager
+        .list_detected_terminals()
+        .await)
 }
 
 #[tauri::command]
@@ -1719,7 +1744,9 @@ pub async fn create_terminal_ssh_url(
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
     let terminal_integrations_manager = &state.terminal_integrations_manager;
-    Ok(terminal_integrations_manager.create_ssh_url(emulator, &user, &host, port).await)
+    Ok(terminal_integrations_manager
+        .create_ssh_url(emulator, &user, &host, port)
+        .await)
 }
 
 #[tauri::command]
@@ -1727,10 +1754,12 @@ pub async fn get_terminal_integration_stats(
     state: State<'_, AppState>,
 ) -> Result<crate::terminal_integrations::TerminalIntegrationStats, String> {
     let terminal_integrations_manager = &state.terminal_integrations_manager;
-    
-    let detected = terminal_integrations_manager.list_detected_terminals().await;
+
+    let detected = terminal_integrations_manager
+        .list_detected_terminals()
+        .await;
     let default = terminal_integrations_manager.get_default_terminal().await;
-    
+
     let mut terminals_by_platform = HashMap::new();
     for info in &detected {
         if let Some(config) = &info.config {
@@ -1742,7 +1771,7 @@ pub async fn get_terminal_integration_stats(
             }
         }
     }
-    
+
     Ok(crate::terminal_integrations::TerminalIntegrationStats {
         total_terminals: detected.len(),
         installed_terminals: detected.iter().filter(|t| t.installed).count(),
@@ -1756,85 +1785,146 @@ pub async fn get_terminal_integration_stats(
 pub async fn get_all_settings() -> Result<HashMap<String, serde_json::Value>, String> {
     let settings = crate::settings::Settings::load().unwrap_or_default();
     let mut all_settings = HashMap::new();
-    
-    all_settings.insert("general".to_string(), 
-        serde_json::to_value(&settings.general).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("dashboard".to_string(), 
-        serde_json::to_value(&settings.dashboard).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("advanced".to_string(), 
-        serde_json::to_value(&settings.advanced).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("recording".to_string(), 
-        serde_json::to_value(&settings.recording).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("tty_forward".to_string(), 
-        serde_json::to_value(&settings.tty_forward).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("monitoring".to_string(), 
-        serde_json::to_value(&settings.monitoring).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("network".to_string(), 
-        serde_json::to_value(&settings.network).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("port".to_string(), 
-        serde_json::to_value(&settings.port).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("notifications".to_string(), 
-        serde_json::to_value(&settings.notifications).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("terminal_integrations".to_string(), 
-        serde_json::to_value(&settings.terminal_integrations).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("updates".to_string(), 
-        serde_json::to_value(&settings.updates).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("security".to_string(), 
-        serde_json::to_value(&settings.security).unwrap_or(serde_json::Value::Null));
-    all_settings.insert("debug".to_string(), 
-        serde_json::to_value(&settings.debug).unwrap_or(serde_json::Value::Null));
-    
+
+    all_settings.insert(
+        "general".to_string(),
+        serde_json::to_value(&settings.general).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "dashboard".to_string(),
+        serde_json::to_value(&settings.dashboard).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "advanced".to_string(),
+        serde_json::to_value(&settings.advanced).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "recording".to_string(),
+        serde_json::to_value(&settings.recording).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "tty_forward".to_string(),
+        serde_json::to_value(&settings.tty_forward).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "monitoring".to_string(),
+        serde_json::to_value(&settings.monitoring).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "network".to_string(),
+        serde_json::to_value(&settings.network).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "port".to_string(),
+        serde_json::to_value(&settings.port).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "notifications".to_string(),
+        serde_json::to_value(&settings.notifications).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "terminal_integrations".to_string(),
+        serde_json::to_value(&settings.terminal_integrations).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "updates".to_string(),
+        serde_json::to_value(&settings.updates).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "security".to_string(),
+        serde_json::to_value(&settings.security).unwrap_or(serde_json::Value::Null),
+    );
+    all_settings.insert(
+        "debug".to_string(),
+        serde_json::to_value(&settings.debug).unwrap_or(serde_json::Value::Null),
+    );
+
     Ok(all_settings)
 }
 
 #[tauri::command]
 pub async fn update_setting(section: String, key: String, value: String) -> Result<(), String> {
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
-    
+
     // Parse the JSON value
-    let json_value: serde_json::Value = serde_json::from_str(&value)
-        .map_err(|e| format!("Invalid JSON value: {}", e))?;
-    
+    let json_value: serde_json::Value =
+        serde_json::from_str(&value).map_err(|e| format!("Invalid JSON value: {}", e))?;
+
     match section.as_str() {
-        "general" => {
-            match key.as_str() {
-                "launch_at_login" => settings.general.launch_at_login = json_value.as_bool().unwrap_or(false),
-                "show_dock_icon" => settings.general.show_dock_icon = json_value.as_bool().unwrap_or(true),
-                "default_terminal" => settings.general.default_terminal = json_value.as_str().unwrap_or("system").to_string(),
-                "default_shell" => settings.general.default_shell = json_value.as_str().unwrap_or("default").to_string(),
-                "show_welcome_on_startup" => settings.general.show_welcome_on_startup = json_value.as_bool(),
-                "theme" => settings.general.theme = json_value.as_str().map(|s| s.to_string()),
-                "language" => settings.general.language = json_value.as_str().map(|s| s.to_string()),
-                "check_updates_automatically" => settings.general.check_updates_automatically = json_value.as_bool(),
-                _ => return Err(format!("Unknown general setting: {}", key)),
+        "general" => match key.as_str() {
+            "launch_at_login" => {
+                settings.general.launch_at_login = json_value.as_bool().unwrap_or(false)
             }
-        }
-        "dashboard" => {
-            match key.as_str() {
-                "server_port" => settings.dashboard.server_port = json_value.as_u64().unwrap_or(4020) as u16,
-                "enable_password" => settings.dashboard.enable_password = json_value.as_bool().unwrap_or(false),
-                "password" => settings.dashboard.password = json_value.as_str().unwrap_or("").to_string(),
-                "access_mode" => settings.dashboard.access_mode = json_value.as_str().unwrap_or("localhost").to_string(),
-                "auto_cleanup" => settings.dashboard.auto_cleanup = json_value.as_bool().unwrap_or(true),
-                "session_limit" => settings.dashboard.session_limit = json_value.as_u64().map(|v| v as u32),
-                "idle_timeout_minutes" => settings.dashboard.idle_timeout_minutes = json_value.as_u64().map(|v| v as u32),
-                "enable_cors" => settings.dashboard.enable_cors = json_value.as_bool(),
-                _ => return Err(format!("Unknown dashboard setting: {}", key)),
+            "show_dock_icon" => {
+                settings.general.show_dock_icon = json_value.as_bool().unwrap_or(true)
             }
-        }
-        "advanced" => {
-            match key.as_str() {
-                "debug_mode" => settings.advanced.debug_mode = json_value.as_bool().unwrap_or(false),
-                "log_level" => settings.advanced.log_level = json_value.as_str().unwrap_or("info").to_string(),
-                "session_timeout" => settings.advanced.session_timeout = json_value.as_u64().unwrap_or(0) as u32,
-                "ngrok_auth_token" => settings.advanced.ngrok_auth_token = json_value.as_str().map(|s| s.to_string()),
-                "ngrok_region" => settings.advanced.ngrok_region = json_value.as_str().map(|s| s.to_string()),
-                "ngrok_subdomain" => settings.advanced.ngrok_subdomain = json_value.as_str().map(|s| s.to_string()),
-                "enable_telemetry" => settings.advanced.enable_telemetry = json_value.as_bool(),
-                "experimental_features" => settings.advanced.experimental_features = json_value.as_bool(),
-                _ => return Err(format!("Unknown advanced setting: {}", key)),
+            "default_terminal" => {
+                settings.general.default_terminal =
+                    json_value.as_str().unwrap_or("system").to_string()
             }
-        }
+            "default_shell" => {
+                settings.general.default_shell =
+                    json_value.as_str().unwrap_or("default").to_string()
+            }
+            "show_welcome_on_startup" => {
+                settings.general.show_welcome_on_startup = json_value.as_bool()
+            }
+            "theme" => settings.general.theme = json_value.as_str().map(|s| s.to_string()),
+            "language" => settings.general.language = json_value.as_str().map(|s| s.to_string()),
+            "check_updates_automatically" => {
+                settings.general.check_updates_automatically = json_value.as_bool()
+            }
+            _ => return Err(format!("Unknown general setting: {}", key)),
+        },
+        "dashboard" => match key.as_str() {
+            "server_port" => {
+                settings.dashboard.server_port = json_value.as_u64().unwrap_or(4020) as u16
+            }
+            "enable_password" => {
+                settings.dashboard.enable_password = json_value.as_bool().unwrap_or(false)
+            }
+            "password" => {
+                settings.dashboard.password = json_value.as_str().unwrap_or("").to_string()
+            }
+            "access_mode" => {
+                settings.dashboard.access_mode =
+                    json_value.as_str().unwrap_or("localhost").to_string()
+            }
+            "auto_cleanup" => {
+                settings.dashboard.auto_cleanup = json_value.as_bool().unwrap_or(true)
+            }
+            "session_limit" => {
+                settings.dashboard.session_limit = json_value.as_u64().map(|v| v as u32)
+            }
+            "idle_timeout_minutes" => {
+                settings.dashboard.idle_timeout_minutes = json_value.as_u64().map(|v| v as u32)
+            }
+            "enable_cors" => settings.dashboard.enable_cors = json_value.as_bool(),
+            _ => return Err(format!("Unknown dashboard setting: {}", key)),
+        },
+        "advanced" => match key.as_str() {
+            "debug_mode" => settings.advanced.debug_mode = json_value.as_bool().unwrap_or(false),
+            "log_level" => {
+                settings.advanced.log_level = json_value.as_str().unwrap_or("info").to_string()
+            }
+            "session_timeout" => {
+                settings.advanced.session_timeout = json_value.as_u64().unwrap_or(0) as u32
+            }
+            "ngrok_auth_token" => {
+                settings.advanced.ngrok_auth_token = json_value.as_str().map(|s| s.to_string())
+            }
+            "ngrok_region" => {
+                settings.advanced.ngrok_region = json_value.as_str().map(|s| s.to_string())
+            }
+            "ngrok_subdomain" => {
+                settings.advanced.ngrok_subdomain = json_value.as_str().map(|s| s.to_string())
+            }
+            "enable_telemetry" => settings.advanced.enable_telemetry = json_value.as_bool(),
+            "experimental_features" => {
+                settings.advanced.experimental_features = json_value.as_bool()
+            }
+            _ => return Err(format!("Unknown advanced setting: {}", key)),
+        },
         "debug" => {
             // Ensure debug settings exist
             if settings.debug.is_none() {
@@ -1849,35 +1939,52 @@ pub async fn update_setting(section: String, key: String, value: String) -> Resu
                     show_internal_errors: false,
                 });
             }
-            
+
             if let Some(ref mut debug) = settings.debug {
                 match key.as_str() {
-                    "enable_debug_menu" => debug.enable_debug_menu = json_value.as_bool().unwrap_or(false),
-                    "show_performance_stats" => debug.show_performance_stats = json_value.as_bool().unwrap_or(false),
-                    "enable_verbose_logging" => debug.enable_verbose_logging = json_value.as_bool().unwrap_or(false),
+                    "enable_debug_menu" => {
+                        debug.enable_debug_menu = json_value.as_bool().unwrap_or(false)
+                    }
+                    "show_performance_stats" => {
+                        debug.show_performance_stats = json_value.as_bool().unwrap_or(false)
+                    }
+                    "enable_verbose_logging" => {
+                        debug.enable_verbose_logging = json_value.as_bool().unwrap_or(false)
+                    }
                     "log_to_file" => debug.log_to_file = json_value.as_bool().unwrap_or(false),
-                    "log_file_path" => debug.log_file_path = json_value.as_str().map(|s| s.to_string()),
-                    "max_log_file_size_mb" => debug.max_log_file_size_mb = json_value.as_u64().map(|v| v as u32),
-                    "enable_dev_tools" => debug.enable_dev_tools = json_value.as_bool().unwrap_or(false),
-                    "show_internal_errors" => debug.show_internal_errors = json_value.as_bool().unwrap_or(false),
+                    "log_file_path" => {
+                        debug.log_file_path = json_value.as_str().map(|s| s.to_string())
+                    }
+                    "max_log_file_size_mb" => {
+                        debug.max_log_file_size_mb = json_value.as_u64().map(|v| v as u32)
+                    }
+                    "enable_dev_tools" => {
+                        debug.enable_dev_tools = json_value.as_bool().unwrap_or(false)
+                    }
+                    "show_internal_errors" => {
+                        debug.show_internal_errors = json_value.as_bool().unwrap_or(false)
+                    }
                     _ => return Err(format!("Unknown debug setting: {}", key)),
                 }
             }
         }
         _ => return Err(format!("Unknown settings section: {}", section)),
     }
-    
+
     settings.save()
 }
 
 #[tauri::command]
-pub async fn set_dashboard_password(password: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn set_dashboard_password(
+    password: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     // Update settings
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
     settings.dashboard.password = password.clone();
     settings.dashboard.enable_password = !password.is_empty();
     settings.save()?;
-    
+
     // Update the running server's auth configuration if it's running
     let server = state.http_server.read().await;
     if server.is_some() {
@@ -1885,7 +1992,7 @@ pub async fn set_dashboard_password(password: String, state: State<'_, AppState>
         // Restart server to apply new auth settings
         restart_server(state).await?;
     }
-    
+
     Ok(())
 }
 
@@ -1895,29 +2002,44 @@ pub async fn restart_server_with_port(port: u16, state: State<'_, AppState>) -> 
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
     settings.dashboard.server_port = port;
     settings.save()?;
-    
+
     // Restart the server
     restart_server(state).await
 }
 
 #[tauri::command]
-pub async fn update_server_bind_address(address: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn update_server_bind_address(
+    address: String,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
     // Update settings
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
-    settings.dashboard.access_mode = if address == "127.0.0.1" { "localhost" } else { "network" }.to_string();
+    let access_mode = if address == "127.0.0.1" {
+        "localhost"
+    } else {
+        "network"
+    };
+    settings.dashboard.access_mode = access_mode.to_string();
     settings.save()?;
-    
+
+    // Update tray menu to reflect new access mode
+    crate::tray_menu::TrayMenuManager::update_access_mode(&app_handle, access_mode).await;
+
     // Restart server to apply new bind address
     restart_server(state).await
 }
 
 #[tauri::command]
-pub async fn set_dock_icon_visibility(visible: bool, app_handle: tauri::AppHandle) -> Result<(), String> {
+pub async fn set_dock_icon_visibility(
+    visible: bool,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
     // Update settings
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
     settings.general.show_dock_icon = visible;
     settings.save()?;
-    
+
     // Apply the change
     update_dock_icon_visibility(app_handle).await
 }
@@ -1928,35 +2050,42 @@ pub async fn set_log_level(level: String) -> Result<(), String> {
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
     settings.advanced.log_level = level.clone();
     settings.save()?;
-    
+
     // TODO: Apply the log level change to the running logger
     tracing::info!("Log level changed to: {}", level);
-    
+
     Ok(())
 }
 
 #[tauri::command]
-pub async fn test_api_endpoint(endpoint: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+pub async fn test_api_endpoint(
+    endpoint: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
     let server = state.http_server.read().await;
-    
+
     if let Some(http_server) = server.as_ref() {
         let port = http_server.port();
         let url = format!("http://localhost:{}{}", port, endpoint);
-        
+
         // Create a simple HTTP client request
         let client = reqwest::Client::new();
-        let response = client.get(&url)
+        let response = client
+            .get(&url)
             .send()
             .await
             .map_err(|e| format!("Request failed: {}", e))?;
-        
+
         let status = response.status();
-        let body = response.text().await.unwrap_or_else(|_| "Failed to read body".to_string());
-        
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read body".to_string());
+
         // Try to parse as JSON, fallback to text
         let json_body = serde_json::from_str::<serde_json::Value>(&body)
             .unwrap_or_else(|_| serde_json::json!({ "body": body }));
-        
+
         Ok(serde_json::json!({
             "status": status.as_u16(),
             "endpoint": endpoint,
@@ -1990,7 +2119,7 @@ pub async fn get_server_logs(limit: usize) -> Result<Vec<ServerLog>, String> {
             message: "Health check endpoint accessed".to_string(),
         },
     ];
-    
+
     Ok(logs.into_iter().take(limit).collect())
 }
 
@@ -1998,30 +2127,40 @@ pub async fn get_server_logs(limit: usize) -> Result<Vec<ServerLog>, String> {
 pub async fn export_logs(_app_handle: tauri::AppHandle) -> Result<(), String> {
     // Get logs
     let logs = get_server_logs(1000).await?;
-    
+
     // Convert to text format
-    let log_text = logs.into_iter()
-        .map(|log| format!("[{}] {} - {}", log.timestamp, log.level.to_uppercase(), log.message))
+    let log_text = logs
+        .into_iter()
+        .map(|log| {
+            format!(
+                "[{}] {} - {}",
+                log.timestamp,
+                log.level.to_uppercase(),
+                log.message
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n");
-    
+
     // Save to file
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
     let filename = format!("vibetunnel_logs_{}.txt", timestamp);
-    
+
     // In Tauri v2, we should use the dialog plugin instead
     // For now, let's just save to a default location
-    let downloads_dir = dirs::download_dir()
-        .ok_or_else(|| "Could not find downloads directory".to_string())?;
+    let downloads_dir =
+        dirs::download_dir().ok_or_else(|| "Could not find downloads directory".to_string())?;
     let path = downloads_dir.join(&filename);
     std::fs::write(&path, log_text).map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
 #[tauri::command]
 pub async fn get_local_ip() -> Result<String, String> {
-    get_local_ip_address().await.map(|opt| opt.unwrap_or_else(|| "127.0.0.1".to_string()))
+    get_local_ip_address()
+        .await
+        .map(|opt| opt.unwrap_or_else(|| "127.0.0.1".to_string()))
 }
 
 #[tauri::command]

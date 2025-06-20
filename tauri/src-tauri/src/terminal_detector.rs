@@ -21,10 +21,7 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
     #[cfg(target_os = "macos")]
     {
         // Check for Terminal.app
-        if let Ok(_) = Command::new("open")
-            .args(&["-Ra", "Terminal.app"])
-            .output()
-        {
+        if let Ok(_) = Command::new("open").args(&["-Ra", "Terminal.app"]).output() {
             available_terminals.push(TerminalInfo {
                 name: "Terminal".to_string(),
                 path: "/System/Applications/Utilities/Terminal.app".to_string(),
@@ -33,10 +30,7 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
         }
 
         // Check for iTerm2
-        if let Ok(_) = Command::new("open")
-            .args(&["-Ra", "iTerm.app"])
-            .output()
-        {
+        if let Ok(_) = Command::new("open").args(&["-Ra", "iTerm.app"]).output() {
             available_terminals.push(TerminalInfo {
                 name: "iTerm2".to_string(),
                 path: "/Applications/iTerm.app".to_string(),
@@ -45,10 +39,7 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
         }
 
         // Check for Warp
-        if let Ok(output) = Command::new("which")
-            .arg("warp")
-            .output()
-        {
+        if let Ok(output) = Command::new("which").arg("warp").output() {
             if output.status.success() {
                 available_terminals.push(TerminalInfo {
                     name: "Warp".to_string(),
@@ -59,10 +50,7 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
         }
 
         // Check for Hyper
-        if let Ok(_) = Command::new("open")
-            .args(&["-Ra", "Hyper.app"])
-            .output()
-        {
+        if let Ok(_) = Command::new("open").args(&["-Ra", "Hyper.app"]).output() {
             available_terminals.push(TerminalInfo {
                 name: "Hyper".to_string(),
                 path: "/Applications/Hyper.app".to_string(),
@@ -71,10 +59,7 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
         }
 
         // Check for Alacritty
-        if let Ok(output) = Command::new("which")
-            .arg("alacritty")
-            .output()
-        {
+        if let Ok(output) = Command::new("which").arg("alacritty").output() {
             if output.status.success() {
                 available_terminals.push(TerminalInfo {
                     name: "Alacritty".to_string(),
@@ -114,10 +99,7 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
     #[cfg(target_os = "windows")]
     {
         // Check for Windows Terminal
-        if let Ok(output) = Command::new("where")
-            .arg("wt.exe")
-            .output()
-        {
+        if let Ok(output) = Command::new("where").arg("wt.exe").output() {
             if output.status.success() {
                 let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 available_terminals.push(TerminalInfo {
@@ -134,10 +116,7 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
         }
 
         // Check for PowerShell
-        if let Ok(output) = Command::new("where")
-            .arg("powershell.exe")
-            .output()
-        {
+        if let Ok(output) = Command::new("where").arg("powershell.exe").output() {
             if output.status.success() {
                 available_terminals.push(TerminalInfo {
                     name: "PowerShell".to_string(),
@@ -148,10 +127,7 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
         }
 
         // Check for Command Prompt
-        if let Ok(output) = Command::new("where")
-            .arg("cmd.exe")
-            .output()
-        {
+        if let Ok(output) = Command::new("where").arg("cmd.exe").output() {
             if output.status.success() {
                 available_terminals.push(TerminalInfo {
                     name: "Command Prompt".to_string(),
@@ -187,10 +163,7 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
         ];
 
         for (cmd, name) in terminals {
-            if let Ok(output) = Command::new("which")
-                .arg(cmd)
-                .output()
-            {
+            if let Ok(output) = Command::new("which").arg(cmd).output() {
                 if output.status.success() {
                     available_terminals.push(TerminalInfo {
                         name: name.to_string(),
@@ -205,17 +178,20 @@ pub fn detect_terminals() -> Result<DetectedTerminals, String> {
         if let Ok(desktop) = std::env::var("XDG_CURRENT_DESKTOP") {
             match desktop.to_lowercase().as_str() {
                 "gnome" | "ubuntu" => {
-                    default_terminal = available_terminals.iter()
+                    default_terminal = available_terminals
+                        .iter()
                         .find(|t| t.name == "GNOME Terminal")
                         .cloned();
                 }
                 "kde" => {
-                    default_terminal = available_terminals.iter()
+                    default_terminal = available_terminals
+                        .iter()
                         .find(|t| t.name == "Konsole")
                         .cloned();
                 }
                 "xfce" => {
-                    default_terminal = available_terminals.iter()
+                    default_terminal = available_terminals
+                        .iter()
                         .find(|t| t.name == "XFCE Terminal")
                         .cloned();
                 }
@@ -247,7 +223,7 @@ pub async fn get_default_shell() -> Result<String, String> {
         if let Ok(shell) = std::env::var("SHELL") {
             return Ok(shell);
         }
-        
+
         // Fallback to common shells
         let shells = vec!["/bin/zsh", "/bin/bash", "/bin/sh"];
         for shell in shells {
@@ -256,22 +232,19 @@ pub async fn get_default_shell() -> Result<String, String> {
             }
         }
     }
-    
+
     #[cfg(windows)]
     {
         // On Windows, default to PowerShell
-        if let Ok(output) = Command::new("where")
-            .arg("powershell.exe")
-            .output()
-        {
+        if let Ok(output) = Command::new("where").arg("powershell.exe").output() {
             if output.status.success() {
                 return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
             }
         }
-        
+
         // Fallback to cmd
         return Ok("cmd.exe".to_string());
     }
-    
+
     Err("Could not detect default shell".to_string())
 }

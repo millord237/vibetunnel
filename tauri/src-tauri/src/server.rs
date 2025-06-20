@@ -1,29 +1,28 @@
-use axum::{
-    Router,
-    routing::{get, post, delete},
-    response::IntoResponse,
-    extract::{ws::WebSocketUpgrade, Path, State as AxumState, Query},
-    http::StatusCode,
-    Json,
-    middleware,
-};
-use axum::extract::ws::{WebSocket, Message};
+use axum::extract::ws::{Message, WebSocket};
 use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::{
+    extract::{ws::WebSocketUpgrade, Path, Query, State as AxumState},
+    http::StatusCode,
+    middleware,
+    response::IntoResponse,
+    routing::{delete, get, post},
+    Json, Router,
+};
+use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt as FuturesStreamExt};
+use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
-use tokio::time::{interval, Duration};
-use tower_http::cors::{CorsLayer, Any};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use futures::sink::SinkExt;
-use serde::{Deserialize, Serialize};
-use tracing::{info, error, debug};
-use std::path::PathBuf;
-use std::fs;
+use tokio::time::{interval, Duration};
+use tower_http::cors::{Any, CorsLayer};
+use tracing::{debug, error, info};
 
-use crate::terminal::TerminalManager;
-use crate::auth::{AuthConfig, auth_middleware, check_auth, login};
+use crate::auth::{auth_middleware, check_auth, login, AuthConfig};
 use crate::session_monitor::SessionMonitor;
+use crate::terminal::TerminalManager;
 
 // Combined app state for Axum
 #[derive(Clone)]
@@ -99,8 +98,11 @@ impl HttpServer {
     pub fn port(&self) -> u16 {
         self.port
     }
-    
-    pub fn new(terminal_manager: Arc<TerminalManager>, session_monitor: Arc<SessionMonitor>) -> Self {
+
+    pub fn new(
+        terminal_manager: Arc<TerminalManager>,
+        session_monitor: Arc<SessionMonitor>,
+    ) -> Self {
         Self {
             terminal_manager,
             auth_config: Arc::new(AuthConfig::new(false, None)),
@@ -110,8 +112,12 @@ impl HttpServer {
             handle: None,
         }
     }
-    
-    pub fn with_auth(terminal_manager: Arc<TerminalManager>, session_monitor: Arc<SessionMonitor>, auth_config: AuthConfig) -> Self {
+
+    pub fn with_auth(
+        terminal_manager: Arc<TerminalManager>,
+        session_monitor: Arc<SessionMonitor>,
+        auth_config: AuthConfig,
+    ) -> Self {
         Self {
             terminal_manager,
             auth_config: Arc::new(auth_config),
@@ -122,71 +128,69 @@ impl HttpServer {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn start(&mut self) -> Result<u16, String> {
         self.start_with_mode("localhost").await
     }
-    
+
     pub async fn start_with_mode(&mut self, mode: &str) -> Result<u16, String> {
         // Determine bind address based on mode
         let bind_addr = match mode {
             "localhost" => "127.0.0.1:0",
-            "network" => "0.0.0.0:0",  // Bind to all interfaces
+            "network" => "0.0.0.0:0", // Bind to all interfaces
             _ => "127.0.0.1:0",
         };
-        
+
         // Find available port
         let listener = TcpListener::bind(bind_addr)
             .await
             .map_err(|e| format!("Failed to bind to {}: {}", bind_addr, e))?;
-            
-        let addr = listener.local_addr()
+
+        let addr = listener
+            .local_addr()
             .map_err(|e| format!("Failed to get local address: {}", e))?;
-            
+
         self.port = addr.port();
-        
+
         info!("Starting HTTP server on port {}", self.port);
-        
+
         // Create shutdown channel
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
         self.shutdown_tx = Some(shutdown_tx);
-        
+
         // Build router
         let app = self.build_router();
-        
+
         // Start server
         let handle = tokio::spawn(async move {
-            let server = axum::serve(listener, app)
-                .with_graceful_shutdown(async {
-                    let _ = shutdown_rx.await;
-                    info!("Graceful shutdown initiated");
-                });
-                
+            let server = axum::serve(listener, app).with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+                info!("Graceful shutdown initiated");
+            });
+
             if let Err(e) = server.await {
                 error!("Server error: {}", e);
             }
-            
+
             info!("Server task completed");
         });
-        
+
         self.handle = Some(handle);
-        
+
         Ok(self.port)
     }
-    
+
     pub async fn stop(&mut self) -> Result<(), String> {
         info!("Stopping HTTP server...");
-        
+
         // Send shutdown signal
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
         }
-        
+
         // Wait for server task to complete
         if let Some(handle) = self.handle.take() {
-            match tokio::time::timeout(
-                tokio::time::Duration::from_secs(10),
-                handle
-            ).await {
+            match tokio::time::timeout(tokio::time::Duration::from_secs(10), handle).await {
                 Ok(Ok(())) => {
                     info!("HTTP server stopped gracefully");
                 }
@@ -200,26 +204,26 @@ impl HttpServer {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     fn build_router(&self) -> Router {
         let app_state = AppState {
             terminal_manager: self.terminal_manager.clone(),
             auth_config: self.auth_config.clone(),
             session_monitor: self.session_monitor.clone(),
         };
-        
+
         // Don't serve static files in Tauri - the frontend is served by Tauri itself
         // This server is only for the terminal API
-        
+
         // Create auth routes that use auth config
         let auth_routes = Router::new()
             .route("/api/auth/check", get(check_auth))
             .route("/api/auth/login", post(login))
             .with_state(app_state.auth_config.clone());
-            
+
         // Create protected routes that use full app state
         let protected_routes = Router::new()
             .route("/api/sessions", get(list_sessions).post(create_session))
@@ -243,17 +247,19 @@ impl HttpServer {
             .route("/api/cleanup-exited", post(cleanup_exited))
             .layer(middleware::from_fn_with_state(
                 app_state.auth_config.clone(),
-                auth_middleware
+                auth_middleware,
             ))
             .with_state(app_state);
-            
+
         Router::new()
             .merge(auth_routes)
             .merge(protected_routes)
-            .layer(CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any))
+            .layer(
+                CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_methods(Any)
+                    .allow_headers(Any),
+            )
     }
 }
 
@@ -262,14 +268,17 @@ async fn list_sessions(
     AxumState(state): AxumState<AppState>,
 ) -> Result<Json<Vec<SessionInfo>>, StatusCode> {
     let sessions = state.terminal_manager.list_sessions().await;
-    
-    let session_infos: Vec<SessionInfo> = sessions.into_iter().map(|s| SessionInfo {
-        id: s.id,
-        name: s.name,
-        status: "running".to_string(),
-        created_at: s.created_at,
-    }).collect();
-    
+
+    let session_infos: Vec<SessionInfo> = sessions
+        .into_iter()
+        .map(|s| SessionInfo {
+            id: s.id,
+            name: s.name,
+            status: "running".to_string(),
+            created_at: s.created_at,
+        })
+        .collect();
+
     Ok(Json(session_infos))
 }
 
@@ -277,18 +286,22 @@ async fn create_session(
     AxumState(state): AxumState<AppState>,
     Json(req): Json<CreateSessionRequest>,
 ) -> Result<Json<SessionInfo>, StatusCode> {
-    let session = state.terminal_manager.create_session(
-        req.name.unwrap_or_else(|| "Terminal".to_string()),
-        req.rows.unwrap_or(24),
-        req.cols.unwrap_or(80),
-        req.cwd,
-        None,
-        None,
-    ).await.map_err(|e| {
-        error!("Failed to create session: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    
+    let session = state
+        .terminal_manager
+        .create_session(
+            req.name.unwrap_or_else(|| "Terminal".to_string()),
+            req.rows.unwrap_or(24),
+            req.cols.unwrap_or(80),
+            req.cwd,
+            None,
+            None,
+        )
+        .await
+        .map_err(|e| {
+            error!("Failed to create session: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
     Ok(Json(SessionInfo {
         id: session.id,
         name: session.name,
@@ -302,15 +315,18 @@ async fn get_session(
     AxumState(state): AxumState<AppState>,
 ) -> Result<Json<SessionInfo>, StatusCode> {
     let sessions = state.terminal_manager.list_sessions().await;
-    
-    sessions.into_iter()
+
+    sessions
+        .into_iter()
         .find(|s| s.id == id)
-        .map(|s| Json(SessionInfo {
-            id: s.id,
-            name: s.name,
-            status: "running".to_string(),
-            created_at: s.created_at,
-        }))
+        .map(|s| {
+            Json(SessionInfo {
+                id: s.id,
+                name: s.name,
+                status: "running".to_string(),
+                created_at: s.created_at,
+            })
+        })
         .ok_or(StatusCode::NOT_FOUND)
 }
 
@@ -318,7 +334,10 @@ async fn delete_session(
     Path(id): Path<String>,
     AxumState(state): AxumState<AppState>,
 ) -> Result<StatusCode, StatusCode> {
-    state.terminal_manager.close_session(&id).await
+    state
+        .terminal_manager
+        .close_session(&id)
+        .await
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|_| StatusCode::NOT_FOUND)
 }
@@ -334,7 +353,10 @@ async fn resize_session(
     AxumState(state): AxumState<AppState>,
     Json(req): Json<ResizeRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    state.terminal_manager.resize_session(&id, req.rows, req.cols).await
+    state
+        .terminal_manager
+        .resize_session(&id, req.rows, req.cols)
+        .await
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|_| StatusCode::NOT_FOUND)
 }
@@ -353,22 +375,27 @@ async fn handle_terminal_websocket(
     terminal_manager: Arc<TerminalManager>,
 ) {
     let (mut sender, mut receiver) = socket.split();
-    
+
     // Get the terminal session
     let _session = match terminal_manager.get_session(&session_id).await {
         Some(s) => s,
         None => {
-            let _ = sender.send(Message::Text("Session not found".to_string())).await;
+            let _ = sender
+                .send(Message::Text("Session not found".to_string()))
+                .await;
             return;
         }
     };
-    
+
     // Spawn task to read from terminal and send to WebSocket
     let session_id_clone = session_id.clone();
     let terminal_manager_clone = terminal_manager.clone();
     let read_task = tokio::spawn(async move {
         loop {
-            match terminal_manager_clone.read_from_session(&session_id_clone).await {
+            match terminal_manager_clone
+                .read_from_session(&session_id_clone)
+                .await
+            {
                 Ok(data) if !data.is_empty() => {
                     if sender.send(Message::Binary(data)).await.is_err() {
                         break;
@@ -385,7 +412,7 @@ async fn handle_terminal_websocket(
             }
         }
     });
-    
+
     // Handle incoming WebSocket messages
     while let Some(msg) = receiver.next().await {
         match msg {
@@ -399,15 +426,12 @@ async fn handle_terminal_websocket(
                 // Handle text messages (e.g., resize commands)
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
                     if json["type"] == "resize" {
-                        if let (Some(rows), Some(cols)) = (
-                            json["rows"].as_u64(),
-                            json["cols"].as_u64()
-                        ) {
-                            let _ = terminal_manager.resize_session(
-                                &session_id,
-                                rows as u16,
-                                cols as u16
-                            ).await;
+                        if let (Some(rows), Some(cols)) =
+                            (json["rows"].as_u64(), json["cols"].as_u64())
+                        {
+                            let _ = terminal_manager
+                                .resize_session(&session_id, rows as u16, cols as u16)
+                                .await;
                         }
                     }
                 }
@@ -420,10 +444,10 @@ async fn handle_terminal_websocket(
             _ => {}
         }
     }
-    
+
     // Cancel the read task
     read_task.abort();
-    
+
     debug!("WebSocket connection closed for session {}", session_id);
 }
 
@@ -437,7 +461,10 @@ async fn send_input(
     AxumState(state): AxumState<AppState>,
     Json(req): Json<InputRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    state.terminal_manager.write_to_session(&id, req.input.as_bytes()).await
+    state
+        .terminal_manager
+        .write_to_session(&id, req.input.as_bytes())
+        .await
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|_| StatusCode::NOT_FOUND)
 }
@@ -448,14 +475,15 @@ async fn terminal_stream(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
     // Check if session exists
     let sessions = state.terminal_manager.list_sessions().await;
-    let session = sessions.into_iter()
+    let session = sessions
+        .into_iter()
         .find(|s| s.id == id)
         .ok_or(StatusCode::NOT_FOUND)?;
-    
+
     // Create the SSE stream
     let session_id = id.clone();
     let terminal_manager = state.terminal_manager.clone();
-    
+
     let stream = async_stream::stream! {
         // Send initial header
         let header = serde_json::json!({
@@ -463,18 +491,18 @@ async fn terminal_stream(
             "width": session.cols,
             "height": session.rows
         });
-        
+
         yield Ok(Event::default()
             .event("header")
             .data(header.to_string()));
-        
+
         // Poll for terminal output
         let mut poll_interval = interval(Duration::from_millis(10));
         let exit_sent = false;
-        
+
         loop {
             poll_interval.tick().await;
-            
+
             // Check if session still exists
             let sessions = terminal_manager.list_sessions().await;
             if !sessions.iter().any(|s| s.id == session_id) && !exit_sent {
@@ -486,7 +514,7 @@ async fn terminal_stream(
                 let _ = exit_sent; // Prevent duplicate exit events
                 break;
             }
-            
+
             // Read any available output
             match terminal_manager.read_from_session(&session_id).await {
                 Ok(data) if !data.is_empty() => {
@@ -494,7 +522,7 @@ async fn terminal_stream(
                     let timestamp = chrono::Utc::now().timestamp();
                     let output = String::from_utf8_lossy(&data);
                     let event_data = serde_json::json!([timestamp, "o", output]);
-                    
+
                     yield Ok(Event::default()
                         .event("data")
                         .data(event_data.to_string()));
@@ -515,7 +543,7 @@ async fn terminal_stream(
             }
         }
     };
-    
+
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
@@ -525,17 +553,16 @@ async fn session_events_stream(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
     // Clone the session monitor Arc to avoid lifetime issues
     let session_monitor = state.session_monitor.clone();
-    
+
     // Start monitoring if not already started
     session_monitor.start_monitoring().await;
-    
+
     // Create SSE stream from session monitor
-    let stream = session_monitor.create_sse_stream()
-        .map(|data| {
-            data.map(|json| Event::default().data(json))
-                .map_err(|_| unreachable!())
-        });
-    
+    let stream = session_monitor.create_sse_stream().map(|data| {
+        data.map(|json| Event::default().data(json))
+            .map_err(|_| unreachable!())
+    });
+
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
@@ -544,49 +571,50 @@ async fn browse_directory(
     Query(params): Query<BrowseQuery>,
 ) -> Result<Json<DirectoryListing>, StatusCode> {
     let path_str = params.path.unwrap_or_else(|| "~".to_string());
-    
+
     // Expand tilde to home directory
     let path = if path_str.starts_with('~') {
-        let home = dirs::home_dir()
-            .ok_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let home = dirs::home_dir().ok_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)?;
         home.join(path_str.strip_prefix("~/").unwrap_or(""))
     } else {
         PathBuf::from(&path_str)
     };
-    
+
     // Check if path exists and is a directory
     if !path.exists() {
         return Err(StatusCode::NOT_FOUND);
     }
-    
+
     if !path.is_dir() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    
+
     // Read directory entries
     let mut files = Vec::new();
-    let entries = fs::read_dir(&path)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+    let entries = fs::read_dir(&path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     for entry in entries {
         let entry = entry.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let metadata = entry.metadata()
+        let metadata = entry
+            .metadata()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        
-        let created = metadata.created()
+
+        let created = metadata
+            .created()
             .map(|t| {
                 let datetime: chrono::DateTime<chrono::Utc> = t.into();
                 datetime.to_rfc3339()
             })
             .unwrap_or_else(|_| String::new());
-            
-        let modified = metadata.modified()
+
+        let modified = metadata
+            .modified()
             .map(|t| {
                 let datetime: chrono::DateTime<chrono::Utc> = t.into();
                 datetime.to_rfc3339()
             })
             .unwrap_or_else(|_| String::new());
-        
+
         files.push(FileInfo {
             name: entry.file_name().to_string_lossy().to_string(),
             created,
@@ -595,54 +623,49 @@ async fn browse_directory(
             is_dir: metadata.is_dir(),
         });
     }
-    
+
     // Sort directories first, then files, alphabetically
-    files.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        }
+    files.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
     });
-    
+
     Ok(Json(DirectoryListing {
         absolute_path: path.to_string_lossy().to_string(),
         files,
     }))
 }
 
-async fn create_directory(
-    Json(req): Json<CreateDirRequest>,
-) -> Result<StatusCode, StatusCode> {
+async fn create_directory(Json(req): Json<CreateDirRequest>) -> Result<StatusCode, StatusCode> {
     // Validate directory name
-    if req.name.is_empty() || 
-       req.name.contains('/') || 
-       req.name.contains('\\') || 
-       req.name.starts_with('.') {
+    if req.name.is_empty()
+        || req.name.contains('/')
+        || req.name.contains('\\')
+        || req.name.starts_with('.')
+    {
         return Err(StatusCode::BAD_REQUEST);
     }
-    
+
     // Expand path
     let base_path = if req.path.starts_with('~') {
-        let home = dirs::home_dir()
-            .ok_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let home = dirs::home_dir().ok_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)?;
         home.join(req.path.strip_prefix("~/").unwrap_or(""))
     } else {
         PathBuf::from(&req.path)
     };
-    
+
     // Create full path
     let full_path = base_path.join(&req.name);
-    
+
     // Check if directory already exists
     if full_path.exists() {
         return Err(StatusCode::CONFLICT);
     }
-    
+
     // Create directory
-    fs::create_dir(&full_path)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+    fs::create_dir(&full_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(StatusCode::CREATED)
 }
 
@@ -652,20 +675,30 @@ async fn cleanup_exited(
     // Get list of all sessions
     let sessions = state.terminal_manager.list_sessions().await;
     let mut cleaned_sessions = Vec::new();
-    
+
     // Check each session and close if the process has exited
     for session in sessions {
         // Try to write empty data to check if session is alive
-        if state.terminal_manager.write_to_session(&session.id, &[]).await.is_err() {
+        if state
+            .terminal_manager
+            .write_to_session(&session.id, &[])
+            .await
+            .is_err()
+        {
             // Session is dead, clean it up
-            if state.terminal_manager.close_session(&session.id).await.is_ok() {
+            if state
+                .terminal_manager
+                .close_session(&session.id)
+                .await
+                .is_ok()
+            {
                 cleaned_sessions.push(session.id);
             }
         }
     }
-    
+
     let count = cleaned_sessions.len();
-    
+
     Ok(Json(CleanupResponse {
         success: true,
         message: format!("{} exited sessions cleaned up", count),
@@ -679,14 +712,15 @@ async fn get_snapshot(
 ) -> Result<String, StatusCode> {
     // Check if session exists
     let sessions = state.terminal_manager.list_sessions().await;
-    let session = sessions.into_iter()
+    let session = sessions
+        .into_iter()
         .find(|s| s.id == id)
         .ok_or(StatusCode::NOT_FOUND)?;
-    
+
     // For Tauri, we don't have access to the stream-out file like the Node.js version
     // Instead, we'll return a minimal snapshot with just the header
     // The frontend can use the regular stream endpoint for actual content
-    
+
     let cast_data = serde_json::json!({
         "version": 2,
         "width": session.cols,
@@ -703,7 +737,7 @@ async fn get_snapshot(
             ]
         }
     });
-    
+
     // Return as a single line JSON (asciicast v2 format)
     Ok(cast_data.to_string())
 }

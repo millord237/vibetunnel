@@ -1,9 +1,9 @@
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, TimeZone, Utc};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use chrono::{DateTime, Utc, TimeZone};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
+use tokio::sync::RwLock;
 
 /// Update channel type
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -23,7 +23,7 @@ impl UpdateChannel {
             UpdateChannel::Custom => "custom",
         }
     }
-    
+
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "stable" => UpdateChannel::Stable,
@@ -155,7 +155,10 @@ impl UpdateManager {
     }
 
     /// Set the notification manager
-    pub fn set_notification_manager(&mut self, notification_manager: Arc<crate::notification_manager::NotificationManager>) {
+    pub fn set_notification_manager(
+        &mut self,
+        notification_manager: Arc<crate::notification_manager::NotificationManager>,
+    ) {
         self.notification_manager = Some(notification_manager);
     }
 
@@ -166,12 +169,13 @@ impl UpdateManager {
                 let mut updater_settings = self.settings.write().await;
                 updater_settings.channel = UpdateChannel::from_str(&update_settings.channel);
                 updater_settings.check_on_startup = true;
-                updater_settings.check_interval_hours = match update_settings.check_frequency.as_str() {
-                    "daily" => 24,
-                    "weekly" => 168,
-                    "monthly" => 720,
-                    _ => 24,
-                };
+                updater_settings.check_interval_hours =
+                    match update_settings.check_frequency.as_str() {
+                        "daily" => 24,
+                        "weekly" => 168,
+                        "monthly" => 720,
+                        _ => 24,
+                    };
                 updater_settings.auto_download = update_settings.auto_download;
                 updater_settings.auto_install = update_settings.auto_install;
                 updater_settings.show_release_notes = update_settings.show_release_notes;
@@ -189,7 +193,7 @@ impl UpdateManager {
     /// Update settings
     pub async fn update_settings(&self, settings: UpdaterSettings) -> Result<(), String> {
         *self.settings.write().await = settings.clone();
-        
+
         // Save to persistent settings
         if let Ok(mut app_settings) = crate::settings::Settings::load() {
             app_settings.updates = Some(crate::settings::UpdateSettings {
@@ -207,7 +211,7 @@ impl UpdateManager {
             });
             app_settings.save()?;
         }
-        
+
         Ok(())
     }
 
@@ -224,30 +228,37 @@ impl UpdateManager {
             state.status = UpdateStatus::Checking;
             state.last_error = None;
         }
-        
+
         // Emit checking event
         self.emit_update_event("checking", None).await;
-        
+
         let app_handle_guard = self.app_handle.read().await;
-        let app_handle = app_handle_guard.as_ref()
+        let app_handle = app_handle_guard
+            .as_ref()
             .ok_or_else(|| "App handle not set".to_string())?;
-        
+
         // Get the updater instance
         let updater = app_handle.updater_builder();
-        
+
         // Configure updater based on settings
         let settings = self.settings.read().await;
-        
+
         // Build updater with channel-specific endpoint
         let updater_result = match settings.channel {
             UpdateChannel::Stable => updater.endpoints(vec![
-                "https://releases.vibetunnel.com/stable/{{target}}/{{arch}}/{{current_version}}".parse().unwrap()
+                "https://releases.vibetunnel.com/stable/{{target}}/{{arch}}/{{current_version}}"
+                    .parse()
+                    .unwrap(),
             ]),
             UpdateChannel::Beta => updater.endpoints(vec![
-                "https://releases.vibetunnel.com/beta/{{target}}/{{arch}}/{{current_version}}".parse().unwrap()
+                "https://releases.vibetunnel.com/beta/{{target}}/{{arch}}/{{current_version}}"
+                    .parse()
+                    .unwrap(),
             ]),
             UpdateChannel::Nightly => updater.endpoints(vec![
-                "https://releases.vibetunnel.com/nightly/{{target}}/{{arch}}/{{current_version}}".parse().unwrap()
+                "https://releases.vibetunnel.com/nightly/{{target}}/{{arch}}/{{current_version}}"
+                    .parse()
+                    .unwrap(),
             ]),
             UpdateChannel::Custom => {
                 if let Some(endpoint) = &settings.custom_endpoint {
@@ -260,90 +271,97 @@ impl UpdateManager {
                 }
             }
         };
-        
+
         // Build and check
         match updater_result {
             Ok(updater_builder) => match updater_builder.build() {
                 Ok(updater) => {
-                match updater.check().await {
-                    Ok(Some(update)) => {
-                        let update_info = UpdateInfo {
-                            version: update.version.clone(),
-                            notes: update.body.clone().unwrap_or_default(),
-                            pub_date: update.date.map(|d| Utc.timestamp_opt(d.unix_timestamp(), 0).single().unwrap_or(Utc::now())),
-                            download_size: None, // TODO: Get from update
-                            signature: None,
-                            download_url: String::new(), // Will be set by updater
-                            channel: settings.channel,
-                        };
-                        
-                        // Update state
-                        {
+                    match updater.check().await {
+                        Ok(Some(update)) => {
+                            let update_info = UpdateInfo {
+                                version: update.version.clone(),
+                                notes: update.body.clone().unwrap_or_default(),
+                                pub_date: update.date.map(|d| {
+                                    Utc.timestamp_opt(d.unix_timestamp(), 0)
+                                        .single()
+                                        .unwrap_or(Utc::now())
+                                }),
+                                download_size: None, // TODO: Get from update
+                                signature: None,
+                                download_url: String::new(), // Will be set by updater
+                                channel: settings.channel,
+                            };
+
+                            // Update state
+                            {
+                                let mut state = self.state.write().await;
+                                state.status = UpdateStatus::Available;
+                                state.available_update = Some(update_info.clone());
+                                state.last_check = Some(Utc::now());
+                            }
+
+                            // Emit available event
+                            self.emit_update_event("available", Some(&update_info))
+                                .await;
+
+                            // Show notification
+                            if let Some(notification_manager) = &self.notification_manager {
+                                let _ = notification_manager
+                                    .notify_update_available(
+                                        &update_info.version,
+                                        &update_info.download_url,
+                                    )
+                                    .await;
+                            }
+
+                            // Auto-download if enabled
+                            if settings.auto_download {
+                                let _ = self.download_update().await;
+                            }
+
+                            Ok(Some(update_info))
+                        }
+                        Ok(None) => {
+                            // No update available
                             let mut state = self.state.write().await;
-                            state.status = UpdateStatus::Available;
-                            state.available_update = Some(update_info.clone());
+                            state.status = UpdateStatus::NoUpdate;
                             state.last_check = Some(Utc::now());
+
+                            self.emit_update_event("no-update", None).await;
+
+                            Ok(None)
                         }
-                        
-                        // Emit available event
-                        self.emit_update_event("available", Some(&update_info)).await;
-                        
-                        // Show notification
-                        if let Some(notification_manager) = &self.notification_manager {
-                            let _ = notification_manager.notify_update_available(
-                                &update_info.version,
-                                &update_info.download_url
-                            ).await;
+                        Err(e) => {
+                            let error_msg = format!("Failed to check for updates: {}", e);
+
+                            let mut state = self.state.write().await;
+                            state.status = UpdateStatus::Error;
+                            state.last_error = Some(error_msg.clone());
+                            state.last_check = Some(Utc::now());
+
+                            self.emit_update_event("error", None).await;
+
+                            Err(error_msg)
                         }
-                        
-                        // Auto-download if enabled
-                        if settings.auto_download {
-                            let _ = self.download_update().await;
-                        }
-                        
-                        Ok(Some(update_info))
-                    }
-                    Ok(None) => {
-                        // No update available
-                        let mut state = self.state.write().await;
-                        state.status = UpdateStatus::NoUpdate;
-                        state.last_check = Some(Utc::now());
-                        
-                        self.emit_update_event("no-update", None).await;
-                        
-                        Ok(None)
-                    }
-                    Err(e) => {
-                        let error_msg = format!("Failed to check for updates: {}", e);
-                        
-                        let mut state = self.state.write().await;
-                        state.status = UpdateStatus::Error;
-                        state.last_error = Some(error_msg.clone());
-                        state.last_check = Some(Utc::now());
-                        
-                        self.emit_update_event("error", None).await;
-                        
-                        Err(error_msg)
                     }
                 }
-            }
-            Err(e) => {
-                let error_msg = format!("Failed to build updater: {}", e);
-                
-                let mut state = self.state.write().await;
-                state.status = UpdateStatus::Error;
-                state.last_error = Some(error_msg.clone());
-                
-                Err(error_msg)
-            }
+                Err(e) => {
+                    let error_msg = format!("Failed to build updater: {}", e);
+
+                    let mut state = self.state.write().await;
+                    state.status = UpdateStatus::Error;
+                    state.last_error = Some(error_msg.clone());
+
+                    Err(error_msg)
+                }
             },
             Err(e) => {
                 let error_msg = format!("Failed to configure updater endpoints: {}", e);
-                
+
                 let mut state = self.state.write().await;
                 state.status = UpdateStatus::Error;
                 state.last_error = Some(error_msg.clone());
-                
+
                 Err(error_msg)
             }
         }
@@ -355,11 +373,11 @@ impl UpdateManager {
             let state = self.state.read().await;
             state.available_update.is_some()
         };
-        
+
         if !update_available {
             return Err("No update available to download".to_string());
         }
-        
+
         // Update status
         {
             let mut state = self.state.write().await;
@@ -372,28 +390,28 @@ impl UpdateManager {
                 eta_seconds: None,
             });
         }
-        
+
         self.emit_update_event("downloading", None).await;
-        
+
         // TODO: Implement actual download with progress tracking
         // For now, simulate download completion
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        
+
         // Update status to ready
         {
             let mut state = self.state.write().await;
             state.status = UpdateStatus::Ready;
             state.progress = None;
         }
-        
+
         self.emit_update_event("ready", None).await;
-        
+
         // Auto-install if enabled
         let settings = self.settings.read().await;
         if settings.auto_install {
             let _ = self.install_update().await;
         }
-        
+
         Ok(())
     }
 
@@ -406,17 +424,17 @@ impl UpdateManager {
             }
             state.available_update.clone()
         };
-        
+
         let update_info = update_info.ok_or_else(|| "No update available".to_string())?;
-        
+
         // Update status
         {
             let mut state = self.state.write().await;
             state.status = UpdateStatus::Installing;
         }
-        
+
         self.emit_update_event("installing", None).await;
-        
+
         // Add to history
         {
             let mut state = self.state.write().await;
@@ -430,19 +448,19 @@ impl UpdateManager {
                 notes: Some(update_info.notes.clone()),
             });
         }
-        
+
         // TODO: Implement actual installation
         // For now, return success
-        
+
         self.emit_update_event("installed", None).await;
-        
+
         Ok(())
     }
 
     /// Cancel update
     pub async fn cancel_update(&self) -> Result<(), String> {
         let mut state = self.state.write().await;
-        
+
         match state.status {
             UpdateStatus::Downloading => {
                 // TODO: Cancel download
@@ -459,15 +477,15 @@ impl UpdateManager {
         let mut settings = self.settings.write().await;
         settings.channel = channel;
         drop(settings);
-        
+
         // Save settings
         self.update_settings(self.get_settings().await).await?;
-        
+
         // Clear current update info when switching channels
         let mut state = self.state.write().await;
         state.available_update = None;
         state.status = UpdateStatus::Idle;
-        
+
         Ok(())
     }
 
@@ -486,10 +504,11 @@ impl UpdateManager {
         if !settings.check_on_startup {
             return;
         }
-        
-        let check_interval = std::time::Duration::from_secs(settings.check_interval_hours as u64 * 3600);
+
+        let check_interval =
+            std::time::Duration::from_secs(settings.check_interval_hours as u64 * 3600);
         drop(settings);
-        
+
         tokio::spawn(async move {
             loop {
                 let _ = self.check_for_updates().await;
@@ -506,7 +525,7 @@ impl UpdateManager {
                 "update": update_info,
                 "state": self.get_state().await,
             });
-            
+
             let _ = app_handle.emit("updater:event", event_data);
         }
     }

@@ -1,9 +1,9 @@
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
-use sha2::{Sha256, Digest};
 
 /// Authentication token type
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -104,7 +104,7 @@ impl Default for AuthCacheConfig {
         Self {
             enabled: true,
             max_entries: 1000,
-            default_ttl_seconds: 3600, // 1 hour
+            default_ttl_seconds: 3600,      // 1 hour
             refresh_threshold_seconds: 300, // 5 minutes
             persist_to_disk: false,
             encryption_enabled: true,
@@ -126,7 +126,11 @@ pub struct AuthCacheStats {
 }
 
 /// Token refresh callback
-pub type TokenRefreshCallback = Arc<dyn Fn(CachedToken) -> futures::future::BoxFuture<'static, Result<CachedToken, String>> + Send + Sync>;
+pub type TokenRefreshCallback = Arc<
+    dyn Fn(CachedToken) -> futures::future::BoxFuture<'static, Result<CachedToken, String>>
+        + Send
+        + Sync,
+>;
 
 /// Authentication cache manager
 pub struct AuthCacheManager {
@@ -168,7 +172,10 @@ impl AuthCacheManager {
     }
 
     /// Set the notification manager
-    pub fn set_notification_manager(&mut self, notification_manager: Arc<crate::notification_manager::NotificationManager>) {
+    pub fn set_notification_manager(
+        &mut self,
+        notification_manager: Arc<crate::notification_manager::NotificationManager>,
+    ) {
         self.notification_manager = Some(notification_manager);
     }
 
@@ -244,12 +251,13 @@ impl AuthCacheManager {
                     // Check if needs refresh
                     if token.needs_refresh(config.refresh_threshold_seconds) {
                         // Trigger refresh in background
-                        if let Some(refresh_callback) = self.refresh_callbacks.read().await.get(key) {
+                        if let Some(refresh_callback) = self.refresh_callbacks.read().await.get(key)
+                        {
                             let token_clone = token.clone();
                             let callback = refresh_callback.clone();
                             let key_clone = key.to_string();
                             let manager = self.clone_for_refresh();
-                            
+
                             tokio::spawn(async move {
                                 if let Ok(refreshed_token) = callback(token_clone).await {
                                     let _ = manager.store_token(&key_clone, refreshed_token).await;
@@ -269,7 +277,11 @@ impl AuthCacheManager {
     }
 
     /// Store credential in cache
-    pub async fn store_credential(&self, key: &str, credential: AuthCredential) -> Result<(), String> {
+    pub async fn store_credential(
+        &self,
+        key: &str,
+        credential: AuthCredential,
+    ) -> Result<(), String> {
         let config = self.config.read().await;
         if !config.enabled {
             return Ok(());
@@ -303,7 +315,7 @@ impl AuthCacheManager {
         }
 
         let mut cache = self.cache.write().await;
-        
+
         if let Some(entry) = cache.get_mut(key) {
             entry.last_accessed = Utc::now();
             entry.access_count += 1;
@@ -315,7 +327,10 @@ impl AuthCacheManager {
 
     /// Register token refresh callback
     pub async fn register_refresh_callback(&self, key: &str, callback: TokenRefreshCallback) {
-        self.refresh_callbacks.write().await.insert(key.to_string(), callback);
+        self.refresh_callbacks
+            .write()
+            .await
+            .insert(key.to_string(), callback);
     }
 
     /// Clear specific cache entry
@@ -330,7 +345,7 @@ impl AuthCacheManager {
     pub async fn clear_all(&self) {
         let mut cache = self.cache.write().await;
         cache.clear();
-        
+
         let mut stats = self.stats.write().await;
         stats.total_entries = 0;
         stats.total_tokens = 0;
@@ -344,7 +359,9 @@ impl AuthCacheManager {
 
     /// List all cache entries
     pub async fn list_entries(&self) -> Vec<(String, DateTime<Utc>, u64)> {
-        self.cache.read().await
+        self.cache
+            .read()
+            .await
             .values()
             .map(|entry| (entry.key.clone(), entry.last_accessed, entry.access_count))
             .collect()
@@ -354,7 +371,7 @@ impl AuthCacheManager {
     pub async fn export_cache(&self) -> Result<String, String> {
         let cache = self.cache.read().await;
         let entries: Vec<_> = cache.values().cloned().collect();
-        
+
         serde_json::to_string_pretty(&entries)
             .map_err(|e| format!("Failed to serialize cache: {}", e))
     }
@@ -363,19 +380,17 @@ impl AuthCacheManager {
     pub async fn import_cache(&self, json_data: &str) -> Result<(), String> {
         let entries: Vec<AuthCacheEntry> = serde_json::from_str(json_data)
             .map_err(|e| format!("Failed to deserialize cache: {}", e))?;
-        
+
         let mut cache = self.cache.write().await;
         let mut stats = self.stats.write().await;
-        
+
         for entry in entries {
             cache.insert(entry.key.clone(), entry);
         }
-        
+
         stats.total_entries = cache.len();
-        stats.total_tokens = cache.values()
-            .map(|e| e.tokens.len())
-            .sum();
-        
+        stats.total_tokens = cache.values().map(|e| e.tokens.len()).sum();
+
         Ok(())
     }
 
@@ -388,14 +403,20 @@ impl AuthCacheManager {
 
     // Helper methods
     fn token_matches_scope(&self, token: &CachedToken, scope: &AuthScope) -> bool {
-        token.scope.service == scope.service &&
-        token.scope.resource == scope.resource &&
-        scope.permissions.iter().all(|p| token.scope.permissions.contains(p))
+        token.scope.service == scope.service
+            && token.scope.resource == scope.resource
+            && scope
+                .permissions
+                .iter()
+                .all(|p| token.scope.permissions.contains(p))
     }
 
-    fn evict_oldest_entry(&self, cache: &mut HashMap<String, AuthCacheEntry>, stats: &mut AuthCacheStats) {
-        if let Some((key, _)) = cache.iter()
-            .min_by_key(|(_, entry)| entry.last_accessed) {
+    fn evict_oldest_entry(
+        &self,
+        cache: &mut HashMap<String, AuthCacheEntry>,
+        stats: &mut AuthCacheStats,
+    ) {
+        if let Some((key, _)) = cache.iter().min_by_key(|(_, entry)| entry.last_accessed) {
             let key = key.clone();
             cache.remove(&key);
             stats.eviction_count += 1;
@@ -410,7 +431,7 @@ impl AuthCacheManager {
 
         loop {
             tokio::time::sleep(cleanup_interval.to_std().unwrap()).await;
-            
+
             let config = self.config.read().await;
             if !config.enabled {
                 continue;
@@ -429,9 +450,7 @@ impl AuthCacheManager {
             }
 
             stats.expired_tokens += total_expired;
-            stats.total_tokens = cache.values()
-                .map(|e| e.tokens.len())
-                .sum();
+            stats.total_tokens = cache.values().map(|e| e.tokens.len()).sum();
 
             // Remove empty entries
             cache.retain(|_, entry| !entry.tokens.is_empty() || entry.credential.is_some());

@@ -5,7 +5,7 @@ use axum::{
     response::Response,
     Json,
 };
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

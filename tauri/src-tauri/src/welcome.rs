@@ -1,9 +1,9 @@
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
-use tauri::{AppHandle, Manager, Emitter};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::RwLock;
 
 /// Tutorial step structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +73,7 @@ impl WelcomeManager {
             tutorials: Arc::new(RwLock::new(Vec::new())),
             app_handle: Arc::new(RwLock::new(None)),
         };
-        
+
         // Initialize default tutorials
         tokio::spawn({
             let tutorials = manager.tutorials.clone();
@@ -82,7 +82,7 @@ impl WelcomeManager {
                 *tutorials.write().await = default_tutorials;
             }
         });
-        
+
         manager
     }
 
@@ -98,7 +98,7 @@ impl WelcomeManager {
             // Check if this is first launch based on settings
             let mut state = self.state.write().await;
             state.first_launch = settings.general.show_welcome_on_startup.unwrap_or(true);
-            
+
             // Mark first launch as false for next time
             if state.first_launch {
                 state.onboarding_date = Some(Utc::now());
@@ -110,13 +110,14 @@ impl WelcomeManager {
     /// Save welcome state
     pub async fn save_state(&self) -> Result<(), String> {
         let state = self.state.read().await;
-        
+
         // Update settings to reflect welcome state
         if let Ok(mut settings) = crate::settings::Settings::load() {
-            settings.general.show_welcome_on_startup = Some(!state.tutorial_completed && !state.tutorial_skipped);
+            settings.general.show_welcome_on_startup =
+                Some(!state.tutorial_completed && !state.tutorial_skipped);
             settings.save().map_err(|e| e.to_string())?;
         }
-        
+
         Ok(())
     }
 
@@ -138,7 +139,9 @@ impl WelcomeManager {
 
     /// Get specific tutorial category
     pub async fn get_tutorial_category(&self, category_id: &str) -> Option<TutorialCategory> {
-        self.tutorials.read().await
+        self.tutorials
+            .read()
+            .await
             .iter()
             .find(|c| c.id == category_id)
             .cloned()
@@ -147,31 +150,29 @@ impl WelcomeManager {
     /// Complete a tutorial step
     pub async fn complete_step(&self, step_id: &str) -> Result<(), String> {
         let mut state = self.state.write().await;
-        
+
         if !state.completed_steps.contains(&step_id.to_string()) {
             state.completed_steps.push(step_id.to_string());
-            
+
             // Check if all steps are completed
             let tutorials = self.tutorials.read().await;
-            let total_steps: usize = tutorials.iter()
-                .map(|c| c.steps.len())
-                .sum();
-            
+            let total_steps: usize = tutorials.iter().map(|c| c.steps.len()).sum();
+
             if state.completed_steps.len() >= total_steps {
                 state.tutorial_completed = true;
             }
-            
+
             // Save state
             drop(state);
             drop(tutorials);
             self.save_state().await?;
-            
+
             // Emit progress event
             if let Some(app_handle) = self.app_handle.read().await.as_ref() {
                 let _ = app_handle.emit("tutorial:step_completed", step_id);
             }
         }
-        
+
         Ok(())
     }
 
@@ -181,9 +182,9 @@ impl WelcomeManager {
         state.tutorial_skipped = true;
         state.first_launch = false;
         drop(state);
-        
+
         self.save_state().await?;
-        
+
         Ok(())
     }
 
@@ -194,9 +195,9 @@ impl WelcomeManager {
         state.tutorial_completed = false;
         state.tutorial_skipped = false;
         drop(state);
-        
+
         self.save_state().await?;
-        
+
         Ok(())
     }
 
@@ -212,7 +213,7 @@ impl WelcomeManager {
                 tauri::WebviewWindowBuilder::new(
                     app_handle,
                     "welcome",
-                    tauri::WebviewUrl::App("welcome.html".into())
+                    tauri::WebviewUrl::App("welcome.html".into()),
                 )
                 .title("Welcome to VibeTunnel")
                 .inner_size(800.0, 600.0)
@@ -224,7 +225,7 @@ impl WelcomeManager {
         } else {
             return Err("App handle not set".to_string());
         }
-        
+
         Ok(())
     }
 
@@ -408,34 +409,37 @@ VibeTunnel will be ready whenever you need it."#.to_string(),
     pub async fn get_progress(&self) -> TutorialProgress {
         let state = self.state.read().await;
         let tutorials = self.tutorials.read().await;
-        
-        let total_steps: usize = tutorials.iter()
-            .map(|c| c.steps.len())
-            .sum();
-        
+
+        let total_steps: usize = tutorials.iter().map(|c| c.steps.len()).sum();
+
         let completed_steps = state.completed_steps.len();
         let percentage = if total_steps > 0 {
             (completed_steps as f32 / total_steps as f32 * 100.0) as u32
         } else {
             0
         };
-        
+
         TutorialProgress {
             total_steps,
             completed_steps,
             percentage,
-            categories: tutorials.iter().map(|category| {
-                let category_completed = category.steps.iter()
-                    .filter(|s| state.completed_steps.contains(&s.id))
-                    .count();
-                
-                CategoryProgress {
-                    category_id: category.id.clone(),
-                    category_name: category.name.clone(),
-                    total_steps: category.steps.len(),
-                    completed_steps: category_completed,
-                }
-            }).collect(),
+            categories: tutorials
+                .iter()
+                .map(|category| {
+                    let category_completed = category
+                        .steps
+                        .iter()
+                        .filter(|s| state.completed_steps.contains(&s.id))
+                        .count();
+
+                    CategoryProgress {
+                        category_id: category.id.clone(),
+                        category_name: category.name.clone(),
+                        total_steps: category.steps.len(),
+                        completed_steps: category_completed,
+                    }
+                })
+                .collect(),
         }
     }
 }

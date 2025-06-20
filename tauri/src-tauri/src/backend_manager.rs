@@ -1,10 +1,10 @@
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
+use std::sync::Arc;
 use tokio::process::Command;
+use tokio::sync::RwLock;
 
 /// Backend type enumeration
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -26,7 +26,7 @@ impl BackendType {
             BackendType::Custom => "custom",
         }
     }
-    
+
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "rust" => BackendType::Rust,
@@ -141,7 +141,7 @@ impl BackendManager {
             active_backend: Arc::new(RwLock::new(Some(BackendType::Rust))),
             notification_manager: None,
         };
-        
+
         // Initialize default backend configurations
         tokio::spawn({
             let configs = manager.configs.clone();
@@ -150,118 +150,130 @@ impl BackendManager {
                 *configs.write().await = default_configs;
             }
         });
-        
+
         manager
     }
 
     /// Set the notification manager
-    pub fn set_notification_manager(&mut self, notification_manager: Arc<crate::notification_manager::NotificationManager>) {
+    pub fn set_notification_manager(
+        &mut self,
+        notification_manager: Arc<crate::notification_manager::NotificationManager>,
+    ) {
         self.notification_manager = Some(notification_manager);
     }
 
     /// Initialize default backend configurations
     fn initialize_default_configs() -> HashMap<BackendType, BackendConfig> {
         let mut configs = HashMap::new();
-        
+
         // Rust backend (built-in)
-        configs.insert(BackendType::Rust, BackendConfig {
-            backend_type: BackendType::Rust,
-            name: "Rust (Built-in)".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            executable_path: None,
-            working_directory: None,
-            environment_variables: HashMap::new(),
-            arguments: vec![],
-            port: Some(4020),
-            features: BackendFeatures {
-                terminal_sessions: true,
-                file_browser: true,
-                port_forwarding: true,
-                authentication: true,
-                websocket_support: true,
-                rest_api: true,
-                graphql_api: false,
-                metrics: true,
+        configs.insert(
+            BackendType::Rust,
+            BackendConfig {
+                backend_type: BackendType::Rust,
+                name: "Rust (Built-in)".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                executable_path: None,
+                working_directory: None,
+                environment_variables: HashMap::new(),
+                arguments: vec![],
+                port: Some(4020),
+                features: BackendFeatures {
+                    terminal_sessions: true,
+                    file_browser: true,
+                    port_forwarding: true,
+                    authentication: true,
+                    websocket_support: true,
+                    rest_api: true,
+                    graphql_api: false,
+                    metrics: true,
+                },
+                requirements: BackendRequirements {
+                    runtime: None,
+                    runtime_version: None,
+                    dependencies: vec![],
+                    system_packages: vec![],
+                    min_memory_mb: Some(64),
+                    min_disk_space_mb: Some(10),
+                },
             },
-            requirements: BackendRequirements {
-                runtime: None,
-                runtime_version: None,
-                dependencies: vec![],
-                system_packages: vec![],
-                min_memory_mb: Some(64),
-                min_disk_space_mb: Some(10),
-            },
-        });
-        
+        );
+
         // Node.js backend
-        configs.insert(BackendType::NodeJS, BackendConfig {
-            backend_type: BackendType::NodeJS,
-            name: "Node.js Server".to_string(),
-            version: "1.0.0".to_string(),
-            executable_path: Some(PathBuf::from("node")),
-            working_directory: None,
-            environment_variables: HashMap::new(),
-            arguments: vec!["server.js".to_string()],
-            port: Some(4021),
-            features: BackendFeatures {
-                terminal_sessions: true,
-                file_browser: true,
-                port_forwarding: false,
-                authentication: true,
-                websocket_support: true,
-                rest_api: true,
-                graphql_api: true,
-                metrics: false,
+        configs.insert(
+            BackendType::NodeJS,
+            BackendConfig {
+                backend_type: BackendType::NodeJS,
+                name: "Node.js Server".to_string(),
+                version: "1.0.0".to_string(),
+                executable_path: Some(PathBuf::from("node")),
+                working_directory: None,
+                environment_variables: HashMap::new(),
+                arguments: vec!["server.js".to_string()],
+                port: Some(4021),
+                features: BackendFeatures {
+                    terminal_sessions: true,
+                    file_browser: true,
+                    port_forwarding: false,
+                    authentication: true,
+                    websocket_support: true,
+                    rest_api: true,
+                    graphql_api: true,
+                    metrics: false,
+                },
+                requirements: BackendRequirements {
+                    runtime: Some("node".to_string()),
+                    runtime_version: Some(">=16.0.0".to_string()),
+                    dependencies: vec![
+                        "express".to_string(),
+                        "socket.io".to_string(),
+                        "node-pty".to_string(),
+                    ],
+                    system_packages: vec![],
+                    min_memory_mb: Some(128),
+                    min_disk_space_mb: Some(50),
+                },
             },
-            requirements: BackendRequirements {
-                runtime: Some("node".to_string()),
-                runtime_version: Some(">=16.0.0".to_string()),
-                dependencies: vec![
-                    "express".to_string(),
-                    "socket.io".to_string(),
-                    "node-pty".to_string(),
-                ],
-                system_packages: vec![],
-                min_memory_mb: Some(128),
-                min_disk_space_mb: Some(50),
-            },
-        });
-        
+        );
+
         // Python backend
-        configs.insert(BackendType::Python, BackendConfig {
-            backend_type: BackendType::Python,
-            name: "Python Server".to_string(),
-            version: "1.0.0".to_string(),
-            executable_path: Some(PathBuf::from("python3")),
-            working_directory: None,
-            environment_variables: HashMap::new(),
-            arguments: vec!["-m".to_string(), "vibetunnel_server".to_string()],
-            port: Some(4022),
-            features: BackendFeatures {
-                terminal_sessions: true,
-                file_browser: true,
-                port_forwarding: false,
-                authentication: true,
-                websocket_support: true,
-                rest_api: true,
-                graphql_api: false,
-                metrics: true,
+        configs.insert(
+            BackendType::Python,
+            BackendConfig {
+                backend_type: BackendType::Python,
+                name: "Python Server".to_string(),
+                version: "1.0.0".to_string(),
+                executable_path: Some(PathBuf::from("python3")),
+                working_directory: None,
+                environment_variables: HashMap::new(),
+                arguments: vec!["-m".to_string(), "vibetunnel_server".to_string()],
+                port: Some(4022),
+                features: BackendFeatures {
+                    terminal_sessions: true,
+                    file_browser: true,
+                    port_forwarding: false,
+                    authentication: true,
+                    websocket_support: true,
+                    rest_api: true,
+                    graphql_api: false,
+                    metrics: true,
+                },
+                requirements: BackendRequirements {
+                    runtime: Some("python3".to_string()),
+                    runtime_version: Some(">=3.8".to_string()),
+                    dependencies: vec![
+                        "fastapi".to_string(),
+                        "uvicorn".to_string(),
+                        "websockets".to_string(),
+                        "ptyprocess".to_string(),
+                    ],
+                    system_packages: vec![],
+                    min_memory_mb: Some(96),
+                    min_disk_space_mb: Some(30),
+                },
             },
-            requirements: BackendRequirements {
-                runtime: Some("python3".to_string()),
-                runtime_version: Some(">=3.8".to_string()),
-                dependencies: vec![
-                    "fastapi".to_string(),
-                    "uvicorn".to_string(),
-                    "websockets".to_string(),
-                    "ptyprocess".to_string(),
-                ],
-                system_packages: vec![],
-                min_memory_mb: Some(96),
-                min_disk_space_mb: Some(30),
-            },
-        });
-        
+        );
+
         configs
     }
 
@@ -303,14 +315,16 @@ impl BackendManager {
         if !self.is_backend_installed(backend_type).await {
             return Err(format!("{:?} backend is not installed", backend_type));
         }
-        
+
         // Get backend configuration
-        let config = self.get_backend_config(backend_type).await
+        let config = self
+            .get_backend_config(backend_type)
+            .await
             .ok_or_else(|| "Backend configuration not found".to_string())?;
-        
+
         // Generate instance ID
         let instance_id = uuid::Uuid::new_v4().to_string();
-        
+
         // Create backend instance
         let instance = BackendInstance {
             id: instance_id.clone(),
@@ -330,15 +344,19 @@ impl BackendManager {
                 active_connections: 0,
             },
         };
-        
+
         // Store instance
-        self.instances.write().await.insert(instance_id.clone(), instance);
-        
+        self.instances
+            .write()
+            .await
+            .insert(instance_id.clone(), instance);
+
         // Start backend process
         match backend_type {
             BackendType::Rust => {
                 // Rust backend is handled internally
-                self.update_instance_status(&instance_id, BackendStatus::Running).await;
+                self.update_instance_status(&instance_id, BackendStatus::Running)
+                    .await;
                 *self.active_backend.write().await = Some(BackendType::Rust);
                 Ok(instance_id)
             }
@@ -351,15 +369,19 @@ impl BackendManager {
 
     /// Stop backend
     pub async fn stop_backend(&self, instance_id: &str) -> Result<(), String> {
-        let instance = self.instances.read().await
+        let instance = self
+            .instances
+            .read()
+            .await
             .get(instance_id)
             .cloned()
             .ok_or_else(|| "Backend instance not found".to_string())?;
-        
+
         match instance.backend_type {
             BackendType::Rust => {
                 // Rust backend is handled internally
-                self.update_instance_status(instance_id, BackendStatus::Stopped).await;
+                self.update_instance_status(instance_id, BackendStatus::Stopped)
+                    .await;
                 Ok(())
             }
             _ => {
@@ -378,8 +400,12 @@ impl BackendManager {
                 // Find and stop current backend instances
                 let instance_id = {
                     let instances = self.instances.read().await;
-                    instances.iter()
-                        .find(|(_, instance)| instance.backend_type == current && instance.status == BackendStatus::Running)
+                    instances
+                        .iter()
+                        .find(|(_, instance)| {
+                            instance.backend_type == current
+                                && instance.status == BackendStatus::Running
+                        })
                         .map(|(id, _)| id.clone())
                 };
                 if let Some(id) = instance_id {
@@ -387,21 +413,23 @@ impl BackendManager {
                 }
             }
         }
-        
+
         // Start new backend
         self.start_backend(backend_type).await?;
-        
+
         // Update active backend
         *self.active_backend.write().await = Some(backend_type);
-        
+
         // Notify about backend switch
         if let Some(notification_manager) = &self.notification_manager {
-            let _ = notification_manager.notify_success(
-                "Backend Switched",
-                &format!("Switched to {:?} backend", backend_type)
-            ).await;
+            let _ = notification_manager
+                .notify_success(
+                    "Backend Switched",
+                    &format!("Switched to {:?} backend", backend_type),
+                )
+                .await;
         }
-        
+
         Ok(())
     }
 
@@ -417,27 +445,30 @@ impl BackendManager {
 
     /// Get backend health
     pub async fn check_backend_health(&self, instance_id: &str) -> Result<HealthStatus, String> {
-        let instance = self.instances.read().await
+        let instance = self
+            .instances
+            .read()
+            .await
             .get(instance_id)
             .cloned()
             .ok_or_else(|| "Backend instance not found".to_string())?;
-        
+
         if instance.status != BackendStatus::Running {
             return Ok(HealthStatus::Unknown);
         }
-        
+
         // Perform health check based on backend type
         let health_status = match instance.backend_type {
             BackendType::Rust => HealthStatus::Healthy, // Always healthy for built-in
             _ => self.check_external_backend_health(&instance).await?,
         };
-        
+
         // Update instance health status
         if let Some(instance) = self.instances.write().await.get_mut(instance_id) {
             instance.health_status = health_status;
             instance.last_health_check = Some(Utc::now());
         }
-        
+
         Ok(health_status)
     }
 
@@ -487,7 +518,11 @@ impl BackendManager {
         Err("Python backend installation not yet implemented".to_string())
     }
 
-    async fn start_external_backend(&self, _instance_id: &str, _config: BackendConfig) -> Result<String, String> {
+    async fn start_external_backend(
+        &self,
+        _instance_id: &str,
+        _config: BackendConfig,
+    ) -> Result<String, String> {
         // TODO: Implement external backend startup
         Err("External backend startup not yet implemented".to_string())
     }
@@ -497,7 +532,10 @@ impl BackendManager {
         Err("External backend shutdown not yet implemented".to_string())
     }
 
-    async fn check_external_backend_health(&self, _instance: &BackendInstance) -> Result<HealthStatus, String> {
+    async fn check_external_backend_health(
+        &self,
+        _instance: &BackendInstance,
+    ) -> Result<HealthStatus, String> {
         // TODO: Implement health check for external backends
         Ok(HealthStatus::Unknown)
     }

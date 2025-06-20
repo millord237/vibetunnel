@@ -1,13 +1,13 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::io::{Read, Write};
-use portable_pty::{CommandBuilder, PtySize, native_pty_system, PtyPair, Child};
-use tokio::sync::{mpsc, RwLock};
-use bytes::Bytes;
-use uuid::Uuid;
-use chrono::Utc;
-use tracing::{info, error, debug};
 use crate::cast::CastManager;
+use bytes::Bytes;
+use chrono::Utc;
+use portable_pty::{native_pty_system, Child, CommandBuilder, PtyPair, PtySize};
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::sync::{Arc, Mutex};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{debug, error, info};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct TerminalManager {
@@ -24,9 +24,12 @@ pub struct TerminalSession {
     pub created_at: String,
     pub cwd: String,
     pty_pair: PtyPair,
+    #[allow(dead_code)]
     child: Box<dyn Child + Send + Sync>,
     writer: Box<dyn Write + Send>,
+    #[allow(dead_code)]
     reader_thread: Option<std::thread::JoinHandle<()>>,
+    #[allow(dead_code)]
     output_tx: mpsc::UnboundedSender<Bytes>,
     pub output_rx: Arc<Mutex<mpsc::UnboundedReceiver<Bytes>>>,
 }
@@ -53,7 +56,7 @@ impl TerminalManager {
         shell: Option<String>,
     ) -> Result<crate::commands::Terminal, String> {
         let id = Uuid::new_v4().to_string();
-        
+
         // Set up PTY
         let pty_system = native_pty_system();
         let pty_pair = pty_system
@@ -77,12 +80,12 @@ impl TerminalManager {
         });
 
         let mut cmd = CommandBuilder::new(&shell);
-        
+
         // Set working directory
         if let Some(cwd) = &cwd {
             cmd.cwd(cwd);
         }
-        
+
         // Set environment variables
         if let Some(env_vars) = env {
             for (key, value) in env_vars {
@@ -97,16 +100,16 @@ impl TerminalManager {
             .map_err(|e| format!("Failed to spawn shell: {}", e))?;
 
         let pid = child.process_id().unwrap_or(0);
-        
+
         // Set up output channel
         let (output_tx, output_rx) = mpsc::unbounded_channel();
-        
+
         // Get reader and writer
         let reader = pty_pair
             .master
             .try_clone_reader()
             .map_err(|e| format!("Failed to clone reader: {}", e))?;
-            
+
         let writer = pty_pair
             .master
             .take_writer()
@@ -119,7 +122,7 @@ impl TerminalManager {
         let reader_thread = std::thread::spawn(move || {
             let mut reader = reader;
             let mut buffer = [0u8; 4096];
-            
+
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
@@ -128,7 +131,7 @@ impl TerminalManager {
                     }
                     Ok(n) => {
                         let data = Bytes::copy_from_slice(&buffer[..n]);
-                        
+
                         // Record output to cast file if recording
                         if let Some(cast_manager) = &cast_manager_clone {
                             let cm = cast_manager.clone();
@@ -138,7 +141,7 @@ impl TerminalManager {
                                 let _ = cm.add_output(&sid, &data_clone).await;
                             });
                         }
-                        
+
                         if output_tx_clone.send(data).is_err() {
                             debug!("Output channel closed");
                             break;
@@ -159,7 +162,12 @@ impl TerminalManager {
             rows,
             cols,
             created_at: Utc::now().to_rfc3339(),
-            cwd: cwd.unwrap_or_else(|| std::env::current_dir().unwrap().to_string_lossy().to_string()),
+            cwd: cwd.unwrap_or_else(|| {
+                std::env::current_dir()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            }),
             pty_pair,
             child,
             writer,
@@ -169,7 +177,10 @@ impl TerminalManager {
         };
 
         // Store session
-        self.sessions.write().await.insert(id.clone(), Arc::new(RwLock::new(session)));
+        self.sessions
+            .write()
+            .await
+            .insert(id.clone(), Arc::new(RwLock::new(session)));
 
         info!("Created terminal session: {} ({})", name, id);
 
@@ -186,7 +197,7 @@ impl TerminalManager {
     pub async fn list_sessions(&self) -> Vec<crate::commands::Terminal> {
         let sessions = self.sessions.read().await;
         let mut result = Vec::new();
-        
+
         for (id, session) in sessions.iter() {
             let session = session.read().await;
             result.push(crate::commands::Terminal {
@@ -198,7 +209,7 @@ impl TerminalManager {
                 created_at: session.created_at.clone(),
             });
         }
-        
+
         result
     }
 
@@ -209,26 +220,26 @@ impl TerminalManager {
     pub async fn close_all_sessions(&self) -> Result<(), String> {
         let mut sessions = self.sessions.write().await;
         let session_count = sessions.len();
-        
+
         // Clear all sessions
         sessions.clear();
-        
+
         info!("Closed all {} terminal sessions", session_count);
         Ok(())
     }
-    
+
     pub async fn close_session(&self, id: &str) -> Result<(), String> {
         let mut sessions = self.sessions.write().await;
-        
+
         if let Some(session_arc) = sessions.remove(id) {
             // Stop recording if active
             if let Some(cast_manager) = &self.cast_manager {
                 let _ = cast_manager.remove_recorder(id).await;
             }
-            
+
             // Session will be dropped when it goes out of scope
             drop(session_arc);
-            
+
             info!("Closed terminal session: {}", id);
             Ok(())
         } else {
@@ -239,8 +250,9 @@ impl TerminalManager {
     pub async fn resize_session(&self, id: &str, rows: u16, cols: u16) -> Result<(), String> {
         if let Some(session_arc) = self.get_session(id).await {
             let mut session = session_arc.write().await;
-            
-            session.pty_pair
+
+            session
+                .pty_pair
                 .master
                 .resize(PtySize {
                     rows,
@@ -249,10 +261,10 @@ impl TerminalManager {
                     pixel_height: 0,
                 })
                 .map_err(|e| format!("Failed to resize PTY: {}", e))?;
-                
+
             session.rows = rows;
             session.cols = cols;
-            
+
             // Update recorder dimensions if recording
             if let Some(cast_manager) = &self.cast_manager {
                 if let Some(recorder) = cast_manager.get_recorder(id).await {
@@ -260,7 +272,7 @@ impl TerminalManager {
                     rec.resize(cols, rows).await;
                 }
             }
-            
+
             debug!("Resized terminal {} to {}x{}", id, cols, rows);
             Ok(())
         } else {
@@ -271,20 +283,22 @@ impl TerminalManager {
     pub async fn write_to_session(&self, id: &str, data: &[u8]) -> Result<(), String> {
         if let Some(session_arc) = self.get_session(id).await {
             let mut session = session_arc.write().await;
-            
+
             // Record input to cast file if recording
             if let Some(cast_manager) = &self.cast_manager {
                 let _ = cast_manager.add_input(id, data).await;
             }
-            
-            session.writer
+
+            session
+                .writer
                 .write_all(data)
                 .map_err(|e| format!("Failed to write to PTY: {}", e))?;
-                
-            session.writer
+
+            session
+                .writer
                 .flush()
                 .map_err(|e| format!("Failed to flush PTY: {}", e))?;
-                
+
             Ok(())
         } else {
             Err(format!("Session not found: {}", id))
@@ -295,7 +309,7 @@ impl TerminalManager {
         if let Some(session_arc) = self.get_session(id).await {
             let session = session_arc.read().await;
             let mut rx = session.output_rx.lock().unwrap();
-            
+
             // Try to receive data without blocking
             match rx.try_recv() {
                 Ok(data) => Ok(data.to_vec()),

@@ -1,6 +1,6 @@
-use tokio::sync::mpsc;
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 /// Request to spawn a terminal
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,17 +23,20 @@ pub struct TerminalSpawnResponse {
 /// Terminal Spawn Service - manages background terminal spawning
 pub struct TerminalSpawnService {
     request_tx: mpsc::Sender<TerminalSpawnRequest>,
+    #[allow(dead_code)]
     terminal_integrations_manager: Arc<crate::terminal_integrations::TerminalIntegrationsManager>,
 }
 
 impl TerminalSpawnService {
     pub fn new(
-        terminal_integrations_manager: Arc<crate::terminal_integrations::TerminalIntegrationsManager>,
+        terminal_integrations_manager: Arc<
+            crate::terminal_integrations::TerminalIntegrationsManager,
+        >,
     ) -> Self {
         let (tx, mut rx) = mpsc::channel::<TerminalSpawnRequest>(100);
-        
+
         let manager_clone = terminal_integrations_manager.clone();
-        
+
         // Spawn background worker to handle terminal spawn requests
         tokio::spawn(async move {
             while let Some(request) = rx.recv().await {
@@ -43,23 +46,27 @@ impl TerminalSpawnService {
                 });
             }
         });
-        
+
         Self {
             request_tx: tx,
             terminal_integrations_manager,
         }
     }
-    
+
     /// Queue a terminal spawn request
     pub async fn spawn_terminal(&self, request: TerminalSpawnRequest) -> Result<(), String> {
-        self.request_tx.send(request).await
+        self.request_tx
+            .send(request)
+            .await
             .map_err(|e| format!("Failed to queue terminal spawn: {}", e))
     }
-    
+
     /// Handle a spawn request
     async fn handle_spawn_request(
         request: TerminalSpawnRequest,
-        terminal_integrations_manager: Arc<crate::terminal_integrations::TerminalIntegrationsManager>,
+        terminal_integrations_manager: Arc<
+            crate::terminal_integrations::TerminalIntegrationsManager,
+        >,
     ) -> Result<TerminalSpawnResponse, String> {
         // Determine which terminal to use
         let terminal_type = if let Some(terminal) = &request.terminal_type {
@@ -78,11 +85,13 @@ impl TerminalSpawnService {
         } else {
             terminal_integrations_manager.get_default_terminal().await
         };
-        
+
         // Build launch options
         let mut launch_options = crate::terminal_integrations::TerminalLaunchOptions {
             command: request.command,
-            working_directory: request.working_directory.map(|s| std::path::PathBuf::from(s)),
+            working_directory: request
+                .working_directory
+                .map(|s| std::path::PathBuf::from(s)),
             args: vec![],
             env_vars: request.environment.unwrap_or_default(),
             title: Some(format!("VibeTunnel Session {}", request.session_id)),
@@ -91,16 +100,22 @@ impl TerminalSpawnService {
             split: None,
             window_size: None,
         };
-        
+
         // If no command specified, create a VibeTunnel session command
         if launch_options.command.is_none() {
             // Get server status to build the correct URL
             let port = 4020; // Default port, should get from settings
-            launch_options.command = Some(format!("vt connect localhost:{}/{}", port, request.session_id));
+            launch_options.command = Some(format!(
+                "vt connect localhost:{}/{}",
+                port, request.session_id
+            ));
         }
-        
+
         // Launch the terminal
-        match terminal_integrations_manager.launch_terminal(Some(terminal_type), launch_options).await {
+        match terminal_integrations_manager
+            .launch_terminal(Some(terminal_type), launch_options)
+            .await
+        {
             Ok(_) => Ok(TerminalSpawnResponse {
                 success: true,
                 error: None,
@@ -113,7 +128,7 @@ impl TerminalSpawnService {
             }),
         }
     }
-    
+
     /// Spawn terminal for a specific session
     pub async fn spawn_terminal_for_session(
         &self,
@@ -127,10 +142,10 @@ impl TerminalSpawnService {
             working_directory: None,
             environment: None,
         };
-        
+
         self.spawn_terminal(request).await
     }
-    
+
     /// Spawn terminal with custom command
     pub async fn spawn_terminal_with_command(
         &self,
@@ -145,7 +160,7 @@ impl TerminalSpawnService {
             working_directory,
             environment: None,
         };
-        
+
         self.spawn_terminal(request).await
     }
 }
@@ -158,7 +173,9 @@ pub async fn spawn_terminal_for_session(
     state: tauri::State<'_, crate::state::AppState>,
 ) -> Result<(), String> {
     let spawn_service = &state.terminal_spawn_service;
-    spawn_service.spawn_terminal_for_session(session_id, terminal_type).await
+    spawn_service
+        .spawn_terminal_for_session(session_id, terminal_type)
+        .await
 }
 
 #[tauri::command]
@@ -169,7 +186,9 @@ pub async fn spawn_terminal_with_command(
     state: tauri::State<'_, crate::state::AppState>,
 ) -> Result<(), String> {
     let spawn_service = &state.terminal_spawn_service;
-    spawn_service.spawn_terminal_with_command(command, working_directory, terminal_type).await
+    spawn_service
+        .spawn_terminal_with_command(command, working_directory, terminal_type)
+        .await
 }
 
 #[tauri::command]

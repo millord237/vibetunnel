@@ -1,10 +1,10 @@
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 
 /// API test method
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -36,11 +36,22 @@ impl HttpMethod {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AssertionType {
     StatusCode(u16),
-    StatusRange { min: u16, max: u16 },
-    ResponseTime { max_ms: u64 },
+    StatusRange {
+        min: u16,
+        max: u16,
+    },
+    ResponseTime {
+        max_ms: u64,
+    },
     HeaderExists(String),
-    HeaderEquals { key: String, value: String },
-    JsonPath { path: String, expected: serde_json::Value },
+    HeaderEquals {
+        key: String,
+        value: String,
+    },
+    JsonPath {
+        path: String,
+        expected: serde_json::Value,
+    },
     BodyContains(String),
     BodyMatches(String), // Regex
     ContentType(String),
@@ -78,9 +89,16 @@ pub enum APITestBody {
 /// API test authentication
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum APITestAuth {
-    Basic { username: String, password: String },
+    Basic {
+        username: String,
+        password: String,
+    },
     Bearer(String),
-    ApiKey { key: String, value: String, in_header: bool },
+    ApiKey {
+        key: String,
+        value: String,
+        in_header: bool,
+    },
     Custom(HashMap<String, String>),
 }
 
@@ -205,7 +223,10 @@ impl APITestingManager {
     }
 
     /// Set the notification manager
-    pub fn set_notification_manager(&mut self, notification_manager: Arc<crate::notification_manager::NotificationManager>) {
+    pub fn set_notification_manager(
+        &mut self,
+        notification_manager: Arc<crate::notification_manager::NotificationManager>,
+    ) {
         self.notification_manager = Some(notification_manager);
     }
 
@@ -221,7 +242,10 @@ impl APITestingManager {
 
     /// Add test suite
     pub async fn add_test_suite(&self, suite: APITestSuite) {
-        self.test_suites.write().await.insert(suite.id.clone(), suite);
+        self.test_suites
+            .write()
+            .await
+            .insert(suite.id.clone(), suite);
     }
 
     /// Get test suite
@@ -235,7 +259,11 @@ impl APITestingManager {
     }
 
     /// Run single test
-    pub async fn run_test(&self, test: &APITest, variables: &HashMap<String, String>) -> APITestResult {
+    pub async fn run_test(
+        &self,
+        test: &APITest,
+        variables: &HashMap<String, String>,
+    ) -> APITestResult {
         let start_time = std::time::Instant::now();
         let mut result = APITestResult {
             test_id: test.id.clone(),
@@ -274,9 +302,11 @@ impl APITestingManager {
                     result.retries_used = retry;
 
                     // Run assertions
-                    result.assertion_results = self.run_assertions(&test.assertions, status, &result.response_headers, &body).await;
+                    result.assertion_results = self
+                        .run_assertions(&test.assertions, status, &result.response_headers, &body)
+                        .await;
                     result.success = result.assertion_results.iter().all(|a| a.passed);
-                    
+
                     break;
                 }
                 Err(e) => {
@@ -298,7 +328,7 @@ impl APITestingManager {
         let suite = self.get_test_suite(suite_id).await?;
         let run_id = uuid::Uuid::new_v4().to_string();
         let start_time = std::time::Instant::now();
-        
+
         // Merge variables
         let mut variables = self.shared_variables.read().await.clone();
         variables.extend(suite.variables.clone());
@@ -323,10 +353,10 @@ impl APITestingManager {
                 let test = test.clone();
                 let vars = variables.clone();
                 let manager = self.clone_for_parallel();
-                
-                tasks.push(tokio::spawn(async move {
-                    manager.run_test(&test, &vars).await
-                }));
+
+                tasks.push(tokio::spawn(
+                    async move { manager.run_test(&test, &vars).await },
+                ));
             }
 
             for task in tasks {
@@ -371,11 +401,10 @@ impl APITestingManager {
 
         // Send notification
         if let Some(notification_manager) = &self.notification_manager {
-            let message = format!(
-                "Test suite completed: {} passed, {} failed",
-                passed, failed
-            );
-            let _ = notification_manager.notify_success("API Tests", &message).await;
+            let message = format!("Test suite completed: {} passed, {} failed", passed, failed);
+            let _ = notification_manager
+                .notify_success("API Tests", &message)
+                .await;
         }
 
         Some(history_entry)
@@ -403,9 +432,11 @@ impl APITestingManager {
 
     /// Export test suite
     pub async fn export_test_suite(&self, suite_id: &str) -> Result<String, String> {
-        let suite = self.get_test_suite(suite_id).await
+        let suite = self
+            .get_test_suite(suite_id)
+            .await
             .ok_or_else(|| "Test suite not found".to_string())?;
-        
+
         serde_json::to_string_pretty(&suite)
             .map_err(|e| format!("Failed to serialize test suite: {}", e))
     }
@@ -469,7 +500,7 @@ impl APITestingManager {
         // Execute request
         let response = request.send().await.map_err(|e| e.to_string())?;
         let status = response.status().as_u16();
-        
+
         let mut headers = HashMap::new();
         for (key, value) in response.headers() {
             if let Ok(value_str) = value.to_str() {
@@ -493,42 +524,39 @@ impl APITestingManager {
 
         for assertion in assertions {
             let result = match assertion {
-                AssertionType::StatusCode(expected) => {
-                    AssertionResult {
-                        assertion: assertion.clone(),
-                        passed: status == *expected,
-                        actual_value: Some(status.to_string()),
-                        error_message: if status != *expected {
-                            Some(format!("Expected status {}, got {}", expected, status))
-                        } else {
-                            None
-                        },
-                    }
-                }
-                AssertionType::StatusRange { min, max } => {
-                    AssertionResult {
-                        assertion: assertion.clone(),
-                        passed: status >= *min && status <= *max,
-                        actual_value: Some(status.to_string()),
-                        error_message: if status < *min || status > *max {
-                            Some(format!("Expected status between {} and {}, got {}", min, max, status))
-                        } else {
-                            None
-                        },
-                    }
-                }
-                AssertionType::HeaderExists(key) => {
-                    AssertionResult {
-                        assertion: assertion.clone(),
-                        passed: headers.contains_key(key),
-                        actual_value: None,
-                        error_message: if !headers.contains_key(key) {
-                            Some(format!("Header '{}' not found", key))
-                        } else {
-                            None
-                        },
-                    }
-                }
+                AssertionType::StatusCode(expected) => AssertionResult {
+                    assertion: assertion.clone(),
+                    passed: status == *expected,
+                    actual_value: Some(status.to_string()),
+                    error_message: if status != *expected {
+                        Some(format!("Expected status {}, got {}", expected, status))
+                    } else {
+                        None
+                    },
+                },
+                AssertionType::StatusRange { min, max } => AssertionResult {
+                    assertion: assertion.clone(),
+                    passed: status >= *min && status <= *max,
+                    actual_value: Some(status.to_string()),
+                    error_message: if status < *min || status > *max {
+                        Some(format!(
+                            "Expected status between {} and {}, got {}",
+                            min, max, status
+                        ))
+                    } else {
+                        None
+                    },
+                },
+                AssertionType::HeaderExists(key) => AssertionResult {
+                    assertion: assertion.clone(),
+                    passed: headers.contains_key(key),
+                    actual_value: None,
+                    error_message: if !headers.contains_key(key) {
+                        Some(format!("Header '{}' not found", key))
+                    } else {
+                        None
+                    },
+                },
                 AssertionType::HeaderEquals { key, value } => {
                     let actual = headers.get(key);
                     AssertionResult {
@@ -536,25 +564,29 @@ impl APITestingManager {
                         passed: actual == Some(value),
                         actual_value: actual.cloned(),
                         error_message: if actual != Some(value) {
-                            Some(format!("Header '{}' expected '{}', got '{:?}'", key, value, actual))
+                            Some(format!(
+                                "Header '{}' expected '{}', got '{:?}'",
+                                key, value, actual
+                            ))
                         } else {
                             None
                         },
                     }
                 }
-                AssertionType::BodyContains(text) => {
-                    AssertionResult {
-                        assertion: assertion.clone(),
-                        passed: body.contains(text),
-                        actual_value: None,
-                        error_message: if !body.contains(text) {
-                            Some(format!("Body does not contain '{}'", text))
-                        } else {
-                            None
-                        },
-                    }
-                }
-                AssertionType::JsonPath { path: _, expected: _ } => {
+                AssertionType::BodyContains(text) => AssertionResult {
+                    assertion: assertion.clone(),
+                    passed: body.contains(text),
+                    actual_value: None,
+                    error_message: if !body.contains(text) {
+                        Some(format!("Body does not contain '{}'", text))
+                    } else {
+                        None
+                    },
+                },
+                AssertionType::JsonPath {
+                    path: _,
+                    expected: _,
+                } => {
                     // TODO: Implement JSON path assertion
                     AssertionResult {
                         assertion: assertion.clone(),
@@ -563,14 +595,12 @@ impl APITestingManager {
                         error_message: Some("JSON path assertions not yet implemented".to_string()),
                     }
                 }
-                _ => {
-                    AssertionResult {
-                        assertion: assertion.clone(),
-                        passed: false,
-                        actual_value: None,
-                        error_message: Some("Assertion type not implemented".to_string()),
-                    }
-                }
+                _ => AssertionResult {
+                    assertion: assertion.clone(),
+                    passed: false,
+                    actual_value: None,
+                    error_message: Some("Assertion type not implemented".to_string()),
+                },
             };
             results.push(result);
         }
@@ -602,7 +632,11 @@ impl APITestingManager {
                 let token = self.replace_variables(token, variables);
                 request.bearer_auth(token)
             }
-            APITestAuth::ApiKey { key, value, in_header } => {
+            APITestAuth::ApiKey {
+                key,
+                value,
+                in_header,
+            } => {
                 let key = self.replace_variables(key, variables);
                 let value = self.replace_variables(value, variables);
                 if *in_header {

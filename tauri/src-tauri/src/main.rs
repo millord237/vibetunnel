@@ -3,44 +3,44 @@
     windows_subsystem = "windows"
 )]
 
-use tauri::{AppHandle, Manager, Emitter, WindowEvent};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::menu::Menu;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod commands;
-mod terminal;
-mod server;
-mod state;
-mod settings;
-mod auto_launch;
-mod ngrok;
-mod terminal_detector;
-mod cli_installer;
-mod auth;
-mod tray_menu;
-mod cast;
-mod tty_forward;
-mod session_monitor;
-mod port_conflict;
-mod network_utils;
-mod notification_manager;
-mod welcome;
-mod permissions;
-mod updater;
-mod backend_manager;
-mod debug_features;
 mod api_testing;
-mod auth_cache;
-mod terminal_integrations;
 mod app_mover;
-mod terminal_spawn_service;
+mod auth;
+mod auth_cache;
+mod auto_launch;
+mod backend_manager;
+mod cast;
+mod cli_installer;
+mod commands;
+mod debug_features;
 mod fs_api;
+mod network_utils;
+mod ngrok;
+mod notification_manager;
+mod permissions;
+mod port_conflict;
+mod server;
+mod session_monitor;
+mod settings;
+mod state;
+mod terminal;
+mod terminal_detector;
+mod terminal_integrations;
+mod terminal_spawn_service;
+mod tray_menu;
+mod tty_forward;
+mod updater;
+mod welcome;
 
-use commands::*;
-use state::AppState;
-use server::HttpServer;
 use commands::ServerStatus;
+use commands::*;
+use server::HttpServer;
+use state::AppState;
 
 #[tauri::command]
 fn open_settings_window(app: AppHandle) -> Result<(), String> {
@@ -53,7 +53,7 @@ fn open_settings_window(app: AppHandle) -> Result<(), String> {
         tauri::WebviewWindowBuilder::new(
             &app,
             "settings",
-            tauri::WebviewUrl::App("settings.html".into())
+            tauri::WebviewUrl::App("settings.html".into()),
         )
         .title("VibeTunnel Settings")
         .inner_size(800.0, 600.0)
@@ -66,10 +66,13 @@ fn open_settings_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn update_tray_menu_status(_app: &AppHandle, port: u16, _session_count: usize) {
-    // For now, just log the status update
-    // TODO: In Tauri v2, dynamic menu updates require rebuilding the menu
-    tracing::info!("Server status updated: port {}", port);
+fn update_tray_menu_status(app: &AppHandle, port: u16, session_count: usize) {
+    // Update tray menu status using the tray menu manager
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tray_menu::TrayMenuManager::update_server_status(&app_handle, port, true).await;
+        tray_menu::TrayMenuManager::update_session_count(&app_handle, session_count).await;
+    });
 }
 
 fn main() {
@@ -290,16 +293,16 @@ fn main() {
                 welcome_manager.set_app_handle(app_handle2).await;
                 permissions_manager.set_app_handle(app_handle3).await;
                 update_manager.set_app_handle(app_handle4).await;
-                
+
                 // Load welcome state and check if should show welcome
                 let _ = welcome_manager.load_state().await;
                 if welcome_manager.should_show_welcome().await {
                     let _ = welcome_manager.show_welcome_window().await;
                 }
-                
+
                 // Check permissions on startup
                 let _ = permissions_manager.check_all_permissions().await;
-                
+
                 // Check if app should be moved to Applications folder (macOS only)
                 #[cfg(target_os = "macos")]
                 {
@@ -310,14 +313,18 @@ fn main() {
                         let _ = app_mover::check_and_prompt_move(app_handle_move).await;
                     });
                 }
-                
+
                 // Load updater settings and start auto-check
                 let _ = update_manager.load_settings().await;
                 update_manager.clone().start_auto_check().await;
             });
 
             // Create system tray icon using menu-bar-icon.png with template mode
-            let icon_path = app.path().resource_dir().unwrap().join("icons/menu-bar-icon.png");
+            let icon_path = app
+                .path()
+                .resource_dir()
+                .unwrap()
+                .join("icons/menu-bar-icon.png");
             let tray_icon = if let Ok(icon_data) = std::fs::read(&icon_path) {
                 tauri::image::Image::from_bytes(&icon_data).ok()
             } else {
@@ -360,16 +367,17 @@ fn main() {
 
             // Load settings to determine initial dock icon visibility
             let settings = settings::Settings::load().unwrap_or_default();
-            
+
             // Check if launched at startup (auto-launch)
-            let is_auto_launched = std::env::args().any(|arg| arg == "--auto-launch" || arg == "--minimized");
-            
+            let is_auto_launched =
+                std::env::args().any(|arg| arg == "--auto-launch" || arg == "--minimized");
+
             let window = app.get_webview_window("main").unwrap();
-            
+
             // Hide window if auto-launched
             if is_auto_launched {
                 window.hide()?;
-                
+
                 // On macOS, apply dock icon visibility based on settings
                 #[cfg(target_os = "macos")]
                 {
@@ -393,13 +401,15 @@ fn main() {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window_clone.hide();
-                    
+
                     // Hide dock icon on macOS when window is hidden (only if settings say so)
                     #[cfg(target_os = "macos")]
                     {
                         if let Ok(settings) = settings::Settings::load() {
                             if !settings.general.show_dock_icon {
-                                let _ = window_clone.app_handle().set_activation_policy(tauri::ActivationPolicy::Accessory);
+                                let _ = window_clone
+                                    .app_handle()
+                                    .set_activation_policy(tauri::ActivationPolicy::Accessory);
                             }
                         }
                     }
@@ -420,10 +430,11 @@ fn main() {
 }
 
 #[cfg(target_os = "macos")]
+#[allow(dead_code)]
 fn create_app_menu(app: &tauri::App) -> Result<Menu<tauri::Wry>, tauri::Error> {
     // Create the menu using the builder pattern
     let menu = Menu::new(app)?;
-    
+
     // For now, return a basic menu
     // TODO: Once we understand the correct Tauri v2 menu API, implement full menu
     Ok(menu)
@@ -546,7 +557,7 @@ fn show_main_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
-        
+
         // Show dock icon on macOS when window is shown
         #[cfg(target_os = "macos")]
         {
@@ -560,87 +571,111 @@ fn show_main_window(app: AppHandle) -> Result<(), String> {
 fn quit_app(app: AppHandle) {
     // Stop monitoring before exit
     let state = app.state::<AppState>();
-    state.server_monitoring.store(false, std::sync::atomic::Ordering::Relaxed);
+    state
+        .server_monitoring
+        .store(false, std::sync::atomic::Ordering::Relaxed);
+
+    // Close all terminal sessions
+    let terminal_manager = state.terminal_manager.clone();
+    tauri::async_runtime::block_on(async move {
+        let _ = terminal_manager.close_all_sessions().await;
+    });
+
     app.exit(0);
 }
 
 async fn start_server_with_monitoring(app_handle: AppHandle) {
     let state = app_handle.state::<AppState>();
     let state_clone = state.inner().clone();
-    
+
     // Start initial server
     match start_server_internal(&*state).await {
         Ok(status) => {
             tracing::info!("Server started on port {}", status.port);
             *state.server_target_port.write().await = Some(status.port);
-            
+
             // Update tray menu with server status
             update_tray_menu_status(&app_handle, status.port, 0);
-            
+
             // Show notification
-            let _ = state.notification_manager.notify_server_status(true, status.port).await;
+            let _ = state
+                .notification_manager
+                .notify_server_status(true, status.port)
+                .await;
         }
         Err(e) => {
             tracing::error!("Failed to start server: {}", e);
-            let _ = state.notification_manager.notify_error(
-                "Server Start Failed",
-                &format!("Failed to start server: {}", e)
-            ).await;
+            let _ = state
+                .notification_manager
+                .notify_error(
+                    "Server Start Failed",
+                    &format!("Failed to start server: {}", e),
+                )
+                .await;
         }
     }
-    
+
     // Monitor server health
     let monitoring_state = state_clone.clone();
     let monitoring_app = app_handle.clone();
-    
+
     tauri::async_runtime::spawn(async move {
         let mut check_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-        
-        while monitoring_state.server_monitoring.load(std::sync::atomic::Ordering::Relaxed) {
+
+        while monitoring_state
+            .server_monitoring
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
             check_interval.tick().await;
-            
+
             // Check if server is still running
             let server_running = {
                 let server = monitoring_state.http_server.read().await;
                 server.is_some()
             };
-            
+
             if server_running {
                 // Perform health check
                 let health_check_result = perform_server_health_check(&monitoring_state).await;
-                
+
                 if !health_check_result {
                     tracing::warn!("Server health check failed, attempting restart...");
-                    
+
                     // Stop current server
                     let _ = stop_server_internal(&monitoring_state).await;
-                    
+
                     // Wait a bit before restart
                     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                    
+
                     // Restart server
                     match start_server_internal(&monitoring_state).await {
                         Ok(status) => {
                             tracing::info!("Server restarted on port {}", status.port);
                             *monitoring_state.server_target_port.write().await = Some(status.port);
-                            
+
                             // Update tray menu with server status
                             update_tray_menu_status(&monitoring_app, status.port, 0);
-                            
+
                             // Notify frontend of server restart
                             if let Some(window) = monitoring_app.get_webview_window("main") {
                                 let _ = window.emit("server:restarted", &status);
                             }
-                            
+
                             // Show notification
-                            let _ = monitoring_state.notification_manager.notify_server_status(true, status.port).await;
+                            let _ = monitoring_state
+                                .notification_manager
+                                .notify_server_status(true, status.port)
+                                .await;
                         }
                         Err(e) => {
                             tracing::error!("Failed to restart server: {}", e);
-                            let _ = monitoring_state.notification_manager.notify_error(
-                                "Server Restart Failed",
-                                &format!("Failed to restart server: {}", e)
-                            ).await;
+                            let _ = monitoring_state
+                                .notification_manager
+                                .notify_error(
+                                    "Server Restart Failed",
+                                    &format!("Failed to restart server: {}", e),
+                                )
+                                .await;
                         }
                     }
                 }
@@ -649,31 +684,37 @@ async fn start_server_with_monitoring(app_handle: AppHandle) {
                 let target_port = *monitoring_state.server_target_port.read().await;
                 if target_port.is_some() {
                     tracing::info!("Server not running, attempting to start...");
-                    
+
                     match start_server_internal(&monitoring_state).await {
                         Ok(status) => {
                             tracing::info!("Server started on port {}", status.port);
-                            
+
                             // Notify frontend of server restart
                             if let Some(window) = monitoring_app.get_webview_window("main") {
                                 let _ = window.emit("server:restarted", &status);
                             }
-                            
+
                             // Show notification
-                            let _ = monitoring_state.notification_manager.notify_server_status(true, status.port).await;
+                            let _ = monitoring_state
+                                .notification_manager
+                                .notify_server_status(true, status.port)
+                                .await;
                         }
                         Err(e) => {
                             tracing::error!("Failed to start server: {}", e);
-                            let _ = monitoring_state.notification_manager.notify_error(
-                                "Server Start Failed",
-                                &format!("Failed to start server: {}", e)
-                            ).await;
+                            let _ = monitoring_state
+                                .notification_manager
+                                .notify_error(
+                                    "Server Start Failed",
+                                    &format!("Failed to start server: {}", e),
+                                )
+                                .await;
                         }
                     }
                 }
             }
         }
-        
+
         tracing::info!("Server monitoring stopped");
     });
 }
@@ -685,7 +726,7 @@ async fn perform_server_health_check(state: &AppState) -> bool {
             // Server reports as running, perform additional check
             // by trying to access the API endpoint
             let url = format!("http://localhost:{}/api/sessions", status.port);
-            
+
             match reqwest::Client::new()
                 .get(&url)
                 .timeout(std::time::Duration::from_secs(2))
@@ -703,50 +744,62 @@ async fn perform_server_health_check(state: &AppState) -> bool {
 // Internal server management functions that work directly with AppState
 async fn start_server_internal(state: &AppState) -> Result<ServerStatus, String> {
     let mut server = state.http_server.write().await;
-    
+
     if let Some(http_server) = server.as_ref() {
         // Get actual port from running server
         let port = http_server.port();
-        
+
         // Check if ngrok is active
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
             ngrok_tunnel.url
         } else {
             format!("http://localhost:{}", port)
         };
-        
+
         return Ok(ServerStatus {
             running: true,
             port,
             url,
         });
     }
-    
+
     // Load settings to check if password is enabled
     let settings = crate::settings::Settings::load().unwrap_or_default();
-    
+
     // Start HTTP server with auth if configured
-    let mut http_server = if settings.dashboard.enable_password && !settings.dashboard.password.is_empty() {
-        let auth_config = crate::auth::AuthConfig::new(true, Some(settings.dashboard.password));
-        HttpServer::with_auth(state.terminal_manager.clone(), state.session_monitor.clone(), auth_config)
-    } else {
-        HttpServer::new(state.terminal_manager.clone(), state.session_monitor.clone())
-    };
-    
+    let mut http_server =
+        if settings.dashboard.enable_password && !settings.dashboard.password.is_empty() {
+            let auth_config = crate::auth::AuthConfig::new(true, Some(settings.dashboard.password));
+            HttpServer::with_auth(
+                state.terminal_manager.clone(),
+                state.session_monitor.clone(),
+                auth_config,
+            )
+        } else {
+            HttpServer::new(
+                state.terminal_manager.clone(),
+                state.session_monitor.clone(),
+            )
+        };
+
     // Start server with appropriate access mode
     let (port, url) = match settings.dashboard.access_mode.as_str() {
         "network" => {
             let port = http_server.start_with_mode("network").await?;
             (port, format!("http://0.0.0.0:{}", port))
-        },
+        }
         "ngrok" => {
             // For ngrok mode, start in localhost and let ngrok handle the tunneling
             let port = http_server.start_with_mode("localhost").await?;
-            
+
             // Try to start ngrok tunnel if auth token is configured
             let url = if let Some(auth_token) = settings.advanced.ngrok_auth_token {
                 if !auth_token.is_empty() {
-                    match state.ngrok_manager.start_tunnel(port, Some(auth_token)).await {
+                    match state
+                        .ngrok_manager
+                        .start_tunnel(port, Some(auth_token))
+                        .await
+                    {
                         Ok(tunnel) => tunnel.url,
                         Err(e) => {
                             tracing::error!("Failed to start ngrok tunnel: {}", e);
@@ -759,17 +812,17 @@ async fn start_server_internal(state: &AppState) -> Result<ServerStatus, String>
             } else {
                 return Err("Ngrok auth token is required for ngrok access mode".to_string());
             };
-            
+
             (port, url)
-        },
+        }
         _ => {
             let port = http_server.start_with_mode("localhost").await?;
             (port, format!("http://localhost:{}", port))
         }
     };
-    
+
     *server = Some(http_server);
-    
+
     Ok(ServerStatus {
         running: true,
         port,
@@ -779,23 +832,23 @@ async fn start_server_internal(state: &AppState) -> Result<ServerStatus, String>
 
 async fn stop_server_internal(state: &AppState) -> Result<(), String> {
     let mut server = state.http_server.write().await;
-    
+
     if let Some(mut http_server) = server.take() {
         http_server.stop().await?;
     }
-    
+
     // Also stop ngrok tunnel if active
     let _ = state.ngrok_manager.stop_tunnel().await;
-    
+
     Ok(())
 }
 
 async fn get_server_status_internal(state: &AppState) -> Result<ServerStatus, String> {
     let server = state.http_server.read().await;
-    
+
     if let Some(http_server) = server.as_ref() {
         let port = http_server.port();
-        
+
         // Check if ngrok is active and return its URL
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
             ngrok_tunnel.url
@@ -807,7 +860,7 @@ async fn get_server_status_internal(state: &AppState) -> Result<ServerStatus, St
                 _ => format!("http://localhost:{}", port),
             }
         };
-        
+
         Ok(ServerStatus {
             running: true,
             port,

@@ -1,29 +1,29 @@
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Terminal emulator type
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum TerminalEmulator {
     SystemDefault,
-    Terminal,      // macOS Terminal.app
-    ITerm2,        // iTerm2
-    Hyper,         // Hyper
-    Alacritty,     // Alacritty
-    Kitty,         // Kitty
-    WezTerm,       // WezTerm
-    Ghostty,       // Ghostty
-    Warp,          // Warp
+    Terminal,        // macOS Terminal.app
+    ITerm2,          // iTerm2
+    Hyper,           // Hyper
+    Alacritty,       // Alacritty
+    Kitty,           // Kitty
+    WezTerm,         // WezTerm
+    Ghostty,         // Ghostty
+    Warp,            // Warp
     WindowsTerminal, // Windows Terminal
-    ConEmu,        // ConEmu
-    Cmder,         // Cmder
-    Gnome,         // GNOME Terminal
-    Konsole,       // KDE Konsole
-    Xterm,         // XTerm
-    Custom,        // Custom terminal
+    ConEmu,          // ConEmu
+    Cmder,           // Cmder
+    Gnome,           // GNOME Terminal
+    Konsole,         // KDE Konsole
+    Xterm,           // XTerm
+    Custom,          // Custom terminal
 }
 
 impl TerminalEmulator {
@@ -141,7 +141,7 @@ impl TerminalIntegrationsManager {
             async move {
                 let default_configs = Self::initialize_default_configs();
                 *configs.write().await = default_configs;
-                
+
                 let default_schemes = Self::initialize_url_schemes();
                 *url_schemes.write().await = default_schemes;
             }
@@ -151,7 +151,10 @@ impl TerminalIntegrationsManager {
     }
 
     /// Set the notification manager
-    pub fn set_notification_manager(&mut self, notification_manager: Arc<crate::notification_manager::NotificationManager>) {
+    pub fn set_notification_manager(
+        &mut self,
+        notification_manager: Arc<crate::notification_manager::NotificationManager>,
+    ) {
         self.notification_manager = Some(notification_manager);
     }
 
@@ -160,123 +163,148 @@ impl TerminalIntegrationsManager {
         let mut configs = HashMap::new();
 
         // WezTerm configuration
-        configs.insert(TerminalEmulator::WezTerm, TerminalConfig {
-            emulator: TerminalEmulator::WezTerm,
-            name: "WezTerm".to_string(),
-            executable_path: PathBuf::from("/Applications/WezTerm.app/Contents/MacOS/wezterm"),
-            args_template: vec![
-                "start".to_string(),
-                "--cwd".to_string(),
-                "{working_directory}".to_string(),
-                "--".to_string(),
-                "{command}".to_string(),
-                "{args}".to_string(),
-            ],
-            env_vars: HashMap::new(),
-            features: TerminalFeatures {
-                supports_tabs: true,
-                supports_splits: true,
-                supports_profiles: true,
-                supports_themes: true,
-                supports_scripting: true,
-                supports_url_scheme: false,
-                supports_remote_control: true,
+        configs.insert(
+            TerminalEmulator::WezTerm,
+            TerminalConfig {
+                emulator: TerminalEmulator::WezTerm,
+                name: "WezTerm".to_string(),
+                executable_path: PathBuf::from("/Applications/WezTerm.app/Contents/MacOS/wezterm"),
+                args_template: vec![
+                    "start".to_string(),
+                    "--cwd".to_string(),
+                    "{working_directory}".to_string(),
+                    "--".to_string(),
+                    "{command}".to_string(),
+                    "{args}".to_string(),
+                ],
+                env_vars: HashMap::new(),
+                features: TerminalFeatures {
+                    supports_tabs: true,
+                    supports_splits: true,
+                    supports_profiles: true,
+                    supports_themes: true,
+                    supports_scripting: true,
+                    supports_url_scheme: false,
+                    supports_remote_control: true,
+                },
+                platform: vec![
+                    "macos".to_string(),
+                    "windows".to_string(),
+                    "linux".to_string(),
+                ],
             },
-            platform: vec!["macos".to_string(), "windows".to_string(), "linux".to_string()],
-        });
+        );
 
         // Ghostty configuration
-        configs.insert(TerminalEmulator::Ghostty, TerminalConfig {
-            emulator: TerminalEmulator::Ghostty,
-            name: "Ghostty".to_string(),
-            executable_path: PathBuf::from("/Applications/Ghostty.app/Contents/MacOS/ghostty"),
-            args_template: vec![
-                "--working-directory".to_string(),
-                "{working_directory}".to_string(),
-                "--command".to_string(),
-                "{command}".to_string(),
-                "{args}".to_string(),
-            ],
-            env_vars: HashMap::new(),
-            features: TerminalFeatures {
-                supports_tabs: true,
-                supports_splits: true,
-                supports_profiles: true,
-                supports_themes: true,
-                supports_scripting: false,
-                supports_url_scheme: false,
-                supports_remote_control: false,
+        configs.insert(
+            TerminalEmulator::Ghostty,
+            TerminalConfig {
+                emulator: TerminalEmulator::Ghostty,
+                name: "Ghostty".to_string(),
+                executable_path: PathBuf::from("/Applications/Ghostty.app/Contents/MacOS/ghostty"),
+                args_template: vec![
+                    "--working-directory".to_string(),
+                    "{working_directory}".to_string(),
+                    "--command".to_string(),
+                    "{command}".to_string(),
+                    "{args}".to_string(),
+                ],
+                env_vars: HashMap::new(),
+                features: TerminalFeatures {
+                    supports_tabs: true,
+                    supports_splits: true,
+                    supports_profiles: true,
+                    supports_themes: true,
+                    supports_scripting: false,
+                    supports_url_scheme: false,
+                    supports_remote_control: false,
+                },
+                platform: vec!["macos".to_string()],
             },
-            platform: vec!["macos".to_string()],
-        });
+        );
 
         // iTerm2 configuration
-        configs.insert(TerminalEmulator::ITerm2, TerminalConfig {
-            emulator: TerminalEmulator::ITerm2,
-            name: "iTerm2".to_string(),
-            executable_path: PathBuf::from("/Applications/iTerm.app/Contents/MacOS/iTerm2"),
-            args_template: vec![],
-            env_vars: HashMap::new(),
-            features: TerminalFeatures {
-                supports_tabs: true,
-                supports_splits: true,
-                supports_profiles: true,
-                supports_themes: true,
-                supports_scripting: true,
-                supports_url_scheme: true,
-                supports_remote_control: true,
+        configs.insert(
+            TerminalEmulator::ITerm2,
+            TerminalConfig {
+                emulator: TerminalEmulator::ITerm2,
+                name: "iTerm2".to_string(),
+                executable_path: PathBuf::from("/Applications/iTerm.app/Contents/MacOS/iTerm2"),
+                args_template: vec![],
+                env_vars: HashMap::new(),
+                features: TerminalFeatures {
+                    supports_tabs: true,
+                    supports_splits: true,
+                    supports_profiles: true,
+                    supports_themes: true,
+                    supports_scripting: true,
+                    supports_url_scheme: true,
+                    supports_remote_control: true,
+                },
+                platform: vec!["macos".to_string()],
             },
-            platform: vec!["macos".to_string()],
-        });
+        );
 
         // Alacritty configuration
-        configs.insert(TerminalEmulator::Alacritty, TerminalConfig {
-            emulator: TerminalEmulator::Alacritty,
-            name: "Alacritty".to_string(),
-            executable_path: PathBuf::from("/Applications/Alacritty.app/Contents/MacOS/alacritty"),
-            args_template: vec![
-                "--working-directory".to_string(),
-                "{working_directory}".to_string(),
-                "-e".to_string(),
-                "{command}".to_string(),
-                "{args}".to_string(),
-            ],
-            env_vars: HashMap::new(),
-            features: TerminalFeatures {
-                supports_tabs: false,
-                supports_splits: false,
-                supports_profiles: true,
-                supports_themes: true,
-                supports_scripting: false,
-                supports_url_scheme: false,
-                supports_remote_control: false,
+        configs.insert(
+            TerminalEmulator::Alacritty,
+            TerminalConfig {
+                emulator: TerminalEmulator::Alacritty,
+                name: "Alacritty".to_string(),
+                executable_path: PathBuf::from(
+                    "/Applications/Alacritty.app/Contents/MacOS/alacritty",
+                ),
+                args_template: vec![
+                    "--working-directory".to_string(),
+                    "{working_directory}".to_string(),
+                    "-e".to_string(),
+                    "{command}".to_string(),
+                    "{args}".to_string(),
+                ],
+                env_vars: HashMap::new(),
+                features: TerminalFeatures {
+                    supports_tabs: false,
+                    supports_splits: false,
+                    supports_profiles: true,
+                    supports_themes: true,
+                    supports_scripting: false,
+                    supports_url_scheme: false,
+                    supports_remote_control: false,
+                },
+                platform: vec![
+                    "macos".to_string(),
+                    "windows".to_string(),
+                    "linux".to_string(),
+                ],
             },
-            platform: vec!["macos".to_string(), "windows".to_string(), "linux".to_string()],
-        });
+        );
 
         // Kitty configuration
-        configs.insert(TerminalEmulator::Kitty, TerminalConfig {
-            emulator: TerminalEmulator::Kitty,
-            name: "Kitty".to_string(),
-            executable_path: PathBuf::from("/Applications/kitty.app/Contents/MacOS/kitty"),
-            args_template: vec![
-                "--directory".to_string(),
-                "{working_directory}".to_string(),
-                "{command}".to_string(),
-                "{args}".to_string(),
-            ],
-            env_vars: HashMap::new(),
-            features: TerminalFeatures {
-                supports_tabs: true,
-                supports_splits: true,
-                supports_profiles: true,
-                supports_themes: true,
-                supports_scripting: true,
-                supports_url_scheme: false,
-                supports_remote_control: true,
+        configs.insert(
+            TerminalEmulator::Kitty,
+            TerminalConfig {
+                emulator: TerminalEmulator::Kitty,
+                name: "Kitty".to_string(),
+                executable_path: PathBuf::from("/Applications/kitty.app/Contents/MacOS/kitty"),
+                args_template: vec![
+                    "--directory".to_string(),
+                    "{working_directory}".to_string(),
+                    "{command}".to_string(),
+                    "{args}".to_string(),
+                ],
+                env_vars: HashMap::new(),
+                features: TerminalFeatures {
+                    supports_tabs: true,
+                    supports_splits: true,
+                    supports_profiles: true,
+                    supports_themes: true,
+                    supports_scripting: true,
+                    supports_url_scheme: false,
+                    supports_remote_control: true,
+                },
+                platform: vec!["macos".to_string(), "linux".to_string()],
             },
-            platform: vec!["macos".to_string(), "linux".to_string()],
-        });
+        );
 
         configs
     }
@@ -285,12 +313,15 @@ impl TerminalIntegrationsManager {
     fn initialize_url_schemes() -> HashMap<TerminalEmulator, TerminalURLScheme> {
         let mut schemes = HashMap::new();
 
-        schemes.insert(TerminalEmulator::ITerm2, TerminalURLScheme {
-            scheme: "iterm2".to_string(),
-            supports_ssh: true,
-            supports_local: true,
-            template: "iterm2://ssh/{user}@{host}:{port}".to_string(),
-        });
+        schemes.insert(
+            TerminalEmulator::ITerm2,
+            TerminalURLScheme {
+                scheme: "iterm2".to_string(),
+                supports_ssh: true,
+                supports_local: true,
+                template: "iterm2://ssh/{user}@{host}:{port}".to_string(),
+            },
+        );
 
         schemes
     }
@@ -304,7 +335,10 @@ impl TerminalIntegrationsManager {
             let info = self.check_terminal_installation(emulator, config).await;
             if info.installed {
                 detected.push(info.clone());
-                self.detected_terminals.write().await.insert(*emulator, info);
+                self.detected_terminals
+                    .write()
+                    .await
+                    .insert(*emulator, info);
             }
         }
 
@@ -316,10 +350,15 @@ impl TerminalIntegrationsManager {
     }
 
     /// Check if a specific terminal is installed
-    async fn check_terminal_installation(&self, emulator: &TerminalEmulator, config: &TerminalConfig) -> TerminalIntegrationInfo {
+    async fn check_terminal_installation(
+        &self,
+        emulator: &TerminalEmulator,
+        config: &TerminalConfig,
+    ) -> TerminalIntegrationInfo {
         let installed = config.executable_path.exists();
         let version = if installed {
-            self.get_terminal_version(emulator, &config.executable_path).await
+            self.get_terminal_version(emulator, &config.executable_path)
+                .await
         } else {
             None
         };
@@ -328,31 +367,39 @@ impl TerminalIntegrationsManager {
             emulator: *emulator,
             installed,
             version,
-            path: if installed { Some(config.executable_path.clone()) } else { None },
+            path: if installed {
+                Some(config.executable_path.clone())
+            } else {
+                None
+            },
             is_default: false,
-            config: if installed { Some(config.clone()) } else { None },
+            config: if installed {
+                Some(config.clone())
+            } else {
+                None
+            },
         }
     }
 
     /// Get terminal version
-    async fn get_terminal_version(&self, emulator: &TerminalEmulator, path: &PathBuf) -> Option<String> {
+    async fn get_terminal_version(
+        &self,
+        emulator: &TerminalEmulator,
+        path: &PathBuf,
+    ) -> Option<String> {
         match emulator {
-            TerminalEmulator::WezTerm => {
-                Command::new(path)
-                    .arg("--version")
-                    .output()
-                    .ok()
-                    .and_then(|output| String::from_utf8(output.stdout).ok())
-                    .map(|v| v.trim().to_string())
-            }
-            TerminalEmulator::Alacritty => {
-                Command::new(path)
-                    .arg("--version")
-                    .output()
-                    .ok()
-                    .and_then(|output| String::from_utf8(output.stdout).ok())
-                    .map(|v| v.trim().to_string())
-            }
+            TerminalEmulator::WezTerm => Command::new(path)
+                .arg("--version")
+                .output()
+                .ok()
+                .and_then(|output| String::from_utf8(output.stdout).ok())
+                .map(|v| v.trim().to_string()),
+            TerminalEmulator::Alacritty => Command::new(path)
+                .arg("--version")
+                .output()
+                .ok()
+                .and_then(|output| String::from_utf8(output.stdout).ok())
+                .map(|v| v.trim().to_string()),
             _ => None,
         }
     }
@@ -413,10 +460,12 @@ impl TerminalIntegrationsManager {
 
         // Notify user
         if let Some(notification_manager) = &self.notification_manager {
-            let _ = notification_manager.notify_success(
-                "Default Terminal Changed",
-                &format!("Default terminal set to {}", emulator.display_name())
-            ).await;
+            let _ = notification_manager
+                .notify_success(
+                    "Default Terminal Changed",
+                    &format!("Default terminal set to {}", emulator.display_name()),
+                )
+                .await;
         }
 
         Ok(())
@@ -461,7 +510,8 @@ impl TerminalIntegrationsManager {
         options: TerminalLaunchOptions,
     ) -> Result<(), String> {
         let configs = self.configs.read().await;
-        let config = configs.get(&emulator)
+        let config = configs
+            .get(&emulator)
             .ok_or_else(|| "Terminal configuration not found".to_string())?;
 
         let mut command = Command::new(&config.executable_path);
@@ -488,7 +538,8 @@ impl TerminalIntegrationsManager {
         }
 
         // Launch terminal
-        command.spawn()
+        command
+            .spawn()
             .map_err(|e| format!("Failed to launch terminal: {}", e))?;
 
         Ok(())
@@ -503,11 +554,16 @@ impl TerminalIntegrationsManager {
         script.push_str("    activate\n");
 
         if options.tab {
-            script.push_str("    tell application \"System Events\" to keystroke \"t\" using command down\n");
+            script.push_str(
+                "    tell application \"System Events\" to keystroke \"t\" using command down\n",
+            );
         }
 
         if let Some(cwd) = options.working_directory {
-            script.push_str(&format!("    do script \"cd '{}'\" in front window\n", cwd.display()));
+            script.push_str(&format!(
+                "    do script \"cd '{}'\" in front window\n",
+                cwd.display()
+            ));
         }
 
         if let Some(command) = options.command {
@@ -516,7 +572,10 @@ impl TerminalIntegrationsManager {
             } else {
                 format!("{} {}", command, options.args.join(" "))
             };
-            script.push_str(&format!("    do script \"{}\" in front window\n", full_command));
+            script.push_str(&format!(
+                "    do script \"{}\" in front window\n",
+                full_command
+            ));
         }
 
         script.push_str("end tell\n");
@@ -552,7 +611,8 @@ impl TerminalIntegrationsManager {
             }
         }
 
-        command.spawn()
+        command
+            .spawn()
             .map_err(|e| format!("Failed to launch Windows Terminal: {}", e))?;
 
         Ok(())
@@ -565,7 +625,7 @@ impl TerminalIntegrationsManager {
 
         // Try common terminal emulators
         let terminals = ["gnome-terminal", "konsole", "xfce4-terminal", "xterm"];
-        
+
         for terminal in &terminals {
             if let Ok(output) = Command::new("which").arg(terminal).output() {
                 if output.status.success() {
@@ -600,7 +660,8 @@ impl TerminalIntegrationsManager {
                         }
                     }
 
-                    return command.spawn()
+                    return command
+                        .spawn()
                         .map_err(|e| format!("Failed to launch terminal: {}", e))
                         .map(|_| ());
                 }
@@ -620,7 +681,8 @@ impl TerminalIntegrationsManager {
     ) -> Option<String> {
         let schemes = self.url_schemes.read().await;
         schemes.get(&emulator).map(|scheme| {
-            scheme.template
+            scheme
+                .template
                 .replace("{user}", user)
                 .replace("{host}", host)
                 .replace("{port}", &port.to_string())
@@ -639,11 +701,20 @@ impl TerminalIntegrationsManager {
 
     /// List detected terminals
     pub async fn list_detected_terminals(&self) -> Vec<TerminalIntegrationInfo> {
-        self.detected_terminals.read().await.values().cloned().collect()
+        self.detected_terminals
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect()
     }
 
     // Helper methods
-    fn replace_template_variables(&self, template: &str, options: &TerminalLaunchOptions) -> String {
+    fn replace_template_variables(
+        &self,
+        template: &str,
+        options: &TerminalLaunchOptions,
+    ) -> String {
         let mut result = template.to_string();
 
         if let Some(cwd) = &options.working_directory {

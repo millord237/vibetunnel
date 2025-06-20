@@ -1,13 +1,13 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock, oneshot};
-use std::io::{Read, Write};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use uuid::Uuid;
-use tracing::{info, error};
 use bytes::Bytes;
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{mpsc, oneshot, RwLock};
+use tracing::{error, info};
+use uuid::Uuid;
 
 /// Represents a forwarded TTY session
 pub struct ForwardedSession {
@@ -42,16 +42,17 @@ impl TTYForwardManager {
         shell: Option<String>,
     ) -> Result<String, String> {
         let id = Uuid::new_v4().to_string();
-        
+
         // Create TCP listener
         let listener = TcpListener::bind(format!("127.0.0.1:{}", local_port))
             .await
             .map_err(|e| format!("Failed to bind to port {}: {}", local_port, e))?;
-        
-        let actual_port = listener.local_addr()
+
+        let actual_port = listener
+            .local_addr()
             .map_err(|e| format!("Failed to get local address: {}", e))?
             .port();
-        
+
         // Create session
         let session = ForwardedSession {
             id: id.clone(),
@@ -61,14 +62,14 @@ impl TTYForwardManager {
             connected: false,
             client_count: 0,
         };
-        
+
         // Store session
         self.sessions.write().await.insert(id.clone(), session);
-        
+
         // Create shutdown channel
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         self.listeners.write().await.insert(id.clone(), shutdown_tx);
-        
+
         // Start listening for connections
         let sessions = self.sessions.clone();
         let session_id = id.clone();
@@ -81,7 +82,7 @@ impl TTYForwardManager {
                 }
             })
         });
-        
+
         tokio::spawn(async move {
             Self::accept_connections(
                 listener,
@@ -91,9 +92,10 @@ impl TTYForwardManager {
                 remote_port,
                 shell,
                 shutdown_rx,
-            ).await;
+            )
+            .await;
         });
-        
+
         info!("Started TTY forward on port {} (ID: {})", actual_port, id);
         Ok(id)
     }
@@ -114,18 +116,18 @@ impl TTYForwardManager {
                     match accept_result {
                         Ok((stream, addr)) => {
                             info!("New TTY forward connection from {}", addr);
-                            
+
                             // Update client count
                             if let Some(session) = sessions.write().await.get_mut(&session_id) {
                                 session.client_count += 1;
                                 session.connected = true;
                             }
-                            
+
                             // Handle the connection
                             let sessions_clone = sessions.clone();
                             let session_id_clone = session_id.clone();
                             let shell_clone = shell.clone();
-                            
+
                             tokio::spawn(async move {
                                 if let Err(e) = Self::handle_client(
                                     stream,
@@ -135,7 +137,7 @@ impl TTYForwardManager {
                                 ).await {
                                     error!("Error handling TTY forward client: {}", e);
                                 }
-                                
+
                                 // Decrease client count
                                 if let Some(session) = sessions_clone.write().await.get_mut(&session_id_clone) {
                                     session.client_count = session.client_count.saturating_sub(1);
@@ -188,7 +190,7 @@ impl TTYForwardManager {
             .master
             .try_clone_reader()
             .map_err(|e| format!("Failed to clone reader: {}", e))?;
-            
+
         let mut writer = pty_pair
             .master
             .take_writer()
@@ -221,7 +223,7 @@ impl TTYForwardManager {
             }
         });
 
-        // Task 2: Read from PTY and write to TCP  
+        // Task 2: Read from PTY and write to TCP
         let pty_to_tcp = tokio::spawn(async move {
             while let Some(data) = rx_from_pty.recv().await {
                 if tcp_writer.write_all(&data).await.is_err() {
@@ -262,7 +264,7 @@ impl TTYForwardManager {
                 .enable_all()
                 .build()
                 .unwrap();
-            
+
             rt.block_on(async {
                 while let Some(data) = rx_from_tcp.recv().await {
                     if writer.write_all(&data).is_err() {
@@ -293,19 +295,21 @@ impl TTYForwardManager {
     pub async fn stop_forward(&self, id: &str) -> Result<(), String> {
         // Remove session
         self.sessions.write().await.remove(id);
-        
+
         // Send shutdown signal
         if let Some(shutdown_tx) = self.listeners.write().await.remove(id) {
             let _ = shutdown_tx.send(());
         }
-        
+
         info!("Stopped TTY forward session: {}", id);
         Ok(())
     }
 
     /// List all active forwarding sessions
     pub async fn list_forwards(&self) -> Vec<ForwardedSession> {
-        self.sessions.read().await
+        self.sessions
+            .read()
+            .await
             .values()
             .map(|s| ForwardedSession {
                 id: s.id.clone(),
@@ -320,36 +324,38 @@ impl TTYForwardManager {
 
     /// Get a specific forwarding session
     pub async fn get_forward(&self, id: &str) -> Option<ForwardedSession> {
-        self.sessions.read().await.get(id).map(|s| ForwardedSession {
-            id: s.id.clone(),
-            local_port: s.local_port,
-            remote_host: s.remote_host.clone(),
-            remote_port: s.remote_port,
-            connected: s.connected,
-            client_count: s.client_count,
-        })
+        self.sessions
+            .read()
+            .await
+            .get(id)
+            .map(|s| ForwardedSession {
+                id: s.id.clone(),
+                local_port: s.local_port,
+                remote_host: s.remote_host.clone(),
+                remote_port: s.remote_port,
+                connected: s.connected,
+                client_count: s.client_count,
+            })
     }
 }
 
 /// HTTP endpoint handler for terminal spawn requests
-pub async fn handle_terminal_spawn(
-    port: u16,
-    _shell: Option<String>,
-) -> Result<(), String> {
+pub async fn handle_terminal_spawn(port: u16, _shell: Option<String>) -> Result<(), String> {
     // Listen for HTTP requests on the specified port
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port))
         .await
         .map_err(|e| format!("Failed to bind spawn listener: {}", e))?;
-    
+
     info!("Terminal spawn service listening on port {}", port);
-    
+
     loop {
-        let (stream, addr) = listener.accept()
+        let (stream, addr) = listener
+            .accept()
             .await
             .map_err(|e| format!("Failed to accept spawn connection: {}", e))?;
-        
+
         info!("Terminal spawn request from {}", addr);
-        
+
         // Handle the spawn request
         tokio::spawn(async move {
             if let Err(e) = handle_spawn_request(stream, None).await {
@@ -360,18 +366,16 @@ pub async fn handle_terminal_spawn(
 }
 
 /// Handle a single terminal spawn request
-async fn handle_spawn_request(
-    mut stream: TcpStream,
-    _shell: Option<String>,
-) -> Result<(), String> {
+async fn handle_spawn_request(mut stream: TcpStream, _shell: Option<String>) -> Result<(), String> {
     // Simple HTTP response
     let response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nTerminal spawned\r\n";
-    stream.write_all(response)
+    stream
+        .write_all(response)
         .await
         .map_err(|e| format!("Failed to write response: {}", e))?;
-    
+
     // TODO: Implement actual terminal spawning logic
     // This would integrate with the system's terminal emulator
-    
+
     Ok(())
 }

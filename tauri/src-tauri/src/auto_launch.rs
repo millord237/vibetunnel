@@ -1,10 +1,10 @@
+use crate::state::AppState;
 use auto_launch::AutoLaunchBuilder;
 use tauri::State;
-use crate::state::AppState;
 
 fn get_app_path() -> String {
     let exe_path = std::env::current_exe().unwrap();
-    
+
     // On macOS, we need to use the .app bundle path, not the executable inside it
     #[cfg(target_os = "macos")]
     {
@@ -20,7 +20,7 @@ fn get_app_path() -> String {
             }
         }
     }
-    
+
     // For other platforms or if we couldn't find the .app bundle, use the executable path
     exe_path.to_string_lossy().to_string()
 }
@@ -32,10 +32,10 @@ pub fn enable_auto_launch() -> Result<(), String> {
         .set_args(&["--auto-launch"])
         .build()
         .map_err(|e| format!("Failed to build auto-launch: {}", e))?;
-        
+
     auto.enable()
         .map_err(|e| format!("Failed to enable auto-launch: {}", e))?;
-        
+
     Ok(())
 }
 
@@ -45,10 +45,10 @@ pub fn disable_auto_launch() -> Result<(), String> {
         .set_app_path(&get_app_path())
         .build()
         .map_err(|e| format!("Failed to build auto-launch: {}", e))?;
-        
+
     auto.disable()
         .map_err(|e| format!("Failed to disable auto-launch: {}", e))?;
-        
+
     Ok(())
 }
 
@@ -58,16 +58,13 @@ pub fn is_auto_launch_enabled() -> Result<bool, String> {
         .set_app_path(&get_app_path())
         .build()
         .map_err(|e| format!("Failed to build auto-launch: {}", e))?;
-        
+
     auto.is_enabled()
         .map_err(|e| format!("Failed to check auto-launch status: {}", e))
 }
 
 #[tauri::command]
-pub async fn set_auto_launch(
-    enabled: bool,
-    _state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn set_auto_launch(enabled: bool, _state: State<'_, AppState>) -> Result<(), String> {
     if enabled {
         enable_auto_launch()
     } else {
@@ -76,8 +73,6 @@ pub async fn set_auto_launch(
 }
 
 #[tauri::command]
-pub async fn get_auto_launch(
-    _state: State<'_, AppState>,
-) -> Result<bool, String> {
+pub async fn get_auto_launch(_state: State<'_, AppState>) -> Result<bool, String> {
     is_auto_launch_enabled()
 }

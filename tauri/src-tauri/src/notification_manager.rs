@@ -1,10 +1,10 @@
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
-use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Notification type enumeration
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -127,7 +127,7 @@ impl NotificationManager {
         metadata: HashMap<String, serde_json::Value>,
     ) -> Result<String, String> {
         let settings = self.settings.read().await;
-        
+
         // Check if notifications are enabled
         if !settings.enabled {
             return Ok("notifications_disabled".to_string());
@@ -154,12 +154,15 @@ impl NotificationManager {
         };
 
         // Store notification
-        self.notifications.write().await.insert(notification_id.clone(), notification.clone());
+        self.notifications
+            .write()
+            .await
+            .insert(notification_id.clone(), notification.clone());
 
         // Add to history
         let mut history = self.notification_history.write().await;
         history.push(notification.clone());
-        
+
         // Trim history if it exceeds max size
         if history.len() > self.max_history_size {
             let drain_count = history.len() - self.max_history_size;
@@ -168,8 +171,11 @@ impl NotificationManager {
 
         // Show system notification if enabled
         if settings.show_in_system {
-            match self.show_system_notification(&title, &body, notification_type).await {
-                Ok(_) => {},
+            match self
+                .show_system_notification(&title, &body, notification_type)
+                .await
+            {
+                Ok(_) => {}
                 Err(e) => {
                     tracing::error!("Failed to show system notification: {}", e);
                 }
@@ -178,7 +184,8 @@ impl NotificationManager {
 
         // Emit notification event to frontend
         if let Some(app_handle) = self.app_handle.read().await.as_ref() {
-            app_handle.emit("notification:new", &notification)
+            app_handle
+                .emit("notification:new", &notification)
                 .map_err(|e| format!("Failed to emit notification event: {}", e))?;
         }
 
@@ -193,13 +200,11 @@ impl NotificationManager {
         notification_type: NotificationType,
     ) -> Result<(), String> {
         let app_handle_guard = self.app_handle.read().await;
-        let app_handle = app_handle_guard.as_ref()
+        let app_handle = app_handle_guard
+            .as_ref()
             .ok_or_else(|| "App handle not set".to_string())?;
 
-        let mut builder = app_handle.notification()
-            .builder()
-            .title(title)
-            .body(body);
+        let mut builder = app_handle.notification().builder().title(title).body(body);
 
         // Set icon based on notification type
         let icon = match notification_type {
@@ -217,7 +222,8 @@ impl NotificationManager {
             builder = builder.icon(icon_str);
         }
 
-        builder.show()
+        builder
+            .show()
             .map_err(|e| format!("Failed to show notification: {}", e))?;
 
         Ok(())
@@ -228,13 +234,13 @@ impl NotificationManager {
         let mut notifications = self.notifications.write().await;
         if let Some(notification) = notifications.get_mut(notification_id) {
             notification.read = true;
-            
+
             // Update history
             let mut history = self.notification_history.write().await;
             if let Some(hist_notification) = history.iter_mut().find(|n| n.id == notification_id) {
                 hist_notification.read = true;
             }
-            
+
             Ok(())
         } else {
             Err("Notification not found".to_string())
@@ -247,12 +253,12 @@ impl NotificationManager {
         for notification in notifications.values_mut() {
             notification.read = true;
         }
-        
+
         let mut history = self.notification_history.write().await;
         for notification in history.iter_mut() {
             notification.read = true;
         }
-        
+
         Ok(())
     }
 
@@ -263,7 +269,9 @@ impl NotificationManager {
 
     /// Get unread notification count
     pub async fn get_unread_count(&self) -> usize {
-        self.notifications.read().await
+        self.notifications
+            .read()
+            .await
             .values()
             .filter(|n| !n.read)
             .count()
@@ -311,50 +319,69 @@ impl NotificationManager {
             body,
             vec![],
             HashMap::new(),
-        ).await
+        )
+        .await
     }
 
     /// Show update available notification
-    pub async fn notify_update_available(&self, version: &str, download_url: &str) -> Result<String, String> {
+    pub async fn notify_update_available(
+        &self,
+        version: &str,
+        download_url: &str,
+    ) -> Result<String, String> {
         let mut metadata = HashMap::new();
-        metadata.insert("version".to_string(), serde_json::Value::String(version.to_string()));
-        metadata.insert("download_url".to_string(), serde_json::Value::String(download_url.to_string()));
+        metadata.insert(
+            "version".to_string(),
+            serde_json::Value::String(version.to_string()),
+        );
+        metadata.insert(
+            "download_url".to_string(),
+            serde_json::Value::String(download_url.to_string()),
+        );
 
         self.show_notification(
             NotificationType::UpdateAvailable,
             NotificationPriority::High,
             "Update Available".to_string(),
-            format!("VibeTunnel {} is now available. Click to download.", version),
-            vec![
-                NotificationAction {
-                    id: "download".to_string(),
-                    label: "Download".to_string(),
-                    action_type: "open_url".to_string(),
-                }
-            ],
+            format!(
+                "VibeTunnel {} is now available. Click to download.",
+                version
+            ),
+            vec![NotificationAction {
+                id: "download".to_string(),
+                label: "Download".to_string(),
+                action_type: "open_url".to_string(),
+            }],
             metadata,
-        ).await
+        )
+        .await
     }
 
     /// Show permission required notification
-    pub async fn notify_permission_required(&self, permission: &str, reason: &str) -> Result<String, String> {
+    pub async fn notify_permission_required(
+        &self,
+        permission: &str,
+        reason: &str,
+    ) -> Result<String, String> {
         let mut metadata = HashMap::new();
-        metadata.insert("permission".to_string(), serde_json::Value::String(permission.to_string()));
+        metadata.insert(
+            "permission".to_string(),
+            serde_json::Value::String(permission.to_string()),
+        );
 
         self.show_notification(
             NotificationType::PermissionRequired,
             NotificationPriority::High,
             "Permission Required".to_string(),
             format!("{} permission is required: {}", permission, reason),
-            vec![
-                NotificationAction {
-                    id: "grant".to_string(),
-                    label: "Grant Permission".to_string(),
-                    action_type: "request_permission".to_string(),
-                }
-            ],
+            vec![NotificationAction {
+                id: "grant".to_string(),
+                label: "Grant Permission".to_string(),
+                action_type: "request_permission".to_string(),
+            }],
             metadata,
-        ).await
+        )
+        .await
     }
 
     /// Show error notification
@@ -366,7 +393,8 @@ impl NotificationManager {
             error_message.to_string(),
             vec![],
             HashMap::new(),
-        ).await
+        )
+        .await
     }
 
     /// Show success notification
@@ -378,6 +406,7 @@ impl NotificationManager {
             message.to_string(),
             vec![],
             HashMap::new(),
-        ).await
+        )
+        .await
     }
 }

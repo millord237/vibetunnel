@@ -1,9 +1,9 @@
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::collections::{HashMap, VecDeque};
-use chrono::{DateTime, Utc};
-use std::path::PathBuf;
 
 /// Debug feature types
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -245,7 +245,10 @@ impl DebugFeaturesManager {
     }
 
     /// Set the notification manager
-    pub fn set_notification_manager(&mut self, notification_manager: Arc<crate::notification_manager::NotificationManager>) {
+    pub fn set_notification_manager(
+        &mut self,
+        notification_manager: Arc<crate::notification_manager::NotificationManager>,
+    ) {
         self.notification_manager = Some(notification_manager);
     }
 
@@ -260,14 +263,20 @@ impl DebugFeaturesManager {
     }
 
     /// Log a message
-    pub async fn log(&self, level: LogLevel, component: &str, message: &str, metadata: HashMap<String, serde_json::Value>) {
+    pub async fn log(
+        &self,
+        level: LogLevel,
+        component: &str,
+        message: &str,
+        metadata: HashMap<String, serde_json::Value>,
+    ) {
         let settings = self.settings.read().await;
-        
+
         // Check if logging is enabled and level is appropriate
         if !settings.enabled || level < settings.log_level {
             return;
         }
-        
+
         let entry = LogEntry {
             timestamp: Utc::now(),
             level,
@@ -275,16 +284,16 @@ impl DebugFeaturesManager {
             message: message.to_string(),
             metadata,
         };
-        
+
         // Add to in-memory log
         let mut logs = self.logs.write().await;
         logs.push_back(entry.clone());
-        
+
         // Limit log size
         while logs.len() > settings.max_log_entries {
             logs.pop_front();
         }
-        
+
         // Log to file if enabled
         if settings.log_to_file {
             if let Some(path) = &settings.log_file_path {
@@ -294,13 +303,19 @@ impl DebugFeaturesManager {
     }
 
     /// Record a performance metric
-    pub async fn record_metric(&self, name: &str, value: f64, unit: &str, tags: HashMap<String, String>) {
+    pub async fn record_metric(
+        &self,
+        name: &str,
+        value: f64,
+        unit: &str,
+        tags: HashMap<String, String>,
+    ) {
         let settings = self.settings.read().await;
-        
+
         if !settings.enabled || !settings.enable_performance_monitoring {
             return;
         }
-        
+
         let metric = PerformanceMetric {
             name: name.to_string(),
             value,
@@ -308,10 +323,10 @@ impl DebugFeaturesManager {
             timestamp: Utc::now(),
             tags,
         };
-        
+
         let mut metrics = self.performance_metrics.write().await;
         metrics.push_back(metric);
-        
+
         // Keep only last 1000 metrics
         while metrics.len() > 1000 {
             metrics.pop_front();
@@ -321,11 +336,11 @@ impl DebugFeaturesManager {
     /// Take a memory snapshot
     pub async fn take_memory_snapshot(&self) -> Result<MemorySnapshot, String> {
         let settings = self.settings.read().await;
-        
+
         if !settings.enabled || !settings.enable_memory_profiling {
             return Err("Memory profiling is disabled".to_string());
         }
-        
+
         // TODO: Implement actual memory profiling
         let snapshot = MemorySnapshot {
             timestamp: Utc::now(),
@@ -335,29 +350,29 @@ impl DebugFeaturesManager {
             process_rss_mb: 0.0,
             details: HashMap::new(),
         };
-        
+
         let mut snapshots = self.memory_snapshots.write().await;
         snapshots.push_back(snapshot.clone());
-        
+
         // Keep only last 100 snapshots
         while snapshots.len() > 100 {
             snapshots.pop_front();
         }
-        
+
         Ok(snapshot)
     }
 
     /// Log a network request
     pub async fn log_network_request(&self, request: NetworkRequest) {
         let settings = self.settings.read().await;
-        
+
         if !settings.enabled || !settings.enable_network_inspector {
             return;
         }
-        
+
         let mut requests = self.network_requests.write().await;
         requests.insert(request.id.clone(), request);
-        
+
         // Keep only last 500 requests
         if requests.len() > 500 {
             // Remove oldest entries
@@ -372,28 +387,29 @@ impl DebugFeaturesManager {
     /// Run API tests
     pub async fn run_api_tests(&self, tests: Vec<APITestCase>) -> Vec<APITestResult> {
         let mut results = Vec::new();
-        
+
         for test in tests {
             let result = self.run_single_api_test(&test).await;
             results.push(result.clone());
-            
+
             // Store result
             let mut test_results = self.api_test_results.write().await;
-            test_results.entry(test.id.clone())
+            test_results
+                .entry(test.id.clone())
                 .or_insert_with(Vec::new)
                 .push(result);
         }
-        
+
         results
     }
 
     /// Run a single API test
     async fn run_single_api_test(&self, test: &APITestCase) -> APITestResult {
         let start = std::time::Instant::now();
-        
+
         // TODO: Implement actual API testing
         let duration_ms = start.elapsed().as_millis() as u64;
-        
+
         APITestResult {
             test_id: test.id.clone(),
             success: false,
@@ -408,15 +424,15 @@ impl DebugFeaturesManager {
     /// Run benchmarks
     pub async fn run_benchmarks(&self, configs: Vec<BenchmarkConfig>) -> Vec<BenchmarkResult> {
         let mut results = Vec::new();
-        
+
         for config in configs {
             let result = self.run_single_benchmark(&config).await;
             results.push(result.clone());
-            
+
             // Store result
             self.benchmark_results.write().await.push(result);
         }
-        
+
         results
     }
 
@@ -443,8 +459,13 @@ impl DebugFeaturesManager {
         let app_info = self.get_app_info().await;
         let performance_summary = self.get_performance_summary().await;
         let error_summary = self.get_error_summary().await;
-        let recommendations = self.generate_recommendations(&system_info, &app_info, &performance_summary, &error_summary);
-        
+        let recommendations = self.generate_recommendations(
+            &system_info,
+            &app_info,
+            &performance_summary,
+            &error_summary,
+        );
+
         DiagnosticReport {
             timestamp: Utc::now(),
             system_info,
@@ -459,13 +480,13 @@ impl DebugFeaturesManager {
     pub async fn get_logs(&self, limit: Option<usize>, level: Option<LogLevel>) -> Vec<LogEntry> {
         let logs = self.logs.read().await;
         let iter = logs.iter().rev();
-        
+
         let filtered: Vec<_> = if let Some(min_level) = level {
             iter.filter(|log| log.level >= min_level).cloned().collect()
         } else {
             iter.cloned().collect()
         };
-        
+
         match limit {
             Some(n) => filtered.into_iter().take(n).collect(),
             None => filtered,
@@ -495,7 +516,7 @@ impl DebugFeaturesManager {
         let requests = self.network_requests.read().await;
         let mut sorted: Vec<_> = requests.values().cloned().collect();
         sorted.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        
+
         match limit {
             Some(n) => sorted.into_iter().take(n).collect(),
             None => sorted,
@@ -515,21 +536,23 @@ impl DebugFeaturesManager {
     /// Enable/disable debug mode
     pub async fn set_debug_mode(&self, enabled: bool) {
         self.settings.write().await.enabled = enabled;
-        
+
         if let Some(notification_manager) = &self.notification_manager {
             let message = if enabled {
                 "Debug mode enabled"
             } else {
                 "Debug mode disabled"
             };
-            let _ = notification_manager.notify_success("Debug Mode", message).await;
+            let _ = notification_manager
+                .notify_success("Debug Mode", message)
+                .await;
         }
     }
 
     // Helper methods
     async fn write_log_to_file(&self, entry: &LogEntry, path: &PathBuf) -> Result<(), String> {
         use tokio::io::AsyncWriteExt;
-        
+
         let log_line = format!(
             "[{}] [{}] [{}] {}\n",
             entry.timestamp.format("%Y-%m-%d %H:%M:%S%.3f"),
@@ -537,17 +560,18 @@ impl DebugFeaturesManager {
             entry.component,
             entry.message
         );
-        
+
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)
             .await
             .map_err(|e| e.to_string())?;
-        
-        file.write_all(log_line.as_bytes()).await
+
+        file.write_all(log_line.as_bytes())
+            .await
             .map_err(|e| e.to_string())?;
-        
+
         Ok(())
     }
 
@@ -568,7 +592,7 @@ impl DebugFeaturesManager {
         AppInfo {
             version: env!("CARGO_PKG_VERSION").to_string(),
             build_date: chrono::Utc::now().to_rfc3339(), // TODO: Get actual build date
-            uptime_seconds: 0, // TODO: Track uptime
+            uptime_seconds: 0,                           // TODO: Track uptime
             active_sessions: 0,
             total_requests: 0,
             error_count: 0,
@@ -588,20 +612,23 @@ impl DebugFeaturesManager {
 
     async fn get_error_summary(&self) -> ErrorSummary {
         let logs = self.logs.read().await;
-        let errors: Vec<_> = logs.iter()
+        let errors: Vec<_> = logs
+            .iter()
             .filter(|log| log.level == LogLevel::Error)
             .cloned()
             .collect();
-        
+
         let mut errors_by_type = HashMap::new();
         for error in &errors {
-            let error_type = error.metadata.get("type")
+            let error_type = error
+                .metadata
+                .get("type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string();
             *errors_by_type.entry(error_type).or_insert(0) += 1;
         }
-        
+
         ErrorSummary {
             total_errors: errors.len() as u64,
             errors_by_type,
@@ -609,25 +636,37 @@ impl DebugFeaturesManager {
         }
     }
 
-    fn generate_recommendations(&self, system: &SystemInfo, _app: &AppInfo, perf: &PerformanceSummary, errors: &ErrorSummary) -> Vec<String> {
+    fn generate_recommendations(
+        &self,
+        system: &SystemInfo,
+        _app: &AppInfo,
+        perf: &PerformanceSummary,
+        errors: &ErrorSummary,
+    ) -> Vec<String> {
         let mut recommendations = Vec::new();
-        
+
         if perf.cpu_usage_percent > 80.0 {
-            recommendations.push("High CPU usage detected. Consider optimizing performance-critical code.".to_string());
+            recommendations.push(
+                "High CPU usage detected. Consider optimizing performance-critical code."
+                    .to_string(),
+            );
         }
-        
+
         if perf.memory_usage_mb > (system.total_memory_mb as f64 * 0.8) {
             recommendations.push("High memory usage detected. Check for memory leaks.".to_string());
         }
-        
+
         if errors.total_errors > 100 {
-            recommendations.push("High error rate detected. Review error logs for patterns.".to_string());
+            recommendations
+                .push("High error rate detected. Review error logs for patterns.".to_string());
         }
-        
+
         if perf.avg_response_time_ms > 1000.0 {
-            recommendations.push("Slow response times detected. Consider caching or query optimization.".to_string());
+            recommendations.push(
+                "Slow response times detected. Consider caching or query optimization.".to_string(),
+            );
         }
-        
+
         recommendations
     }
 }

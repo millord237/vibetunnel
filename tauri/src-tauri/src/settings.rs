@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use directories::ProjectDirs;
-use tauri::{Manager, State};
 use crate::state::AppState;
+use directories::ProjectDirs;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use tauri::{Manager, State};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GeneralSettings {
@@ -193,7 +193,7 @@ impl Default for Settings {
         default_notification_types.insert("error".to_string(), true);
         default_notification_types.insert("server_status".to_string(), true);
         default_notification_types.insert("update_available".to_string(), true);
-        
+
         let mut enabled_terminals = HashMap::new();
         enabled_terminals.insert("Terminal".to_string(), true);
         enabled_terminals.insert("iTerm2".to_string(), true);
@@ -202,7 +202,7 @@ impl Default for Settings {
         enabled_terminals.insert("Warp".to_string(), true);
         enabled_terminals.insert("Ghostty".to_string(), false);
         enabled_terminals.insert("WezTerm".to_string(), false);
-        
+
         Self {
             general: GeneralSettings {
                 launch_at_login: false,
@@ -328,48 +328,45 @@ impl Default for Settings {
 impl Settings {
     pub fn load() -> Result<Self, String> {
         let config_path = Self::config_path()?;
-        
+
         if !config_path.exists() {
             return Ok(Self::default());
         }
-        
+
         let contents = std::fs::read_to_string(&config_path)
             .map_err(|e| format!("Failed to read settings: {}", e))?;
-            
-        toml::from_str(&contents)
-            .map_err(|e| format!("Failed to parse settings: {}", e))
+
+        toml::from_str(&contents).map_err(|e| format!("Failed to parse settings: {}", e))
     }
-    
+
     pub fn save(&self) -> Result<(), String> {
         let config_path = Self::config_path()?;
-        
+
         // Ensure the config directory exists
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create config directory: {}", e))?;
         }
-        
+
         let contents = toml::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-            
+
         std::fs::write(&config_path, contents)
             .map_err(|e| format!("Failed to write settings: {}", e))?;
-            
+
         Ok(())
     }
-    
+
     fn config_path() -> Result<PathBuf, String> {
         let proj_dirs = ProjectDirs::from("com", "vibetunnel", "VibeTunnel")
             .ok_or_else(|| "Failed to get project directories".to_string())?;
-            
+
         Ok(proj_dirs.config_dir().join("settings.toml"))
     }
 }
 
 #[tauri::command]
-pub async fn get_settings(
-    _state: State<'_, AppState>,
-) -> Result<Settings, String> {
+pub async fn get_settings(_state: State<'_, AppState>) -> Result<Settings, String> {
     Settings::load()
 }
 
@@ -380,20 +377,23 @@ pub async fn save_settings(
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     settings.save()?;
-    
+
     // Apply settings that need immediate effect
     if settings.general.launch_at_login {
         crate::auto_launch::enable_auto_launch()?;
     } else {
         crate::auto_launch::disable_auto_launch()?;
     }
-    
+
     // Apply dock icon visibility on macOS
     #[cfg(target_os = "macos")]
     {
         // Check if any windows are visible
-        let has_visible_windows = app.windows().values().any(|w| w.is_visible().unwrap_or(false));
-        
+        let has_visible_windows = app
+            .windows()
+            .values()
+            .any(|w| w.is_visible().unwrap_or(false));
+
         if !has_visible_windows && !settings.general.show_dock_icon {
             // Hide dock icon if no windows are visible and setting is disabled
             let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -403,6 +403,6 @@ pub async fn save_settings(
         }
         // Note: If windows are visible, we always show the dock icon regardless of setting
     }
-    
+
     Ok(())
 }
