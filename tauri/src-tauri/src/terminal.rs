@@ -16,13 +16,13 @@ pub struct TerminalManager {
 }
 
 pub struct TerminalSession {
-    pub id: String,
+    pub _id: String,
     pub name: String,
     pub pid: u32,
     pub rows: u16,
     pub cols: u16,
     pub created_at: String,
-    pub cwd: String,
+    pub _cwd: String,
     pty_pair: PtyPair,
     #[allow(dead_code)]
     child: Box<dyn Child + Send + Sync>,
@@ -156,13 +156,13 @@ impl TerminalManager {
         });
 
         let session = TerminalSession {
-            id: id.clone(),
+            _id: id.clone(),
             name: name.clone(),
             pid,
             rows,
             cols,
             created_at: Utc::now().to_rfc3339(),
-            cwd: cwd.unwrap_or_else(|| {
+            _cwd: cwd.unwrap_or_else(|| {
                 std::env::current_dir()
                     .unwrap()
                     .to_string_lossy()

@@ -363,6 +363,7 @@ impl DebugFeaturesManager {
     }
 
     /// Log a network request
+    #[allow(dead_code)]
     pub async fn log_network_request(&self, request: NetworkRequest) {
         let settings = self.settings.read().await;
 

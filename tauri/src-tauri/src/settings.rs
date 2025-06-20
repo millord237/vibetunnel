@@ -396,6 +396,7 @@ impl Settings {
     }
 
     /// Migrate passwords from settings file to keychain (one-time operation)
+    #[allow(dead_code)]
     pub fn migrate_passwords_to_keychain(&self) -> Result<(), String> {
         // Check if we have passwords in the settings file that need migration
         let config_path = Self::config_path()?;

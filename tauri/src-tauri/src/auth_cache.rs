@@ -143,6 +143,12 @@ pub struct AuthCacheManager {
     notification_manager: Option<Arc<crate::notification_manager::NotificationManager>>,
 }
 
+impl Default for AuthCacheManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AuthCacheManager {
     /// Create a new authentication cache manager
     pub fn new() -> Self {

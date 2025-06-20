@@ -14,6 +14,8 @@ use crate::terminal_spawn_service::TerminalSpawnService;
 use crate::tty_forward::TTYForwardManager;
 use crate::updater::UpdateManager;
 use crate::welcome::WelcomeManager;
+#[cfg(unix)]
+use crate::unix_socket_server::UnixSocketServer;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -38,6 +40,8 @@ pub struct AppState {
     pub auth_cache_manager: Arc<AuthCacheManager>,
     pub terminal_integrations_manager: Arc<TerminalIntegrationsManager>,
     pub terminal_spawn_service: Arc<TerminalSpawnService>,
+    #[cfg(unix)]
+    pub unix_socket_server: Arc<UnixSocketServer>,
 }
 
 impl AppState {
@@ -78,6 +82,9 @@ impl AppState {
             terminal_integrations_manager.clone(),
         ));
 
+        #[cfg(unix)]
+        let unix_socket_server = Arc::new(UnixSocketServer::new(terminal_spawn_service.clone()));
+
         Self {
             terminal_manager,
             http_server: Arc::new(RwLock::new(None)),
@@ -97,6 +104,8 @@ impl AppState {
             auth_cache_manager: Arc::new(auth_cache_manager),
             terminal_integrations_manager,
             terminal_spawn_service,
+            #[cfg(unix)]
+            unix_socket_server,
         }
     }
 }

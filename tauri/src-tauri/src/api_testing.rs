@@ -204,6 +204,12 @@ pub struct APITestingManager {
     notification_manager: Option<Arc<crate::notification_manager::NotificationManager>>,
 }
 
+impl Default for APITestingManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl APITestingManager {
     /// Create a new API testing manager
     pub fn new() -> Self {
@@ -293,7 +299,7 @@ impl APITestingManager {
                 }
             }
 
-            match self.execute_request(&test, &url, variables).await {
+            match self.execute_request(test, &url, variables).await {
                 Ok((status, headers, body)) => {
                     result.status_code = Some(status);
                     result.response_headers = headers;

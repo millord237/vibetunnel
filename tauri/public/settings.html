@@ -7,40 +7,75 @@
     <style>
         :root {
             /* Light mode colors */
-            --bg-color: #f5f5f7;
+            --bg-color: #f0f4f3;
             --window-bg: #ffffff;
-            --text-primary: #1d1d1f;
-            --text-secondary: #86868b;
-            --text-tertiary: #c7c7cc;
-            --accent-color: #007aff;
-            --accent-hover: #0051d5;
-            --border-color: rgba(0, 0, 0, 0.1);
-            --shadow-color: rgba(0, 0, 0, 0.1);
-            --tab-bg: #f2f2f7;
+            --text-primary: #0a1612;
+            --text-secondary: #506e61;
+            --text-tertiary: #8fa89f;
+            --accent-color: #10b981;
+            --accent-hover: #059669;
+            --accent-light: #34d399;
+            --accent-dark: #047857;
+            --border-color: rgba(16, 185, 129, 0.15);
+            --shadow-color: rgba(16, 185, 129, 0.1);
+            --tab-bg: #f9fdfb;
             --tab-active-bg: #ffffff;
             --input-bg: #ffffff;
-            --input-border: rgba(0, 0, 0, 0.15);
-            --success-color: #34c759;
-            --error-color: #ff3b30;
-            --warning-color: #ff9500;
+            --input-border: rgba(16, 185, 129, 0.2);
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+            --glass-bg: rgba(255, 255, 255, 0.8);
+            --glass-border: rgba(16, 185, 129, 0.1);
+            --gradient-start: #ecfdf5;
+            --gradient-end: #f0fdf4;
         }
 
+        [data-theme="dark"] {
+            /* Dark mode colors */
+            --bg-color: #0a0f0d;
+            --window-bg: #111918;
+            --text-primary: #ecfdf5;
+            --text-secondary: #86efac;
+            --text-tertiary: #4ade80;
+            --accent-color: #10b981;
+            --accent-hover: #34d399;
+            --accent-light: #4ade80;
+            --accent-dark: #059669;
+            --border-color: rgba(16, 185, 129, 0.2);
+            --shadow-color: rgba(16, 185, 129, 0.3);
+            --tab-bg: #0f1715;
+            --tab-active-bg: #162320;
+            --input-bg: #1a2723;
+            --input-border: rgba(16, 185, 129, 0.3);
+            --glass-bg: rgba(17, 25, 24, 0.7);
+            --glass-border: rgba(16, 185, 129, 0.2);
+            --gradient-start: #0a0f0d;
+            --gradient-end: #0f1715;
+        }
+        
         @media (prefers-color-scheme: dark) {
-            :root {
+            :root:not([data-theme]) {
                 /* Dark mode colors */
-                --bg-color: #000000;
-                --window-bg: #1c1c1e;
-                --text-primary: #f5f5f7;
-                --text-secondary: #98989d;
-                --text-tertiary: #48484a;
-                --accent-color: #0a84ff;
-                --accent-hover: #409cff;
-                --border-color: rgba(255, 255, 255, 0.1);
-                --shadow-color: rgba(0, 0, 0, 0.5);
-                --tab-bg: #2c2c2e;
-                --tab-active-bg: #1c1c1e;
-                --input-bg: #2c2c2e;
-                --input-border: rgba(255, 255, 255, 0.15);
+                --bg-color: #0a0f0d;
+                --window-bg: #111918;
+                --text-primary: #ecfdf5;
+                --text-secondary: #86efac;
+                --text-tertiary: #4ade80;
+                --accent-color: #10b981;
+                --accent-hover: #34d399;
+                --accent-light: #4ade80;
+                --accent-dark: #059669;
+                --border-color: rgba(16, 185, 129, 0.2);
+                --shadow-color: rgba(16, 185, 129, 0.3);
+                --tab-bg: #0f1715;
+                --tab-active-bg: #162320;
+                --input-bg: #1a2723;
+                --input-border: rgba(16, 185, 129, 0.3);
+                --glass-bg: rgba(17, 25, 24, 0.7);
+                --glass-border: rgba(16, 185, 129, 0.2);
+                --gradient-start: #0a0f0d;
+                --gradient-end: #0f1715;
             }
         }
 
@@ -52,13 +87,27 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
-            background-color: var(--bg-color);
+            background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
             color: var(--text-primary);
             width: 100vw;
             height: 100vh;
             overflow: hidden;
             -webkit-user-select: none;
             user-select: none;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, var(--accent-color) 0%, transparent 70%);
+            opacity: 0.05;
+            animation: float 20s ease-in-out infinite;
+            pointer-events: none;
         }
 
         .container {
@@ -66,18 +115,99 @@
             height: 100%;
             display: flex;
             flex-direction: column;
-            background-color: var(--window-bg);
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--accent-color) 0%, transparent 50%);
+            opacity: 0.03;
+            pointer-events: none;
         }
 
         /* Tab Bar */
         .tab-bar {
             display: flex;
-            background-color: var(--tab-bg);
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--border-color);
-            padding: 0;
-            height: 48px;
+            padding: 0 52px 0 0;
+            height: 52px;
             position: relative;
             z-index: 100;
+            box-shadow: 0 2px 20px var(--shadow-color);
+        }
+        
+        /* Theme Toggle */
+        .theme-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--glass-bg);
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 102;
+        }
+        
+        .theme-toggle:hover {
+            border-color: var(--accent-color);
+            transform: translateY(-50%) scale(1.1);
+            box-shadow: 0 4px 15px var(--shadow-color);
+        }
+        
+        .theme-toggle svg {
+            width: 20px;
+            height: 20px;
+            transition: all 0.3s ease;
+            color: var(--accent-color);
+        }
+        
+        .theme-toggle:hover svg {
+            transform: rotate(180deg);
+        }
+        
+        [data-theme="dark"] .theme-toggle .sun-icon {
+            display: block;
+        }
+        
+        [data-theme="dark"] .theme-toggle .moon-icon {
+            display: none;
+        }
+        
+        [data-theme="light"] .theme-toggle .sun-icon,
+        :root:not([data-theme]) .theme-toggle .sun-icon {
+            display: none;
+        }
+        
+        [data-theme="light"] .theme-toggle .moon-icon,
+        :root:not([data-theme]) .theme-toggle .moon-icon {
+            display: block;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme]) .theme-toggle .sun-icon {
+                display: block;
+            }
+            
+            :root:not([data-theme]) .theme-toggle .moon-icon {
+                display: none;
+            }
         }
 
         .tab {
@@ -85,9 +215,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 12px 20px;
+            padding: 14px 20px;
             cursor: pointer;
-            transition: background-color 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             border-right: 1px solid var(--border-color);
             font-size: 13px;
             font-weight: 500;
@@ -96,6 +226,20 @@
             -webkit-user-select: none;
             user-select: none;
             z-index: 101;
+            overflow: hidden;
+        }
+        
+        .tab::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at center, var(--accent-color), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
         }
 
         .tab:last-child {
@@ -103,9 +247,13 @@
         }
 
         .tab:hover {
-            background-color: var(--tab-active-bg);
-            color: var(--text-primary);
-            transition: all 0.2s ease;
+            background-color: rgba(16, 185, 129, 0.05);
+            color: var(--accent-color);
+            transform: translateY(-1px);
+        }
+        
+        .tab:hover::before {
+            opacity: 0.1;
         }
 
         .tab:active {
@@ -113,8 +261,9 @@
         }
 
         .tab.active {
-            background-color: var(--tab-active-bg);
-            color: var(--text-primary);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+            color: var(--accent-color);
+            font-weight: 600;
         }
 
         .tab.active::after {
@@ -123,8 +272,20 @@
             bottom: -1px;
             left: 0;
             right: 0;
-            height: 2px;
-            background-color: var(--accent-color);
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
         }
 
         .tab-icon {
@@ -155,11 +316,11 @@
         @keyframes fadeIn {
             from {
                 opacity: 0;
-                transform: translateY(10px);
+                transform: translateY(20px) scale(0.95);
             }
             to {
                 opacity: 1;
-                transform: translateY(0);
+                transform: translateY(0) scale(1);
             }
         }
 
@@ -170,16 +331,25 @@
         }
 
         @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
+            0%, 100% { 
+                transform: translateY(0px) rotate(0deg); 
+            }
+            33% { 
+                transform: translateY(-10px) rotate(1deg); 
+            }
+            66% { 
+                transform: translateY(5px) rotate(-1deg); 
+            }
         }
 
         @keyframes glow {
             0%, 100% { 
                 filter: drop-shadow(0 4px 12px var(--shadow-color)) brightness(1);
+                transform: scale(1);
             }
             50% { 
-                filter: drop-shadow(0 8px 24px var(--accent-color)) brightness(1.1);
+                filter: drop-shadow(0 0 30px var(--accent-color)) brightness(1.2);
+                transform: scale(1.05);
             }
         }
 
@@ -395,17 +565,31 @@
 
         /* Console */
         .console {
-            background-color: var(--input-bg);
-            border: 1px solid var(--input-border);
-            border-radius: 6px;
-            padding: 12px;
+            background: var(--input-bg);
+            border: 2px solid var(--input-border);
+            border-radius: 10px;
+            padding: 16px;
             font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
             font-size: 11px;
-            line-height: 1.5;
+            line-height: 1.6;
             max-height: 300px;
             overflow-y: auto;
             -webkit-user-select: text;
             user-select: text;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .console::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .console::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .console::-webkit-scrollbar-thumb {
+            background: var(--accent-color);
+            border-radius: 4px;
         }
 
         .console-line {
@@ -476,10 +660,12 @@
         .permission-icon.granted {
             color: var(--success-color);
             animation: checkmark 0.5s ease-out;
+            filter: drop-shadow(0 2px 4px var(--shadow-color));
         }
 
         .permission-icon.denied {
             color: var(--error-color);
+            filter: drop-shadow(0 2px 4px rgba(239, 68, 68, 0.3));
         }
 
         @keyframes checkmark {
@@ -515,15 +701,20 @@
         }
 
         .app-name {
-            font-size: 24px;
-            font-weight: 600;
+            font-size: 28px;
+            font-weight: 700;
             margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-light) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .app-version {
             font-size: 14px;
             color: var(--text-secondary);
-            margin-bottom: 24px;
+            margin-bottom: 32px;
+            font-weight: 500;
         }
 
         .copyright {
@@ -618,16 +809,35 @@
 
         /* Update UI Styles */
         .update-status-card {
-            background-color: var(--tab-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 20px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
             margin-bottom: 24px;
             transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .update-status-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, var(--accent-color) 0%, transparent 70%);
+            opacity: 0.05;
+            animation: float 15s ease-in-out infinite;
+            pointer-events: none;
         }
 
         .update-status-card:hover {
-            box-shadow: 0 4px 12px var(--shadow-color);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px var(--shadow-color);
+            border-color: var(--accent-color);
         }
 
         .update-status-header {
@@ -684,9 +894,13 @@
         .update-check-button {
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 6px 14px;
+            gap: 8px;
+            padding: 10px 20px;
             font-size: 13px;
+            font-weight: 500;
+            background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-dark) 100%);
+            box-shadow: 0 4px 15px var(--shadow-color);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .button-icon {
@@ -945,6 +1159,15 @@
     <div class="container">
         <!-- Tab Bar -->
         <div class="tab-bar">
+            <!-- Theme Toggle -->
+            <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                <svg class="sun-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                </svg>
+                <svg class="moon-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                </svg>
+            </button>
             <div class="tab active" data-tab="general">
                 <svg class="tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
@@ -1312,8 +1535,37 @@
     </div>
 
     <script>
+        // Theme management
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            }
+        }
+        
+        // Initialize theme before DOM loads to prevent flash
+        initTheme();
+        
         // Wait for Tauri API to be available
         window.addEventListener('DOMContentLoaded', async () => {
+            // Theme toggle handler
+            const themeToggle = document.getElementById('themeToggle');
+            themeToggle.addEventListener('click', () => {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                
+                // If no explicit theme is set, check system preference
+                if (!currentTheme) {
+                    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const newTheme = systemPrefersDark ? 'light' : 'dark';
+                    document.documentElement.setAttribute('data-theme', newTheme);
+                    localStorage.setItem('theme', newTheme);
+                } else {
+                    document.documentElement.setAttribute('data-theme', newTheme);
+                    localStorage.setItem('theme', newTheme);
+                }
+            });
+            
             // Check if Tauri API is available
             if (!window.__TAURI__) {
                 console.error('Tauri API not available. Running in browser mode.');

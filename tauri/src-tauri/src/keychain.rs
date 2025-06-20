@@ -97,6 +97,7 @@ impl KeychainManager {
     }
 
     /// Migrate passwords from settings to keychain
+    #[allow(dead_code)]
     pub fn migrate_from_settings(settings: &HashMap<String, String>) -> Result<(), KeychainError> {
         // Migrate dashboard password
         if let Some(password) = settings.get("dashboard_password") {

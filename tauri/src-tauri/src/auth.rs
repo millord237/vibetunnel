@@ -49,8 +49,7 @@ pub async fn auth_middleware(
     // Check Authorization header
     if let Some(auth_header) = request.headers().get("authorization") {
         if let Ok(auth_str) = auth_header.to_str() {
-            if auth_str.starts_with("Basic ") {
-                let encoded = &auth_str[6..];
+            if let Some(encoded) = auth_str.strip_prefix("Basic ") {
                 if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
                     if let Ok(credentials) = String::from_utf8(decoded) {
                         let parts: Vec<&str> = credentials.splitn(2, ':').collect();

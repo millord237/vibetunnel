@@ -231,14 +231,14 @@ impl WelcomeManager {
                         id: "welcome".to_string(),
                         title: "Welcome to VibeTunnel".to_string(),
                         description: "Your powerful terminal session manager".to_string(),
-                        content: r#"VibeTunnel lets you create, manage, and share terminal sessions with ease. 
+                        content: r"VibeTunnel lets you create, manage, and share terminal sessions with ease. 
                         
 Key features:
 • Create multiple terminal sessions
 • Share sessions via web interface
 • Record terminal sessions
 • Secure remote access with ngrok
-• Cross-platform support"#.to_string(),
+• Cross-platform support".to_string(),
                         action: None,
                         completed: false,
                         order: 1,
@@ -310,14 +310,14 @@ Recordings can be played back later or shared with others."#.to_string(),
                         id: "port_forwarding".to_string(),
                         title: "TTY Forwarding".to_string(),
                         description: "Forward terminal sessions over TCP".to_string(),
-                        content: r#"TTY forwarding allows remote terminal access:
+                        content: r"TTY forwarding allows remote terminal access:
 
 1. Go to Settings > Advanced
 2. Enable TTY Forwarding
 3. Configure the local port
 4. Connect using: telnet localhost <port>
 
-This is useful for accessing terminals from other applications."#.to_string(),
+This is useful for accessing terminals from other applications.".to_string(),
                         action: None,
                         completed: false,
                         order: 2,

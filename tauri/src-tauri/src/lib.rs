@@ -25,6 +25,8 @@ pub mod terminal_integrations;
 pub mod terminal_spawn_service;
 pub mod tray_menu;
 pub mod tty_forward;
+#[cfg(unix)]
+pub mod unix_socket_server;
 pub mod updater;
 pub mod welcome;
 

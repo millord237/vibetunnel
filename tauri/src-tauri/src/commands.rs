@@ -1002,6 +1002,15 @@ pub async fn check_permission(
 }
 
 #[tauri::command]
+pub async fn check_permission_silent(
+    permission_type: crate::permissions::PermissionType,
+    state: State<'_, AppState>,
+) -> Result<crate::permissions::PermissionStatus, String> {
+    let permissions_manager = &state.permissions_manager;
+    Ok(permissions_manager.check_permission_silent(permission_type).await)
+}
+
+#[tauri::command]
 pub async fn request_permission(
     permission_type: crate::permissions::PermissionType,
     state: State<'_, AppState>,

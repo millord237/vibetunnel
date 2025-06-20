@@ -4,7 +4,7 @@ use tauri::AppHandle;
 /// Check if the app should be moved to Applications folder
 /// This is a macOS-specific feature
 #[cfg(target_os = "macos")]
-pub async fn check_and_prompt_move(_app_handle: AppHandle) -> Result<(), String> {
+pub async fn check_and_prompt_move(app_handle: AppHandle) -> Result<(), String> {
     // Get current app bundle path
     let bundle_path = get_app_bundle_path()?;
 
@@ -25,7 +25,7 @@ pub async fn check_and_prompt_move(_app_handle: AppHandle) -> Result<(), String>
     // Show dialog to ask user if they want to move the app
     use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
     
-    let response = _app_handle.dialog()
+    let response = app_handle.dialog()
         .message("VibeTunnel works best when run from the Applications folder. Would you like to move it there now?\n\nClick OK to move it now, or Cancel to skip.")
         .title("Move to Applications?")
         .kind(MessageDialogKind::Info)
@@ -36,7 +36,7 @@ pub async fn check_and_prompt_move(_app_handle: AppHandle) -> Result<(), String>
         move_to_applications_folder(bundle_path)?;
         
         // Show success message
-        _app_handle.dialog()
+        app_handle.dialog()
             .message("VibeTunnel has been moved to your Applications folder and will restart.")
             .title("Move Complete")
             .kind(MessageDialogKind::Info)

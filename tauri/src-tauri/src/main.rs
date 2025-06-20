@@ -35,6 +35,8 @@ mod terminal_integrations;
 mod terminal_spawn_service;
 mod tray_menu;
 mod tty_forward;
+#[cfg(unix)]
+mod unix_socket_server;
 mod updater;
 mod welcome;
 
@@ -197,6 +199,7 @@ fn main() {
             import_settings,
             check_all_permissions,
             check_permission,
+            check_permission_silent,
             request_permission,
             get_permission_info,
             get_all_permissions,
@@ -328,6 +331,14 @@ fn main() {
                 // Start background workers now that we have a runtime
                 state.terminal_spawn_service.clone().start_worker().await;
                 state.auth_cache_manager.start_cleanup_task().await;
+                
+                // Start Unix socket server for terminal spawning (macOS/Linux)
+                #[cfg(unix)]
+                {
+                    if let Err(e) = state.unix_socket_server.start() {
+                        tracing::error!("Failed to start Unix socket server: {}", e);
+                    }
+                }
                 
                 // Start session monitoring
                 state.session_monitor.start_monitoring().await;
