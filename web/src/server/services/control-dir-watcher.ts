@@ -3,6 +3,7 @@ import * as path from 'path';
 import chalk from 'chalk';
 import { RemoteRegistry } from './remote-registry.js';
 import { HQClient } from './hq-client.js';
+import { isShuttingDown } from './shutdown-state.js';
 
 interface ControlDirWatcherConfig {
   controlDir: string;
@@ -57,7 +58,7 @@ export class ControlDirWatcher {
         console.log(chalk.blue(`Detected new external session: ${sessionId}`));
 
         // If we're a remote server registered with HQ, immediately notify HQ
-        if (this.config.hqClient) {
+        if (this.config.hqClient && !isShuttingDown()) {
           try {
             await this.notifyHQAboutSession(sessionId, 'created');
           } catch (error) {
@@ -73,14 +74,17 @@ export class ControlDirWatcher {
         console.log(chalk.yellow(`Detected removed external session: ${sessionId}`));
 
         // If we're a remote server registered with HQ, immediately notify HQ
-        if (this.config.hqClient) {
+        if (this.config.hqClient && !isShuttingDown()) {
           try {
             await this.notifyHQAboutSession(sessionId, 'deleted');
           } catch (error) {
-            console.error(
-              chalk.red(`Failed to notify HQ about deleted session ${sessionId}:`),
-              error
-            );
+            // During shutdown, this is expected
+            if (!isShuttingDown()) {
+              console.error(
+                chalk.red(`Failed to notify HQ about deleted session ${sessionId}:`),
+                error
+              );
+            }
           }
         }
 
@@ -98,7 +102,7 @@ export class ControlDirWatcher {
     sessionId: string,
     action: 'created' | 'deleted'
   ): Promise<void> {
-    if (!this.config.hqClient) return;
+    if (!this.config.hqClient || isShuttingDown()) return;
 
     const hqUrl = this.config.hqClient.getHQUrl();
     const hqAuth = this.config.hqClient.getHQAuth();
@@ -120,6 +124,10 @@ export class ControlDirWatcher {
     });
 
     if (!response.ok) {
+      // If we get a 503 during shutdown, that's expected
+      if (response.status === 503 && isShuttingDown()) {
+        return;
+      }
       throw new Error(`HQ responded with ${response.status}`);
     }
 

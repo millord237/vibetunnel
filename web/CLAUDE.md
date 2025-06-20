@@ -1,7 +1,6 @@
 # Claude Development Notes
 
-After receiving the first user mesage, read spec.md before you proceed. The spec.md contains a map of this code base that should help you navigate it.
-
+**IMPORTANT**: BEFORE YOU DO ANYTHING, READ spec.md IN FULL USING THE READ TOOL!
 **IMPORTANT**: NEVER USE GREP. ALWAYS USE RIPGREP!
 
 ## Updating spec.md
@@ -37,6 +36,7 @@ As code changes, the spec.md might get outdated. If you detect outdated informat
     - `npm run lint:fix`
     - `npm run typecheck`
 - Always fix all linting and type checking errors.
+- Never run the tests, unless explicitely asked to. `npm run test`
 
 ## Server Execution
 - NEVER RUN THE SERVER YOURSELF, I ALWAYS RUN IT ON THE SIDE VIA NPM RUN DEV!

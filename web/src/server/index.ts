@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { createApp } from './app.js';
+import { setShuttingDown } from './services/shutdown-state.js';
 
 // Create and configure the app
 const appInstance = createApp();
@@ -31,6 +32,7 @@ if (isMainModule) {
     }
 
     isShuttingDown = true;
+    setShuttingDown(true);
     console.log(chalk.yellow('\nShutting down...'));
 
     try {

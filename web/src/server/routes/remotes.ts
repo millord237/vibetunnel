@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { RemoteRegistry } from '../services/remote-registry.js';
 import chalk from 'chalk';
+import { isShuttingDown } from '../services/shutdown-state.js';
 
 interface RemoteRoutesConfig {
   remoteRegistry: RemoteRegistry | null;
@@ -74,6 +75,11 @@ export function createRemoteRoutes(config: RemoteRoutesConfig): Router {
       return res.status(404).json({ error: 'Not running in HQ mode' });
     }
 
+    // If server is shutting down, return service unavailable
+    if (isShuttingDown()) {
+      return res.status(503).json({ error: 'Server is shutting down' });
+    }
+
     const remoteName = req.params.remoteName;
     const { action, sessionId } = req.body;
 
@@ -109,6 +115,14 @@ export function createRemoteRoutes(config: RemoteRoutesConfig): Router {
         throw new Error(`Failed to fetch sessions: ${response.status}`);
       }
     } catch (error) {
+      // During shutdown, connection failures are expected
+      if (isShuttingDown()) {
+        console.log(
+          chalk.yellow(`Remote ${remote.name} refresh failed during shutdown (expected)`)
+        );
+        return res.status(503).json({ error: 'Server is shutting down' });
+      }
+
       console.error(chalk.red(`Failed to refresh sessions for remote ${remote.name}:`), error);
       res.status(500).json({ error: 'Failed to refresh sessions' });
     }

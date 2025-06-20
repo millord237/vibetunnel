@@ -1,3 +1,5 @@
+import { isShuttingDown } from './shutdown-state.js';
+
 export interface RemoteServer {
   id: string;
   name: string;
@@ -116,6 +118,11 @@ export class RemoteRegistry {
   }
 
   private async checkRemoteHealth(remote: RemoteServer): Promise<void> {
+    // Skip health checks during shutdown
+    if (isShuttingDown()) {
+      return;
+    }
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.HEALTH_CHECK_TIMEOUT);
@@ -139,14 +146,22 @@ export class RemoteRegistry {
         throw new Error(`HTTP ${response.status}`);
       }
     } catch (error) {
-      console.log(`Remote failed health check: ${remote.name} (${remote.id}) - ${error}`);
-      // Remove the remote if it fails health check
-      this.unregister(remote.id);
+      // During shutdown, don't log errors or unregister remotes
+      if (!isShuttingDown()) {
+        console.log(`Remote failed health check: ${remote.name} (${remote.id}) - ${error}`);
+        // Remove the remote if it fails health check
+        this.unregister(remote.id);
+      }
     }
   }
 
   private startHealthChecker() {
     this.healthCheckInterval = setInterval(() => {
+      // Skip health checks during shutdown
+      if (isShuttingDown()) {
+        return;
+      }
+
       // Check all remotes in parallel
       const healthChecks = Array.from(this.remotes.values()).map((remote) =>
         this.checkRemoteHealth(remote)
