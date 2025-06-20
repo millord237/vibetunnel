@@ -82,6 +82,9 @@ reqwest = { version = "0.12", features = ["json"] }
 base64 = "0.22"
 sha2 = "0.10"
 
+# Keychain/Credential Storage
+keyring = "3"
+
 # Debug features
 num_cpus = "1"
 

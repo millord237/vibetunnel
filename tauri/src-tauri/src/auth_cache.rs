@@ -57,6 +57,7 @@ impl CachedToken {
     }
 
     /// Get remaining lifetime in seconds
+    #[allow(dead_code)]
     pub fn remaining_lifetime_seconds(&self) -> Option<i64> {
         self.expires_at.map(|expires_at| {
             let duration = expires_at - Utc::now();
@@ -161,12 +162,6 @@ impl AuthCacheManager {
             cleanup_handle: Arc::new(RwLock::new(None)),
             notification_manager: None,
         };
-
-        // Start cleanup task
-        let cleanup_manager = manager.clone_for_cleanup();
-        tokio::spawn(async move {
-            cleanup_manager.start_cleanup_task().await;
-        });
 
         manager
     }
@@ -326,6 +321,7 @@ impl AuthCacheManager {
     }
 
     /// Register token refresh callback
+    #[allow(dead_code)]
     pub async fn register_refresh_callback(&self, key: &str, callback: TokenRefreshCallback) {
         self.refresh_callbacks
             .write()
@@ -424,7 +420,7 @@ impl AuthCacheManager {
         }
     }
 
-    async fn start_cleanup_task(&self) {
+    pub async fn start_cleanup_task(&self) {
         let config = self.config.read().await;
         let cleanup_interval = Duration::seconds(config.cleanup_interval_seconds as i64);
         drop(config);
@@ -458,6 +454,7 @@ impl AuthCacheManager {
         }
     }
 
+    #[allow(dead_code)]
     fn clone_for_cleanup(&self) -> Self {
         Self {
             config: self.config.clone(),

@@ -8,18 +8,7 @@
     "frontendDist": "../public"
   },
   "app": {
-    "windows": [{
-      "title": "VibeTunnel",
-      "width": 400,
-      "height": 500,
-      "resizable": false,
-      "fullscreen": false,
-      "decorations": true,
-      "transparent": false,
-      "skipTaskbar": true,
-      "visible": false,
-      "center": true
-    }],
+    "windows": [],
     "security": {
       "csp": null
     }

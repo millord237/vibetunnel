@@ -15,28 +15,40 @@ pub async fn check_and_prompt_move(_app_handle: AppHandle) -> Result<(), String>
 
     // Check if we've already asked this question
     let settings = crate::settings::Settings::load().unwrap_or_default();
-    if let Some(asked) = settings.general.show_welcome_on_startup {
+    if let Some(asked) = settings.general.prompt_move_to_applications {
         if !asked {
             // User has already been asked, don't ask again
             return Ok(());
         }
     }
 
-    // For now, just log and return
-    // TODO: Implement dialog using tauri-plugin-dialog
-    tracing::info!("App should be moved to Applications folder");
-
-    if false {
-        // Temporarily disabled until dialog is implemented
+    // Show dialog to ask user if they want to move the app
+    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+    
+    let response = _app_handle.dialog()
+        .message("VibeTunnel works best when run from the Applications folder. Would you like to move it there now?\n\nClick OK to move it now, or Cancel to skip.")
+        .title("Move to Applications?")
+        .kind(MessageDialogKind::Info)
+        .blocking_show();
+    
+    if response {
+        // User wants to move the app
         move_to_applications_folder(bundle_path)?;
-
+        
+        // Show success message
+        _app_handle.dialog()
+            .message("VibeTunnel has been moved to your Applications folder and will restart.")
+            .title("Move Complete")
+            .kind(MessageDialogKind::Info)
+            .blocking_show();
+        
         // Restart the app from the new location
         restart_from_applications()?;
     }
-
+    
     // Update settings to not ask again
     let mut settings = crate::settings::Settings::load().unwrap_or_default();
-    settings.general.show_welcome_on_startup = Some(false);
+    settings.general.prompt_move_to_applications = Some(false);
     settings.save().ok();
 
     Ok(())

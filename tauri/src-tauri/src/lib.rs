@@ -9,6 +9,7 @@ pub mod cli_installer;
 pub mod commands;
 pub mod debug_features;
 pub mod fs_api;
+pub mod keychain;
 pub mod network_utils;
 pub mod ngrok;
 pub mod notification_manager;

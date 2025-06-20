@@ -17,6 +17,7 @@ pub enum BackendType {
 }
 
 impl BackendType {
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &str {
         match self {
             BackendType::Rust => "rust",
@@ -27,6 +28,7 @@ impl BackendType {
         }
     }
 
+    #[allow(dead_code)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "rust" => BackendType::Rust,
@@ -135,23 +137,12 @@ pub struct BackendManager {
 impl BackendManager {
     /// Create a new backend manager
     pub fn new() -> Self {
-        let manager = Self {
-            configs: Arc::new(RwLock::new(HashMap::new())),
+        Self {
+            configs: Arc::new(RwLock::new(Self::initialize_default_configs())),
             instances: Arc::new(RwLock::new(HashMap::new())),
             active_backend: Arc::new(RwLock::new(Some(BackendType::Rust))),
             notification_manager: None,
-        };
-
-        // Initialize default backend configurations
-        tokio::spawn({
-            let configs = manager.configs.clone();
-            async move {
-                let default_configs = Self::initialize_default_configs();
-                *configs.write().await = default_configs;
-            }
-        });
-
-        manager
+        }
     }
 
     /// Set the notification manager

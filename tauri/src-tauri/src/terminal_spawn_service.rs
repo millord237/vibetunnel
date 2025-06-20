@@ -23,6 +23,7 @@ pub struct TerminalSpawnResponse {
 /// Terminal Spawn Service - manages background terminal spawning
 pub struct TerminalSpawnService {
     request_tx: mpsc::Sender<TerminalSpawnRequest>,
+    request_rx: Arc<tokio::sync::Mutex<Option<mpsc::Receiver<TerminalSpawnRequest>>>>,
     #[allow(dead_code)]
     terminal_integrations_manager: Arc<crate::terminal_integrations::TerminalIntegrationsManager>,
 }
@@ -33,23 +34,29 @@ impl TerminalSpawnService {
             crate::terminal_integrations::TerminalIntegrationsManager,
         >,
     ) -> Self {
-        let (tx, mut rx) = mpsc::channel::<TerminalSpawnRequest>(100);
-
-        let manager_clone = terminal_integrations_manager.clone();
-
-        // Spawn background worker to handle terminal spawn requests
-        tokio::spawn(async move {
-            while let Some(request) = rx.recv().await {
-                let manager = manager_clone.clone();
-                tokio::spawn(async move {
-                    let _ = Self::handle_spawn_request(request, manager).await;
-                });
-            }
-        });
+        let (tx, rx) = mpsc::channel::<TerminalSpawnRequest>(100);
 
         Self {
             request_tx: tx,
+            request_rx: Arc::new(tokio::sync::Mutex::new(Some(rx))),
             terminal_integrations_manager,
+        }
+    }
+
+    /// Start the background worker - must be called after Tokio runtime is available
+    pub async fn start_worker(self: Arc<Self>) {
+        let rx = self.request_rx.lock().await.take();
+        if let Some(mut rx) = rx {
+            let manager_clone = self.terminal_integrations_manager.clone();
+            
+            tokio::spawn(async move {
+                while let Some(request) = rx.recv().await {
+                    let manager = manager_clone.clone();
+                    tokio::spawn(async move {
+                        let _ = Self::handle_spawn_request(request, manager).await;
+                    });
+                }
+            });
         }
     }
 

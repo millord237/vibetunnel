@@ -15,6 +15,7 @@ pub struct GeneralSettings {
     pub theme: Option<String>,
     pub language: Option<String>,
     pub check_updates_automatically: Option<bool>,
+    pub prompt_move_to_applications: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -213,6 +214,7 @@ impl Default for Settings {
                 theme: Some("auto".to_string()),
                 language: Some("en".to_string()),
                 check_updates_automatically: Some(true),
+                prompt_move_to_applications: None,
             },
             dashboard: DashboardSettings {
                 server_port: 4020,
@@ -329,14 +331,25 @@ impl Settings {
     pub fn load() -> Result<Self, String> {
         let config_path = Self::config_path()?;
 
-        if !config_path.exists() {
-            return Ok(Self::default());
+        let mut settings = if !config_path.exists() {
+            Self::default()
+        } else {
+            let contents = std::fs::read_to_string(&config_path)
+                .map_err(|e| format!("Failed to read settings: {}", e))?;
+
+            toml::from_str(&contents).map_err(|e| format!("Failed to parse settings: {}", e))?
+        };
+
+        // Load passwords from keychain
+        if let Ok(Some(password)) = crate::keychain::KeychainManager::get_dashboard_password() {
+            settings.dashboard.password = password;
         }
 
-        let contents = std::fs::read_to_string(&config_path)
-            .map_err(|e| format!("Failed to read settings: {}", e))?;
+        if let Ok(Some(token)) = crate::keychain::KeychainManager::get_ngrok_auth_token() {
+            settings.advanced.ngrok_auth_token = Some(token);
+        }
 
-        toml::from_str(&contents).map_err(|e| format!("Failed to parse settings: {}", e))
+        Ok(settings)
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -348,7 +361,25 @@ impl Settings {
                 .map_err(|e| format!("Failed to create config directory: {}", e))?;
         }
 
-        let contents = toml::to_string_pretty(self)
+        // Clone settings to remove sensitive data before saving
+        let mut settings_to_save = self.clone();
+        
+        // Save passwords to keychain and remove from TOML
+        if !self.dashboard.password.is_empty() {
+            crate::keychain::KeychainManager::set_dashboard_password(&self.dashboard.password)
+                .map_err(|e| format!("Failed to save dashboard password to keychain: {}", e.message))?;
+            settings_to_save.dashboard.password = String::new();
+        }
+
+        if let Some(ref token) = self.advanced.ngrok_auth_token {
+            if !token.is_empty() {
+                crate::keychain::KeychainManager::set_ngrok_auth_token(token)
+                    .map_err(|e| format!("Failed to save ngrok token to keychain: {}", e.message))?;
+                settings_to_save.advanced.ngrok_auth_token = None;
+            }
+        }
+
+        let contents = toml::to_string_pretty(&settings_to_save)
             .map_err(|e| format!("Failed to serialize settings: {}", e))?;
 
         std::fs::write(&config_path, contents)
@@ -362,6 +393,46 @@ impl Settings {
             .ok_or_else(|| "Failed to get project directories".to_string())?;
 
         Ok(proj_dirs.config_dir().join("settings.toml"))
+    }
+
+    /// Migrate passwords from settings file to keychain (one-time operation)
+    pub fn migrate_passwords_to_keychain(&self) -> Result<(), String> {
+        // Check if we have passwords in the settings file that need migration
+        let config_path = Self::config_path()?;
+        if !config_path.exists() {
+            return Ok(());
+        }
+
+        let contents = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read settings for migration: {}", e))?;
+
+        let raw_settings: Settings = toml::from_str(&contents)
+            .map_err(|e| format!("Failed to parse settings for migration: {}", e))?;
+
+        let mut migrated = false;
+
+        // Migrate dashboard password if present in file
+        if !raw_settings.dashboard.password.is_empty() {
+            crate::keychain::KeychainManager::set_dashboard_password(&raw_settings.dashboard.password)
+                .map_err(|e| format!("Failed to migrate dashboard password: {}", e.message))?;
+            migrated = true;
+        }
+
+        // Migrate ngrok token if present in file
+        if let Some(ref token) = raw_settings.advanced.ngrok_auth_token {
+            if !token.is_empty() {
+                crate::keychain::KeychainManager::set_ngrok_auth_token(token)
+                    .map_err(|e| format!("Failed to migrate ngrok token: {}", e.message))?;
+                migrated = true;
+            }
+        }
+
+        // If we migrated anything, save the settings again to remove passwords from file
+        if migrated {
+            self.save()?;
+        }
+
+        Ok(())
     }
 }
 

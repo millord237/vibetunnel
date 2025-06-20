@@ -70,22 +70,11 @@ pub struct PermissionsManager {
 impl PermissionsManager {
     /// Create a new permissions manager
     pub fn new() -> Self {
-        let manager = Self {
-            permissions: Arc::new(RwLock::new(HashMap::new())),
+        Self {
+            permissions: Arc::new(RwLock::new(Self::initialize_permissions())),
             app_handle: Arc::new(RwLock::new(None)),
             notification_manager: None,
-        };
-
-        // Initialize default permissions
-        tokio::spawn({
-            let permissions = manager.permissions.clone();
-            async move {
-                let default_permissions = Self::initialize_permissions();
-                *permissions.write().await = default_permissions;
-            }
-        });
-
-        manager
+        }
     }
 
     /// Set the app handle

@@ -76,6 +76,8 @@
             border-bottom: 1px solid var(--border-color);
             padding: 0;
             height: 48px;
+            position: relative;
+            z-index: 100;
         }
 
         .tab {
@@ -91,6 +93,9 @@
             font-weight: 500;
             color: var(--text-secondary);
             position: relative;
+            -webkit-user-select: none;
+            user-select: none;
+            z-index: 101;
         }
 
         .tab:last-child {
@@ -101,6 +106,10 @@
             background-color: var(--tab-active-bg);
             color: var(--text-primary);
             transition: all 0.2s ease;
+        }
+
+        .tab:active {
+            transform: scale(0.98);
         }
 
         .tab.active {
@@ -123,6 +132,7 @@
             height: 16px;
             margin-right: 8px;
             color: currentColor;
+            pointer-events: none;
         }
 
         /* Content Area */
@@ -605,6 +615,330 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* Update UI Styles */
+        .update-status-card {
+            background-color: var(--tab-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .update-status-card:hover {
+            box-shadow: 0 4px 12px var(--shadow-color);
+        }
+
+        .update-status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        
+        @media (max-width: 480px) {
+            .update-status-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .update-check-button {
+                width: 100%;
+                justify-content: center;
+                margin-top: 12px;
+            }
+        }
+
+        .update-status-info {
+            flex: 1;
+        }
+
+        .update-version-info {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .update-current-version {
+            font-weight: 500;
+        }
+
+        .update-latest-version {
+            color: var(--accent-color);
+            font-weight: 500;
+        }
+
+        .update-status-text {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .update-check-button {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            font-size: 13px;
+        }
+
+        .button-icon {
+            transition: transform 0.3s ease;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .update-check-button:hover .button-icon {
+            transform: rotate(180deg);
+        }
+
+        .update-check-button:disabled .button-icon {
+            animation: spin 1s linear infinite;
+        }
+        
+        .update-check-button:active {
+            transform: scale(0.98);
+        }
+
+        /* Update Progress */
+        .update-progress {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-color);
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .update-progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .update-progress-bar {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        }
+
+        .update-progress-fill {
+            height: 100%;
+            background-color: var(--accent-color);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.3s ease;
+            background-image: linear-gradient(
+                45deg,
+                rgba(255, 255, 255, 0.15) 25%,
+                transparent 25%,
+                transparent 50%,
+                rgba(255, 255, 255, 0.15) 50%,
+                rgba(255, 255, 255, 0.15) 75%,
+                transparent 75%,
+                transparent
+            );
+            background-size: 20px 20px;
+            animation: progress-stripes 1s linear infinite;
+        }
+
+        @keyframes progress-stripes {
+            0% { background-position: 0 0; }
+            100% { background-position: 20px 0; }
+        }
+
+        .update-progress-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        /* Update Actions */
+        .update-actions {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .button-primary {
+            background-color: var(--accent-color);
+            color: white;
+            font-weight: 500;
+        }
+
+        .button-primary:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+        }
+
+        /* Update Settings */
+        .update-settings {
+            margin-top: 24px;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.2s ease;
+        }
+
+        .setting-row:last-child {
+            border-bottom: none;
+        }
+
+        .setting-row:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+            margin: 0 -12px;
+            padding: 12px 12px;
+            border-radius: 6px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .setting-row:hover {
+                background-color: rgba(255, 255, 255, 0.02);
+            }
+        }
+
+        .setting-label {
+            flex: 1;
+        }
+
+        .setting-label label {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .setting-description {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        .setting-control {
+            min-width: 120px;
+            font-size: 13px;
+            padding: 6px 10px;
+            height: 32px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M1 1L5 5L9 1' stroke='%2386868b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 32px;
+        }
+        
+        .setting-control:hover {
+            border-color: var(--accent-color);
+        }
+        
+        .setting-control:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+        }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+        }
+
+        .toggle-input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-label {
+            display: block;
+            width: 48px;
+            height: 28px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .toggle-label::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 22px;
+            height: 22px;
+            background-color: white;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .toggle-input:checked + .toggle-label {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+
+        .toggle-input:checked + .toggle-label::after {
+            transform: translateX(20px);
+        }
+
+        .toggle-input:disabled + .toggle-label {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Update Status States */
+        .update-status-card.checking .update-status-text {
+            color: var(--text-secondary);
+        }
+
+        .update-status-card.available {
+            background-color: rgba(255, 149, 0, 0.05);
+            border-color: var(--warning-color);
+        }
+
+        .update-status-card.available .update-status-text {
+            color: var(--warning-color);
+        }
+
+        .update-status-card.downloading {
+            background-color: rgba(0, 122, 255, 0.05);
+            border-color: var(--accent-color);
+        }
+
+        .update-status-card.error {
+            background-color: rgba(255, 59, 48, 0.05);
+            border-color: var(--error-color);
+        }
+
+        .update-status-card.error .update-status-text {
+            color: var(--error-color);
+        }
     </style>
 </head>
 <body>
@@ -661,18 +995,80 @@
 
                 <div class="section">
                     <h2 class="section-title">Updates</h2>
-                    <div class="form-group">
-                        <label for="updateChannel">Update Channel</label>
-                        <select id="updateChannel">
-                            <option value="stable">Stable Releases</option>
-                            <option value="beta">Beta Releases</option>
-                            <option value="nightly">Nightly Builds</option>
-                        </select>
-                        <p class="help-text">Choose which release channel to receive updates from</p>
+                    
+                    <!-- Update Status Card -->
+                    <div class="update-status-card">
+                        <div class="update-status-header">
+                            <div class="update-status-info">
+                                <div class="update-version-info">
+                                    <span class="update-current-version">Current Version: <span id="currentVersion">1.0.0</span></span>
+                                    <span class="update-latest-version" id="latestVersionInfo" style="display: none;">
+                                        Latest: <span id="latestVersion">1.0.1</span>
+                                    </span>
+                                </div>
+                                <div class="update-status-text" id="updateStatusText">
+                                    <span class="status-dot success"></span>
+                                    VibeTunnel is up to date
+                                </div>
+                            </div>
+                            <button class="button update-check-button" id="checkUpdates">
+                                <svg class="button-icon" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Check Now
+                            </button>
+                        </div>
+                        
+                        <!-- Update Progress (hidden by default) -->
+                        <div class="update-progress" id="updateProgress" style="display: none;">
+                            <div class="update-progress-bar">
+                                <div class="update-progress-fill" id="updateProgressFill"></div>
+                            </div>
+                            <div class="update-progress-text" id="updateProgressText">Downloading update...</div>
+                        </div>
+                        
+                        <!-- Update Actions (hidden by default) -->
+                        <div class="update-actions" id="updateActions" style="display: none;">
+                            <button class="button button-primary" id="installUpdate">Install Update</button>
+                            <button class="button secondary" id="postponeUpdate">Later</button>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <button class="button" id="checkUpdates">Check for Updates</button>
-                        <span id="updateStatus" class="status" style="display: none;"></span>
+                    
+                    <!-- Update Settings -->
+                    <div class="update-settings">
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <label for="updateChannel">Update Channel</label>
+                                <p class="setting-description">Choose which releases to receive</p>
+                            </div>
+                            <select id="updateChannel" class="setting-control">
+                                <option value="stable">Stable</option>
+                                <option value="beta">Beta</option>
+                                <option value="nightly">Nightly</option>
+                            </select>
+                        </div>
+                        
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <label for="autoCheck">Automatic Updates</label>
+                                <p class="setting-description">Check for updates automatically</p>
+                            </div>
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="autoCheck" class="toggle-input">
+                                <label for="autoCheck" class="toggle-label"></label>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-row">
+                            <div class="setting-label">
+                                <label for="autoDownload">Download Updates</label>
+                                <p class="setting-description">Download updates in the background</p>
+                            </div>
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="autoDownload" class="toggle-input">
+                                <label for="autoDownload" class="toggle-label"></label>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -916,23 +1312,52 @@
     </div>
 
     <script>
-        const { invoke } = window.__TAURI__.tauri;
-        const { open } = window.__TAURI__.shell;
-        const { appWindow } = window.__TAURI__.window;
+        // Wait for Tauri API to be available
+        window.addEventListener('DOMContentLoaded', async () => {
+            // Check if Tauri API is available
+            if (!window.__TAURI__) {
+                console.error('Tauri API not available. Running in browser mode.');
+                return;
+            }
+            
+            const { invoke } = window.__TAURI__.tauri;
+            const { open } = window.__TAURI__.shell;
+            const { appWindow } = window.__TAURI__.window;
 
-        // Tab switching
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                // Remove active class from all tabs and contents
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                
-                // Add active class to clicked tab and corresponding content
+            // Tab switching function
+        function switchToTab(tabName) {
+            // Remove active class from all tabs and contents
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            // Find and activate the requested tab
+            const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+            if (tab) {
                 tab.classList.add('active');
+                const content = document.getElementById(tabName);
+                if (content) {
+                    content.classList.add('active');
+                }
+            }
+        }
+
+        // Tab switching event handlers
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 const tabId = tab.getAttribute('data-tab');
-                document.getElementById(tabId).classList.add('active');
+                console.log('Tab clicked:', tabId);
+                switchToTab(tabId);
             });
         });
+
+            // Check URL parameters on load
+            const urlParams = new URLSearchParams(window.location.search);
+            const tabParam = urlParams.get('tab');
+            if (tabParam) {
+                switchToTab(tabParam);
+            }
 
         // Load settings on startup
         async function loadSettings() {
@@ -970,8 +1395,12 @@
                 updateNetworkInfo();
                 updateDebugTabVisibility();
                 
-                // Load permissions
-                await loadPermissions();
+                // Load permissions - wrapped in try-catch to prevent errors from blocking settings load
+                try {
+                    await loadPermissions();
+                } catch (permError) {
+                    console.warn('Failed to load permissions:', permError);
+                }
                 
                 // Load terminal list
                 await loadTerminals();
@@ -982,6 +1411,11 @@
                 // Get app version
                 const version = await invoke('get_app_version');
                 document.getElementById('appVersion').textContent = version;
+                document.getElementById('currentVersion').textContent = version;
+                
+                // Initialize update settings
+                document.getElementById('autoCheck').checked = settings.general?.auto_check_updates ?? true;
+                document.getElementById('autoDownload').checked = settings.general?.auto_download_updates ?? false;
                 
             } catch (error) {
                 console.error('Failed to load settings:', error);
@@ -1011,36 +1445,127 @@
             await saveSetting('general', 'update_channel', e.target.value);
         });
 
+        // Update UI handlers
         document.getElementById('checkUpdates').addEventListener('click', async () => {
             const button = document.getElementById('checkUpdates');
-            const status = document.getElementById('updateStatus');
+            const statusCard = document.querySelector('.update-status-card');
+            const statusText = document.getElementById('updateStatusText');
+            const latestVersionInfo = document.getElementById('latestVersionInfo');
+            const updateProgress = document.getElementById('updateProgress');
+            const updateActions = document.getElementById('updateActions');
             
+            // Reset UI
             button.disabled = true;
-            status.style.display = 'inline-flex';
-            status.className = 'status';
-            status.innerHTML = '<span class="spinner"></span> Checking for updates...';
+            statusCard.className = 'update-status-card checking';
+            statusText.innerHTML = '<span class="spinner"></span> Checking for updates...';
+            latestVersionInfo.style.display = 'none';
+            updateProgress.style.display = 'none';
+            updateActions.style.display = 'none';
             
             try {
                 const result = await invoke('check_for_updates');
-                if (result.available) {
-                    status.className = 'status warning';
-                    status.innerHTML = '<span class="status-dot warning"></span>Update available!';
-                    // Trigger update download
-                    await invoke('download_update');
+                
+                if (result && result.available) {
+                    // Update available
+                    statusCard.className = 'update-status-card available';
+                    statusText.innerHTML = '<span class="status-dot warning"></span> Update available!';
+                    
+                    // Show latest version
+                    document.getElementById('latestVersion').textContent = result.latest_version || '1.0.1';
+                    latestVersionInfo.style.display = 'inline';
+                    
+                    // Show actions
+                    updateActions.style.display = 'flex';
+                    
+                    // Auto-download if enabled
+                    if (document.getElementById('autoDownload').checked) {
+                        await startUpdateDownload();
+                    }
                 } else {
-                    status.className = 'status success';
-                    status.innerHTML = '<span class="status-dot success"></span>Up to date';
+                    // No update
+                    statusCard.className = 'update-status-card';
+                    statusText.innerHTML = '<span class="status-dot success"></span> VibeTunnel is up to date';
                 }
             } catch (error) {
-                status.className = 'status error';
-                status.innerHTML = '<span class="status-dot error"></span>Check failed';
+                statusCard.className = 'update-status-card error';
+                statusText.innerHTML = '<span class="status-dot error"></span> Failed to check for updates';
+                console.error('Update check failed:', error);
             } finally {
                 button.disabled = false;
-                setTimeout(() => {
-                    status.style.display = 'none';
-                }, 3000);
             }
         });
+        
+        // Install update handler
+        document.getElementById('installUpdate').addEventListener('click', async () => {
+            await startUpdateDownload();
+        });
+        
+        // Postpone update handler
+        document.getElementById('postponeUpdate').addEventListener('click', () => {
+            const updateActions = document.getElementById('updateActions');
+            updateActions.style.display = 'none';
+        });
+        
+        // Auto-check handler
+        document.getElementById('autoCheck').addEventListener('change', async (e) => {
+            await saveSetting('general', 'auto_check_updates', e.target.checked);
+        });
+        
+        // Auto-download handler
+        document.getElementById('autoDownload').addEventListener('change', async (e) => {
+            await saveSetting('general', 'auto_download_updates', e.target.checked);
+        });
+        
+        // Helper function to start update download
+        async function startUpdateDownload() {
+            const statusCard = document.querySelector('.update-status-card');
+            const statusText = document.getElementById('updateStatusText');
+            const updateProgress = document.getElementById('updateProgress');
+            const updateActions = document.getElementById('updateActions');
+            const progressFill = document.getElementById('updateProgressFill');
+            const progressText = document.getElementById('updateProgressText');
+            
+            // Show download progress
+            statusCard.className = 'update-status-card downloading';
+            statusText.innerHTML = '<span class="status-dot warning"></span> Downloading update...';
+            updateProgress.style.display = 'block';
+            updateActions.style.display = 'none';
+            
+            // Simulate download progress
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress > 100) progress = 100;
+                
+                progressFill.style.width = progress + '%';
+                progressText.textContent = `Downloading update... ${Math.round(progress)}%`;
+                
+                if (progress >= 100) {
+                    clearInterval(interval);
+                    
+                    // Download complete
+                    progressText.textContent = 'Download complete! Ready to install.';
+                    statusText.innerHTML = '<span class="status-dot success"></span> Update ready to install';
+                    
+                    // Show install button
+                    updateActions.style.display = 'flex';
+                    document.getElementById('installUpdate').textContent = 'Restart and Install';
+                    document.getElementById('installUpdate').onclick = async () => {
+                        await invoke('install_update');
+                    };
+                }
+            }, 500);
+            
+            try {
+                await invoke('download_update');
+            } catch (error) {
+                clearInterval(interval);
+                statusCard.className = 'update-status-card error';
+                statusText.innerHTML = '<span class="status-dot error"></span> Download failed';
+                updateProgress.style.display = 'none';
+                console.error('Update download failed:', error);
+            }
+        }
 
         // Dashboard tab handlers
         document.getElementById('enablePassword').addEventListener('change', async (e) => {
@@ -1204,11 +1729,29 @@
 
         async function loadPermissions() {
             try {
-                const permissions = await invoke('check_all_permissions');
+                const permissions = await invoke('get_all_permissions');
                 const container = document.getElementById('permissionsList');
+                if (!container) {
+                    console.warn('Permissions container not found');
+                    return;
+                }
                 container.innerHTML = '';
                 
-                for (const [name, status] of Object.entries(permissions)) {
+                // Handle empty or invalid permissions response
+                if (!permissions || (Array.isArray(permissions) && permissions.length === 0)) {
+                    container.innerHTML = '<p class="help-text">No permissions to display</p>';
+                    return;
+                }
+                
+                // Convert array to object format if needed
+                const permissionsObj = Array.isArray(permissions) 
+                    ? permissions.reduce((acc, perm) => {
+                        acc[perm.permission_type] = perm.status;
+                        return acc;
+                    }, {})
+                    : permissions;
+                
+                for (const [name, status] of Object.entries(permissionsObj)) {
                     const item = document.createElement('div');
                     item.className = 'permission-item';
                     
@@ -1382,6 +1925,8 @@
                 updateServerConsole();
             }
         }, 1000);
+        
+        }); // End of DOMContentLoaded
     </script>
 </body>
 </html>

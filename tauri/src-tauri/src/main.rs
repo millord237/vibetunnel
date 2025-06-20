@@ -19,6 +19,7 @@ mod cli_installer;
 mod commands;
 mod debug_features;
 mod fs_api;
+mod keychain;
 mod network_utils;
 mod ngrok;
 mod notification_manager;
@@ -43,17 +44,27 @@ use server::HttpServer;
 use state::AppState;
 
 #[tauri::command]
-fn open_settings_window(app: AppHandle) -> Result<(), String> {
+fn open_settings_window(app: AppHandle, tab: Option<String>) -> Result<(), String> {
+    // Build URL with optional tab parameter
+    let url = if let Some(tab_name) = tab {
+        format!("settings.html?tab={}", tab_name)
+    } else {
+        "settings.html".to_string()
+    };
+    
     // Check if settings window already exists
     if let Some(window) = app.get_webview_window("settings") {
+        // Navigate to the URL with the tab parameter if window exists
+        window.eval(&format!("window.location.href = '{}'", url))
+            .map_err(|e| e.to_string())?;
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
     } else {
         // Create new settings window
-        tauri::WebviewWindowBuilder::new(
+        let window = tauri::WebviewWindowBuilder::new(
             &app,
             "settings",
-            tauri::WebviewUrl::App("settings.html".into()),
+            tauri::WebviewUrl::App(url.into()),
         )
         .title("VibeTunnel Settings")
         .inner_size(800.0, 600.0)
@@ -62,6 +73,14 @@ fn open_settings_window(app: AppHandle) -> Result<(), String> {
         .center()
         .build()
         .map_err(|e| e.to_string())?;
+
+        // Handle close event to destroy the window
+        let window_clone = window.clone();
+        window.on_window_event(move |event| {
+            if let WindowEvent::CloseRequested { .. } = event {
+                let _ = window_clone.close();
+            }
+        });
     }
     Ok(())
 }
@@ -275,33 +294,52 @@ fn main() {
             terminal_spawn_service::spawn_terminal_for_session,
             terminal_spawn_service::spawn_terminal_with_command,
             terminal_spawn_service::spawn_custom_terminal,
+            // Keychain Commands
+            keychain_set_password,
+            keychain_get_password,
+            keychain_delete_password,
+            keychain_set_dashboard_password,
+            keychain_get_dashboard_password,
+            keychain_delete_dashboard_password,
+            keychain_set_ngrok_auth_token,
+            keychain_get_ngrok_auth_token,
+            keychain_delete_ngrok_auth_token,
+            keychain_list_keys,
+            // Welcome flow commands
+            request_all_permissions,
+            test_terminal,
         ])
         .setup(|app| {
             // Set app handle in managers
-            let state = app.state::<AppState>();
-            let notification_manager = state.notification_manager.clone();
-            let welcome_manager = state.welcome_manager.clone();
-            let permissions_manager = state.permissions_manager.clone();
-            let update_manager = state.update_manager.clone();
+            let state_clone = app.state::<AppState>().inner().clone();
             let app_handle = app.handle().clone();
             let app_handle2 = app.handle().clone();
             let app_handle3 = app.handle().clone();
             let app_handle4 = app.handle().clone();
             let app_handle_for_move = app.handle().clone();
+            
             tauri::async_runtime::spawn(async move {
-                notification_manager.set_app_handle(app_handle).await;
-                welcome_manager.set_app_handle(app_handle2).await;
-                permissions_manager.set_app_handle(app_handle3).await;
-                update_manager.set_app_handle(app_handle4).await;
+                let state = state_clone;
+                state.notification_manager.set_app_handle(app_handle).await;
+                state.welcome_manager.set_app_handle(app_handle2).await;
+                state.permissions_manager.set_app_handle(app_handle3).await;
+                state.update_manager.set_app_handle(app_handle4).await;
+                
+                // Start background workers now that we have a runtime
+                state.terminal_spawn_service.clone().start_worker().await;
+                state.auth_cache_manager.start_cleanup_task().await;
+                
+                // Start session monitoring
+                state.session_monitor.start_monitoring().await;
 
                 // Load welcome state and check if should show welcome
-                let _ = welcome_manager.load_state().await;
-                if welcome_manager.should_show_welcome().await {
-                    let _ = welcome_manager.show_welcome_window().await;
+                let _ = state.welcome_manager.load_state().await;
+                if state.welcome_manager.should_show_welcome().await {
+                    let _ = state.welcome_manager.show_welcome_window().await;
                 }
 
                 // Check permissions on startup
-                let _ = permissions_manager.check_all_permissions().await;
+                let _ = state.permissions_manager.check_all_permissions().await;
 
                 // Check if app should be moved to Applications folder (macOS only)
                 #[cfg(target_os = "macos")]
@@ -315,20 +353,34 @@ fn main() {
                 }
 
                 // Load updater settings and start auto-check
-                let _ = update_manager.load_settings().await;
-                update_manager.clone().start_auto_check().await;
+                let _ = state.update_manager.load_settings().await;
+                state.update_manager.clone().start_auto_check().await;
             });
 
-            // Create system tray icon using menu-bar-icon.png with template mode
-            let icon_path = app
-                .path()
-                .resource_dir()
-                .unwrap()
-                .join("icons/menu-bar-icon.png");
-            let tray_icon = if let Ok(icon_data) = std::fs::read(&icon_path) {
-                tauri::image::Image::from_bytes(&icon_data).ok()
+            // Create system tray icon using tray-icon.png for macOS (menu-bar-icon.png is for Windows/Linux)
+            let tray_icon = if let Ok(resource_dir) = app.path().resource_dir() {
+                // On macOS, use tray-icon.png which has the proper design for the menu bar
+                let icon_name = if cfg!(target_os = "macos") {
+                    "tray-icon.png"
+                } else {
+                    "menu-bar-icon.png"
+                };
+                
+                let icon_path = resource_dir.join(icon_name);
+                if let Ok(icon_data) = std::fs::read(&icon_path) {
+                    tauri::image::Image::from_bytes(&icon_data).ok()
+                } else {
+                    // Try alternative path
+                    let icon_path2 = resource_dir.join("icons").join(icon_name);
+                    if let Ok(icon_data) = std::fs::read(&icon_path2) {
+                        tauri::image::Image::from_bytes(&icon_data).ok()
+                    } else {
+                        // Fallback to default icon
+                        app.default_window_icon().cloned()
+                    }
+                }
             } else {
-                // Fallback to default icon if menu-bar-icon.png not found
+                // Fallback to default icon if resource dir not found
                 app.default_window_icon().cloned()
             };
 
@@ -368,53 +420,13 @@ fn main() {
             // Load settings to determine initial dock icon visibility
             let settings = settings::Settings::load().unwrap_or_default();
 
-            // Check if launched at startup (auto-launch)
-            let is_auto_launched =
-                std::env::args().any(|arg| arg == "--auto-launch" || arg == "--minimized");
-
-            let window = app.get_webview_window("main").unwrap();
-
-            // Hide window if auto-launched
-            if is_auto_launched {
-                window.hide()?;
-
-                // On macOS, apply dock icon visibility based on settings
-                #[cfg(target_os = "macos")]
-                {
-                    if !settings.general.show_dock_icon {
-                        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                    }
-                }
-            } else {
-                // If not auto-launched but dock icon should be hidden, hide it
-                #[cfg(target_os = "macos")]
-                {
-                    if !settings.general.show_dock_icon {
-                        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                    }
+            // Set initial dock icon visibility on macOS
+            #[cfg(target_os = "macos")]
+            {
+                if !settings.general.show_dock_icon {
+                    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                 }
             }
-
-            // Handle window close event to hide instead of quit
-            let window_clone = window.clone();
-            window.on_window_event(move |event| {
-                if let WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = window_clone.hide();
-
-                    // Hide dock icon on macOS when window is hidden (only if settings say so)
-                    #[cfg(target_os = "macos")]
-                    {
-                        if let Ok(settings) = settings::Settings::load() {
-                            if !settings.general.show_dock_icon {
-                                let _ = window_clone
-                                    .app_handle()
-                                    .set_activation_policy(tauri::ActivationPolicy::Accessory);
-                            }
-                        }
-                    }
-                }
-            });
 
             // Auto-start server with monitoring
             let app_handle = app.handle().clone();
@@ -462,7 +474,7 @@ fn handle_tray_menu_event(app: &AppHandle, event_id: &str) {
             let _ = open::that("https://vibetunnel.sh");
         }
         "report_issue" => {
-            let _ = open::that("https://github.com/vibetunnel/vibetunnel/issues");
+            let _ = open::that("https://github.com/amantus-ai/vibetunnel/issues");
         }
         "check_updates" => {
             // TODO: Implement update check
@@ -474,7 +486,7 @@ fn handle_tray_menu_event(app: &AppHandle, event_id: &str) {
         }
         "settings" => {
             // Open native settings window
-            let _ = open_settings_window(app.clone());
+            let _ = open_settings_window(app.clone(), None);
         }
         "quit" => {
             quit_app(app.clone());
@@ -554,16 +566,53 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
 
 #[tauri::command]
 fn show_main_window(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("main") {
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
+    let window = if let Some(window) = app.get_webview_window("main") {
+        window
+    } else {
+        // Create main window if it doesn't exist
+        tauri::WebviewWindowBuilder::new(
+            &app,
+            "main",
+            tauri::WebviewUrl::App("index.html".into()),
+        )
+        .title("VibeTunnel")
+        .inner_size(1200.0, 800.0)
+        .center()
+        .resizable(true)
+        .decorations(true)
+        .build()
+        .map_err(|e| e.to_string())?
+    };
 
-        // Show dock icon on macOS when window is shown
-        #[cfg(target_os = "macos")]
-        {
-            let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
-        }
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+
+    // Show dock icon on macOS when window is shown
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
     }
+
+    // Handle window close event to hide instead of quit
+    let window_clone = window.clone();
+    let app_clone = app.clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = window_clone.hide();
+
+            // Hide dock icon on macOS when window is hidden (only if settings say so)
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(settings) = settings::Settings::load() {
+                    if !settings.general.show_dock_icon {
+                        let _ = app_clone.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    }
+                }
+            }
+        }
+    });
+
     Ok(())
 }
 

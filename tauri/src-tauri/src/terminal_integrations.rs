@@ -126,28 +126,13 @@ pub struct TerminalIntegrationsManager {
 impl TerminalIntegrationsManager {
     /// Create a new terminal integrations manager
     pub fn new() -> Self {
-        let manager = Self {
-            configs: Arc::new(RwLock::new(HashMap::new())),
+        Self {
+            configs: Arc::new(RwLock::new(Self::initialize_default_configs())),
             detected_terminals: Arc::new(RwLock::new(HashMap::new())),
             default_terminal: Arc::new(RwLock::new(TerminalEmulator::SystemDefault)),
-            url_schemes: Arc::new(RwLock::new(HashMap::new())),
+            url_schemes: Arc::new(RwLock::new(Self::initialize_url_schemes())),
             notification_manager: None,
-        };
-
-        // Initialize default configurations
-        tokio::spawn({
-            let configs = manager.configs.clone();
-            let url_schemes = manager.url_schemes.clone();
-            async move {
-                let default_configs = Self::initialize_default_configs();
-                *configs.write().await = default_configs;
-
-                let default_schemes = Self::initialize_url_schemes();
-                *url_schemes.write().await = default_schemes;
-            }
-        });
-
-        manager
+        }
     }
 
     /// Set the notification manager

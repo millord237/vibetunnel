@@ -68,22 +68,11 @@ pub struct WelcomeManager {
 impl WelcomeManager {
     /// Create a new welcome manager
     pub fn new() -> Self {
-        let manager = Self {
+        Self {
             state: Arc::new(RwLock::new(WelcomeState::default())),
-            tutorials: Arc::new(RwLock::new(Vec::new())),
+            tutorials: Arc::new(RwLock::new(Self::create_default_tutorials())),
             app_handle: Arc::new(RwLock::new(None)),
-        };
-
-        // Initialize default tutorials
-        tokio::spawn({
-            let tutorials = manager.tutorials.clone();
-            async move {
-                let default_tutorials = Self::create_default_tutorials();
-                *tutorials.write().await = default_tutorials;
-            }
-        });
-
-        manager
+        }
     }
 
     /// Set the app handle

@@ -35,10 +35,11 @@ pub struct CreateTerminalOptions {
 pub async fn create_terminal(
     options: CreateTerminalOptions,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Terminal, String> {
     let terminal_manager = &state.terminal_manager;
 
-    terminal_manager
+    let result = terminal_manager
         .create_session(
             options.name.unwrap_or_else(|| "Terminal".to_string()),
             options.rows.unwrap_or(24),
@@ -47,7 +48,13 @@ pub async fn create_terminal(
             options.env,
             options.shell,
         )
-        .await
+        .await?;
+    
+    // Update menu bar session count
+    let session_count = terminal_manager.list_sessions().await.len();
+    crate::tray_menu::TrayMenuManager::update_session_count(&app, session_count).await;
+    
+    Ok(result)
 }
 
 #[tauri::command]
@@ -57,9 +64,15 @@ pub async fn list_terminals(state: State<'_, AppState>) -> Result<Vec<Terminal>,
 }
 
 #[tauri::command]
-pub async fn close_terminal(id: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn close_terminal(id: String, state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
     let terminal_manager = &state.terminal_manager;
-    terminal_manager.close_session(&id).await
+    terminal_manager.close_session(&id).await?;
+    
+    // Update menu bar session count
+    let session_count = terminal_manager.list_sessions().await.len();
+    crate::tray_menu::TrayMenuManager::update_session_count(&app, session_count).await;
+    
+    Ok(())
 }
 
 #[tauri::command]
@@ -80,17 +93,31 @@ pub async fn write_to_terminal(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let terminal_manager = &state.terminal_manager;
-    terminal_manager.write_to_session(&id, &data).await
+    let result = terminal_manager.write_to_session(&id, &data).await;
+    
+    // Notify session monitor of activity
+    if result.is_ok() {
+        state.session_monitor.notify_activity(&id).await;
+    }
+    
+    result
 }
 
 #[tauri::command]
 pub async fn read_from_terminal(id: String, state: State<'_, AppState>) -> Result<Vec<u8>, String> {
     let terminal_manager = &state.terminal_manager;
-    terminal_manager.read_from_session(&id).await
+    let result = terminal_manager.read_from_session(&id).await;
+    
+    // Notify session monitor of activity
+    if result.is_ok() {
+        state.session_monitor.notify_activity(&id).await;
+    }
+    
+    result
 }
 
 #[tauri::command]
-pub async fn start_server(state: State<'_, AppState>) -> Result<ServerStatus, String> {
+pub async fn start_server(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<ServerStatus, String> {
     let mut server = state.http_server.write().await;
 
     if let Some(http_server) = server.as_ref() {
@@ -171,6 +198,9 @@ pub async fn start_server(state: State<'_, AppState>) -> Result<ServerStatus, St
 
     *server = Some(http_server);
 
+    // Update menu bar server status
+    crate::tray_menu::TrayMenuManager::update_server_status(&app, port, true).await;
+
     Ok(ServerStatus {
         running: true,
         port,
@@ -179,7 +209,7 @@ pub async fn start_server(state: State<'_, AppState>) -> Result<ServerStatus, St
 }
 
 #[tauri::command]
-pub async fn stop_server(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn stop_server(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
     let mut server = state.http_server.write().await;
 
     if let Some(mut http_server) = server.take() {
@@ -188,6 +218,9 @@ pub async fn stop_server(state: State<'_, AppState>) -> Result<(), String> {
 
     // Also stop ngrok tunnel if active
     let _ = state.ngrok_manager.stop_tunnel().await;
+
+    // Update menu bar server status
+    crate::tray_menu::TrayMenuManager::update_server_status(&app, 4020, false).await;
 
     Ok(())
 }
@@ -2166,4 +2199,111 @@ pub async fn get_local_ip() -> Result<String, String> {
 #[tauri::command]
 pub async fn detect_terminals() -> Result<crate::terminal_detector::DetectedTerminals, String> {
     crate::terminal_detector::detect_terminals()
+}
+
+// Keychain commands
+#[tauri::command]
+pub async fn keychain_set_password(key: String, password: String) -> Result<(), String> {
+    crate::keychain::KeychainManager::set_password(&key, &password)
+        .map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub async fn keychain_get_password(key: String) -> Result<Option<String>, String> {
+    crate::keychain::KeychainManager::get_password(&key)
+        .map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub async fn keychain_delete_password(key: String) -> Result<(), String> {
+    crate::keychain::KeychainManager::delete_password(&key)
+        .map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub async fn keychain_set_dashboard_password(password: String) -> Result<(), String> {
+    crate::keychain::KeychainManager::set_dashboard_password(&password)
+        .map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub async fn keychain_get_dashboard_password() -> Result<Option<String>, String> {
+    crate::keychain::KeychainManager::get_dashboard_password()
+        .map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub async fn keychain_delete_dashboard_password() -> Result<(), String> {
+    crate::keychain::KeychainManager::delete_dashboard_password()
+        .map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub async fn keychain_set_ngrok_auth_token(token: String) -> Result<(), String> {
+    crate::keychain::KeychainManager::set_ngrok_auth_token(&token)
+        .map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub async fn keychain_get_ngrok_auth_token() -> Result<Option<String>, String> {
+    crate::keychain::KeychainManager::get_ngrok_auth_token()
+        .map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub async fn keychain_delete_ngrok_auth_token() -> Result<(), String> {
+    crate::keychain::KeychainManager::delete_ngrok_auth_token()
+        .map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub async fn keychain_list_keys() -> Result<Vec<String>, String> {
+    Ok(crate::keychain::KeychainManager::list_stored_keys())
+}
+
+#[tauri::command]
+pub async fn request_all_permissions(state: State<'_, AppState>) -> Result<Vec<crate::permissions::PermissionRequestResult>, String> {
+    let permissions_manager = &state.permissions_manager;
+    let mut results = Vec::new();
+    
+    // Get all permissions that need to be requested
+    let all_permissions = permissions_manager.get_all_permissions().await;
+    
+    for permission_info in all_permissions {
+        // Only request permissions that are not already granted
+        if permission_info.status != crate::permissions::PermissionStatus::Granted 
+            && permission_info.status != crate::permissions::PermissionStatus::NotApplicable {
+            match permissions_manager.request_permission(permission_info.permission_type).await {
+                Ok(result) => results.push(result),
+                Err(e) => {
+                    results.push(crate::permissions::PermissionRequestResult {
+                        permission_type: permission_info.permission_type,
+                        status: crate::permissions::PermissionStatus::Denied,
+                        message: Some(e),
+                        requires_restart: false,
+                        requires_system_settings: false,
+                    });
+                }
+            }
+        }
+    }
+    
+    Ok(results)
+}
+
+#[tauri::command]
+pub async fn test_terminal(terminal: String, state: State<'_, AppState>) -> Result<(), String> {
+    // Use the terminal spawn service to test launching a terminal
+    state.terminal_spawn_service
+        .spawn_terminal(crate::terminal_spawn_service::TerminalSpawnRequest {
+            session_id: "test".to_string(),
+            terminal_type: Some(terminal),
+            command: None,
+            working_directory: None,
+            environment: None,
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    Ok(())
 }
