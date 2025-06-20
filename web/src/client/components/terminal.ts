@@ -775,11 +775,6 @@ export class Terminal extends LitElement {
         }
       }
 
-      // Override background for cursor
-      if (isCursor) {
-        style += `background-color: #23d18b;`;
-      }
-
       // Get text attributes/flags
       const isBold = cell.isBold();
       const isItalic = cell.isItalic();
@@ -788,12 +783,14 @@ export class Terminal extends LitElement {
       const isInverse = cell.isInverse();
       const isInvisible = cell.isInvisible();
       const isStrikethrough = cell.isStrikethrough();
+      const isOverline = cell.isOverline();
 
       if (isBold) classes += ' bold';
       if (isItalic) classes += ' italic';
       if (isUnderline) classes += ' underline';
       if (isDim) classes += ' dim';
       if (isStrikethrough) classes += ' strikethrough';
+      if (isOverline) classes += ' overline';
 
       // Handle inverse colors
       if (isInverse) {
@@ -815,6 +812,11 @@ export class Terminal extends LitElement {
         // Set swapped colors
         style += `color: ${actualBg};`;
         style += `background-color: ${actualFg};`;
+      }
+
+      // Apply cursor styling after inverse to ensure it takes precedence
+      if (isCursor) {
+        style += `background-color: #23d18b;`;
       }
 
       // Handle invisible text
