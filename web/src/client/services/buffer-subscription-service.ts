@@ -144,6 +144,11 @@ export class BufferSubscriptionService {
       const message = JSON.parse(data);
 
       switch (message.type) {
+        case 'connected':
+          // Server confirmed connection, version info available in message.version
+          console.log('[BufferSubscriptionService] Connected to server, version:', message.version);
+          break;
+
         case 'ping':
           this.sendMessage({ type: 'pong' });
           break;
