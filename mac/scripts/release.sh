@@ -327,9 +327,9 @@ else
     export IS_PRERELEASE_BUILD=NO
 fi
 
-# Build universal binary
+# Build ARM64 binary
 echo ""
-echo "🔨 Building universal binary (arm64 + x86_64)..."
+echo "🔨 Building ARM64 binary..."
 "$SCRIPT_DIR/build.sh" --configuration Release
 
 # Verify build
@@ -346,14 +346,15 @@ if [[ "$BUILT_VERSION" != "$BUILD_NUMBER" ]]; then
     exit 1
 fi
 
-# Verify it's a universal binary
+# Verify it's an ARM64 binary
 APP_BINARY="$APP_PATH/Contents/MacOS/VibeTunnel"
 if [[ -f "$APP_BINARY" ]]; then
     ARCH_INFO=$(lipo -info "$APP_BINARY" 2>/dev/null || echo "")
-    if [[ "$ARCH_INFO" == *"x86_64"* ]] && [[ "$ARCH_INFO" == *"arm64"* ]]; then
-        echo "✅ Universal binary created (arm64 + x86_64)"
+    if [[ "$ARCH_INFO" == *"arm64"* ]]; then
+        echo "✅ ARM64 binary created"
     else
-        echo -e "${YELLOW}⚠️  Warning: Binary may not be universal: $ARCH_INFO${NC}"
+        echo -e "${RED}❌ Error: Binary is not ARM64: $ARCH_INFO${NC}"
+        exit 1
     fi
 fi
 

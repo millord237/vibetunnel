@@ -22,13 +22,13 @@ MAC_DIR="$SCRIPT_DIR/.."
 WEB_DIR="$PROJECT_ROOT/web"
 PREBUILTS_DIR="$MAC_DIR/Resources/BunPrebuilts"
 
-# Get current architecture
+# VibeTunnel only supports ARM64
 CURRENT_ARCH=$(uname -m)
-if [ "$CURRENT_ARCH" = "x86_64" ]; then
-    ARCH_DIR="x86_64"
-else
-    ARCH_DIR="arm64"
+if [ "$CURRENT_ARCH" != "arm64" ]; then
+    echo -e "${RED}Error: VibeTunnel requires Apple Silicon (ARM64)${NC}"
+    exit 1
 fi
+ARCH_DIR="arm64"
 
 echo -e "${BLUE}Setting up Bun prebuilt binaries...${NC}"
 echo "Current architecture: $CURRENT_ARCH"
@@ -72,7 +72,7 @@ build_current_arch() {
 check_status() {
     echo -e "\n${BLUE}Prebuilt binaries status:${NC}"
     
-    for arch in arm64 x86_64; do
+    for arch in arm64; do
         echo -n "  $arch: "
         if [ -f "$PREBUILTS_DIR/$arch/vibetunnel" ] && \
            [ -f "$PREBUILTS_DIR/$arch/pty.node" ] && \
@@ -100,8 +100,8 @@ case "${1:-build}" in
         ;;
     clean)
         echo -e "${YELLOW}Cleaning prebuilt binaries...${NC}"
-        rm -rf "$PREBUILTS_DIR"/{arm64,x86_64}
-        mkdir -p "$PREBUILTS_DIR"/{arm64,x86_64}
+        rm -rf "$PREBUILTS_DIR"/arm64
+        mkdir -p "$PREBUILTS_DIR"/arm64
         echo -e "${GREEN}✓ Cleaned${NC}"
         ;;
     *)
@@ -113,5 +113,4 @@ case "${1:-build}" in
         ;;
 esac
 
-echo -e "\n${BLUE}Note:${NC} To support both architectures, run this script on both"
-echo "      an Intel Mac and an Apple Silicon Mac, then commit the results."
+echo -e "\n${BLUE}Note:${NC} VibeTunnel requires Apple Silicon (M1/M2/M3) Macs."

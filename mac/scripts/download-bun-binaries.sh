@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Download pre-built Bun binaries for both architectures
-# This allows building universal support without needing both Mac types
+# Download pre-built Bun binaries for ARM64
+# VibeTunnel only supports Apple Silicon Macs
 #
 
 set -euo pipefail
@@ -21,11 +21,11 @@ PREBUILTS_DIR="$MAC_DIR/Resources/BunPrebuilts"
 # Bun version - update this as needed
 BUN_VERSION="1.1.18"
 
-echo -e "${BLUE}Downloading Bun binaries for both architectures...${NC}"
+echo -e "${BLUE}Downloading Bun binaries for ARM64...${NC}"
 echo "Bun version: $BUN_VERSION"
 
-# Create directories
-mkdir -p "$PREBUILTS_DIR"/{arm64,x86_64}
+# Create directory
+mkdir -p "$PREBUILTS_DIR"/arm64
 
 # Function to download and extract Bun
 download_bun() {
@@ -74,13 +74,11 @@ download_bun() {
     return 0
 }
 
-# Download both architectures
+# Download ARM64 only
 download_bun "arm64" "aarch64" || echo -e "${YELLOW}Warning: Failed to download arm64 Bun${NC}"
-download_bun "x86_64" "x64" || echo -e "${YELLOW}Warning: Failed to download x86_64 Bun${NC}"
 
-echo -e "\n${BLUE}Note: You still need the native modules (pty.node and spawn-helper) for each architecture.${NC}"
-echo "These must be built on the respective architecture."
+echo -e "\n${BLUE}Note: You still need the native modules (pty.node and spawn-helper).${NC}"
+echo "These must be built on Apple Silicon."
 echo ""
 echo "Current status:"
 ls -lh "$PREBUILTS_DIR"/arm64/vibetunnel 2>/dev/null && echo "  ✓ arm64 Bun binary downloaded" || echo "  ✗ arm64 Bun binary missing"
-ls -lh "$PREBUILTS_DIR"/x86_64/vibetunnel 2>/dev/null && echo "  ✓ x86_64 Bun binary downloaded" || echo "  ✗ x86_64 Bun binary missing"

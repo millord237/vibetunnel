@@ -66,16 +66,107 @@ cp -R "$APP_PATH" "$DMG_TEMP/"
 # Create symbolic link to Applications folder
 ln -s /Applications "$DMG_TEMP/Applications"
 
-# Create DMG
+# Create initial DMG as read-write
+DMG_RW_PATH="${DMG_PATH%.dmg}-rw.dmg"
 hdiutil create \
     -volname "$DMG_VOLUME_NAME" \
     -srcfolder "$DMG_TEMP" \
     -ov \
-    -format UDZO \
-    "$DMG_PATH"
+    -format UDRW \
+    -size 200m \
+    "$DMG_RW_PATH"
+
+# Clean up temp folder
+rm -rf "$DMG_TEMP"
+
+echo "Applying custom styling to DMG..."
+
+# Mount the DMG
+MOUNT_POINT="/Volumes/$DMG_VOLUME_NAME"
+hdiutil attach "$DMG_RW_PATH" -mountpoint "$MOUNT_POINT" -nobrowse
+
+
+# Copy background image
+mkdir -p "$MOUNT_POINT/.background"
+cp "$PROJECT_DIR/assets/dmg-background-small.png" "$MOUNT_POINT/.background/background.png"
+
+# Set custom volume icon
+if [[ -f "$PROJECT_DIR/assets/appicon-512.png" ]]; then
+    # Convert PNG to ICNS for volume icon
+    sips -s format icns "$PROJECT_DIR/assets/appicon-512.png" --out "$MOUNT_POINT/.VolumeIcon.icns" >/dev/null 2>&1
+    SetFile -a C "$MOUNT_POINT" 2>/dev/null || true
+fi
+
+# Apply window styling with AppleScript
+osascript <<EOF
+tell application "Finder"
+    tell disk "$DMG_VOLUME_NAME"
+        open
+        
+        -- Get the window
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        
+        -- Set window bounds (centered, 500x320)
+        set the bounds of container window to {400, 100, 900, 420}
+        
+        -- Configure icon view options
+        set viewOptions to the icon view options of container window
+        set arrangement of viewOptions to not arranged
+        set icon size of viewOptions to 128
+        
+        -- Set background
+        set background picture of viewOptions to file ".background:background.png"
+        
+        -- Set text color to white
+        set text size of viewOptions to 12
+        set label position of viewOptions to bottom
+        
+        -- Position items
+        set position of item "VibeTunnel.app" of container window to {125, 160}
+        set position of item "Applications" of container window to {375, 160}
+        
+        -- Set extended attributes for better appearance
+        set shows item info of viewOptions to false
+        set shows icon preview of viewOptions to true
+        
+        
+        -- Update without registering applications
+        update without registering applications
+        delay 2
+        
+        -- Close and reopen to ensure settings stick
+        close
+        open
+        delay 1
+    end tell
+end tell
+EOF
+
+# Give Finder time to update
+sleep 3
+
+# Force close Finder window to ensure settings are saved
+osascript -e 'tell application "Finder" to close every window'
+
+
+# Unmount with retry
+echo "Unmounting DMG..."
+for i in {1..5}; do
+    if hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null; then
+        break
+    fi
+    echo "  Retry $i/5..."
+    sleep 2
+done
+
+# Convert to compressed read-only DMG
+echo "Converting to final DMG format..."
+hdiutil convert "$DMG_RW_PATH" -format ULMO -o "$DMG_PATH" -ov
 
 # Clean up
-rm -rf "$DMG_TEMP"
+rm -f "$DMG_RW_PATH"
 
 # === EXTENSIVE ENVIRONMENT DEBUGGING ===
 echo "=== Environment Debug Information ==="
