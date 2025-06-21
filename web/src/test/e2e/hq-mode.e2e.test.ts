@@ -49,11 +49,11 @@ describe('HQ Mode E2E Tests', () => {
     args: string[],
     env: Record<string, string>
   ): Promise<{ process: ChildProcess; port: number }> {
-    const serverPath = path.join(__dirname, '..', '..', 'server.ts');
-    console.log(`[DEBUG] Starting server at: ${serverPath}`);
+    const cliPath = path.join(__dirname, '..', '..', 'cli.ts');
+    console.log(`[DEBUG] Starting server at: ${cliPath}`);
     console.log(`[DEBUG] Args: ${args.join(' ')}`);
 
-    const serverProcess = spawn('tsx', [serverPath, ...args], {
+    const serverProcess = spawn('tsx', [cliPath, ...args], {
       env: { ...process.env, ...env, NODE_ENV: 'production', FORCE_COLOR: '0' },
       stdio: 'pipe',
       detached: false, // Ensure child dies with parent

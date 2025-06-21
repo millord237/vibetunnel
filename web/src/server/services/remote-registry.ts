@@ -1,4 +1,4 @@
-import { isShuttingDown } from './shutdown-state.js';
+import { isShuttingDown } from '../server.js';
 
 export interface RemoteServer {
   id: string;

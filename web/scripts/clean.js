@@ -8,8 +8,9 @@ function removeRecursive(dirPath) {
   }
 }
 
-// Clean public and dist directories
+// Clean build output directories
 removeRecursive('public');
 removeRecursive('dist');
+removeRecursive('native');
 
 console.log('Clean completed successfully');

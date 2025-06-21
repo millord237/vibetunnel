@@ -156,7 +156,7 @@ jobs:
       
     - name: Check TypeScript types
       working-directory: web
-      run: npx tsc --noEmit
+      run: npm run typecheck
 
   audit:
     name: Security Audit

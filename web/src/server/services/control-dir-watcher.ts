@@ -3,7 +3,7 @@ import * as path from 'path';
 import chalk from 'chalk';
 import { RemoteRegistry } from './remote-registry.js';
 import { HQClient } from './hq-client.js';
-import { isShuttingDown } from './shutdown-state.js';
+import { isShuttingDown } from '../server.js';
 import { PtyManager } from '../pty/index.js';
 
 interface ControlDirWatcherConfig {

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { RemoteRegistry } from '../services/remote-registry.js';
 import chalk from 'chalk';
-import { isShuttingDown } from '../services/shutdown-state.js';
+import { isShuttingDown } from '../server.js';
 
 interface RemoteRoutesConfig {
   remoteRegistry: RemoteRegistry | null;
