@@ -67,6 +67,10 @@ fi
 # Create destination directory
 mkdir -p "${DEST_DIR}"
 
+# Clean destination directory to avoid stale files
+echo "Cleaning destination directory..."
+rm -rf "${DEST_DIR}/"*
+
 # Copy built files to Resources
 echo "Copying web files to app bundle..."
 if [ -d "${PUBLIC_DIR}" ]; then
