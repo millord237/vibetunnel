@@ -6,6 +6,7 @@ import { RemoteRegistry } from '../services/remote-registry.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as net from 'net';
 
 interface SessionRoutesConfig {
   ptyManager: PtyManager;
@@ -121,10 +122,45 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
   // Create new session (local or on remote)
   router.post('/sessions', async (req, res) => {
-    const { command, workingDir, name, remoteId } = req.body;
+    const { command, workingDir, name, remoteId, spawn_terminal } = req.body;
 
     if (!command || !Array.isArray(command) || command.length === 0) {
       return res.status(400).json({ error: 'Command array is required' });
+    }
+
+    // If spawn_terminal is true, use the spawn-terminal logic
+    if (spawn_terminal) {
+      try {
+        // Generate session ID
+        const sessionId = generateSessionId();
+        const sessionName = name || `session_${Date.now()}`;
+
+        // Request Mac app to spawn terminal
+        const spawnResult = await requestTerminalSpawn({
+          sessionId,
+          sessionName,
+          command,
+          workingDir: resolvePath(workingDir, process.cwd()),
+        });
+
+        if (!spawnResult.success) {
+          throw new Error(spawnResult.error || 'Failed to spawn terminal');
+        }
+
+        // Wait a bit for the session to be created
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Return the session ID - client will poll for the session to appear
+        res.json({ sessionId, message: 'Terminal spawn requested' });
+        return;
+      } catch (error) {
+        console.error('Error spawning terminal:', error);
+        res.status(500).json({
+          error: 'Failed to spawn terminal',
+          details: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return;
+      }
     }
 
     try {
@@ -772,4 +808,86 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
   });
 
   return router;
+}
+
+// Generate a unique session ID
+function generateSessionId(): string {
+  // Generate UUID v4
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) {
+    bytes[i] = Math.floor(Math.random() * 256);
+  }
+
+  // Set version (4) and variant bits
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  // Convert to hex string with dashes
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join('-');
+}
+
+// Request terminal spawn from Mac app
+async function requestTerminalSpawn(params: {
+  sessionId: string;
+  sessionName: string;
+  command: string[];
+  workingDir: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const socketPath = '/tmp/vibetunnel-terminal.sock';
+
+  // Check if socket exists
+  if (!fs.existsSync(socketPath)) {
+    return {
+      success: false,
+      error: 'Terminal spawn service not available. Is the Mac app running?',
+    };
+  }
+
+  const spawnRequest = {
+    workingDir: params.workingDir,
+    sessionId: params.sessionId,
+    command: params.command.join(' '),
+    terminal: null, // Let Mac app use default terminal
+  };
+
+  return new Promise((resolve) => {
+    const client = net.createConnection(socketPath, () => {
+      console.log(`Connected to terminal spawn service for session ${params.sessionId}`);
+      client.write(JSON.stringify(spawnRequest));
+    });
+
+    client.on('data', (data) => {
+      try {
+        const response = JSON.parse(data.toString());
+        console.log(`Terminal spawn response:`, response);
+        resolve({ success: response.success, error: response.error });
+      } catch (error) {
+        console.error('Failed to parse terminal spawn response:', error);
+        resolve({ success: false, error: 'Invalid response from terminal spawn service' });
+      }
+      client.end();
+    });
+
+    client.on('error', (error) => {
+      console.error('Failed to connect to terminal spawn service:', error);
+      resolve({
+        success: false,
+        error: `Connection failed: ${error.message}`,
+      });
+    });
+
+    client.on('timeout', () => {
+      client.destroy();
+      resolve({ success: false, error: 'Terminal spawn request timed out' });
+    });
+
+    client.setTimeout(5000); // 5 second timeout
+  });
 }

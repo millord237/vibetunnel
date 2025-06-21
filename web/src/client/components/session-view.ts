@@ -2,6 +2,8 @@ import { LitElement, PropertyValues, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from './session-list.js';
 import './terminal.js';
+import './file-browser-fab.js';
+import './file-browser-enhanced.js';
 import type { Terminal } from './terminal.js';
 import { CastConverter } from '../utils/cast-converter.js';
 import {
@@ -35,6 +37,7 @@ export class SessionView extends LitElement {
   @state() private terminalMaxCols = 0;
   @state() private showWidthSelector = false;
   @state() private customWidth = '';
+  @state() private showFileBrowser = false;
 
   private preferencesManager = TerminalPreferencesManager.getInstance();
   @state() private reconnectCount = 0;
@@ -48,6 +51,12 @@ export class SessionView extends LitElement {
   private lastResizeHeight = 0;
 
   private keyboardHandler = (e: KeyboardEvent) => {
+    // Handle Cmd+O / Ctrl+O to open file browser
+    if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
+      e.preventDefault();
+      this.showFileBrowser = true;
+      return;
+    }
     if (!this.session) return;
 
     // Allow important browser shortcuts to pass through
@@ -847,6 +856,14 @@ export class SessionView extends LitElement {
     return commonWidth ? commonWidth.label : this.terminalMaxCols.toString();
   }
 
+  private handleOpenFileBrowser() {
+    this.showFileBrowser = true;
+  }
+
+  private handleCloseFileBrowser() {
+    this.showFileBrowser = false;
+  }
+
   private async sendInputText(text: string) {
     if (!this.session) return;
 
@@ -1359,6 +1376,19 @@ export class SessionView extends LitElement {
               </div>
             `
           : ''}
+
+        <!-- File Browser FAB -->
+        <file-browser-fab
+          .visible=${!this.showFileBrowser}
+          @open-file-browser=${this.handleOpenFileBrowser}
+        ></file-browser-fab>
+
+        <!-- File Browser Modal -->
+        <file-browser-enhanced
+          .visible=${this.showFileBrowser}
+          .mode=${'browse'}
+          @browser-cancel=${this.handleCloseFileBrowser}
+        ></file-browser-enhanced>
       </div>
     `;
   }

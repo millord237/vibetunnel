@@ -8,6 +8,7 @@ import './components/session-create-form.js';
 import './components/session-list.js';
 import './components/session-view.js';
 import './components/session-card.js';
+import './components/file-browser-enhanced.js';
 
 import type { Session } from './components/session-list.js';
 import type { SessionCard } from './components/session-card.js';
@@ -27,6 +28,7 @@ export class VibeTunnelApp extends LitElement {
   @state() private selectedSessionId: string | null = null;
   @state() private hideExited = this.loadHideExitedState();
   @state() private showCreateModal = false;
+  @state() private showFileBrowser = false;
 
   private hotReloadWs: WebSocket | null = null;
   private errorTimeoutId: number | null = null;
@@ -38,6 +40,7 @@ export class VibeTunnelApp extends LitElement {
     this.loadSessions();
     this.startAutoRefresh();
     this.setupRouting();
+    this.setupKeyboardShortcuts();
   }
 
   disconnectedCallback() {
@@ -47,6 +50,20 @@ export class VibeTunnelApp extends LitElement {
     }
     // Clean up routing listeners
     window.removeEventListener('popstate', this.handlePopState);
+    // Clean up keyboard shortcuts
+    window.removeEventListener('keydown', this.handleKeyDown);
+  }
+
+  private handleKeyDown = (e: KeyboardEvent) => {
+    // Handle Cmd+O / Ctrl+O to open file browser
+    if ((e.metaKey || e.ctrlKey) && e.key === 'o' && this.currentView === 'list') {
+      e.preventDefault();
+      this.showFileBrowser = true;
+    }
+  };
+
+  private setupKeyboardShortcuts() {
+    window.addEventListener('keydown', this.handleKeyDown);
   }
 
   private showError(message: string) {
@@ -452,6 +469,7 @@ export class VibeTunnelApp extends LitElement {
                 @hide-exited-change=${this.handleHideExitedChange}
                 @kill-all-sessions=${this.handleKillAll}
                 @clean-exited-sessions=${this.handleCleanExited}
+                @open-file-browser=${() => (this.showFileBrowser = true)}
               ></app-header>
               <session-list
                 .sessions=${this.sessions}
@@ -469,6 +487,13 @@ export class VibeTunnelApp extends LitElement {
               ></session-list>
             </div>
           `}
+
+      <!-- File Browser Modal -->
+      <file-browser-enhanced
+        .visible=${this.showFileBrowser}
+        .mode=${'browse'}
+        @browser-cancel=${() => (this.showFileBrowser = false)}
+      ></file-browser-enhanced>
     `;
   }
 }

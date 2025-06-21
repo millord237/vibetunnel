@@ -13,6 +13,7 @@ import { HQClient } from './services/hq-client.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { createSessionRoutes } from './routes/sessions.js';
 import { createRemoteRoutes } from './routes/remotes.js';
+import { createFilesystemRoutes } from './routes/filesystem.js';
 import { ControlDirWatcher } from './services/control-dir-watcher.js';
 import { BufferAggregator } from './services/buffer-aggregator.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -354,6 +355,9 @@ export function createApp(): AppInstance {
     })
   );
 
+  // Mount filesystem routes
+  app.use('/api', createFilesystemRoutes());
+
   // WebSocket endpoint for buffer updates
   wss.on('connection', (ws, _req) => {
     if (bufferAggregator) {
@@ -438,6 +442,7 @@ export function createApp(): AppInstance {
         remoteRegistry,
         isHQMode: config.isHQMode,
         hqClient,
+        ptyManager,
       });
       controlDirWatcher.start();
     });

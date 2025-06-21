@@ -1,7 +1,7 @@
 // Version information for VibeTunnel Server
 // This file is updated during the build process
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.0-beta.3';
 // BUILD_DATE will be replaced by build script, fallback to current time in dev
 export const BUILD_DATE = process.env.BUILD_DATE || new Date().toISOString();
 export const BUILD_TIMESTAMP = process.env.BUILD_TIMESTAMP || Date.now();

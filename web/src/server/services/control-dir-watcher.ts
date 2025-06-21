@@ -4,12 +4,14 @@ import chalk from 'chalk';
 import { RemoteRegistry } from './remote-registry.js';
 import { HQClient } from './hq-client.js';
 import { isShuttingDown } from './shutdown-state.js';
+import { PtyManager } from '../pty/index.js';
 
 interface ControlDirWatcherConfig {
   controlDir: string;
   remoteRegistry: RemoteRegistry | null;
   isHQMode: boolean;
   hqClient: HQClient | null;
+  ptyManager?: PtyManager;
 }
 
 export class ControlDirWatcher {
@@ -56,6 +58,17 @@ export class ControlDirWatcher {
         const sessionId = sessionData.session_id || filename;
 
         console.log(chalk.blue(`Detected new external session: ${sessionId}`));
+
+        // Check if PtyManager already knows about this session
+        if (this.config.ptyManager) {
+          const existingSession = this.config.ptyManager.getSession(sessionId);
+          if (!existingSession) {
+            // This is a new external session, PtyManager needs to track it
+            console.log(chalk.green(`Attaching to external session: ${sessionId}`));
+            // PtyManager will pick it up through its own session listing
+            // since it reads from the control directory
+          }
+        }
 
         // If we're a remote server registered with HQ, immediately notify HQ
         if (this.config.hqClient && !isShuttingDown()) {

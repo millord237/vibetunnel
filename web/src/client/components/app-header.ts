@@ -46,6 +46,10 @@ export class AppHeader extends LitElement {
     this.dispatchEvent(new CustomEvent('clean-exited-sessions'));
   }
 
+  private handleOpenFileBrowser() {
+    this.dispatchEvent(new CustomEvent('open-file-browser'));
+  }
+
   render() {
     const runningSessions = this.sessions.filter((session) => session.status === 'running');
     const exitedSessions = this.sessions.filter((session) => session.status === 'exited');
@@ -117,6 +121,13 @@ export class AppHeader extends LitElement {
 
             <div class="flex gap-2">
               <button
+                class="btn-secondary font-mono text-xs px-3 py-2"
+                @click=${this.handleOpenFileBrowser}
+                title="Browse Files"
+              >
+                Browse
+              </button>
+              <button
                 class="btn-primary font-mono text-xs px-4 py-2 vt-create-button"
                 @click=${this.handleCreateSession}
                 style="view-transition-name: create-session-button"
@@ -180,6 +191,13 @@ export class AppHeader extends LitElement {
                     </button>
                   `
                 : ''}
+              <button
+                class="btn-secondary font-mono text-xs px-4 py-2"
+                @click=${this.handleOpenFileBrowser}
+                title="Browse Files (⌘O)"
+              >
+                Browse
+              </button>
               <button
                 class="btn-primary font-mono text-xs px-4 py-2 vt-create-button"
                 @click=${this.handleCreateSession}
