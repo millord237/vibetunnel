@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "npm run bundle:assets && npm run bundle:css && concurrently --kill-others-on-fail \"npm run watch:css\" \"npm run watch:assets\" \"npm run bundle:client -- --watch\" \"npm run bundle:test -- --watch\" \"npm run watch:server\"",
-    "watch:server": "tsx watch src/server.ts",
+    "watch:server": "tsx watch src/server/server.ts",
     "watch:css": "npx tailwindcss -i ./src/client/styles.css -o ./public/bundle/styles.css --watch",
     "watch:assets": "chokidar 'src/client/assets/**/*' -c 'npm run bundle:assets'",
     "clean": "node scripts/clean.js",
