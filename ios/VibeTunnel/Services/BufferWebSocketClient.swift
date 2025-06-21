@@ -266,7 +266,7 @@ class BufferWebSocketClient: NSObject {
         
         // Read header
         guard data.count >= 32 else {
-            print("[BufferWebSocket] Buffer too small for header")
+            print("[BufferWebSocket] Buffer too small for header: \(data.count) bytes (need 32)")
             return nil
         }
         
@@ -277,7 +277,7 @@ class BufferWebSocketClient: NSObject {
         offset += 2
         
         guard magic == 0x5654 else {
-            print("[BufferWebSocket] Invalid magic bytes: \(String(format: "0x%04X", magic))")
+            print("[BufferWebSocket] Invalid magic bytes: \(String(format: "0x%04X", magic)), expected 0x5654")
             return nil
         }
         
@@ -286,14 +286,20 @@ class BufferWebSocketClient: NSObject {
         offset += 1
         
         guard version == 0x01 else {
-            print("[BufferWebSocket] Unsupported version: \(version)")
+            print("[BufferWebSocket] Unsupported version: 0x\(String(format: "%02X", version)), expected 0x01")
             return nil
         }
         
         // Flags (unused)
+        _ = data[offset]
         offset += 1
         
-        // Dimensions and cursor
+        // Dimensions and cursor - validate before reading
+        guard offset + 20 <= data.count else {
+            print("[BufferWebSocket] Insufficient data for header fields")
+            return nil
+        }
+        
         let cols = data.withUnsafeBytes { bytes in
             bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian
         }
@@ -303,6 +309,12 @@ class BufferWebSocketClient: NSObject {
             bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian
         }
         offset += 4
+        
+        // Validate dimensions
+        guard cols > 0 && cols <= 1000 && rows > 0 && rows <= 1000 else {
+            print("[BufferWebSocket] Invalid dimensions: \(cols)x\(rows)")
+            return nil
+        }
         
         let viewportY = data.withUnsafeBytes { bytes in
             bytes.loadUnaligned(fromByteOffset: offset, as: Int32.self).littleEndian
@@ -322,42 +334,93 @@ class BufferWebSocketClient: NSObject {
         // Skip reserved
         offset += 4
         
+        // Validate cursor position
+        if cursorX < 0 || cursorX > Int32(cols) || cursorY < 0 || cursorY > Int32(rows) {
+            print("[BufferWebSocket] Warning: cursor position out of bounds: (\(cursorX),\(cursorY)) for \(cols)x\(rows)")
+        }
+        
         // Decode cells
         var cells: [[BufferCell]] = []
+        var totalRows = 0
         
-        while offset < data.count {
+        while offset < data.count && totalRows < Int(rows) {
+            guard offset < data.count else {
+                print("[BufferWebSocket] Unexpected end of data at offset \(offset)")
+                break
+            }
+            
             let marker = data[offset]
             offset += 1
             
             if marker == 0xFE {
                 // Empty row(s)
-                let count = data[offset]
+                guard offset < data.count else {
+                    print("[BufferWebSocket] Missing count byte for empty rows")
+                    break
+                }
+                
+                let count = Int(data[offset])
                 offset += 1
                 
-                for _ in 0..<count {
-                    cells.append([BufferCell(char: " ", width: 1, fg: nil, bg: nil, attributes: nil)])
+                // Create empty rows efficiently
+                // Single space cell that represents the entire empty row
+                let emptyRow = [BufferCell(char: "", width: 0, fg: nil, bg: nil, attributes: nil)]
+                for _ in 0..<min(count, Int(rows) - totalRows) {
+                    cells.append(emptyRow)
+                    totalRows += 1
                 }
             } else if marker == 0xFD {
                 // Row with content
-                guard offset + 2 <= data.count else { break }
+                guard offset + 2 <= data.count else {
+                    print("[BufferWebSocket] Insufficient data for cell count")
+                    break
+                }
                 
                 let cellCount = data.withUnsafeBytes { bytes in
                     bytes.loadUnaligned(fromByteOffset: offset, as: UInt16.self).littleEndian
                 }
                 offset += 2
                 
+                // Validate cell count
+                guard cellCount <= cols * 2 else { // Allow for wide chars
+                    print("[BufferWebSocket] Invalid cell count: \(cellCount) for \(cols) columns")
+                    break
+                }
+                
                 var rowCells: [BufferCell] = []
-                for _ in 0..<cellCount {
+                var colIndex = 0
+                
+                for i in 0..<cellCount {
                     if let (cell, newOffset) = decodeCell(data, offset: offset) {
                         rowCells.append(cell)
                         offset = newOffset
+                        colIndex += cell.width
+                        
+                        // Stop if we exceed column count
+                        if colIndex > Int(cols) {
+                            print("[BufferWebSocket] Warning: row \(totalRows) exceeds column count at cell \(i)")
+                            break
+                        }
                     } else {
+                        print("[BufferWebSocket] Failed to decode cell \(i) in row \(totalRows)")
                         break
                     }
                 }
+                
                 cells.append(rowCells)
+                totalRows += 1
+            } else {
+                print("[BufferWebSocket] Unknown row marker: 0x\(String(format: "%02X", marker)) at offset \(offset - 1)")
+                // Try to continue parsing
             }
         }
+        
+        // Fill missing rows with empty rows if needed
+        while cells.count < Int(rows) {
+            cells.append([BufferCell(char: " ", width: 1, fg: nil, bg: nil, attributes: nil)])
+        }
+        
+        print("[BufferWebSocket] Successfully decoded buffer: \(cols)x\(rows), \(cells.count) rows")
         
         return BufferSnapshot(
             cols: Int(cols),
@@ -370,7 +433,10 @@ class BufferWebSocketClient: NSObject {
     }
     
     private func decodeCell(_ data: Data, offset: Int) -> (BufferCell, Int)? {
-        guard offset < data.count else { return nil }
+        guard offset < data.count else { 
+            print("[BufferWebSocket] Cell decode failed: offset \(offset) beyond data size \(data.count)")
+            return nil 
+        }
         
         var currentOffset = offset
         let typeByte = data[currentOffset]
@@ -394,84 +460,106 @@ class BufferWebSocketClient: NSObject {
         var width: Int = 1
         
         if isUnicode {
-            // UTF-8 encoded character
-            guard currentOffset < data.count else { return nil }
-            let firstByte = data[currentOffset]
+            // Read character length first
+            guard currentOffset < data.count else {
+                print("[BufferWebSocket] Unicode char decode failed: missing length byte")
+                return nil
+            }
+            let charLen = Int(data[currentOffset])
+            currentOffset += 1
             
-            let utf8Length: Int
-            if firstByte & 0x80 == 0 {
-                utf8Length = 1
-            } else if firstByte & 0xE0 == 0xC0 {
-                utf8Length = 2
-            } else if firstByte & 0xF0 == 0xE0 {
-                utf8Length = 3
-            } else if firstByte & 0xF8 == 0xF0 {
-                utf8Length = 4
-            } else {
-                utf8Length = 1
+            guard currentOffset + charLen <= data.count else {
+                print("[BufferWebSocket] Unicode char decode failed: insufficient data for char length \(charLen)")
+                return nil
             }
             
-            guard currentOffset + utf8Length <= data.count else { return nil }
-            
-            let charData = data.subdata(in: currentOffset..<(currentOffset + utf8Length))
+            let charData = data.subdata(in: currentOffset..<(currentOffset + charLen))
             char = String(data: charData, encoding: .utf8) ?? "?"
-            currentOffset += utf8Length
+            currentOffset += charLen
             
-            // Read width for Unicode chars
-            guard currentOffset < data.count else { return nil }
-            width = Int(data[currentOffset])
-            currentOffset += 1
+            // For wide characters, width is encoded in the extended data
+            if hasExtended {
+                // Width will be read from extended data
+                width = 1 // Default, will be updated if needed
+            }
         } else {
             // ASCII character
-            guard currentOffset < data.count else { return nil }
-            char = String(Character(UnicodeScalar(data[currentOffset])))
+            guard currentOffset < data.count else {
+                print("[BufferWebSocket] ASCII char decode failed: missing char byte")
+                return nil
+            }
+            let charCode = data[currentOffset]
             currentOffset += 1
+            
+            if charCode < 32 || charCode > 126 {
+                // Control character or extended ASCII
+                char = charCode == 0 ? " " : "?"
+            } else {
+                char = String(Character(UnicodeScalar(charCode)))
+            }
         }
         
-        // Read colors and attributes
+        // Read extended data if present
         var fg: Int?
         var bg: Int?
         var attributes: Int?
         
-        if hasFg {
-            if isRgbFg {
-                // RGB color (3 bytes)
-                guard currentOffset + 3 <= data.count else { return nil }
-                let r = Int(data[currentOffset])
-                let g = Int(data[currentOffset + 1])
-                let b = Int(data[currentOffset + 2])
-                fg = (r << 16) | (g << 8) | b | 0xFF000000 // Add alpha for RGB
-                currentOffset += 3
-            } else {
-                // Palette color (1 byte)
-                guard currentOffset < data.count else { return nil }
-                fg = Int(data[currentOffset])
-                currentOffset += 1
-            }
-        }
-        
-        if hasBg {
-            if isRgbBg {
-                // RGB color (3 bytes)
-                guard currentOffset + 3 <= data.count else { return nil }
-                let r = Int(data[currentOffset])
-                let g = Int(data[currentOffset + 1])
-                let b = Int(data[currentOffset + 2])
-                bg = (r << 16) | (g << 8) | b | 0xFF000000 // Add alpha for RGB
-                currentOffset += 3
-            } else {
-                // Palette color (1 byte)
-                guard currentOffset < data.count else { return nil }
-                bg = Int(data[currentOffset])
-                currentOffset += 1
-            }
-        }
-        
         if hasExtended {
             // Read attributes byte
-            guard currentOffset < data.count else { return nil }
+            guard currentOffset < data.count else {
+                print("[BufferWebSocket] Extended data decode failed: missing attributes byte")
+                return nil
+            }
             attributes = Int(data[currentOffset])
             currentOffset += 1
+            
+            // Read foreground color
+            if hasFg {
+                if isRgbFg {
+                    // RGB color (3 bytes)
+                    guard currentOffset + 3 <= data.count else {
+                        print("[BufferWebSocket] RGB foreground decode failed: insufficient data")
+                        return nil
+                    }
+                    let r = Int(data[currentOffset])
+                    let g = Int(data[currentOffset + 1])
+                    let b = Int(data[currentOffset + 2])
+                    fg = (r << 16) | (g << 8) | b | 0xFF000000 // Add alpha for RGB
+                    currentOffset += 3
+                } else {
+                    // Palette color (1 byte)
+                    guard currentOffset < data.count else {
+                        print("[BufferWebSocket] Palette foreground decode failed: missing color byte")
+                        return nil
+                    }
+                    fg = Int(data[currentOffset])
+                    currentOffset += 1
+                }
+            }
+            
+            // Read background color
+            if hasBg {
+                if isRgbBg {
+                    // RGB color (3 bytes)
+                    guard currentOffset + 3 <= data.count else {
+                        print("[BufferWebSocket] RGB background decode failed: insufficient data")
+                        return nil
+                    }
+                    let r = Int(data[currentOffset])
+                    let g = Int(data[currentOffset + 1])
+                    let b = Int(data[currentOffset + 2])
+                    bg = (r << 16) | (g << 8) | b | 0xFF000000 // Add alpha for RGB
+                    currentOffset += 3
+                } else {
+                    // Palette color (1 byte)
+                    guard currentOffset < data.count else {
+                        print("[BufferWebSocket] Palette background decode failed: missing color byte")
+                        return nil
+                    }
+                    bg = Int(data[currentOffset])
+                    currentOffset += 1
+                }
+            }
         }
         
         return (BufferCell(char: char, width: width, fg: fg, bg: bg, attributes: attributes), currentOffset)

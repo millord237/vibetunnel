@@ -154,6 +154,10 @@ struct TerminalHostingView: UIViewRepresentable {
         let onResize: (Int, Int) -> Void
         let viewModel: TerminalViewModel
         weak var terminal: SwiftTerm.TerminalView?
+        
+        // Track previous buffer state for incremental updates
+        private var previousSnapshot: BufferSnapshot?
+        private var isFirstUpdate = true
 
         init(
             onInput: @escaping (String) -> Void,
@@ -181,13 +185,28 @@ struct TerminalHostingView: UIViewRepresentable {
             
             if currentCols != snapshot.cols || currentRows != snapshot.rows {
                 terminal.resize(cols: snapshot.cols, rows: snapshot.rows)
+                // Force full redraw on resize
+                isFirstUpdate = true
             }
             
-            // Convert buffer to optimized ANSI sequences
-            let ansiData = convertBufferToOptimizedANSI(snapshot)
+            // Use incremental updates if possible
+            let ansiData: String
+            if isFirstUpdate || previousSnapshot == nil {
+                // Full redraw
+                ansiData = convertBufferToOptimizedANSI(snapshot)
+                isFirstUpdate = false
+            } else {
+                // Incremental update
+                ansiData = generateIncrementalUpdate(from: previousSnapshot!, to: snapshot)
+            }
+            
+            // Store current snapshot for next update
+            previousSnapshot = snapshot
             
             // Feed the ANSI data to the terminal
-            feedData(ansiData)
+            if !ansiData.isEmpty {
+                feedData(ansiData)
+            }
         }
         
         private func convertBufferToOptimizedANSI(_ snapshot: BufferSnapshot) -> String {
@@ -207,6 +226,12 @@ struct TerminalHostingView: UIViewRepresentable {
                     output += "\r\n"
                 }
                 
+                // Check if this is an empty row (marked by empty array or single empty cell)
+                if row.isEmpty || (row.count == 1 && row[0].width == 0) {
+                    // Skip rendering empty rows - terminal will show blank line
+                    continue
+                }
+                
                 var lastNonSpaceIndex = -1
                 for (index, cell) in row.enumerated() {
                     if cell.char != " " || cell.bg != nil {
@@ -216,7 +241,7 @@ struct TerminalHostingView: UIViewRepresentable {
                 
                 // Only render up to the last non-space character
                 for (colIndex, cell) in row.enumerated() {
-                    if colIndex > lastNonSpaceIndex {
+                    if colIndex > lastNonSpaceIndex && lastNonSpaceIndex >= 0 {
                         break
                     }
                     
@@ -296,6 +321,175 @@ struct TerminalHostingView: UIViewRepresentable {
             output += "\u{001B}[\(snapshot.cursorY + 1);\(snapshot.cursorX + 1)H"
             
             return output
+        }
+        
+        /// Generate incremental ANSI updates by comparing previous and current snapshots
+        private func generateIncrementalUpdate(from oldSnapshot: BufferSnapshot, to newSnapshot: BufferSnapshot) -> String {
+            var output = ""
+            var currentFg: Int?
+            var currentBg: Int?
+            var currentAttrs: Int = 0
+            
+            // Update cursor if changed
+            let cursorChanged = oldSnapshot.cursorX != newSnapshot.cursorX || oldSnapshot.cursorY != newSnapshot.cursorY
+            
+            // Check each row for changes
+            for rowIndex in 0..<min(newSnapshot.cells.count, oldSnapshot.cells.count) {
+                let oldRow = rowIndex < oldSnapshot.cells.count ? oldSnapshot.cells[rowIndex] : []
+                let newRow = rowIndex < newSnapshot.cells.count ? newSnapshot.cells[rowIndex] : []
+                
+                // Quick check if rows are identical
+                if rowsAreIdentical(oldRow, newRow) {
+                    continue
+                }
+                
+                // Handle empty rows efficiently
+                let oldIsEmpty = oldRow.isEmpty || (oldRow.count == 1 && oldRow[0].width == 0)
+                let newIsEmpty = newRow.isEmpty || (newRow.count == 1 && newRow[0].width == 0)
+                
+                if oldIsEmpty && newIsEmpty {
+                    continue // Both empty, no change
+                } else if !oldIsEmpty && newIsEmpty {
+                    // Row became empty - clear it
+                    output += "\u{001B}[\(rowIndex + 1);1H\u{001B}[2K"
+                    continue
+                } else if oldIsEmpty && !newIsEmpty {
+                    // Empty row now has content - render full row
+                    output += "\u{001B}[\(rowIndex + 1);1H"
+                    for cell in newRow {
+                        updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
+                        updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
+                        output += cell.char
+                    }
+                    continue
+                }
+                
+                // Find changed cells in this row
+                var firstChange = -1
+                var lastChange = -1
+                
+                for colIndex in 0..<max(oldRow.count, newRow.count) {
+                    let oldCell = colIndex < oldRow.count ? oldRow[colIndex] : nil
+                    let newCell = colIndex < newRow.count ? newRow[colIndex] : nil
+                    
+                    if !cellsAreIdentical(oldCell, newCell) {
+                        if firstChange == -1 {
+                            firstChange = colIndex
+                        }
+                        lastChange = colIndex
+                    }
+                }
+                
+                // If changes found, update only the changed portion
+                if firstChange >= 0 {
+                    // Move cursor to start of changes
+                    output += "\u{001B}[\(rowIndex + 1);\(firstChange + 1)H"
+                    
+                    // Render changed cells
+                    for colIndex in firstChange...lastChange {
+                        guard colIndex < newRow.count else { break }
+                        let cell = newRow[colIndex]
+                        
+                        // Handle attributes
+                        var needsReset = false
+                        if let attrs = cell.attributes, attrs != currentAttrs {
+                            needsReset = true
+                            currentAttrs = attrs
+                        }
+                        
+                        // Apply styles if changed
+                        if cell.fg != currentFg || cell.bg != currentBg || needsReset {
+                            if needsReset {
+                                output += "\u{001B}[0m"
+                                currentFg = nil
+                                currentBg = nil
+                                
+                                // Apply attributes
+                                if let attrs = cell.attributes {
+                                    if (attrs & 0x01) != 0 { output += "\u{001B}[1m" }
+                                    if (attrs & 0x02) != 0 { output += "\u{001B}[3m" }
+                                    if (attrs & 0x04) != 0 { output += "\u{001B}[4m" }
+                                    if (attrs & 0x08) != 0 { output += "\u{001B}[2m" }
+                                    if (attrs & 0x10) != 0 { output += "\u{001B}[7m" }
+                                    if (attrs & 0x40) != 0 { output += "\u{001B}[9m" }
+                                }
+                            }
+                            
+                            // Apply colors
+                            updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
+                            updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
+                        }
+                        
+                        output += cell.char
+                    }
+                }
+            }
+            
+            // Handle newly added rows
+            if newSnapshot.cells.count > oldSnapshot.cells.count {
+                for rowIndex in oldSnapshot.cells.count..<newSnapshot.cells.count {
+                    output += "\u{001B}[\(rowIndex + 1);1H"
+                    output += "\u{001B}[2K" // Clear line
+                    
+                    let row = newSnapshot.cells[rowIndex]
+                    for cell in row {
+                        // Apply styles
+                        updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
+                        updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
+                        output += cell.char
+                    }
+                }
+            }
+            
+            // Update cursor position if changed
+            if cursorChanged {
+                output += "\u{001B}[\(newSnapshot.cursorY + 1);\(newSnapshot.cursorX + 1)H"
+            }
+            
+            return output
+        }
+        
+        private func rowsAreIdentical(_ row1: [BufferCell], _ row2: [BufferCell]) -> Bool {
+            guard row1.count == row2.count else { return false }
+            
+            for i in 0..<row1.count {
+                if !cellsAreIdentical(row1[i], row2[i]) {
+                    return false
+                }
+            }
+            return true
+        }
+        
+        private func cellsAreIdentical(_ cell1: BufferCell?, _ cell2: BufferCell?) -> Bool {
+            guard let cell1 = cell1, let cell2 = cell2 else {
+                return cell1 == nil && cell2 == nil
+            }
+            
+            return cell1.char == cell2.char &&
+                   cell1.fg == cell2.fg &&
+                   cell1.bg == cell2.bg &&
+                   cell1.attributes == cell2.attributes
+        }
+        
+        private func updateColorIfNeeded(_ output: inout String, _ current: inout Int?, _ new: Int?, isBackground: Bool) {
+            if new != current {
+                current = new
+                if let color = new {
+                    if color & 0xFF000000 != 0 {
+                        // RGB color
+                        let r = (color >> 16) & 0xFF
+                        let g = (color >> 8) & 0xFF
+                        let b = color & 0xFF
+                        output += "\u{001B}[\(isBackground ? 48 : 38);2;\(r);\(g);\(b)m"
+                    } else if color <= 255 {
+                        // Palette color
+                        output += "\u{001B}[\(isBackground ? 48 : 38);5;\(color)m"
+                    }
+                } else {
+                    // Default color
+                    output += "\u{001B}[\(isBackground ? 49 : 39)m"
+                }
+            }
         }
 
         func feedData(_ data: String) {
