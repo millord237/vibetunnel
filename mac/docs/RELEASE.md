@@ -269,7 +269,7 @@ VibeTunnel supports two update channels:
 ### Architecture Support
 
 VibeTunnel uses universal binaries that include both architectures:
-- **Apple Silicon (arm64)**: Optimized for M1/M2/M3 Macs
+- **Apple Silicon (arm64)**: Optimized for M1+ Macs
 - **Intel (x86_64)**: For Intel-based Macs
 
 The build system creates a single universal binary that works on all Mac architectures. This approach:

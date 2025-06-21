@@ -8,12 +8,17 @@
 [![Download](https://img.shields.io/badge/Download-macOS-blue)](https://github.com/amantus-ai/vibetunnel/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![macOS 14.0+](https://img.shields.io/badge/macOS-14.0+-red)](https://www.apple.com/macos/)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Required-orange)](https://support.apple.com/en-us/HT211814)
 
 ## Why VibeTunnel?
 
 Ever wanted to check on your AI agents while you're away? Need to monitor that long-running build from your phone? Want to share a terminal session with a colleague without complex SSH setups? VibeTunnel makes it happen with zero friction.
 
 ## Quick Start
+
+### Requirements
+
+**VibeTunnel requires an Apple Silicon Mac (M1+).** Intel Macs are not supported.
 
 ### 1. Download & Install
 
@@ -49,6 +54,7 @@ Visit [http://localhost:4020](http://localhost:4020) to see all your terminal se
 - **📱 Mobile Ready** - Native iOS app and responsive web interface for phones and tablets
 - **🎬 Session Recording** - All sessions recorded in asciinema format for later playback
 - **⚡ High Performance** - Powered by Bun runtime for blazing-fast JavaScript execution
+- **🍎 Apple Silicon Native** - Optimized for M1/M2/M3 Macs with ARM64-only binaries
 
 ## Architecture
 
@@ -79,7 +85,7 @@ The server runs as a standalone Bun executable with embedded Node.js modules, pr
 ## Building from Source
 
 ### Prerequisites
-- macOS 14.0+ (Sonoma)
+- macOS 14.0+ (Sonoma) on Apple Silicon (M1/M2/M3)
 - Xcode 16.0+
 - Node.js 20+
 - Bun runtime
