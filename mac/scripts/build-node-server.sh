@@ -107,12 +107,22 @@ cd "$WEB_DIR"
 
 # Copy server files
 echo "Copying server files..."
-if [ -f "dist/server.js" ]; then
-    cp dist/server.js "$NODE_SERVER_DIR/dist/"
-    cp dist/server.js.map "$NODE_SERVER_DIR/dist/" 2>/dev/null || true
+# Copy the main entry point (index.js)
+if [ -f "dist/index.js" ]; then
+    cp dist/index.js "$NODE_SERVER_DIR/dist/"
+    cp dist/index.js.map "$NODE_SERVER_DIR/dist/" 2>/dev/null || true
 fi
+# Copy server directory
 if [ -d "dist/server" ]; then
     cp -r dist/server "$NODE_SERVER_DIR/dist/"
+fi
+# Copy client directory if it exists
+if [ -d "dist/client" ]; then
+    cp -r dist/client "$NODE_SERVER_DIR/dist/"
+fi
+# Copy test directory if it exists
+if [ -d "dist/test" ]; then
+    cp -r dist/test "$NODE_SERVER_DIR/dist/"
 fi
 
 # Copy public files (static assets)
@@ -219,7 +229,7 @@ if (!process.env.PORT) {
 }
 
 // Launch the actual server
-const serverPath = path.join(__dirname, 'dist', 'server.js');
+const serverPath = path.join(__dirname, 'dist', 'index.js');
 const server = spawn(process.execPath, [serverPath], {
     stdio: 'inherit',
     env: process.env
