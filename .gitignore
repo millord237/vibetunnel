@@ -104,3 +104,4 @@ VibeTunnel/Resources/vibetunnel
 web/vibetunnel
 /server/vibetunnel-server
 server/vibetunnel-fwd
+/.build-tools
