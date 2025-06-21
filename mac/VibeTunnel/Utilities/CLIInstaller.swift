@@ -73,7 +73,7 @@ final class CLIInstaller {
         lastError = nil
 
         // Verify that vt script exists in the app bundle
-        guard let vtScriptPath = Bundle.main.path(forResource: "vt", ofType: nil) else {
+        guard Bundle.main.path(forResource: "vt", ofType: nil) != nil else {
             logger.error("CLIInstaller: Could not find vt script in app bundle")
             lastError = "The vt script could not be found in the application bundle."
             showError("The vt script could not be found in the application bundle.")
