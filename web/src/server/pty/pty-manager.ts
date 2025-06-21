@@ -109,16 +109,46 @@ export class PtyManager {
       );
 
       // Create PTY process
-      const ptyProcess = pty.spawn(command[0], command.slice(1), {
-        name: term,
-        cols,
-        rows,
-        cwd: workingDir,
-        env: {
+      let ptyProcess;
+      try {
+        // Log the command we're about to spawn for debugging
+        console.log(
+          `[PTY] Spawning command: ${command[0]} with args: ${JSON.stringify(command.slice(1))}`
+        );
+        console.log(`[PTY] Working directory: ${workingDir}`);
+        console.log(`[PTY] Terminal: ${term}, Size: ${cols}x${rows}`);
+
+        // Set up environment like Linux implementation
+        const ptyEnv = {
           ...process.env,
           TERM: term,
-        },
-      });
+          SHELL: command[0], // Set SHELL to the command being run (like Linux does)
+        };
+
+        ptyProcess = pty.spawn(command[0], command.slice(1), {
+          name: term,
+          cols,
+          rows,
+          cwd: workingDir,
+          env: ptyEnv,
+        });
+      } catch (spawnError: any) {
+        // Provide better error messages for common issues
+        let errorMessage = spawnError.message;
+
+        if (spawnError.code === 'ENOENT' || errorMessage.includes('ENOENT')) {
+          errorMessage = `Command not found: '${command[0]}'. Please ensure the command exists and is in your PATH.`;
+        } else if (spawnError.code === 'EACCES' || errorMessage.includes('EACCES')) {
+          errorMessage = `Permission denied: '${command[0]}'. The command exists but is not executable.`;
+        } else if (spawnError.code === 'ENXIO' || errorMessage.includes('ENXIO')) {
+          errorMessage = `Failed to allocate terminal for '${command[0]}'. This may occur if the command doesn't exist or the system cannot create a pseudo-terminal.`;
+        } else if (errorMessage.includes('cwd') || errorMessage.includes('working directory')) {
+          errorMessage = `Working directory does not exist: '${workingDir}'`;
+        }
+
+        console.error(`PTY spawn error for command '${command.join(' ')}':`, spawnError);
+        throw new PtyError(errorMessage, 'SPAWN_FAILED');
+      }
 
       // Create session object
       const session: PtySession = {

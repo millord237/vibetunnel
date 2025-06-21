@@ -615,7 +615,7 @@ final class TerminalLauncher {
         // For Bun server, use fwd to create sessions
         logger.info("Using Bun server session creation via fwd")
         let bunPath = findBunExecutable()
-        let bunCommand = buildBunCommand(bunPath: bunPath, userCommand: command, workingDir: escapedWorkingDir)
+        let bunCommand = buildBunCommand(bunPath: bunPath, userCommand: command, workingDir: escapedWorkingDir, sessionId: sessionId)
         let fullCommand = "cd \"\(escapedWorkingDir)\" && \(bunCommand) && exit"
 
         // Get the preferred terminal or fallback
@@ -674,17 +674,18 @@ final class TerminalLauncher {
                     let bunCommand = buildBunCommand(
                         bunPath: bunPath,
                         userCommand: actualCommand,
-                        workingDir: escapedDir
+                        workingDir: escapedDir,
+                        sessionId: sessionId
                     )
                     fullCommand = "cd \"\(escapedDir)\" && \(bunCommand) && exit"
                 } else {
                     // Fallback if format is different
-                    let bunCommand = buildBunCommand(bunPath: bunPath, userCommand: command, workingDir: escapedDir)
+                    let bunCommand = buildBunCommand(bunPath: bunPath, userCommand: command, workingDir: escapedDir, sessionId: sessionId)
                     fullCommand = "cd \"\(escapedDir)\" && \(bunCommand) && exit"
                 }
             } else {
                 // Command is just the user command
-                let bunCommand = buildBunCommand(bunPath: bunPath, userCommand: command, workingDir: escapedDir)
+                let bunCommand = buildBunCommand(bunPath: bunPath, userCommand: command, workingDir: escapedDir, sessionId: sessionId)
                 fullCommand = "cd \"\(escapedDir)\" && \(bunCommand) && exit"
             }
         } else {
@@ -751,9 +752,14 @@ final class TerminalLauncher {
         return "echo 'VibeTunnel: Bun executable not found in app bundle'; false"
     }
 
-    private func buildBunCommand(bunPath: String, userCommand: String, workingDir: String) -> String {
+    private func buildBunCommand(bunPath: String, userCommand: String, workingDir: String, sessionId: String? = nil) -> String {
         // Bun executable has fwd command built-in
         logger.info("Using Bun executable for session creation")
-        return "\"\(bunPath)\" fwd \(userCommand)"
+        if let sessionId = sessionId {
+            // Pass the pre-generated session ID to fwd
+            return "\"\(bunPath)\" fwd --session-id \(sessionId) \(userCommand)"
+        } else {
+            return "\"\(bunPath)\" fwd \(userCommand)"
+        }
     }
 }

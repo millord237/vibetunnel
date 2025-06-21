@@ -136,6 +136,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
         const sessionName = name || `session_${Date.now()}`;
 
         // Request Mac app to spawn terminal
+        console.log(`Requesting terminal spawn with command: ${JSON.stringify(command)}`);
         const spawnResult = await requestTerminalSpawn({
           sessionId,
           sessionName,

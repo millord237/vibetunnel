@@ -19,16 +19,18 @@ function showUsage() {
   console.log('VibeTunnel Forward (fwd.ts)');
   console.log('');
   console.log('Usage:');
-  console.log('  npx tsx src/fwd.ts <command> [args...]');
-  console.log('  npx tsx src/fwd.ts --monitor-only <command> [args...]');
+  console.log('  npx tsx src/fwd.ts [--session-id <id>] <command> [args...]');
+  console.log('  npx tsx src/fwd.ts [--session-id <id>] --monitor-only <command> [args...]');
   console.log('');
   console.log('Options:');
-  console.log('  --monitor-only   Just create session and monitor, no interactive I/O');
+  console.log('  --session-id <id>   Use a pre-generated session ID');
+  console.log('  --monitor-only      Just create session and monitor, no interactive I/O');
   console.log('');
   console.log('Examples:');
   console.log('  npx tsx src/fwd.ts claude --resume');
   console.log('  npx tsx src/fwd.ts bash -l');
   console.log('  npx tsx src/fwd.ts python3 -i');
+  console.log('  npx tsx src/fwd.ts --session-id abc123 claude');
   console.log('  npx tsx src/fwd.ts --monitor-only long-running-command');
   console.log('');
   console.log('The command will be spawned in the current working directory');
@@ -42,8 +44,17 @@ export async function startVibeTunnelForward(args: string[]) {
     process.exit(0);
   }
 
-  const monitorOnly = args[0] === '--monitor-only';
-  const command = monitorOnly ? args.slice(1) : args;
+  // Check for --session-id parameter
+  let sessionId: string | undefined;
+  let remainingArgs = args;
+
+  if (args[0] === '--session-id' && args.length > 1) {
+    sessionId = args[1];
+    remainingArgs = args.slice(2);
+  }
+
+  const monitorOnly = remainingArgs[0] === '--monitor-only';
+  const command = monitorOnly ? remainingArgs.slice(1) : remainingArgs;
 
   if (command.length === 0) {
     console.error('Error: No command specified');
@@ -61,11 +72,41 @@ export async function startVibeTunnelForward(args: string[]) {
   const ptyManager = new PtyManager(controlPath);
 
   try {
+    // Handle shell expansion for single commands that aren't common shells
+    let finalCommand = command;
+    const isShell =
+      command.length === 1 &&
+      (command[0].endsWith('bash') || command[0].endsWith('zsh') || command[0].endsWith('sh'));
+
+    // Match Linux implementation - add -i for shells
+    if (isShell && command.length === 1) {
+      // For shells, add -i flag to ensure interactive mode
+      console.log(`Adding -i flag for interactive shell: ${command[0]}`);
+      finalCommand = [...command, '-i'];
+    } else if (command.length === 1 && command[0] === 'claude') {
+      // Special handling for claude - it needs to run in a shell environment
+      const userShell = process.env.SHELL || '/bin/zsh';
+      console.log(`Running claude through shell for proper terminal setup: ${userShell}`);
+      // Run claude through an interactive shell
+      finalCommand = [userShell, '-i', '-c', 'claude'];
+    } else {
+      // All other commands - spawn as-is (like Linux does)
+      console.log(`Spawning command as-is: ${command.join(' ')}`);
+      finalCommand = command;
+    }
+
     // Create the session
     const sessionName = `fwd_${command[0]}_${Date.now()}`;
     console.log(`Creating session: ${sessionName}`);
+    if (sessionId) {
+      console.log(`Using pre-generated session ID: ${sessionId}`);
+    }
 
-    const result = await ptyManager.createSession(command, {
+    console.log(`Final command to spawn: ${JSON.stringify(finalCommand)}`);
+    console.log(`Environment TERM: ${process.env.TERM}`);
+
+    const result = await ptyManager.createSession(finalCommand, {
+      sessionId, // Use the pre-generated session ID if provided
       sessionName,
       workingDir: cwd,
       term: process.env.TERM || 'xterm-256color',
@@ -149,10 +190,19 @@ export async function startVibeTunnelForward(args: string[]) {
 
       if (!fs.existsSync(controlPath)) {
         if (!isWindows) {
-          const { spawnSync } = require('child_process');
-          const result = spawnSync('mkfifo', [controlPath], { stdio: 'ignore' });
-          if (result.status === 0) {
-            useFifo = true;
+          try {
+            const { spawnSync } = require('child_process');
+            const result = spawnSync('mkfifo', [controlPath], { stdio: 'pipe' });
+            if (result.status === 0) {
+              useFifo = true;
+              console.log(`Created control FIFO at: ${controlPath}`);
+            } else {
+              console.warn(
+                `Failed to create FIFO: ${result.stderr?.toString() || 'Unknown error'}`
+              );
+            }
+          } catch (e) {
+            console.warn(`Error creating FIFO: ${e}`);
           }
         }
 

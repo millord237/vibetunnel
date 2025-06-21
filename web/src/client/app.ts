@@ -492,6 +492,7 @@ export class VibeTunnelApp extends LitElement {
       <file-browser-enhanced
         .visible=${this.showFileBrowser}
         .mode=${'browse'}
+        .session=${null}
         @browser-cancel=${() => (this.showFileBrowser = false)}
       ></file-browser-enhanced>
     `;
