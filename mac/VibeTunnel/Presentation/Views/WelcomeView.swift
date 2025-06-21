@@ -89,8 +89,22 @@ struct WelcomeView: View {
                 }
                 .frame(height: 32) // Fixed height for indicator area
 
-                // Navigation button
+                // Navigation buttons
                 HStack {
+                    // Back button - only visible when not on first page
+                    if currentPage > 0 {
+                        Button(action: handleBackAction) {
+                            Label("Back", systemImage: "chevron.left")
+                                .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.secondary)
+                        .opacity(0.7)
+                        .pointingHandCursor()
+                        .help("Go back to previous page")
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    }
+
                     Spacer()
 
                     Button(action: handleNextAction) {
@@ -115,6 +129,12 @@ struct WelcomeView: View {
 
     private var buttonTitle: String {
         currentPage == 5 ? "Finish" : "Next"
+    }
+
+    private func handleBackAction() {
+        withAnimation {
+            currentPage -= 1
+        }
     }
 
     private func handleNextAction() {
