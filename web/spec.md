@@ -271,7 +271,9 @@ npx tsx src/fwd.ts --monitor-only <command>
 
 ### Build System
 - `npm run dev`: Auto-rebuilds TypeScript
+- `npm run build`: Full build including Node.js SEA executable
 - ESBuild: Fast bundling
+- Node.js SEA: Creates standalone executable (Node.js 20+ required)
 - Vitest: Testing framework
 - Assets: Copied from `src/client/assets/` to `public/` during build
 

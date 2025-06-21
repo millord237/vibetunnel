@@ -31,8 +31,8 @@ npm run format     # Format code
 ## Production Build
 
 ```bash
-npm run build
-./native/vibetunnel  # Run standalone executable
+npm run build          # Creates Node.js SEA executable
+./native/vibetunnel    # Run standalone executable (no Node.js required)
 ```
 
 ## Architecture
