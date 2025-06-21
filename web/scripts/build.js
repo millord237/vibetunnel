@@ -25,12 +25,8 @@ execSync('esbuild src/client/test-terminals-entry.ts --bundle --outfile=public/b
 console.log('Building server...');
 execSync('tsc', { stdio: 'inherit' });
 
-// Build native executable (skip if building from Xcode)
-if (process.env.SKIP_NATIVE_BUILD !== 'true') {
-    console.log('Building native executable...');
-    execSync('node build-native.js', { stdio: 'inherit' });
-} else {
-    console.log('Skipping native executable build (handled by Xcode)...');
-}
+// Build native executable
+console.log('Building native executable...');
+execSync('node build-native.js', { stdio: 'inherit' });
 
 console.log('Build completed successfully!');
