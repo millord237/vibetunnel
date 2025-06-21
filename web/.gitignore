@@ -111,3 +111,6 @@ lint_output.txt
 
 # Native build output
 native/
+
+# Bun lockfile (generated during native build)
+bun.lock

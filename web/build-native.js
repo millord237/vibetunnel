@@ -99,7 +99,7 @@ try {
   console.log('Compiling with Bun...');
   const buildDate = new Date().toISOString();
   const buildTimestamp = Date.now();
-  const compileCmd = `BUILD_DATE="${buildDate}" BUILD_TIMESTAMP="${buildTimestamp}" bun build src/index.ts --compile --outfile native/vibetunnel`;
+  const compileCmd = `BUILD_DATE="${buildDate}" BUILD_TIMESTAMP="${buildTimestamp}" bun build src/cli.ts --compile --outfile native/vibetunnel`;
   
   console.log(`Running: ${compileCmd}`);
   console.log(`Build date: ${buildDate}`);

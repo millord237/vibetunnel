@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
@@ -29,9 +29,8 @@ export default defineConfig({
       branches: 80,
       statements: 80,
     },
-    testTimeout: 10000,
-    // Separate test suites
-    includeSource: ['src/**/*.{js,ts}'],
+    testTimeout: 60000, // 60s for e2e tests
+    hookTimeout: 30000, // 30s for setup/teardown
   },
   resolve: {
     alias: {

@@ -25,10 +25,8 @@ execSync('esbuild src/client/test-terminals-entry.ts --bundle --outfile=public/b
 console.log('Building server...');
 execSync('tsc', { stdio: 'inherit' });
 
-// Build native executable if requested
-if (process.argv.includes('--native')) {
-  console.log('Building native executable...');
-  execSync('node build-native.js', { stdio: 'inherit' });
-}
+// Build native executable
+console.log('Building native executable...');
+execSync('node build-native.js', { stdio: 'inherit' });
 
 console.log('Build completed successfully!');
