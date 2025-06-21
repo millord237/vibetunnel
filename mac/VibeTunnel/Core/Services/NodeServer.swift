@@ -40,13 +40,36 @@ final class NodeServer: BaseProcessServer {
             message: "Initializing Node.js vibetunnel server..."
         ))
         
-        // Get paths for Node.js runtime and server
+        // Check for Bun executable first
+        if let bunExecutablePath = getBunExecutablePath() {
+            // Use Bun executable
+            logger.info("Using Bun executable")
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: bunExecutablePath)
+            
+            // No arguments needed for the standalone Bun executable
+            process.arguments = []
+            
+            // Set working directory to server directory if available
+            if let serverPath = getNodeServerPath() {
+                process.currentDirectoryURL = URL(fileURLWithPath: serverPath)
+                logger.info("Working directory: \(serverPath)")
+            }
+            
+            setupProcessEnvironment(process)
+            setupProcessPipes(process)
+            
+            try await launchProcess(process)
+            return
+        }
+        
+        // Fallback to Node.js
         guard let nodePath = getNodePath() else {
-            let error = ServerError.binaryNotFound("Node.js runtime")
-            logger.error("Node.js runtime not found")
+            let error = ServerError.binaryNotFound("Node.js runtime or Bun executable")
+            logger.error("Neither Bun executable nor Node.js runtime found")
             logContinuation?.yield(ServerLogEntry(
                 level: .error,
-                message: "Node.js runtime not available. Please ensure Node.js support is installed."
+                message: "Server runtime not available. Please ensure Node.js support is installed."
             ))
             throw error
         }
@@ -70,15 +93,71 @@ final class NodeServer: BaseProcessServer {
         let serverScript = URL(fileURLWithPath: serverPath).appendingPathComponent("server.js").path
         process.arguments = [serverScript]
         
-        // Set environment variables
+        setupProcessEnvironment(process)
+        setupProcessPipes(process)
+        
+        try await launchProcess(process)
+    }
+    
+    override func getStaticFilesPath() -> String? {
+        guard let serverPath = getNodeServerPath() else { return nil }
+        return URL(fileURLWithPath: serverPath).appendingPathComponent("public").path
+    }
+    
+    // MARK: - Private Methods
+    
+    private func getBunExecutablePath() -> String? {
+        // Check for bundled Bun executable
+        if let bundledPath = Bundle.main.path(forResource: "vibetunnel", ofType: nil) {
+            // Check if native modules are in the same directory
+            let executableDir = URL(fileURLWithPath: bundledPath).deletingLastPathComponent()
+            let ptyPath = executableDir.appendingPathComponent("pty.node").path
+            let spawnHelperPath = executableDir.appendingPathComponent("spawn-helper").path
+            
+            if FileManager.default.fileExists(atPath: ptyPath) &&
+               FileManager.default.fileExists(atPath: spawnHelperPath) {
+                return bundledPath
+            } else {
+                logger.warning("Bun executable found but native modules missing")
+                // Native modules might need to be copied or we fall back to Node.js
+                return nil
+            }
+        }
+        return nil
+    }
+    
+    private func getNodePath() -> String? {
+        // First check for bundled Node.js runtime
+        if let bundledPath = Bundle.main.path(forResource: "node", ofType: nil, inDirectory: "node") {
+            return bundledPath
+        }
+        
+        return nil
+    }
+    
+    private func getNodeServerPath() -> String? {
+        // Check for bundled server
+        guard let resourcesPath = Bundle.main.resourcePath else { return nil }
+        let serverPath = URL(fileURLWithPath: resourcesPath).appendingPathComponent("node-server").path
+        
+        if FileManager.default.fileExists(atPath: serverPath) {
+            return serverPath
+        }
+        
+        return nil
+    }
+    
+    private func setupProcessEnvironment(_ process: Process) {
         var environment = ProcessInfo.processInfo.environment
         environment["PORT"] = port
         environment["HOST"] = bindAddress
         environment["NODE_ENV"] = "production"
         
-        // Add node modules path
-        let nodeModulesPath = URL(fileURLWithPath: serverPath).appendingPathComponent("node_modules").path
-        environment["NODE_PATH"] = nodeModulesPath
+        // Add node modules path if we have a server directory
+        if let serverPath = getNodeServerPath() {
+            let nodeModulesPath = URL(fileURLWithPath: serverPath).appendingPathComponent("node_modules").path
+            environment["NODE_PATH"] = nodeModulesPath
+        }
         
         // For node-pty support
         if let resourcesPath = Bundle.main.resourcePath {
@@ -86,7 +165,9 @@ final class NodeServer: BaseProcessServer {
         }
         
         process.environment = environment
-        
+    }
+    
+    private func setupProcessPipes(_ process: Process) {
         // Setup stdout pipe
         let stdoutPipe = Pipe()
         process.standardOutput = stdoutPipe
@@ -99,7 +180,9 @@ final class NodeServer: BaseProcessServer {
         
         // Start output monitoring before launching process
         super.startOutputMonitoring()
-        
+    }
+    
+    private func launchProcess(_ process: Process) async throws {
         do {
             try await processHandler.runProcess(process)
             self.process = process
@@ -130,34 +213,6 @@ final class NodeServer: BaseProcessServer {
             ))
             throw error
         }
-    }
-    
-    override func getStaticFilesPath() -> String? {
-        guard let serverPath = getNodeServerPath() else { return nil }
-        return URL(fileURLWithPath: serverPath).appendingPathComponent("public").path
-    }
-    
-    // MARK: - Private Methods
-    
-    private func getNodePath() -> String? {
-        // First check for bundled Node.js runtime
-        if let bundledPath = Bundle.main.path(forResource: "node", ofType: nil, inDirectory: "node") {
-            return bundledPath
-        }
-        
-        return nil
-    }
-    
-    private func getNodeServerPath() -> String? {
-        // Check for bundled server
-        guard let resourcesPath = Bundle.main.resourcePath else { return nil }
-        let serverPath = URL(fileURLWithPath: resourcesPath).appendingPathComponent("node-server").path
-        
-        if FileManager.default.fileExists(atPath: serverPath) {
-            return serverPath
-        }
-        
-        return nil
     }
     
     private func monitorProcessTermination() async {
