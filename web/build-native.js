@@ -99,7 +99,15 @@ try {
   console.log('Compiling with Bun...');
   const buildDate = new Date().toISOString();
   const buildTimestamp = Date.now();
-  const compileCmd = `BUILD_DATE="${buildDate}" BUILD_TIMESTAMP="${buildTimestamp}" bun build src/cli.ts --compile --outfile native/vibetunnel`;
+  
+  // Detect how we're running bun
+  let bunCommand = 'bun';
+  if (process.argv[0].includes('npx')) {
+    // We're running via npx, so bun should also be run via npx
+    bunCommand = 'npx -y bun';
+  }
+  
+  const compileCmd = `BUILD_DATE="${buildDate}" BUILD_TIMESTAMP="${buildTimestamp}" ${bunCommand} build src/cli.ts --compile --outfile native/vibetunnel`;
   
   console.log(`Running: ${compileCmd}`);
   console.log(`Build date: ${buildDate}`);

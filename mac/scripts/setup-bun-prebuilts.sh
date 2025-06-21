@@ -44,10 +44,13 @@ build_current_arch() {
         echo "Building Bun executable..."
         if command -v bun &> /dev/null; then
             bun build-native.js
+        elif command -v npx &> /dev/null; then
+            echo "Using npx bun..."
+            npx -y bun build-native.js
         elif command -v node &> /dev/null; then
             node build-native.js
         else
-            echo -e "${RED}Error: Neither bun nor node found. Cannot build.${NC}"
+            echo -e "${RED}Error: No JavaScript runtime found (bun, npx, or node).${NC}"
             exit 1
         fi
     fi

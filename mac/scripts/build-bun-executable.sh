@@ -34,26 +34,53 @@ echo -e "${GREEN}Building and copying Bun executable (ARM64 only)...${NC}"
 # Change to web directory
 cd "$WEB_DIR"
 
-# Check if native directory exists, if not build it
+# Check if native directory exists, if not use prebuilts
 if [ ! -d "$NATIVE_DIR" ] || [ ! -f "$NATIVE_DIR/vibetunnel" ]; then
-    echo -e "${YELLOW}Native directory not found or incomplete. Building Bun executable...${NC}"
+    echo -e "${YELLOW}Native directory not found. Checking for prebuilt binaries...${NC}"
     
-    # Check if build-native.js exists
-    if [ -f "build-native.js" ]; then
-        # Ensure we have bun installed
-        if command -v bun &> /dev/null; then
-            echo "Using bun to build..."
-            bun build-native.js
-        elif command -v node &> /dev/null; then
-            echo "Using node to build..."
-            node build-native.js
+    # Use prebuilt binaries if available
+    PREBUILTS_DIR="$PROJECT_ROOT/mac/Resources/BunPrebuilts"
+    ARCH=$(uname -m)
+    
+    if [ "$ARCH" != "arm64" ]; then
+        echo -e "${RED}Error: VibeTunnel requires Apple Silicon (ARM64)${NC}"
+        exit 1
+    fi
+    
+    if [ -d "$PREBUILTS_DIR/arm64" ] && [ -f "$PREBUILTS_DIR/arm64/vibetunnel" ]; then
+        echo -e "${GREEN}Using prebuilt binaries for ARM64${NC}"
+        mkdir -p "$NATIVE_DIR"
+        cp "$PREBUILTS_DIR/arm64/vibetunnel" "$NATIVE_DIR/"
+        cp "$PREBUILTS_DIR/arm64/pty.node" "$NATIVE_DIR/"
+        cp "$PREBUILTS_DIR/arm64/spawn-helper" "$NATIVE_DIR/"
+        chmod +x "$NATIVE_DIR/vibetunnel"
+        chmod +x "$NATIVE_DIR/spawn-helper"
+    else
+        # Try to build if Bun is available
+        echo -e "${YELLOW}Prebuilt binaries not found. Attempting to build...${NC}"
+        
+        # Check if build-native.js exists
+        if [ -f "build-native.js" ]; then
+            # Try different ways to run bun
+            if command -v bun &> /dev/null; then
+                echo "Using bun to build..."
+                bun build-native.js
+            elif command -v npx &> /dev/null; then
+                echo "Bun not found, using npx bun to build..."
+                npx -y bun build-native.js
+            elif command -v node &> /dev/null; then
+                echo "Using node to build (fallback)..."
+                node build-native.js
+            else
+                echo -e "${RED}Error: No JavaScript runtime found (bun, npx, or node).${NC}"
+                echo -e "${RED}Please ensure prebuilt binaries are available in:${NC}"
+                echo -e "${RED}  $PREBUILTS_DIR/arm64/${NC}"
+                exit 1
+            fi
         else
-            echo -e "${RED}Error: Neither bun nor node found. Cannot build native executable.${NC}"
+            echo -e "${RED}Error: build-native.js not found and no prebuilt binaries available${NC}"
             exit 1
         fi
-    else
-        echo -e "${RED}Error: build-native.js not found in web directory${NC}"
-        exit 1
     fi
 fi
 

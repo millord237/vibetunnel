@@ -6,7 +6,7 @@
 # requiring any pre-installed tools except Xcode.
 #
 
-set -euo pipefail
+set -uo pipefail  # Remove 'e' flag to allow non-critical failures
 
 # Colors for output
 RED='\033[0;31m'
@@ -78,8 +78,31 @@ if [ -f "$BUN_BINARY" ]; then
     exit 0
 fi
 
-# No Bun found, install it
-install_bun
+# No Bun found, check alternatives
+echo -e "${YELLOW}Bun not found in PATH or locally${NC}"
+
+# Check if npx is available as an alternative
+if command -v npx &> /dev/null; then
+    echo -e "${GREEN}✓ npx found - can use 'npx bun' as fallback${NC}"
+    echo "  npx version: $(npx --version)"
+    exit 0
+fi
+
+# Check if prebuilts are available
+PREBUILTS_DIR="$PROJECT_DIR/Resources/BunPrebuilts"
+if [ -d "$PREBUILTS_DIR/arm64" ] && [ -f "$PREBUILTS_DIR/arm64/vibetunnel" ]; then
+    echo -e "${YELLOW}No npx found, but prebuilt binaries are available${NC}"
+    echo -e "${GREEN}✓ Build can proceed using prebuilt binaries${NC}"
+    exit 0
+fi
+
+# No alternatives found, try to install Bun
+echo -e "${YELLOW}No alternatives found. Attempting to install Bun locally...${NC}"
+install_bun || {
+    echo -e "${YELLOW}Warning: Bun installation failed${NC}"
+    echo -e "${YELLOW}Build may fail without bun, npx, or prebuilt binaries${NC}"
+    exit 0
+}
 
 # Export path for use in other scripts
 echo "export PATH=\"$BUN_DIR/bin:\$PATH\""

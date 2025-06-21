@@ -3,10 +3,25 @@
 echo "Building web frontend..."
 
 # Get the project directory
-PROJECT_DIR="${SRCROOT}"
+if [ -z "${SRCROOT}" ]; then
+    # If SRCROOT is not set (running outside Xcode), determine it from script location
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+else
+    PROJECT_DIR="${SRCROOT}"
+fi
+
 WEB_DIR="${PROJECT_DIR}/../web"
 PUBLIC_DIR="${WEB_DIR}/public"
-DEST_DIR="${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/web/public"
+
+# Set destination directory
+if [ -z "${BUILT_PRODUCTS_DIR}" ]; then
+    # Default for testing outside Xcode
+    DEST_DIR="/tmp/vibetunnel-web-build"
+else
+    DEST_DIR="${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/web/public"
+fi
+
 BUILD_TOOLS_DIR="${PROJECT_DIR}/.build-tools"
 
 # Add common Node.js installation paths to PATH
@@ -76,7 +91,8 @@ fi
 
 # Build the web frontend
 echo "Running npm build..."
-npm run build
+# Skip native build since Xcode handles that separately
+SKIP_NATIVE_BUILD=true npm run build
 if [ $? -ne 0 ]; then
     echo "error: npm run build failed"
     exit 1
