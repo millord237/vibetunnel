@@ -128,42 +128,6 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       return res.status(400).json({ error: 'Command array is required' });
     }
 
-    // If spawn_terminal is true, use the spawn-terminal logic
-    if (spawn_terminal) {
-      try {
-        // Generate session ID
-        const sessionId = generateSessionId();
-        const sessionName = name || `session_${Date.now()}`;
-
-        // Request Mac app to spawn terminal
-        console.log(`Requesting terminal spawn with command: ${JSON.stringify(command)}`);
-        const spawnResult = await requestTerminalSpawn({
-          sessionId,
-          sessionName,
-          command,
-          workingDir: resolvePath(workingDir, process.cwd()),
-        });
-
-        if (!spawnResult.success) {
-          throw new Error(spawnResult.error || 'Failed to spawn terminal');
-        }
-
-        // Wait a bit for the session to be created
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        // Return the session ID - client will poll for the session to appear
-        res.json({ sessionId, message: 'Terminal spawn requested' });
-        return;
-      } catch (error) {
-        console.error('Error spawning terminal:', error);
-        res.status(500).json({
-          error: 'Failed to spawn terminal',
-          details: error instanceof Error ? error.message : 'Unknown error',
-        });
-        return;
-      }
-    }
-
     try {
       // If remoteId is specified and we're in HQ mode, forward to remote
       if (remoteId && isHQMode && remoteRegistry) {
@@ -185,6 +149,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
             command,
             workingDir,
             name,
+            spawn_terminal,
             // Don't forward remoteId to avoid recursion
           }),
           signal: AbortSignal.timeout(10000), // 10 second timeout
@@ -204,6 +169,53 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
         res.json(result); // Return sessionId as-is, no namespacing
         return;
+      }
+
+      // If spawn_terminal is true and socket exists, use the spawn-terminal logic
+      const socketPath = '/tmp/vibetunnel-terminal.sock';
+      if (spawn_terminal && fs.existsSync(socketPath)) {
+        try {
+          // Generate session ID
+          const sessionId = generateSessionId();
+          const sessionName = name || `session_${Date.now()}`;
+
+          // Request Mac app to spawn terminal
+          console.log(`Requesting terminal spawn with command: ${JSON.stringify(command)}`);
+          const spawnResult = await requestTerminalSpawn({
+            sessionId,
+            sessionName,
+            command,
+            workingDir: resolvePath(workingDir, process.cwd()),
+          });
+
+          if (!spawnResult.success) {
+            if (spawnResult.error?.includes('ECONNREFUSED')) {
+              console.log(
+                'Terminal spawn requested but socket not available, falling back to normal spawn'
+              );
+            } else {
+              throw new Error(spawnResult.error || 'Failed to spawn terminal');
+            }
+          } else {
+            // Wait a bit for the session to be created
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            // Return the session ID - client will poll for the session to appear
+            res.json({ sessionId, message: 'Terminal spawn requested' });
+            return;
+          }
+        } catch (error) {
+          console.error('Error spawning terminal:', error);
+          res.status(500).json({
+            error: 'Failed to spawn terminal',
+            details: error instanceof Error ? error.message : 'Unknown error',
+          });
+          return;
+        }
+      } else if (spawn_terminal && !fs.existsSync(socketPath)) {
+        console.log(
+          'Terminal spawn requested but socket not available, falling back to normal spawn'
+        );
       }
 
       // Create local session
