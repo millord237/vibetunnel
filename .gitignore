@@ -105,3 +105,6 @@ web/vibetunnel
 /server/vibetunnel-server
 server/vibetunnel-fwd
 /.build-tools
+
+# Bun prebuilt executables (too large for git)
+mac/Resources/BunPrebuilts/*/vibetunnel

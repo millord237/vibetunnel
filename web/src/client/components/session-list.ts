@@ -114,8 +114,69 @@ export class SessionList extends LitElement {
                 ${this.loading
                   ? 'Loading sessions...'
                   : this.hideExited && this.sessions.length > 0
-                    ? 'No running sessions'
-                    : 'No sessions found'}
+                    ? html`
+                        <div class="space-y-4 max-w-2xl mx-auto text-left">
+                          <div class="text-lg font-semibold text-dark-text">
+                            No running sessions
+                          </div>
+                          <div class="text-sm text-dark-text-muted">
+                            There are exited sessions. Show them by toggling "Hide exited" above.
+                          </div>
+                        </div>
+                      `
+                    : html`
+                        <div class="space-y-6 max-w-2xl mx-auto text-left">
+                          <div class="text-lg font-semibold text-dark-text">
+                            No terminal sessions yet!
+                          </div>
+
+                          <div class="space-y-3">
+                            <div class="text-sm text-dark-text-muted">
+                              Get started by using the
+                              <code class="bg-dark-bg-secondary px-2 py-1 rounded">vt</code> command
+                              in your terminal:
+                            </div>
+
+                            <div
+                              class="bg-dark-bg-secondary p-4 rounded-lg font-mono text-xs space-y-2"
+                            >
+                              <div class="text-green-400">vt npm run dev</div>
+                              <div class="text-dark-text-muted pl-4"># Monitor your dev server</div>
+
+                              <div class="text-green-400">vt claude --dangerously...</div>
+                              <div class="text-dark-text-muted pl-4">
+                                # Keep an eye on AI agents
+                              </div>
+
+                              <div class="text-green-400">vt --shell</div>
+                              <div class="text-dark-text-muted pl-4">
+                                # Open an interactive shell
+                              </div>
+
+                              <div class="text-green-400">vt python train.py</div>
+                              <div class="text-dark-text-muted pl-4">
+                                # Watch long-running scripts
+                              </div>
+                            </div>
+                          </div>
+
+                          <div class="space-y-3 border-t border-dark-border pt-4">
+                            <div class="text-sm font-semibold text-dark-text">
+                              Haven't installed the CLI yet?
+                            </div>
+                            <div class="text-sm text-dark-text-muted space-y-1">
+                              <div>→ Click the VibeTunnel menu bar icon</div>
+                              <div>→ Go to Settings → Advanced → Install CLI Tools</div>
+                            </div>
+                          </div>
+
+                          <div class="text-xs text-dark-text-muted mt-4">
+                            Once installed, any command prefixed with
+                            <code class="bg-dark-bg-secondary px-1 rounded">vt</code> will appear
+                            here, accessible from any browser at localhost:4020.
+                          </div>
+                        </div>
+                      `}
               </div>
             `
           : html`
