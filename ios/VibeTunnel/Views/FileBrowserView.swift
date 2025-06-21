@@ -33,6 +33,110 @@ struct FileBrowserView: View {
         self.onSelect = onSelect
     }
 
+    private var navigationHeader: some View {
+        HStack(spacing: 16) {
+            // Back button
+            if viewModel.canGoUp {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    viewModel.navigateToParent()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Back")
+                            .font(.custom("SF Mono", size: 14))
+                    }
+                    .foregroundColor(Theme.Colors.terminalAccent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Theme.Colors.terminalAccent.opacity(0.1))
+                    )
+                }
+                .buttonStyle(TerminalButtonStyle())
+            }
+
+            // Current path display
+            HStack(spacing: 8) {
+                Image(systemName: "folder.fill")
+                    .foregroundColor(Theme.Colors.terminalAccent)
+                    .font(.system(size: 16))
+
+                Text(viewModel.displayPath)
+                    .font(.custom("SF Mono", size: 14))
+                    .foregroundColor(Theme.Colors.terminalGray)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                
+                // Git branch indicator
+                if let gitStatus = viewModel.gitStatus, gitStatus.isGitRepo, let branch = gitStatus.branch {
+                    Text("📍 \(branch)")
+                        .font(.custom("SF Mono", size: 12))
+                        .foregroundColor(Theme.Colors.terminalGray.opacity(0.8))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(Theme.Colors.terminalDarkGray)
+    }
+    
+    private var filterToolbar: some View {
+        HStack(spacing: 12) {
+            // Git filter toggle
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                viewModel.gitFilter = viewModel.gitFilter == .all ? .changed : .all
+                viewModel.loadDirectory(path: viewModel.currentPath)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 12))
+                    Text(viewModel.gitFilter == .changed ? "Git Changes" : "All Files")
+                        .font(.custom("SF Mono", size: 12))
+                }
+                .foregroundColor(viewModel.gitFilter == .changed ? Theme.Colors.successAccent : Theme.Colors.terminalGray)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(viewModel.gitFilter == .changed ? Theme.Colors.successAccent.opacity(0.2) : Theme.Colors.terminalGray.opacity(0.1))
+                )
+            }
+            .buttonStyle(TerminalButtonStyle())
+            
+            // Hidden files toggle
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                viewModel.showHidden.toggle()
+                viewModel.loadDirectory(path: viewModel.currentPath)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: viewModel.showHidden ? "eye" : "eye.slash")
+                        .font(.system(size: 12))
+                    Text("Hidden")
+                        .font(.custom("SF Mono", size: 12))
+                }
+                .foregroundColor(viewModel.showHidden ? Theme.Colors.terminalAccent : Theme.Colors.terminalGray)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(viewModel.showHidden ? Theme.Colors.terminalAccent.opacity(0.2) : Theme.Colors.terminalGray.opacity(0.1))
+                )
+            }
+            .buttonStyle(TerminalButtonStyle())
+            
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Theme.Colors.terminalDarkGray.opacity(0.5))
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -40,107 +144,8 @@ struct FileBrowserView: View {
                 Color.black.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Navigation header
-                    HStack(spacing: 16) {
-                        // Back button
-                        if viewModel.canGoUp {
-                            Button {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                viewModel.navigateToParent()
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "chevron.left")
-                                        .font(.system(size: 14, weight: .semibold))
-                                    Text("Back")
-                                        .font(.custom("SF Mono", size: 14))
-                                }
-                                .foregroundColor(Theme.Colors.terminalAccent)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Theme.Colors.terminalAccent.opacity(0.1))
-                                )
-                            }
-                            .buttonStyle(TerminalButtonStyle())
-                        }
-
-                        // Current path display
-                        HStack(spacing: 8) {
-                            Image(systemName: "folder.fill")
-                                .foregroundColor(Theme.Colors.terminalAccent)
-                                .font(.system(size: 16))
-
-                            Text(viewModel.displayPath)
-                                .font(.custom("SF Mono", size: 14))
-                                .foregroundColor(Theme.Colors.terminalGray)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            
-                            // Git branch indicator
-                            if let gitStatus = viewModel.gitStatus, gitStatus.isGitRepo, let branch = gitStatus.branch {
-                                Text("📍 \(branch)")
-                                    .font(.custom("SF Mono", size: 12))
-                                    .foregroundColor(Theme.Colors.terminalGray.opacity(0.8))
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
-                    .background(Theme.Colors.terminalDarkGray)
-                    
-                    // Filter toolbar
-                    HStack(spacing: 12) {
-                        // Git filter toggle
-                        Button {
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            viewModel.gitFilter = viewModel.gitFilter == .all ? .changed : .all
-                            viewModel.loadDirectory(path: viewModel.currentPath)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.triangle.branch")
-                                    .font(.system(size: 12))
-                                Text(viewModel.gitFilter == .changed ? "Git Changes" : "All Files")
-                                    .font(.custom("SF Mono", size: 12))
-                            }
-                            .foregroundColor(viewModel.gitFilter == .changed ? Theme.Colors.terminalGreen : Theme.Colors.terminalGray)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(viewModel.gitFilter == .changed ? Theme.Colors.terminalGreen.opacity(0.2) : Theme.Colors.terminalGray.opacity(0.1))
-                            )
-                        }
-                        .buttonStyle(TerminalButtonStyle())
-                        
-                        // Hidden files toggle
-                        Button {
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            viewModel.showHidden.toggle()
-                            viewModel.loadDirectory(path: viewModel.currentPath)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: viewModel.showHidden ? "eye" : "eye.slash")
-                                    .font(.system(size: 12))
-                                Text("Hidden")
-                                    .font(.custom("SF Mono", size: 12))
-                            }
-                            .foregroundColor(viewModel.showHidden ? Theme.Colors.terminalAccent : Theme.Colors.terminalGray)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(viewModel.showHidden ? Theme.Colors.terminalAccent.opacity(0.2) : Theme.Colors.terminalGray.opacity(0.1))
-                            )
-                        }
-                        .buttonStyle(TerminalButtonStyle())
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Theme.Colors.terminalDarkGray.opacity(0.5))
+                    navigationHeader
+                    filterToolbar
 
                     // File list
                     ScrollView {
