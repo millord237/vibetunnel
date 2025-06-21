@@ -30,13 +30,16 @@ As code changes, the spec.md might get outdated. If you detect outdated informat
 
 ## Development Workflow
 - Make changes to source files in `src/`
-- Format, lint and typecheck after you made changes.
+- Format, lint and typecheck after you made changes
     - `npm run format`
     - `npm run lint`
     - `npm run lint:fix`
     - `npm run typecheck`
-- Always fix all linting and type checking errors.
+- Always fix all linting and type checking errors, including in unrelated code
 - Never run the tests, unless explicitely asked to. `npm run test`
+
+**CRITICAL**
+- **NEVER EVER USE SETTIMEOUT FOR ANYTHING IN THE FRONTEND UNLESS EXPLICITLY PERMITTED**
 
 ## Server Execution
 - NEVER RUN THE SERVER YOURSELF, I ALWAYS RUN IT ON THE SIDE VIA NPM RUN DEV!
