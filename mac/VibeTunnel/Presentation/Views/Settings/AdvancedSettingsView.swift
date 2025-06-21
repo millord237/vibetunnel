@@ -38,33 +38,23 @@ struct AdvancedSettingsView: View {
 
                                 // Actual content
                                 if cliInstaller.isInstalled {
-                                    if cliInstaller.needsUpdate {
-                                        Button("Update VT") {
-                                            cliInstaller.updateCLITool()
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .disabled(cliInstaller.isInstalling)
-                                    } else {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
-                                            Text(
-                                                "CLI \(cliInstaller.installedVersion?.replacingOccurrences(of: "v", with: "") ?? "unknown") installed"
-                                            )
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        Text("VT installed")
                                             .foregroundColor(.secondary)
 
-                                            // Show reinstall button in debug mode
-                                            if debugMode {
-                                                Button(action: {
-                                                    cliInstaller.installCLITool()
-                                                }, label: {
-                                                    Image(systemName: "arrow.clockwise.circle")
-                                                        .font(.system(size: 14))
-                                                })
-                                                .buttonStyle(.plain)
-                                                .foregroundColor(.accentColor)
-                                                .help("Reinstall CLI tool")
-                                            }
+                                        // Show reinstall button in debug mode
+                                        if debugMode {
+                                            Button(action: {
+                                                cliInstaller.installCLITool()
+                                            }, label: {
+                                                Image(systemName: "arrow.clockwise.circle")
+                                                    .font(.system(size: 14))
+                                            })
+                                            .buttonStyle(.plain)
+                                            .foregroundColor(.accentColor)
+                                            .help("Reinstall CLI tool")
                                         }
                                     }
                                 } else {
@@ -84,17 +74,9 @@ struct AdvancedSettingsView: View {
                                 .font(.caption)
                                 .foregroundColor(.red)
                         } else if cliInstaller.isInstalled {
-                            if cliInstaller.needsUpdate {
-                                Text(
-                                    "Update available: \(cliInstaller.installedVersion ?? "unknown") → \(cliInstaller.bundledVersion ?? "unknown")"
-                                )
+                            Text("The 'vt' command line tool is installed at /usr/local/bin/vt")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            } else {
-                                Text("The 'vt' command line tool is installed at /usr/local/bin/vt")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
                         } else {
                             Text("Install the 'vt' command line tool to /usr/local/bin for terminal access.")
                                 .font(.caption)

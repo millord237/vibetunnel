@@ -42,7 +42,7 @@ class ServerManager {
     private(set) var isRunning = false
     private(set) var isRestarting = false
     private(set) var lastError: Error?
-    
+
     /// Track if we're in the middle of handling a crash to prevent multiple restarts
     private var isHandlingCrash = false
     /// Number of consecutive crashes for backoff
@@ -136,7 +136,7 @@ class ServerManager {
             let server = BunServer()
             server.port = port
             server.bindAddress = bindAddress
-            
+
             // Set up crash handler
             server.onCrash = { [weak self] exitCode in
                 Task { @MainActor in
@@ -149,7 +149,7 @@ class ServerManager {
             bunServer = server
             isRunning = true
             lastError = nil
-            
+
             // Reset crash counter on successful start
             consecutiveCrashes = 0
 
@@ -176,19 +176,19 @@ class ServerManager {
     func stop() async {
         guard let server = bunServer else {
             logger.warning("No server running")
-            isRunning = false  // Ensure state is synced
+            isRunning = false // Ensure state is synced
             return
         }
 
         logger.info("Stopping server")
-        
+
         // Clear crash handler to prevent auto-restart
         server.onCrash = nil
 
         await server.stop()
         bunServer = nil
         isRunning = false
-        
+
         // Reset crash tracking when manually stopped
         consecutiveCrashes = 0
         lastCrashTime = nil
@@ -201,6 +201,10 @@ class ServerManager {
         defer { isRestarting = false }
 
         await stop()
+        
+        // Add a brief delay to ensure the port is released by the OS
+        try? await Task.sleep(for: .milliseconds(500))
+        
         await start()
     }
 
@@ -261,24 +265,24 @@ class ServerManager {
     }
 
     // MARK: - Server Management
-    
+
     /// Handle server crash with automatic restart logic
     private func handleServerCrash(exitCode: Int32) async {
         logger.error("Server crashed with exit code: \(exitCode)")
-        
+
         // Update state immediately
         isRunning = false
         bunServer = nil
-        
+
         // Prevent multiple simultaneous crash handlers
         guard !isHandlingCrash else {
             logger.warning("Already handling a crash, skipping duplicate handler")
             return
         }
-        
+
         isHandlingCrash = true
         defer { isHandlingCrash = false }
-        
+
         // Check crash rate
         let now = Date()
         if let lastCrash = lastCrashTime {
@@ -293,14 +297,14 @@ class ServerManager {
             consecutiveCrashes = 1
         }
         lastCrashTime = now
-        
+
         // Implement exponential backoff for crashes
         let maxRetries = 3
         guard consecutiveCrashes <= maxRetries else {
             logger.error("Server crashed \(self.consecutiveCrashes) times in a row, giving up on auto-restart")
             lastError = NSError(
                 domain: "sh.vibetunnel.vibetunnel.ServerManager",
-                code: 1002,
+                code: 1_002,
                 userInfo: [
                     NSLocalizedDescriptionKey: "Server keeps crashing",
                     NSLocalizedFailureReasonErrorKey: "The server crashed \(consecutiveCrashes) times in a row",
@@ -309,43 +313,43 @@ class ServerManager {
             )
             return
         }
-        
+
         // Calculate backoff delay
         let baseDelay: TimeInterval = 2.0
         let delay = baseDelay * pow(2.0, Double(consecutiveCrashes - 1))
-        
+
         logger.info("Will restart server after \(delay) seconds (attempt \(self.consecutiveCrashes) of \(maxRetries))")
-        
+
         // Wait with exponential backoff
         try? await Task.sleep(for: .seconds(delay))
-        
+
         // Only restart if we haven't been manually stopped in the meantime
         guard bunServer == nil else {
             logger.info("Server was manually restarted during crash recovery, skipping auto-restart")
             return
         }
-        
+
         // Restart with full port conflict detection
         logger.info("Auto-restarting server after crash...")
         await start()
     }
-    
+
     /// Monitor server health periodically
     func startHealthMonitoring() {
         Task {
             while true {
                 try? await Task.sleep(for: .seconds(30))
-                
+
                 guard let server = bunServer else { continue }
-                
+
                 // Check if the server process is still running
                 let health = await server.checkHealth()
-                
+
                 if !health && isRunning {
                     logger.warning("Server health check failed but state shows running, syncing state")
                     isRunning = false
                     bunServer = nil
-                    
+
                     // Trigger restart
                     await handleServerCrash(exitCode: -1)
                 }

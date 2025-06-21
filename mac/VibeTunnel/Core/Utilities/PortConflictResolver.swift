@@ -35,7 +35,7 @@ struct ProcessDetails {
             return true
         }
         // Check if the path contains our bundle identifier
-        if let path = path, path.contains("sh.vibetunnel") {
+        if let path, path.contains("sh.vibetunnel") {
             return true
         }
         return false
@@ -348,8 +348,11 @@ final class PortConflictResolver {
     }
 
     private func determineAction(for process: ProcessDetails, rootProcess: ProcessDetails?) -> ConflictAction {
-        logger.debug("Determining action for process: \(process.name) (PID: \(process.pid), Path: \(process.path ?? "unknown"))")
-        
+        logger
+            .debug(
+                "Determining action for process: \(process.name) (PID: \(process.pid), Path: \(process.path ?? "unknown"))"
+            )
+
         // If it's our managed server, kill it
         if process.isManagedServer {
             logger.info("Process identified as managed server: \(process.name)")

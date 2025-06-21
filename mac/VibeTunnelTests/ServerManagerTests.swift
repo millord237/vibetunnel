@@ -221,15 +221,15 @@ struct ServerManagerTests {
         // Start server
         await manager.start()
         try await Task.sleep(for: .milliseconds(500))
-        
+
         // Verify server is running
         #expect(manager.isRunning)
         #expect(manager.bunServer != nil)
-        
+
         // Note: We can't easily simulate crashes in tests without
         // modifying the production code. The BunServer has built-in
         // auto-restart functionality on unexpected termination.
-        
+
         // Cleanup
         await manager.stop()
     }

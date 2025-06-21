@@ -10,6 +10,7 @@ import OSLog
 final class BunServer {
     /// Callback when the server crashes unexpectedly
     var onCrash: ((Int32) -> Void)?
+
     // MARK: - Properties
 
     private var process: Process?
@@ -103,7 +104,7 @@ final class BunServer {
 
         // Build the vibetunnel command with all arguments
         var vibetunnelArgs = "--port \(port)"
-        
+
         // Add password flag if password protection is enabled
         if UserDefaults.standard.bool(forKey: "dashboardPasswordEnabled") && DashboardKeychain.shared.hasPassword() {
             logger.info("Password protection enabled, retrieving from keychain")
@@ -116,12 +117,12 @@ final class BunServer {
                 vibetunnelArgs += " --username admin --password \"\(escapedPassword)\""
             }
         }
-        
+
         // Create wrapper to run vibetunnel
         let vibetunnelCommand = """
-            # Run vibetunnel directly
-            exec "\(binaryPath)" \(vibetunnelArgs)
-            """
+        # Run vibetunnel directly
+        exec "\(binaryPath)" \(vibetunnelArgs)
+        """
 
         // Note: cleanup-startup is not supported by the current server implementation
 
@@ -371,15 +372,15 @@ final class BunServer {
         await process.waitUntilExitAsync()
 
         let exitCode = process.terminationStatus
-        
+
         if self.isRunning {
             // Unexpected termination
             self.logger.error("Bun server terminated unexpectedly with exit code: \(exitCode)")
             self.isRunning = false
-            
+
             // Clean up process reference
             self.process = nil
-            
+
             // Notify about the crash
             if let onCrash = self.onCrash {
                 self.logger.info("Notifying ServerManager about server crash")
@@ -429,7 +430,7 @@ extension Process {
             }
         }
     }
-    
+
     /// Wait for the process to exit asynchronously
     func waitUntilExitAsync() async {
         await withCheckedContinuation { continuation in
@@ -439,7 +440,7 @@ extension Process {
             }
         }
     }
-    
+
     /// Terminate the process asynchronously
     func terminateAsync() async {
         await withCheckedContinuation { continuation in
@@ -451,7 +452,7 @@ extension Process {
             }
         }
     }
-    
+
     /// Wait for exit with timeout
     func waitUntilExitWithTimeout(seconds: TimeInterval) async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
@@ -459,17 +460,17 @@ extension Process {
                 await self.waitUntilExitAsync()
                 return true
             }
-            
+
             group.addTask {
                 try? await Task.sleep(for: .seconds(seconds))
                 return false
             }
-            
+
             for await result in group {
                 group.cancelAll()
                 return result
             }
-            
+
             return false
         }
     }

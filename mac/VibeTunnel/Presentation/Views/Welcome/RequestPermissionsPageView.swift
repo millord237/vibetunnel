@@ -27,7 +27,7 @@ struct RequestPermissionsPageView: View {
         _ = permissionUpdateTrigger
         return permissionManager.hasPermission(.appleScript)
     }
-    
+
     private var hasAccessibilityPermission: Bool {
         // This will cause a re-read whenever permissionUpdateTrigger changes
         _ = permissionUpdateTrigger
