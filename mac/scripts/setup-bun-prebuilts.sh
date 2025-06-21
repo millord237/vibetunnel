@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# Setup pre-built Bun binaries for universal app support
+# Setup pre-built binaries for universal app support
 #
-# This script copies the current architecture's Bun binaries to the prebuilts directory
+# This script copies the current architecture's binaries to the prebuilts directory
 # and can also download pre-built binaries for other architectures if needed.
 #
 
@@ -30,27 +30,23 @@ if [ "$CURRENT_ARCH" != "arm64" ]; then
 fi
 ARCH_DIR="arm64"
 
-echo -e "${BLUE}Setting up Bun prebuilt binaries...${NC}"
+echo -e "${BLUE}Setting up prebuilt binaries...${NC}"
 echo "Current architecture: $CURRENT_ARCH"
 
 # Function to build and copy binaries for current architecture
 build_current_arch() {
-    echo -e "${YELLOW}Building Bun binaries for $CURRENT_ARCH...${NC}"
+    echo -e "${YELLOW}Building binaries for $CURRENT_ARCH...${NC}"
     
     cd "$WEB_DIR"
     
     # Build if native directory doesn't exist
     if [ ! -f "native/vibetunnel" ]; then
-        echo "Building Bun executable..."
-        if command -v bun &> /dev/null; then
-            bun build-native.js
-        elif command -v npx &> /dev/null; then
-            echo "Using npx bun..."
-            npx -y bun build-native.js
-        elif command -v node &> /dev/null; then
+        echo "Building executable..."
+        if command -v node &> /dev/null; then
             node build-native.js
         else
-            echo -e "${RED}Error: No JavaScript runtime found (bun, npx, or node).${NC}"
+            echo -e "${RED}Error: Node.js not found.${NC}"
+            echo -e "${RED}Please install Node.js 20+ to build the executable.${NC}"
             exit 1
         fi
     fi

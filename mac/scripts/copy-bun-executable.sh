@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copy Bun executable and native modules to the app bundle
+# Copy executable and native modules to the app bundle
 #
 
 set -euo pipefail
@@ -26,7 +26,7 @@ fi
 
 DEST_RESOURCES="$1"
 
-echo -e "${GREEN}Copying Bun executable and native modules...${NC}"
+echo -e "${GREEN}Copying executable and native modules...${NC}"
 
 # Check if native directory exists
 if [ ! -d "$NATIVE_DIR" ]; then
@@ -35,14 +35,14 @@ if [ ! -d "$NATIVE_DIR" ]; then
     exit 0
 fi
 
-# Check if Bun executable exists
+# Check if executable exists
 if [ ! -f "$NATIVE_DIR/vibetunnel" ]; then
-    echo -e "${YELLOW}Warning: Bun executable not found at $NATIVE_DIR/vibetunnel${NC}"
+    echo -e "${YELLOW}Warning: Executable not found at $NATIVE_DIR/vibetunnel${NC}"
     exit 0
 fi
 
-# Copy Bun executable
-echo "Copying Bun executable..."
+# Copy executable
+echo "Copying executable..."
 cp "$NATIVE_DIR/vibetunnel" "$DEST_RESOURCES/"
 chmod +x "$DEST_RESOURCES/vibetunnel"
 
@@ -58,7 +58,7 @@ if [ -f "$NATIVE_DIR/spawn-helper" ]; then
     chmod +x "$DEST_RESOURCES/spawn-helper"
 fi
 
-echo -e "${GREEN}✓ Bun executable and native modules copied successfully${NC}"
+echo -e "${GREEN}✓ Executable and native modules copied successfully${NC}"
 
 # Verify the files
 echo "Verifying copied files:"

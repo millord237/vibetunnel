@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Build and copy Bun executable and native modules to the app bundle
+# Build and copy Node.js SEA executable and native modules to the app bundle
 # ARM64 only - VibeTunnel requires Apple Silicon
 #
 
@@ -29,7 +29,7 @@ else
     DEST_RESOURCES="$1"
 fi
 
-echo -e "${GREEN}Building and copying Bun executable (ARM64 only)...${NC}"
+echo -e "${GREEN}Building and copying Node.js SEA executable (ARM64 only)...${NC}"
 
 # Change to web directory
 cd "$WEB_DIR"
@@ -56,24 +56,18 @@ if [ ! -d "$NATIVE_DIR" ] || [ ! -f "$NATIVE_DIR/vibetunnel" ]; then
         chmod +x "$NATIVE_DIR/vibetunnel"
         chmod +x "$NATIVE_DIR/spawn-helper"
     else
-        # Try to build if Bun is available
+        # Try to build with Node.js
         echo -e "${YELLOW}Prebuilt binaries not found. Attempting to build...${NC}"
         
         # Check if build-native.js exists
         if [ -f "build-native.js" ]; then
-            # Try different ways to run bun
-            if command -v bun &> /dev/null; then
-                echo "Using bun to build..."
-                bun build-native.js
-            elif command -v npx &> /dev/null; then
-                echo "Bun not found, using npx bun to build..."
-                npx -y bun build-native.js
-            elif command -v node &> /dev/null; then
-                echo "Using node to build (fallback)..."
+            # Use Node.js to build
+            if command -v node &> /dev/null; then
+                echo "Using Node.js to build SEA executable..."
                 node build-native.js
             else
-                echo -e "${RED}Error: No JavaScript runtime found (bun, npx, or node).${NC}"
-                echo -e "${RED}Please ensure prebuilt binaries are available in:${NC}"
+                echo -e "${RED}Error: Node.js not found.${NC}"
+                echo -e "${RED}Please install Node.js 20+ or ensure prebuilt binaries are available in:${NC}"
                 echo -e "${RED}  $PREBUILTS_DIR/arm64/${NC}"
                 exit 1
             fi
@@ -86,12 +80,12 @@ fi
 
 # Verify native files exist
 if [ ! -f "$NATIVE_DIR/vibetunnel" ]; then
-    echo -e "${RED}Error: Bun executable not found at $NATIVE_DIR/vibetunnel${NC}"
+    echo -e "${RED}Error: Executable not found at $NATIVE_DIR/vibetunnel${NC}"
     exit 1
 fi
 
-# Copy Bun executable
-echo "Copying Bun executable to app bundle..."
+# Copy executable
+echo "Copying executable to app bundle..."
 cp "$NATIVE_DIR/vibetunnel" "$DEST_RESOURCES/"
 chmod +x "$DEST_RESOURCES/vibetunnel"
 
@@ -113,7 +107,7 @@ else
     exit 1
 fi
 
-echo -e "${GREEN}✓ Bun executable and native modules copied successfully${NC}"
+echo -e "${GREEN}✓ Executable and native modules copied successfully${NC}"
 
 # Verify the files
 echo "Verifying copied files:"
