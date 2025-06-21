@@ -29,6 +29,7 @@ export class VibeTunnelApp extends LitElement {
   @state() private hideExited = this.loadHideExitedState();
   @state() private showCreateModal = false;
   @state() private showFileBrowser = false;
+  private initialLoadComplete = false;
 
   private hotReloadWs: WebSocket | null = null;
   private errorTimeoutId: number | null = null;
@@ -113,7 +114,10 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private async loadSessions() {
-    this.loading = true;
+    // Only show loading state on initial load, not on refreshes
+    if (!this.initialLoadComplete) {
+      this.loading = true;
+    }
     try {
       const response = await fetch('/api/sessions');
       if (response.ok) {
@@ -127,6 +131,7 @@ export class VibeTunnelApp extends LitElement {
       this.showError('Failed to load sessions');
     } finally {
       this.loading = false;
+      this.initialLoadComplete = true;
     }
   }
 
