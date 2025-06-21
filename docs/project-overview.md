@@ -49,7 +49,7 @@ The project provides a native macOS menu bar application that runs a local HTTP 
 
 **macOS Requirements**
 - macOS 14.0+ (Sonoma or later)
-- Apple Silicon Mac (M1/M2/M3)
+- Apple Silicon Mac (M1+)
 - Xcode 15+ for building from source
 - Code signing for proper terminal permissions
 
