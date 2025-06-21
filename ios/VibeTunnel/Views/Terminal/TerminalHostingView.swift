@@ -25,8 +25,25 @@ struct TerminalHostingView: UIViewRepresentable {
         terminal.nativeBackgroundColor = UIColor(theme.background)
         
         // Set ANSI colors from theme
-        // TODO: Fix color conversion for SwiftTerm
-        // terminal.installColors([])
+        let ansiColors: [SwiftTerm.Color] = [
+            UIColor(theme.black).toSwiftTermColor(),         // 0
+            UIColor(theme.red).toSwiftTermColor(),          // 1
+            UIColor(theme.green).toSwiftTermColor(),        // 2
+            UIColor(theme.yellow).toSwiftTermColor(),       // 3
+            UIColor(theme.blue).toSwiftTermColor(),         // 4
+            UIColor(theme.magenta).toSwiftTermColor(),      // 5
+            UIColor(theme.cyan).toSwiftTermColor(),         // 6
+            UIColor(theme.white).toSwiftTermColor(),        // 7
+            UIColor(theme.brightBlack).toSwiftTermColor(),  // 8
+            UIColor(theme.brightRed).toSwiftTermColor(),    // 9
+            UIColor(theme.brightGreen).toSwiftTermColor(),  // 10
+            UIColor(theme.brightYellow).toSwiftTermColor(), // 11
+            UIColor(theme.brightBlue).toSwiftTermColor(),   // 12
+            UIColor(theme.brightMagenta).toSwiftTermColor(),// 13
+            UIColor(theme.brightCyan).toSwiftTermColor(),   // 14
+            UIColor(theme.brightWhite).toSwiftTermColor()   // 15
+        ]
+        terminal.installColors(ansiColors)
         
         // Set cursor color
         terminal.caretColor = UIColor(theme.cursor)
@@ -68,8 +85,25 @@ struct TerminalHostingView: UIViewRepresentable {
         terminal.selectedTextBackgroundColor = UIColor(theme.selection)
         
         // Update ANSI colors
-        // TODO: Fix color conversion for SwiftTerm
-        // terminal.installColors([])
+        let ansiColors: [SwiftTerm.Color] = [
+            UIColor(theme.black).toSwiftTermColor(),         // 0
+            UIColor(theme.red).toSwiftTermColor(),          // 1
+            UIColor(theme.green).toSwiftTermColor(),        // 2
+            UIColor(theme.yellow).toSwiftTermColor(),       // 3
+            UIColor(theme.blue).toSwiftTermColor(),         // 4
+            UIColor(theme.magenta).toSwiftTermColor(),      // 5
+            UIColor(theme.cyan).toSwiftTermColor(),         // 6
+            UIColor(theme.white).toSwiftTermColor(),        // 7
+            UIColor(theme.brightBlack).toSwiftTermColor(),  // 8
+            UIColor(theme.brightRed).toSwiftTermColor(),    // 9
+            UIColor(theme.brightGreen).toSwiftTermColor(),  // 10
+            UIColor(theme.brightYellow).toSwiftTermColor(), // 11
+            UIColor(theme.brightBlue).toSwiftTermColor(),   // 12
+            UIColor(theme.brightMagenta).toSwiftTermColor(),// 13
+            UIColor(theme.brightCyan).toSwiftTermColor(),   // 14
+            UIColor(theme.brightWhite).toSwiftTermColor()   // 15
+        ]
+        terminal.installColors(ansiColors)
 
         // Update terminal content from viewModel
         context.coordinator.terminal = terminal
@@ -206,3 +240,24 @@ struct TerminalHostingView: UIViewRepresentable {
 
 /// Add conformance with proper isolation
 extension TerminalHostingView.Coordinator: @preconcurrency SwiftTerm.TerminalViewDelegate {}
+
+// MARK: - UIColor Extension for SwiftTerm
+
+extension UIColor {
+    /// Convert UIColor to SwiftTerm.Color (which uses 16-bit color components)
+    func toSwiftTermColor() -> SwiftTerm.Color {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        
+        getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        
+        // Convert from 0.0-1.0 range to 0-65535 range
+        let red16 = UInt16(red * 65535.0)
+        let green16 = UInt16(green * 65535.0)
+        let blue16 = UInt16(blue * 65535.0)
+        
+        return SwiftTerm.Color(red: red16, green: green16, blue: blue16)
+    }
+}
