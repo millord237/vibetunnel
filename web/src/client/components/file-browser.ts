@@ -73,8 +73,8 @@ export class FileBrowser extends LitElement {
 
   async connectedCallback() {
     super.connectedCallback();
-    if (this.visible && this.session) {
-      this.currentPath = this.session.workingDir || '.';
+    if (this.visible) {
+      this.currentPath = this.session?.workingDir || '.';
       await this.loadDirectory(this.currentPath);
     }
     document.addEventListener('keydown', this.handleKeyDown);
@@ -84,8 +84,8 @@ export class FileBrowser extends LitElement {
     super.updated(changedProperties);
 
     if (changedProperties.has('visible') || changedProperties.has('session')) {
-      if (this.visible && this.session) {
-        this.currentPath = this.session.workingDir || '.';
+      if (this.visible) {
+        this.currentPath = this.session?.workingDir || '.';
         await this.loadDirectory(this.currentPath);
       }
     }

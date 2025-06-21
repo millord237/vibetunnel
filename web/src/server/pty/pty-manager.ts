@@ -74,6 +74,9 @@ export class PtyManager {
     options: SessionOptions = {}
   ): Promise<SessionCreationResult> {
     const sessionId = options.sessionId || uuidv4();
+    console.log(
+      `[PTY] Creating session - provided ID: ${options.sessionId}, using ID: ${sessionId}`
+    );
     const sessionName = options.sessionName || path.basename(command[0]);
     const workingDir = options.workingDir || process.cwd();
     const term = options.term || this.defaultTerm;

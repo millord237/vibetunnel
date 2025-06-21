@@ -38,6 +38,8 @@ function showUsage() {
 }
 
 export async function startVibeTunnelForward(args: string[]) {
+  console.log(`[fwd] Raw args received: ${JSON.stringify(args)}`);
+
   // Parse command line arguments
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
     showUsage();
@@ -51,6 +53,8 @@ export async function startVibeTunnelForward(args: string[]) {
   if (args[0] === '--session-id' && args.length > 1) {
     sessionId = args[1];
     remainingArgs = args.slice(2);
+    console.log(`[fwd] Parsed session ID: ${sessionId}`);
+    console.log(`[fwd] Remaining args after session ID: ${JSON.stringify(remainingArgs)}`);
   }
 
   const monitorOnly = remainingArgs[0] === '--monitor-only';
@@ -66,6 +70,7 @@ export async function startVibeTunnelForward(args: string[]) {
 
   console.log(`Starting command: ${command.join(' ')}`);
   console.log(`Working directory: ${cwd}`);
+  console.log(`Session ID: ${sessionId || 'not provided'}`);
 
   // Initialize PTY manager
   const controlPath = path.join(os.homedir(), '.vibetunnel', 'control');
