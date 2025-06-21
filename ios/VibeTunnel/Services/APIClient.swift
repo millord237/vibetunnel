@@ -463,7 +463,7 @@ class APIClient: APIClientProtocol {
 
     // MARK: - File System Operations
 
-    func browseDirectory(path: String) async throws -> (absolutePath: String, files: [FileEntry]) {
+    func browseDirectory(path: String, showHidden: Bool = false, gitFilter: String = "all") async throws -> DirectoryListing {
         guard let baseURL else {
             throw APIError.noServerConfigured
         }
@@ -474,7 +474,11 @@ class APIClient: APIClientProtocol {
         ) else {
             throw APIError.invalidURL
         }
-        components.queryItems = [URLQueryItem(name: "path", value: path)]
+        components.queryItems = [
+            URLQueryItem(name: "path", value: path),
+            URLQueryItem(name: "showHidden", value: String(showHidden)),
+            URLQueryItem(name: "gitFilter", value: gitFilter)
+        ]
 
         guard let url = components.url else {
             throw APIError.invalidResponse
@@ -500,14 +504,8 @@ class APIClient: APIClientProtocol {
 
         try validateResponse(response)
 
-        // Decode the response which includes absolutePath and files
-        struct BrowseResponse: Codable {
-            let absolutePath: String
-            let files: [FileEntry]
-        }
-
-        let browseResponse = try decoder.decode(BrowseResponse.self, from: data)
-        return (absolutePath: browseResponse.absolutePath, files: browseResponse.files)
+        // Decode the DirectoryListing response
+        return try decoder.decode(DirectoryListing.self, from: data)
     }
 
     func createDirectory(path: String) async throws {

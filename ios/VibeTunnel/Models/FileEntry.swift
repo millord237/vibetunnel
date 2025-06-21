@@ -1,5 +1,14 @@
 import Foundation
 
+/// Git status for a file
+enum GitFileStatus: String, Codable {
+    case modified
+    case added
+    case deleted
+    case untracked
+    case unchanged
+}
+
 /// Represents a file or directory entry in the file system.
 ///
 /// FileEntry contains metadata about a file or directory, including
@@ -12,6 +21,8 @@ struct FileEntry: Codable, Identifiable {
     let size: Int64
     let mode: String
     let modTime: Date
+    let isGitTracked: Bool?
+    let gitStatus: GitFileStatus?
 
     var id: String { path }
 
@@ -24,13 +35,17 @@ struct FileEntry: Codable, Identifiable {
     ///   - size: The file size in bytes
     ///   - mode: The file permissions mode string
     ///   - modTime: The modification time
-    init(name: String, path: String, isDir: Bool, size: Int64, mode: String, modTime: Date) {
+    ///   - isGitTracked: Whether the file is in a git repository
+    ///   - gitStatus: The git status of the file
+    init(name: String, path: String, isDir: Bool, size: Int64, mode: String, modTime: Date, isGitTracked: Bool? = nil, gitStatus: GitFileStatus? = nil) {
         self.name = name
         self.path = path
         self.isDir = isDir
         self.size = size
         self.mode = mode
         self.modTime = modTime
+        self.isGitTracked = isGitTracked
+        self.gitStatus = gitStatus
     }
 
     enum CodingKeys: String, CodingKey {
@@ -40,6 +55,8 @@ struct FileEntry: Codable, Identifiable {
         case size
         case mode
         case modTime = "mod_time"
+        case isGitTracked = "isGitTracked"
+        case gitStatus = "gitStatus"
     }
 
     /// Creates a FileEntry from a decoder.
@@ -55,6 +72,8 @@ struct FileEntry: Codable, Identifiable {
         isDir = try container.decode(Bool.self, forKey: .isDir)
         size = try container.decode(Int64.self, forKey: .size)
         mode = try container.decode(String.self, forKey: .mode)
+        isGitTracked = try container.decodeIfPresent(Bool.self, forKey: .isGitTracked)
+        gitStatus = try container.decodeIfPresent(GitFileStatus.self, forKey: .gitStatus)
 
         // Decode mod_time string as Date
         let modTimeString = try container.decode(String.self, forKey: .modTime)
@@ -98,6 +117,16 @@ struct FileEntry: Codable, Identifiable {
     }
 }
 
+/// Git status information for a directory
+struct GitStatus: Codable {
+    let isGitRepo: Bool
+    let branch: String?
+    let modified: [String]
+    let added: [String]
+    let deleted: [String]
+    let untracked: [String]
+}
+
 /// Represents a directory listing with its contents.
 ///
 /// DirectoryListing contains the absolute path of a directory
@@ -105,7 +134,16 @@ struct FileEntry: Codable, Identifiable {
 struct DirectoryListing: Codable {
     /// The absolute path of the directory being listed.
     let absolutePath: String
-
+    
     /// Array of file and subdirectory entries in this directory.
     let files: [FileEntry]
+    
+    /// Git status information for the directory
+    let gitStatus: GitStatus?
+    
+    enum CodingKeys: String, CodingKey {
+        case absolutePath = "fullPath"
+        case files
+        case gitStatus
+    }
 }

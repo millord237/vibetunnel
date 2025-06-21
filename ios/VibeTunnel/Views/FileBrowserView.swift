@@ -76,12 +76,71 @@ struct FileBrowserView: View {
                                 .foregroundColor(Theme.Colors.terminalGray)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
+                            
+                            // Git branch indicator
+                            if let gitStatus = viewModel.gitStatus, gitStatus.isGitRepo, let branch = gitStatus.branch {
+                                Text("📍 \(branch)")
+                                    .font(.custom("SF Mono", size: 12))
+                                    .foregroundColor(Theme.Colors.terminalGray.opacity(0.8))
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
                     .background(Theme.Colors.terminalDarkGray)
+                    
+                    // Filter toolbar
+                    HStack(spacing: 12) {
+                        // Git filter toggle
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            viewModel.gitFilter = viewModel.gitFilter == .all ? .changed : .all
+                            viewModel.loadDirectory(path: viewModel.currentPath)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.branch")
+                                    .font(.system(size: 12))
+                                Text(viewModel.gitFilter == .changed ? "Git Changes" : "All Files")
+                                    .font(.custom("SF Mono", size: 12))
+                            }
+                            .foregroundColor(viewModel.gitFilter == .changed ? Theme.Colors.terminalGreen : Theme.Colors.terminalGray)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(viewModel.gitFilter == .changed ? Theme.Colors.terminalGreen.opacity(0.2) : Theme.Colors.terminalGray.opacity(0.1))
+                            )
+                        }
+                        .buttonStyle(TerminalButtonStyle())
+                        
+                        // Hidden files toggle
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            viewModel.showHidden.toggle()
+                            viewModel.loadDirectory(path: viewModel.currentPath)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: viewModel.showHidden ? "eye" : "eye.slash")
+                                    .font(.system(size: 12))
+                                Text("Hidden")
+                                    .font(.custom("SF Mono", size: 12))
+                            }
+                            .foregroundColor(viewModel.showHidden ? Theme.Colors.terminalAccent : Theme.Colors.terminalGray)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(viewModel.showHidden ? Theme.Colors.terminalAccent.opacity(0.2) : Theme.Colors.terminalGray.opacity(0.1))
+                            )
+                        }
+                        .buttonStyle(TerminalButtonStyle())
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Theme.Colors.terminalDarkGray.opacity(0.5))
 
                     // File list
                     ScrollView {
@@ -92,7 +151,8 @@ struct FileBrowserView: View {
                                     name: entry.name,
                                     isDirectory: entry.isDir,
                                     size: entry.isDir ? nil : entry.formattedSize,
-                                    modifiedTime: entry.formattedDate
+                                    modifiedTime: entry.formattedDate,
+                                    gitStatus: entry.gitStatus
                                 ) {
                                     if entry.isDir {
                                         viewModel.navigate(to: entry.path)
@@ -344,6 +404,7 @@ struct FileBrowserRow: View {
     let isParent: Bool
     let size: String?
     let modifiedTime: String?
+    let gitStatus: GitFileStatus?
     let onTap: () -> Void
 
     init(
@@ -352,6 +413,7 @@ struct FileBrowserRow: View {
         isParent: Bool = false,
         size: String? = nil,
         modifiedTime: String? = nil,
+        gitStatus: GitFileStatus? = nil,
         onTap: @escaping () -> Void
     ) {
         self.name = name
@@ -359,15 +421,101 @@ struct FileBrowserRow: View {
         self.isParent = isParent
         self.size = size
         self.modifiedTime = modifiedTime
+        self.gitStatus = gitStatus
         self.onTap = onTap
     }
 
+    var iconName: String {
+        if isDirectory {
+            return "folder.fill"
+        }
+        
+        // Get file extension
+        let ext = name.split(separator: ".").last?.lowercased() ?? ""
+        
+        switch ext {
+        case "js", "jsx", "ts", "tsx", "mjs", "cjs":
+            return "doc.text.fill"
+        case "json", "yaml", "yml", "toml":
+            return "doc.text.fill"
+        case "md", "markdown", "txt", "log":
+            return "doc.plaintext.fill"
+        case "html", "htm", "xml":
+            return "globe"
+        case "css", "scss", "sass", "less":
+            return "paintbrush.fill"
+        case "png", "jpg", "jpeg", "gif", "svg", "ico", "webp":
+            return "photo.fill"
+        case "pdf":
+            return "doc.richtext.fill"
+        case "zip", "tar", "gz", "bz2", "xz", "7z", "rar":
+            return "archivebox.fill"
+        case "mp4", "mov", "avi", "mkv", "webm":
+            return "play.rectangle.fill"
+        case "mp3", "wav", "flac", "aac", "ogg":
+            return "music.note"
+        case "sh", "bash", "zsh", "fish":
+            return "terminal.fill"
+        case "py", "pyc", "pyo":
+            return "doc.text.fill"
+        case "swift":
+            return "swift"
+        case "c", "cpp", "cc", "h", "hpp":
+            return "chevron.left.forwardslash.chevron.right"
+        case "go":
+            return "doc.text.fill"
+        case "rs":
+            return "doc.text.fill"
+        case "java", "class", "jar":
+            return "cup.and.saucer.fill"
+        default:
+            return "doc.fill"
+        }
+    }
+    
+    var iconColor: Color {
+        if isDirectory {
+            return Theme.Colors.terminalAccent
+        }
+        
+        let ext = name.split(separator: ".").last?.lowercased() ?? ""
+        
+        switch ext {
+        case "js", "jsx", "mjs", "cjs":
+            return .yellow
+        case "ts", "tsx":
+            return Color(red: 0.0, green: 0.48, blue: 0.78) // TypeScript blue
+        case "json":
+            return .orange
+        case "html", "htm":
+            return .orange
+        case "css", "scss", "sass", "less":
+            return Color(red: 0.21, green: 0.46, blue: 0.74) // CSS blue
+        case "md", "markdown":
+            return .gray
+        case "png", "jpg", "jpeg", "gif", "svg", "ico", "webp":
+            return .green
+        case "swift":
+            return .orange
+        case "py":
+            return Color(red: 0.22, green: 0.49, blue: 0.72) // Python blue
+        case "go":
+            return Color(red: 0.0, green: 0.68, blue: 0.85) // Go cyan
+        case "rs":
+            return .orange
+        case "sh", "bash", "zsh", "fish":
+            return .green
+        default:
+            return Theme.Colors.terminalGray.opacity(0.6)
+        }
+    }
+    
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 // Icon
-                Image(systemName: isDirectory ? "folder.fill" : "doc.text.fill")
-                    .foregroundColor(isDirectory ? Theme.Colors.terminalAccent : Theme.Colors.terminalGray.opacity(0.6))
+                Image(systemName: iconName)
+                    .foregroundColor(iconColor)
                     .font(.system(size: 16))
                     .frame(width: 24)
 
@@ -381,6 +529,12 @@ struct FileBrowserRow: View {
                     .truncationMode(.middle)
 
                 Spacer()
+
+                // Git status indicator
+                if let gitStatus = gitStatus, gitStatus != .unchanged {
+                    GitStatusBadge(status: gitStatus)
+                        .padding(.trailing, 8)
+                }
 
                 // Details
                 if !isParent {
@@ -415,6 +569,23 @@ struct FileBrowserRow: View {
             Theme.Colors.terminalGray.opacity(0.05)
                 .opacity(isDirectory ? 1 : 0)
         )
+        .contextMenu {
+            if !isParent {
+                Button {
+                    UIPasteboard.general.string = name
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                } label: {
+                    Label("Copy Name", systemImage: "doc.on.doc")
+                }
+                
+                Button {
+                    UIPasteboard.general.string = isDirectory ? "\(name)/" : name
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                } label: {
+                    Label("Copy Path", systemImage: "doc.on.doc.fill")
+                }
+            }
+        }
     }
 }
 
@@ -442,6 +613,14 @@ class FileBrowserViewModel {
     var newFolderName = ""
     var showError = false
     var errorMessage: String?
+    var gitStatus: GitStatus?
+    var showHidden = false
+    var gitFilter: GitFilterOption = .all
+    
+    enum GitFilterOption: String {
+        case all = "all"
+        case changed = "changed"
+    }
 
     private let apiClient = APIClient.shared
 
@@ -490,9 +669,14 @@ class FileBrowserViewModel {
         defer { isLoading = false }
 
         do {
-            let result = try await apiClient.browseDirectory(path: path)
+            let result = try await apiClient.browseDirectory(
+                path: path, 
+                showHidden: showHidden, 
+                gitFilter: gitFilter.rawValue
+            )
             // Use the absolute path returned by the server
             currentPath = result.absolutePath
+            gitStatus = result.gitStatus
             withAnimation(.easeInOut(duration: 0.2)) {
                 entries = result.files
             }
@@ -554,6 +738,44 @@ class FileBrowserViewModel {
                 errorMessage = "Failed to preview file: \(error.localizedDescription)"
                 showError = true
             }
+        }
+    }
+}
+
+/// Git status badge component for displaying file status
+struct GitStatusBadge: View {
+    let status: GitFileStatus
+    
+    var label: String {
+        switch status {
+        case .modified: return "M"
+        case .added: return "A"
+        case .deleted: return "D"
+        case .untracked: return "?"
+        case .unchanged: return ""
+        }
+    }
+    
+    var color: Color {
+        switch status {
+        case .modified: return .yellow
+        case .added: return .green
+        case .deleted: return .red
+        case .untracked: return .gray
+        case .unchanged: return .clear
+        }
+    }
+    
+    var body: some View {
+        if status != .unchanged {
+            Text(label)
+                .font(.custom("SF Mono", size: 10))
+                .fontWeight(.bold)
+                .foregroundColor(color)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(color.opacity(0.2))
+                .cornerRadius(4)
         }
     }
 }

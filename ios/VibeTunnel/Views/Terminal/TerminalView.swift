@@ -19,6 +19,7 @@ struct TerminalView: View {
     @State private var selectedTheme = TerminalTheme.selected
     @State private var keyboardHeight: CGFloat = 0
     @State private var showScrollToBottom = false
+    @State private var showingFileBrowser = false
     @FocusState private var isInputFocused: Bool
 
     init(session: Session) {
@@ -209,6 +210,16 @@ struct TerminalView: View {
         .onDisappear {
             viewModel.disconnect()
         }
+        .gesture(
+            DragGesture()
+                .onEnded { value in
+                    // Detect swipe from left edge for back navigation
+                    if value.startLocation.x < 20 && value.translation.width > 50 {
+                        dismiss()
+                        HapticFeedback.impact(.light)
+                    }
+                }
+        )
         .onReceive(NotificationCenter.default
             .publisher(for: UIResponder.keyboardWillShowNotification)
         ) { notification in
@@ -236,6 +247,22 @@ struct TerminalView: View {
             withAnimation(Theme.Animation.smooth) {
                 showScrollToBottom = !newValue
             }
+        }
+        .sheet(isPresented: $showingFileBrowser) {
+            FileBrowserView(
+                initialPath: session.workingDir,
+                mode: .browseFiles
+            ) { selectedPath in
+                // For browse mode, we just dismiss - could be extended to insert path
+                showingFileBrowser = false
+            }
+        }
+        .onKeyPress(.o, modifiers: .command) {
+            if session.isRunning {
+                showingFileBrowser = true
+                return .handled
+            }
+            return .ignored
         }
     }
 
@@ -301,6 +328,12 @@ struct TerminalView: View {
                 action: {
                     viewModel.scrollToBottom()
                     showScrollToBottom = false
+                }
+            )
+            .fileBrowserFABOverlay(
+                isVisible: !keyboardHeight.isZero && session.isRunning,
+                action: {
+                    showingFileBrowser = true
                 }
             )
 

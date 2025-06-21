@@ -68,12 +68,32 @@ struct SessionCardView: View {
                                 if let snapshot = terminalSnapshot, !snapshot.cleanOutputPreview.isEmpty {
                                     // Show terminal output preview
                                     ScrollView(.vertical, showsIndicators: false) {
-                                        Text(snapshot.cleanOutputPreview)
-                                            .font(Theme.Typography.terminalSystem(size: 10))
-                                            .foregroundColor(Theme.Colors.terminalForeground.opacity(0.8))
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .lineLimit(nil)
-                                            .multilineTextAlignment(.leading)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            // ESC indicator if present
+                                            if snapshot.cleanOutputPreview.lowercased().contains("esc to interrupt") {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "escape")
+                                                        .font(.system(size: 10, weight: .bold))
+                                                        .foregroundColor(Theme.Colors.warningAccent)
+                                                    Text("Press ESC to interrupt")
+                                                        .font(Theme.Typography.terminalSystem(size: 10))
+                                                        .foregroundColor(Theme.Colors.warningAccent)
+                                                }
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 4)
+                                                        .fill(Theme.Colors.warningAccent.opacity(0.2))
+                                                )
+                                            }
+                                            
+                                            Text(snapshot.cleanOutputPreview)
+                                                .font(Theme.Typography.terminalSystem(size: 10))
+                                                .foregroundColor(Theme.Colors.terminalForeground.opacity(0.8))
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .lineLimit(nil)
+                                                .multilineTextAlignment(.leading)
+                                        }
                                     }
                                     .padding(Theme.Spacing.small)
                                 } else {
@@ -92,6 +112,10 @@ struct SessionCardView: View {
                                             .font(Theme.Typography.terminalSystem(size: 10))
                                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.6))
                                             .lineLimit(1)
+                                            .onTapGesture {
+                                                UIPasteboard.general.string = session.workingDir
+                                                HapticFeedback.notification(.success)
+                                            }
 
                                         if isLoadingSnapshot {
                                             HStack {
