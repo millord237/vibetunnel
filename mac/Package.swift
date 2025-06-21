@@ -31,8 +31,8 @@ let package = Package(
             exclude: [
                 "Info.plist",
                 "VibeTunnel.entitlements",
-                "Local.xcconfig",
-                "Local.xcconfig.template",
+                "../Config/Local.xcconfig",
+                "../Config/Local.xcconfig.template",
                 "Shared.xcconfig",
                 "version.xcconfig",
                 "version.xcconfig.bak",

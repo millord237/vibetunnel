@@ -6,10 +6,10 @@ This project uses xcconfig files to manage developer team settings, allowing mul
 
 1. Copy the template file to create your local configuration:
    ```bash
-   cp VibeTunnel/Local.xcconfig.template VibeTunnel/Local.xcconfig
+   cp VibeTunnel/Config/Local.xcconfig.template VibeTunnel/Config/Local.xcconfig
    ```
 
-2. Edit `VibeTunnel/Local.xcconfig` and add your personal development team ID:
+2. Edit `VibeTunnel/Config/Local.xcconfig` and add your personal development team ID:
    ```
    DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE
    ```
@@ -24,14 +24,14 @@ This project uses xcconfig files to manage developer team settings, allowing mul
 
 ## How It Works
 
-- `Shared.xcconfig` - Contains shared configuration and includes the local settings
-- `Local.xcconfig` - Your personal settings (ignored by git)
-- `Local.xcconfig.template` - Template for new developers
+- `Config/Shared.xcconfig` - Contains shared configuration and includes the local settings
+- `Config/Local.xcconfig` - Your personal settings (ignored by git)
+- `Config/Local.xcconfig.template` - Template for new developers
 
-The project is configured to use these xcconfig files for code signing settings, so each developer can have their own `Local.xcconfig` without affecting others.
+The project is configured to use these xcconfig files for code signing settings, so each developer can have their own `Config/Local.xcconfig` without affecting others.
 
 ## Important Notes
 
-- Never commit `Local.xcconfig` to git (it's already in .gitignore)
-- If you need to override other settings locally, you can add them to your `Local.xcconfig`
+- Never commit `Config/Local.xcconfig` to git (it's already in .gitignore)
+- If you need to override other settings locally, you can add them to your `Config/Local.xcconfig`
 - The xcconfig files are automatically loaded by Xcode when you open the project

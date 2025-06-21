@@ -176,7 +176,7 @@ To get your team ID:
 security find-identity -v -p codesigning
 ```
 
-Then copy `Local.xcconfig.template` to `Local.xcconfig` and insert your team ID. This file is gitignored to keep your personal settings private.
+Then copy `mac/Config/Local.xcconfig.template` to `mac/Config/Local.xcconfig` and insert your team ID. This file is gitignored to keep your personal settings private.
 
 ## Credits
 

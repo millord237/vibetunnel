@@ -30,7 +30,7 @@ In release builds, the app works normally:
 VibeTunnel uses automatic code signing for development:
 
 1. **Configure your development team:**
-   - Copy `Local.xcconfig.template` to `Local.xcconfig`
+   - Copy `Config/Local.xcconfig.template` to `Config/Local.xcconfig`
    - Set your `DEVELOPMENT_TEAM` ID
 
 2. **Build configurations:**
