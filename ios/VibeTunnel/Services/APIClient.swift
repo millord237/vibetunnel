@@ -124,7 +124,7 @@ class APIClient: APIClientProtocol {
             throw APIError.decodingError(error)
         }
     }
-    
+
     func getSession(_ sessionId: String) async throws -> Session {
         guard let baseURL else {
             throw APIError.noServerConfigured
@@ -187,7 +187,7 @@ class APIClient: APIClientProtocol {
                     let details: String?
                     let code: String?
                 }
-                
+
                 if let errorResponse = try? decoder.decode(ErrorResponse.self, from: responseData) {
                     let errorMessage = errorResponse.details ?? errorResponse.error ?? "Unknown error"
                     print("[APIClient] Server error: \(errorMessage)")
@@ -272,14 +272,14 @@ class APIClient: APIClientProtocol {
             return []
         }
     }
-    
+
     func killAllSessions() async throws {
         // First get all sessions
         let sessions = try await getSessions()
-        
+
         // Filter running sessions
-        let runningSessions = sessions.filter { $0.isRunning }
-        
+        let runningSessions = sessions.filter(\.isRunning)
+
         // Kill each running session concurrently
         await withThrowingTaskGroup(of: Void.self) { group in
             for session in runningSessions {
@@ -354,20 +354,20 @@ class APIClient: APIClientProtocol {
         guard let text = String(data: data, encoding: .utf8) else {
             throw APIError.invalidResponse
         }
-        
+
         // Parse asciinema format
         return try parseAsciinemaSnapshot(sessionId: sessionId, text: text)
     }
-    
+
     private func parseAsciinemaSnapshot(sessionId: String, text: String) throws -> TerminalSnapshot {
         let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        
+
         var header: AsciinemaHeader?
         var events: [AsciinemaEvent] = []
-        
+
         for line in lines {
             guard let data = line.data(using: .utf8) else { continue }
-            
+
             // Try to parse as JSON
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 // This is the header
@@ -391,7 +391,6 @@ class APIClient: APIClientProtocol {
                    let timestamp = json[0] as? Double,
                    let typeStr = json[1] as? String,
                    let eventData = json[2] as? String {
-                    
                     let eventType: AsciinemaEvent.EventType
                     switch typeStr {
                     case "o": eventType = .output
@@ -400,7 +399,7 @@ class APIClient: APIClientProtocol {
                     case "m": eventType = .marker
                     default: continue
                     }
-                    
+
                     events.append(AsciinemaEvent(
                         time: timestamp,
                         type: eventType,
@@ -409,7 +408,7 @@ class APIClient: APIClientProtocol {
                 }
             }
         }
-        
+
         return TerminalSnapshot(
             sessionId: sessionId,
             header: header,
@@ -418,7 +417,7 @@ class APIClient: APIClientProtocol {
     }
 
     // MARK: - Server Health
-    
+
     func checkHealth() async throws -> Bool {
         guard let baseURL else {
             throw APIError.noServerConfigured
@@ -427,10 +426,10 @@ class APIClient: APIClientProtocol {
         let url = baseURL.appendingPathComponent("api/health")
         var request = URLRequest(url: url)
         request.timeoutInterval = 5.0 // Quick timeout for health check
-        
+
         do {
             let (_, response) = try await session.data(for: request)
-            
+
             if let httpResponse = response as? HTTPURLResponse {
                 return httpResponse.statusCode == 200
             }
@@ -532,12 +531,12 @@ class APIClient: APIClientProtocol {
         let (_, response) = try await session.data(for: request)
         try validateResponse(response)
     }
-    
+
     func downloadFile(path: String, progressHandler: ((Double) -> Void)? = nil) async throws -> Data {
         guard let baseURL else {
             throw APIError.noServerConfigured
         }
-        
+
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent("api/fs/read"),
             resolvingAgainstBaseURL: false
@@ -545,30 +544,30 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
         components.queryItems = [URLQueryItem(name: "path", value: path)]
-        
+
         guard let url = components.url else {
             throw APIError.invalidURL
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        
+
         // Add authentication header if needed
         addAuthenticationIfNeeded(&request)
-        
+
         // For progress tracking, we'll use URLSession delegate
         // For now, just download the whole file
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
-        
+
         return data
     }
-    
+
     func getFileInfo(path: String) async throws -> FileInfo {
         guard let baseURL else {
             throw APIError.noServerConfigured
         }
-        
+
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent("api/fs/info"),
             resolvingAgainstBaseURL: false
@@ -576,20 +575,20 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
         components.queryItems = [URLQueryItem(name: "path", value: path)]
-        
+
         guard let url = components.url else {
             throw APIError.invalidURL
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        
+
         // Add authentication header if needed
         addAuthenticationIfNeeded(&request)
-        
+
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
-        
+
         return try decoder.decode(FileInfo.self, from: data)
     }
 }

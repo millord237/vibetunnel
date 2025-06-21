@@ -7,6 +7,8 @@ enum TerminalWebSocketEvent {
     case resize(timestamp: Double, dimensions: String)
     case exit(code: Int)
     case bufferUpdate(snapshot: BufferSnapshot)
+    case bell
+    case alert(title: String?, message: String)
 }
 
 /// Binary buffer snapshot data
@@ -100,8 +102,7 @@ class BufferWebSocketClient: NSObject {
         // Add authentication header if needed
         if let config = UserDefaults.standard.data(forKey: "savedServerConfig"),
            let serverConfig = try? JSONDecoder().decode(ServerConfig.self, from: config),
-           let authHeader = serverConfig.authorizationHeader
-        {
+           let authHeader = serverConfig.authorizationHeader {
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")
         }
 
@@ -195,10 +196,10 @@ class BufferWebSocketClient: NSObject {
 
     private func handleBinaryMessage(_ data: Data) {
         print("[BufferWebSocket] Received binary message: \(data.count) bytes")
-        
-        guard data.count > 5 else { 
+
+        guard data.count > 5 else {
             print("[BufferWebSocket] Binary message too short")
-            return 
+            return
         }
 
         var offset = 0
@@ -219,14 +220,14 @@ class BufferWebSocketClient: NSObject {
         offset += 4
 
         // Read session ID
-        guard data.count >= offset + Int(sessionIdLength) else { 
+        guard data.count >= offset + Int(sessionIdLength) else {
             print("[BufferWebSocket] Not enough data for session ID")
-            return 
+            return
         }
         let sessionIdData = data.subdata(in: offset..<(offset + Int(sessionIdLength)))
-        guard let sessionId = String(data: sessionIdData, encoding: .utf8) else { 
+        guard let sessionId = String(data: sessionIdData, encoding: .utf8) else {
             print("[BufferWebSocket] Failed to decode session ID")
-            return 
+            return
         }
         print("[BufferWebSocket] Session ID: \(sessionId)")
         offset += Int(sessionIdLength)
@@ -237,8 +238,7 @@ class BufferWebSocketClient: NSObject {
 
         // Decode terminal event
         if let event = decodeTerminalEvent(from: messageData),
-           let handler = subscriptions[sessionId]
-        {
+           let handler = subscriptions[sessionId] {
             print("[BufferWebSocket] Dispatching event to handler")
             handler(event)
         } else {
@@ -253,115 +253,125 @@ class BufferWebSocketClient: NSObject {
             print("[BufferWebSocket] Failed to decode binary buffer")
             return nil
         }
-        
+
         print("[BufferWebSocket] Decoded buffer: \(bufferSnapshot.cols)x\(bufferSnapshot.rows)")
-        
+
         // Return buffer update event
         return .bufferUpdate(snapshot: bufferSnapshot)
     }
-    
-    
+
     private func decodeBinaryBuffer(_ data: Data) -> BufferSnapshot? {
         var offset = 0
-        
+
         // Read header
         guard data.count >= 32 else {
             print("[BufferWebSocket] Buffer too small for header: \(data.count) bytes (need 32)")
             return nil
         }
-        
+
         // Magic bytes "VT" (0x5654 in little endian)
         let magic = data.withUnsafeBytes { bytes in
             bytes.loadUnaligned(fromByteOffset: offset, as: UInt16.self).littleEndian
         }
         offset += 2
-        
+
         guard magic == 0x5654 else {
             print("[BufferWebSocket] Invalid magic bytes: \(String(format: "0x%04X", magic)), expected 0x5654")
             return nil
         }
-        
+
         // Version
         let version = data[offset]
         offset += 1
-        
+
         guard version == 0x01 else {
             print("[BufferWebSocket] Unsupported version: 0x\(String(format: "%02X", version)), expected 0x01")
             return nil
         }
-        
-        // Flags (unused)
-        _ = data[offset]
+
+        // Flags
+        let flags = data[offset]
         offset += 1
-        
+
+        // Check for bell flag
+        let hasBell = (flags & 0x01) != 0
+        if hasBell {
+            // Send bell event separately
+            if let handler = subscriptions.values.first {
+                handler(.bell)
+            }
+        }
+
         // Dimensions and cursor - validate before reading
         guard offset + 20 <= data.count else {
             print("[BufferWebSocket] Insufficient data for header fields")
             return nil
         }
-        
+
         let cols = data.withUnsafeBytes { bytes in
             bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian
         }
         offset += 4
-        
+
         let rows = data.withUnsafeBytes { bytes in
             bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian
         }
         offset += 4
-        
+
         // Validate dimensions
-        guard cols > 0 && cols <= 1000 && rows > 0 && rows <= 1000 else {
+        guard cols > 0 && cols <= 1_000 && rows > 0 && rows <= 1_000 else {
             print("[BufferWebSocket] Invalid dimensions: \(cols)x\(rows)")
             return nil
         }
-        
+
         let viewportY = data.withUnsafeBytes { bytes in
             bytes.loadUnaligned(fromByteOffset: offset, as: Int32.self).littleEndian
         }
         offset += 4
-        
+
         let cursorX = data.withUnsafeBytes { bytes in
             bytes.loadUnaligned(fromByteOffset: offset, as: Int32.self).littleEndian
         }
         offset += 4
-        
+
         let cursorY = data.withUnsafeBytes { bytes in
             bytes.loadUnaligned(fromByteOffset: offset, as: Int32.self).littleEndian
         }
         offset += 4
-        
+
         // Skip reserved
         offset += 4
-        
+
         // Validate cursor position
         if cursorX < 0 || cursorX > Int32(cols) || cursorY < 0 || cursorY > Int32(rows) {
-            print("[BufferWebSocket] Warning: cursor position out of bounds: (\(cursorX),\(cursorY)) for \(cols)x\(rows)")
+            print(
+                "[BufferWebSocket] Warning: cursor position out of bounds: (\(cursorX),\(cursorY)) for \(cols)x\(rows)"
+            )
         }
-        
+
         // Decode cells
         var cells: [[BufferCell]] = []
         var totalRows = 0
-        
+
         while offset < data.count && totalRows < Int(rows) {
             guard offset < data.count else {
                 print("[BufferWebSocket] Unexpected end of data at offset \(offset)")
                 break
             }
-            
+
             let marker = data[offset]
             offset += 1
-            
+
             if marker == 0xFE {
                 // Empty row(s)
                 guard offset < data.count else {
                     print("[BufferWebSocket] Missing count byte for empty rows")
                     break
                 }
-                
+
                 let count = Int(data[offset])
                 offset += 1
-                
+
                 // Create empty rows efficiently
                 // Single space cell that represents the entire empty row
                 let emptyRow = [BufferCell(char: "", width: 0, fg: nil, bg: nil, attributes: nil)]
@@ -375,27 +385,27 @@ class BufferWebSocketClient: NSObject {
                     print("[BufferWebSocket] Insufficient data for cell count")
                     break
                 }
-                
+
                 let cellCount = data.withUnsafeBytes { bytes in
                     bytes.loadUnaligned(fromByteOffset: offset, as: UInt16.self).littleEndian
                 }
                 offset += 2
-                
+
                 // Validate cell count
                 guard cellCount <= cols * 2 else { // Allow for wide chars
                     print("[BufferWebSocket] Invalid cell count: \(cellCount) for \(cols) columns")
                     break
                 }
-                
+
                 var rowCells: [BufferCell] = []
                 var colIndex = 0
-                
+
                 for i in 0..<cellCount {
                     if let (cell, newOffset) = decodeCell(data, offset: offset) {
                         rowCells.append(cell)
                         offset = newOffset
                         colIndex += cell.width
-                        
+
                         // Stop if we exceed column count
                         if colIndex > Int(cols) {
                             print("[BufferWebSocket] Warning: row \(totalRows) exceeds column count at cell \(i)")
@@ -406,22 +416,24 @@ class BufferWebSocketClient: NSObject {
                         break
                     }
                 }
-                
+
                 cells.append(rowCells)
                 totalRows += 1
             } else {
-                print("[BufferWebSocket] Unknown row marker: 0x\(String(format: "%02X", marker)) at offset \(offset - 1)")
+                print(
+                    "[BufferWebSocket] Unknown row marker: 0x\(String(format: "%02X", marker)) at offset \(offset - 1)"
+                )
                 // Try to continue parsing
             }
         }
-        
+
         // Fill missing rows with empty rows if needed
         while cells.count < Int(rows) {
             cells.append([BufferCell(char: " ", width: 1, fg: nil, bg: nil, attributes: nil)])
         }
-        
+
         print("[BufferWebSocket] Successfully decoded buffer: \(cols)x\(rows), \(cells.count) rows")
-        
+
         return BufferSnapshot(
             cols: Int(cols),
             rows: Int(rows),
@@ -431,22 +443,22 @@ class BufferWebSocketClient: NSObject {
             cells: cells
         )
     }
-    
+
     private func decodeCell(_ data: Data, offset: Int) -> (BufferCell, Int)? {
-        guard offset < data.count else { 
+        guard offset < data.count else {
             print("[BufferWebSocket] Cell decode failed: offset \(offset) beyond data size \(data.count)")
-            return nil 
+            return nil
         }
-        
+
         var currentOffset = offset
         let typeByte = data[currentOffset]
         currentOffset += 1
-        
+
         // Simple space optimization
         if typeByte == 0x00 {
             return (BufferCell(char: " ", width: 1, fg: nil, bg: nil, attributes: nil), currentOffset)
         }
-        
+
         // Decode type byte
         let hasExtended = (typeByte & 0x80) != 0
         let isUnicode = (typeByte & 0x40) != 0
@@ -454,11 +466,11 @@ class BufferWebSocketClient: NSObject {
         let hasBg = (typeByte & 0x10) != 0
         let isRgbFg = (typeByte & 0x08) != 0
         let isRgbBg = (typeByte & 0x04) != 0
-        
+
         // Read character
         var char: String
         var width: Int = 1
-        
+
         if isUnicode {
             // Read character length first
             guard currentOffset < data.count else {
@@ -467,21 +479,18 @@ class BufferWebSocketClient: NSObject {
             }
             let charLen = Int(data[currentOffset])
             currentOffset += 1
-            
+
             guard currentOffset + charLen <= data.count else {
                 print("[BufferWebSocket] Unicode char decode failed: insufficient data for char length \(charLen)")
                 return nil
             }
-            
+
             let charData = data.subdata(in: currentOffset..<(currentOffset + charLen))
             char = String(data: charData, encoding: .utf8) ?? "?"
             currentOffset += charLen
-            
-            // For wide characters, width is encoded in the extended data
-            if hasExtended {
-                // Width will be read from extended data
-                width = 1 // Default, will be updated if needed
-            }
+
+            // Calculate display width for Unicode characters
+            width = calculateDisplayWidth(for: char)
         } else {
             // ASCII character
             guard currentOffset < data.count else {
@@ -490,7 +499,7 @@ class BufferWebSocketClient: NSObject {
             }
             let charCode = data[currentOffset]
             currentOffset += 1
-            
+
             if charCode < 32 || charCode > 126 {
                 // Control character or extended ASCII
                 char = charCode == 0 ? " " : "?"
@@ -498,12 +507,12 @@ class BufferWebSocketClient: NSObject {
                 char = String(Character(UnicodeScalar(charCode)))
             }
         }
-        
+
         // Read extended data if present
         var fg: Int?
         var bg: Int?
         var attributes: Int?
-        
+
         if hasExtended {
             // Read attributes byte
             guard currentOffset < data.count else {
@@ -512,7 +521,7 @@ class BufferWebSocketClient: NSObject {
             }
             attributes = Int(data[currentOffset])
             currentOffset += 1
-            
+
             // Read foreground color
             if hasFg {
                 if isRgbFg {
@@ -524,7 +533,7 @@ class BufferWebSocketClient: NSObject {
                     let r = Int(data[currentOffset])
                     let g = Int(data[currentOffset + 1])
                     let b = Int(data[currentOffset + 2])
-                    fg = (r << 16) | (g << 8) | b | 0xFF000000 // Add alpha for RGB
+                    fg = (r << 16) | (g << 8) | b | 0xFF00_0000 // Add alpha for RGB
                     currentOffset += 3
                 } else {
                     // Palette color (1 byte)
@@ -536,7 +545,7 @@ class BufferWebSocketClient: NSObject {
                     currentOffset += 1
                 }
             }
-            
+
             // Read background color
             if hasBg {
                 if isRgbBg {
@@ -548,7 +557,7 @@ class BufferWebSocketClient: NSObject {
                     let r = Int(data[currentOffset])
                     let g = Int(data[currentOffset + 1])
                     let b = Int(data[currentOffset + 2])
-                    bg = (r << 16) | (g << 8) | b | 0xFF000000 // Add alpha for RGB
+                    bg = (r << 16) | (g << 8) | b | 0xFF00_0000 // Add alpha for RGB
                     currentOffset += 3
                 } else {
                     // Palette color (1 byte)
@@ -561,10 +570,46 @@ class BufferWebSocketClient: NSObject {
                 }
             }
         }
-        
+
         return (BufferCell(char: char, width: width, fg: fg, bg: bg, attributes: attributes), currentOffset)
     }
-    
+
+    /// Calculate display width for Unicode characters
+    /// Wide characters (CJK, emoji) typically take 2 columns
+    private func calculateDisplayWidth(for string: String) -> Int {
+        guard let scalar = string.unicodeScalars.first else { return 1 }
+
+        // Check for emoji and other wide characters
+        if scalar.properties.isEmoji {
+            return 2
+        }
+
+        // Check for East Asian wide characters
+        let value = scalar.value
+
+        // CJK ranges
+        if (0x1100...0x115F).contains(value) || // Hangul Jamo
+            (0x2E80...0x9FFF).contains(value) || // CJK
+            (0xA960...0xA97F).contains(value) || // Hangul Jamo Extended-A
+            (0xAC00...0xD7AF).contains(value) || // Hangul Syllables
+            (0xF900...0xFAFF).contains(value) || // CJK Compatibility Ideographs
+            (0xFE30...0xFE6F).contains(value) || // CJK Compatibility Forms
+            (0xFF00...0xFF60).contains(value) || // Fullwidth Forms
+            (0xFFE0...0xFFE6).contains(value) || // Fullwidth Forms
+            (0x20000...0x2FFFD).contains(value) || // CJK Extension B-F
+            (0x30000...0x3FFFD).contains(value) { // CJK Extension G
+            return 2
+        }
+
+        // Zero-width characters
+        if (0x200B...0x200F).contains(value) || // Zero-width spaces
+            (0xFE00...0xFE0F).contains(value) || // Variation selectors
+            scalar.properties.isJoinControl {
+            return 0
+        }
+
+        return 1
+    }
 
     func subscribe(to sessionId: String, handler: @escaping (TerminalWebSocketEvent) -> Void) {
         subscriptions[sessionId] = handler

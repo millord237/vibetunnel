@@ -11,7 +11,7 @@ struct ServerManagerTests {
 
     // MARK: - Server Lifecycle Tests
 
-    @Test("Starting and stopping Go server", .tags(.critical))
+    @Test("Starting and stopping Bun server", .tags(.critical))
     func serverLifecycle() async throws {
         let manager = ServerManager.shared
 
@@ -26,7 +26,7 @@ struct ServerManagerTests {
 
         // Check server is running
         #expect(manager.isRunning)
-        #expect(manager.currentServer != nil)
+        #expect(manager.bunServer != nil)
 
         // Stop the server
         await manager.stop()
@@ -36,7 +36,7 @@ struct ServerManagerTests {
 
         // Check server is stopped
         #expect(!manager.isRunning)
-        #expect(manager.currentServer == nil)
+        #expect(manager.bunServer == nil)
     }
 
     @Test("Starting server when already running does not create duplicate", .tags(.critical))
@@ -50,14 +50,14 @@ struct ServerManagerTests {
         await manager.start()
         try await Task.sleep(for: .milliseconds(500))
 
-        let firstServer = manager.currentServer
+        let firstServer = manager.bunServer
         #expect(firstServer != nil)
 
         // Try to start again
         await manager.start()
 
         // Should still be the same server instance
-        #expect(manager.currentServer === firstServer)
+        #expect(manager.bunServer === firstServer)
         #expect(manager.isRunning)
 
         // Cleanup
@@ -138,9 +138,9 @@ struct ServerManagerTests {
         // Server should be in a consistent state
         let finalState = manager.isRunning
         if finalState {
-            #expect(manager.currentServer != nil)
+            #expect(manager.bunServer != nil)
         } else {
-            #expect(manager.currentServer == nil)
+            #expect(manager.bunServer == nil)
         }
 
         // Cleanup
@@ -164,7 +164,7 @@ struct ServerManagerTests {
 
         // Verify running
         #expect(manager.isRunning)
-        let serverBeforeRestart = manager.currentServer
+        let serverBeforeRestart = manager.bunServer
 
         // Restart
         await manager.restart()
@@ -173,7 +173,7 @@ struct ServerManagerTests {
         // Verify still running with same port
         #expect(manager.isRunning)
         #expect(manager.port == testPort)
-        #expect(manager.currentServer !== serverBeforeRestart) // Should be new instance
+        #expect(manager.bunServer !== serverBeforeRestart) // Should be new instance
 
         // Cleanup
         await manager.stop()
@@ -200,49 +200,10 @@ struct ServerManagerTests {
 
         // State should be consistent
         if manager.isRunning {
-            #expect(manager.currentServer != nil)
+            #expect(manager.bunServer != nil)
         } else {
-            #expect(manager.currentServer == nil)
+            #expect(manager.bunServer == nil)
         }
-
-        // Cleanup
-        await manager.stop()
-    }
-
-    // MARK: - Log Stream Tests
-
-    @Test("Server logs are captured in log stream")
-    func serverLogStream() async throws {
-        let manager = ServerManager.shared
-
-        // Ensure clean state
-        await manager.stop()
-
-        // Collect logs during server operations
-        var collectedLogs: [ServerLogEntry] = []
-        let logTask = Task {
-            for await log in manager.logStream {
-                collectedLogs.append(log)
-                if collectedLogs.count >= 2 {
-                    break
-                }
-            }
-        }
-
-        // Start server to generate logs
-        await manager.start()
-
-        // Wait for logs
-        try await Task.sleep(for: .seconds(1))
-        logTask.cancel()
-
-        // Verify logs were captured
-        #expect(!collectedLogs.isEmpty)
-        #expect(collectedLogs.contains { log in
-            log.message.lowercased().contains("start") ||
-                log.message.lowercased().contains("server") ||
-                log.message.lowercased().contains("listening")
-        })
 
         // Cleanup
         await manager.stop()
@@ -250,18 +211,26 @@ struct ServerManagerTests {
 
     // MARK: - Crash Recovery Tests
 
-    @Test("Crash count tracking")
-    func crashCountTracking() async throws {
+    @Test("Server auto-restart behavior")
+    func serverAutoRestart() async throws {
         let manager = ServerManager.shared
 
         // Ensure clean state
         await manager.stop()
 
-        // Initial crash count should be 0
-        #expect(manager.crashCount == 0)
-
+        // Start server
+        await manager.start()
+        try await Task.sleep(for: .milliseconds(500))
+        
+        // Verify server is running
+        #expect(manager.isRunning)
+        #expect(manager.bunServer != nil)
+        
         // Note: We can't easily simulate crashes in tests without
-        // modifying the production code to support dependency injection
-        // This test mainly verifies the property exists and is readable
+        // modifying the production code. The BunServer has built-in
+        // auto-restart functionality on unexpected termination.
+        
+        // Cleanup
+        await manager.stop()
     }
 }

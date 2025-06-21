@@ -20,7 +20,7 @@ struct ContentView: View {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: Theme.Colors.primaryAccent))
                         .scaleEffect(1.5)
-                    
+
                     Text("Restoring connection...")
                         .font(Theme.Typography.terminalSystem(size: 14))
                         .foregroundColor(Theme.Colors.terminalForeground)
@@ -50,14 +50,15 @@ struct ContentView: View {
             }
         }
     }
-    
+
     private func validateRestoredConnection() {
         guard connectionManager.isConnected,
-              connectionManager.serverConfig != nil else {
+              connectionManager.serverConfig != nil
+        else {
             isValidatingConnection = false
             return
         }
-        
+
         // Test the restored connection
         Task {
             do {

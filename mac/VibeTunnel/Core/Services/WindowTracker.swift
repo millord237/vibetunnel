@@ -12,12 +12,12 @@ import OSLog
 @MainActor
 final class WindowTracker {
     static let shared = WindowTracker()
-    
+
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "VibeTunnel",
         category: "WindowTracker"
     )
-    
+
     /// Information about a tracked terminal window
     struct WindowInfo {
         let windowID: CGWindowID
@@ -25,39 +25,49 @@ final class WindowTracker {
         let terminalApp: Terminal
         let sessionID: String
         let createdAt: Date
-        
+
         // Tab-specific information
         let tabReference: String? // AppleScript reference for Terminal.app tabs
         let tabID: String? // Tab identifier for iTerm2
-        
+
         // Window properties from Core Graphics
         let bounds: CGRect?
         let title: String?
     }
-    
+
     /// Maps session IDs to their terminal window information
     private var sessionWindowMap: [String: WindowInfo] = [:]
-    
+
     /// Lock for thread-safe access to the session map
     private let mapLock = NSLock()
-    
+
     private init() {
         logger.info("WindowTracker initialized")
     }
-    
+
     // MARK: - Window Registration
-    
+
     /// Registers a terminal window for a session.
     /// This should be called after launching a terminal with a session ID.
-    func registerWindow(for sessionID: String, terminalApp: Terminal, tabReference: String? = nil, tabID: String? = nil) {
+    func registerWindow(
+        for sessionID: String,
+        terminalApp: Terminal,
+        tabReference: String? = nil,
+        tabID: String? = nil
+    ) {
         logger.info("Registering window for session: \(sessionID), terminal: \(terminalApp.rawValue)")
-        
+
         // Give the terminal some time to create the window
         Task {
             try? await Task.sleep(for: .seconds(1.0))
-            
+
             // Find the most recently created window for this terminal
-            if let windowInfo = findWindow(for: terminalApp, sessionID: sessionID, tabReference: tabReference, tabID: tabID) {
+            if let windowInfo = findWindow(
+                for: terminalApp,
+                sessionID: sessionID,
+                tabReference: tabReference,
+                tabID: tabID
+            ) {
                 mapLock.withLock {
                     sessionWindowMap[sessionID] = windowInfo
                 }
@@ -67,7 +77,7 @@ final class WindowTracker {
             }
         }
     }
-    
+
     /// Unregisters a window for a session.
     func unregisterWindow(for sessionID: String) {
         mapLock.withLock {
@@ -76,25 +86,26 @@ final class WindowTracker {
             }
         }
     }
-    
+
     // MARK: - Window Enumeration
-    
+
     /// Gets all terminal windows currently visible on screen.
     static func getAllTerminalWindows() -> [WindowInfo] {
         let options: CGWindowListOption = [.excludeDesktopElements, .optionOnScreenOnly]
-        
+
         guard let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             return []
         }
-        
+
         return windowList.compactMap { windowDict in
             // Extract window properties
             guard let ownerPID = windowDict[kCGWindowOwnerPID as String] as? pid_t,
                   let windowID = windowDict[kCGWindowNumber as String] as? CGWindowID,
-                  let ownerName = windowDict[kCGWindowOwnerName as String] as? String else {
+                  let ownerName = windowDict[kCGWindowOwnerName as String] as? String
+            else {
                 return nil
             }
-            
+
             // Check if this is a terminal application
             guard let terminal = Terminal.allCases.first(where: { term in
                 // Match by process name or app name
@@ -102,7 +113,7 @@ final class WindowTracker {
             }) else {
                 return nil
             }
-            
+
             // Get window bounds
             let bounds: CGRect? = if let boundsDict = windowDict[kCGWindowBounds as String] as? [String: CGFloat],
                                      let x = boundsDict["X"],
@@ -113,10 +124,10 @@ final class WindowTracker {
             } else {
                 nil
             }
-            
+
             // Get window title
             let title = windowDict[kCGWindowName as String] as? String
-            
+
             return WindowInfo(
                 windowID: windowID,
                 ownerPID: ownerPID,
@@ -130,20 +141,26 @@ final class WindowTracker {
             )
         }
     }
-    
+
     /// Finds a window for a specific terminal and session.
-    private func findWindow(for terminal: Terminal, sessionID: String, tabReference: String?, tabID: String?) -> WindowInfo? {
+    private func findWindow(
+        for terminal: Terminal,
+        sessionID: String,
+        tabReference: String?,
+        tabID: String?
+    )
+        -> WindowInfo? {
         let allWindows = Self.getAllTerminalWindows()
-        
+
         // Filter windows for the specific terminal
         let terminalWindows = allWindows.filter { $0.terminalApp == terminal }
-        
+
         // If we have specific tab information, try to match by title or other properties
         // For now, return the most recently created window (highest window ID)
         guard let latestWindow = terminalWindows.max(by: { $0.windowID < $1.windowID }) else {
             return nil
         }
-        
+
         // Create a new WindowInfo with the session information
         return WindowInfo(
             windowID: latestWindow.windowID,
@@ -157,16 +174,16 @@ final class WindowTracker {
             title: latestWindow.title
         )
     }
-    
+
     // MARK: - Window Focus
-    
+
     /// Focuses the window associated with a session.
     func focusWindow(for sessionID: String) {
         mapLock.withLock {
             guard let windowInfo = sessionWindowMap[sessionID] else {
                 logger.warning("No window found for session: \(sessionID)")
                 logger.debug("Available sessions: \(self.sessionWindowMap.keys.joined(separator: ", "))")
-                
+
                 // Try to scan for the session one more time
                 Task {
                     await scanForSession(sessionID)
@@ -177,9 +194,12 @@ final class WindowTracker {
                 }
                 return
             }
-            
-            logger.info("Focusing window for session: \(sessionID), terminal: \(windowInfo.terminalApp.rawValue), windowID: \(windowInfo.windowID)")
-            
+
+            logger
+                .info(
+                    "Focusing window for session: \(sessionID), terminal: \(windowInfo.terminalApp.rawValue), windowID: \(windowInfo.windowID)"
+                )
+
             switch windowInfo.terminalApp {
             case .terminal:
                 focusTerminalAppWindow(windowInfo)
@@ -191,7 +211,7 @@ final class WindowTracker {
             }
         }
     }
-    
+
     /// Focuses a Terminal.app window/tab.
     private func focusTerminalAppWindow(_ windowInfo: WindowInfo) {
         if let tabRef = windowInfo.tabReference {
@@ -202,7 +222,7 @@ final class WindowTracker {
                 \(tabRef)
             end tell
             """
-            
+
             do {
                 try AppleScriptExecutor.shared.execute(script)
                 logger.info("Focused Terminal.app tab using reference")
@@ -225,7 +245,7 @@ final class WindowTracker {
                 end repeat
             end tell
             """
-            
+
             do {
                 try AppleScriptExecutor.shared.execute(script)
             } catch {
@@ -234,7 +254,7 @@ final class WindowTracker {
             }
         }
     }
-    
+
     /// Focuses an iTerm2 window.
     private func focusiTerm2Window(_ windowInfo: WindowInfo) {
         if let windowID = windowInfo.tabID {
@@ -247,7 +267,7 @@ final class WindowTracker {
                 end tell
             end tell
             """
-            
+
             do {
                 try AppleScriptExecutor.shared.execute(script)
                 logger.info("Focused iTerm2 window using ID")
@@ -260,7 +280,7 @@ final class WindowTracker {
             focusWindowUsingAccessibility(windowInfo)
         }
     }
-    
+
     /// Focuses a window using Accessibility APIs.
     private func focusWindowUsingAccessibility(_ windowInfo: WindowInfo) {
         // First bring the application to front
@@ -268,20 +288,21 @@ final class WindowTracker {
             app.activate()
             logger.info("Activated application with PID: \(windowInfo.ownerPID)")
         }
-        
+
         // Use AXUIElement to focus the specific window
         let axApp = AXUIElementCreateApplication(windowInfo.ownerPID)
-        
+
         var windowsValue: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsValue)
-        
+
         guard result == .success,
               let windows = windowsValue as? [AXUIElement],
-              !windows.isEmpty else {
+              !windows.isEmpty
+        else {
             logger.error("Failed to get windows for application")
             return
         }
-        
+
         // Try to find the window by comparing window IDs
         for window in windows {
             var windowIDValue: CFTypeRef?
@@ -295,12 +316,12 @@ final class WindowTracker {
                 return
             }
         }
-        
+
         logger.warning("Could not find matching window in AXUIElement list")
     }
-    
+
     // MARK: - Direct Permission Checks
-    
+
     /// Checks if we have the required permissions for window tracking using direct API calls.
     private func checkPermissionsDirectly() -> Bool {
         // Check for Screen Recording permission (required for CGWindowListCopyWindowInfo)
@@ -311,35 +332,35 @@ final class WindowTracker {
         }
         return false
     }
-    
+
     /// Requests the required permissions by opening System Preferences.
     private func requestPermissionsDirectly() {
         logger.info("Requesting Screen Recording permission")
-        
+
         // Open System Preferences to Privacy & Security > Screen Recording
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
             NSWorkspace.shared.open(url)
         }
     }
-    
+
     // MARK: - Session Scanning
-    
+
     /// Scans for a terminal window containing a specific session.
     /// This is used for sessions attached via `vt` that weren't launched through our app.
     private func scanForSession(_ sessionID: String) async {
         logger.info("Scanning for window containing session: \(sessionID)")
-        
+
         // Get all terminal windows
         let allWindows = Self.getAllTerminalWindows()
-        
+
         // Look for windows that might contain this session
         // Sessions typically show their ID in the window title
         for window in allWindows {
             // Check if window title contains session ID
             if let title = window.title,
-               (title.contains(sessionID) || title.contains("vt") || title.contains("vibetunnel")) {
+               title.contains(sessionID) || title.contains("vt") || title.contains("vibetunnel") {
                 logger.info("Found potential window for session \(sessionID): \(title)")
-                
+
                 // Create window info for this session
                 let windowInfo = WindowInfo(
                     windowID: window.windowID,
@@ -352,29 +373,29 @@ final class WindowTracker {
                     bounds: window.bounds,
                     title: window.title
                 )
-                
+
                 mapLock.withLock {
                     sessionWindowMap[sessionID] = windowInfo
                 }
-                
+
                 logger.info("Successfully mapped window \(window.windowID) to session \(sessionID)")
                 return
             }
         }
-        
+
         logger.debug("Could not find window for session \(sessionID) in \(allWindows.count) terminal windows")
     }
-    
+
     // MARK: - Session Monitoring
-    
+
     /// Updates the window tracker based on active sessions.
     /// Should be called when SessionMonitor updates.
-    func updateFromSessions(_ sessions: [SessionMonitor.SessionInfo]) {
+    func updateFromSessions(_ sessions: [ServerSessionInfo]) {
         mapLock.withLock {
             // Remove windows for sessions that no longer exist
-            let activeSessionIDs = Set(sessions.map { $0.id })
+            let activeSessionIDs = Set(sessions.map(\.id))
             sessionWindowMap = sessionWindowMap.filter { activeSessionIDs.contains($0.key) }
-            
+
             // Scan for untracked sessions (e.g., attached via vt command)
             for session in sessions where session.isRunning {
                 if sessionWindowMap[session.id] == nil {
@@ -384,52 +405,55 @@ final class WindowTracker {
                     }
                 }
             }
-            
-            logger.debug("Updated window tracker: \(self.sessionWindowMap.count) active windows, \(sessions.count) total sessions")
+
+            logger
+                .debug(
+                    "Updated window tracker: \(self.sessionWindowMap.count) active windows, \(sessions.count) total sessions"
+                )
         }
     }
-    
+
     /// Gets the window information for a session.
     func windowInfo(for sessionID: String) -> WindowInfo? {
         mapLock.withLock {
             sessionWindowMap[sessionID]
         }
     }
-    
+
     /// Gets all tracked windows.
     func allTrackedWindows() -> [WindowInfo] {
         mapLock.withLock {
             Array(sessionWindowMap.values)
         }
     }
-    
+
     // MARK: - Permissions
-    
+
     /// Checks if we have the necessary permissions for window tracking.
     func checkPermissions() -> Bool {
         // Check Screen Recording permission
-        guard ScreenRecordingPermissionManager.shared.hasPermission() else {
+        guard SystemPermissionManager.shared.hasPermission(.screenRecording) else {
             logger.warning("Screen Recording permission required for window tracking")
             return false
         }
-        
+
         // Check Accessibility permission (for window focusing)
-        guard AccessibilityPermissionManager.shared.hasPermission() else {
+        guard SystemPermissionManager.shared.hasPermission(.accessibility) else {
             logger.warning("Accessibility permission required for window focusing")
             return false
         }
-        
+
         return true
     }
-    
+
     /// Requests all necessary permissions for window tracking.
     func requestPermissions() {
-        if !ScreenRecordingPermissionManager.shared.hasPermission() {
-            ScreenRecordingPermissionManager.shared.requestPermission()
+        if !SystemPermissionManager.shared.hasPermission(.screenRecording) {
+            SystemPermissionManager.shared.requestPermission(.screenRecording)
         }
-        
-        if !AccessibilityPermissionManager.shared.hasPermission() {
-            AccessibilityPermissionManager.shared.requestPermission()
+
+        if !SystemPermissionManager.shared.hasPermission(.accessibility) {
+            SystemPermissionManager.shared.requestPermission(.accessibility)
         }
     }
 }

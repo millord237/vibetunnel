@@ -212,20 +212,17 @@ final class NgrokService: NgrokTunnelProtocol {
             let urlExpectation = Task<String, Error> {
                 for try await line in outputHandle.lines {
                     if let data = line.data(using: .utf8),
-                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-                    {
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                         // Look for tunnel established message
                         if let msg = json["msg"] as? String,
                            msg.contains("started tunnel"),
-                           let url = json["url"] as? String
-                        {
+                           let url = json["url"] as? String {
                             return url
                         }
 
                         // Alternative: look for public URL in addr field
                         if let addr = json["addr"] as? String,
-                           addr.starts(with: "https://")
-                        {
+                           addr.starts(with: "https://") {
                             return addr
                         }
                     }
@@ -291,8 +288,7 @@ final class NgrokService: NgrokTunnelProtocol {
         seconds: TimeInterval,
         operation: @Sendable @escaping () async throws -> T
     )
-        async throws -> T
-    {
+        async throws -> T {
         try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask {
                 try await operation()

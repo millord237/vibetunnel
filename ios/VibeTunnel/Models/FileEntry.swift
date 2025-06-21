@@ -14,7 +14,7 @@ struct FileEntry: Codable, Identifiable {
     let modTime: Date
 
     var id: String { path }
-    
+
     /// Creates a new FileEntry with the given parameters.
     ///
     /// - Parameters:

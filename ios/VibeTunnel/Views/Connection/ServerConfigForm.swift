@@ -142,15 +142,22 @@ struct ServerConfigForm: View {
                     .frame(maxWidth: .infinity)
                 }
             })
-            .foregroundColor(isConnecting || !networkMonitor.isConnected ? Theme.Colors.terminalForeground : Theme.Colors.primaryAccent)
+            .foregroundColor(isConnecting || !networkMonitor.isConnected ? Theme.Colors.terminalForeground : Theme
+                .Colors.primaryAccent
+            )
             .padding(.vertical, Theme.Spacing.medium)
             .background(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .fill(isConnecting || !networkMonitor.isConnected ? Theme.Colors.cardBackground : Theme.Colors.terminalBackground)
+                    .fill(isConnecting || !networkMonitor.isConnected ? Theme.Colors.cardBackground : Theme.Colors
+                        .terminalBackground
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .stroke(networkMonitor.isConnected ? Theme.Colors.primaryAccent : Theme.Colors.cardBorder, lineWidth: isConnecting || !networkMonitor.isConnected ? 1 : 2)
+                    .stroke(
+                        networkMonitor.isConnected ? Theme.Colors.primaryAccent : Theme.Colors.cardBorder,
+                        lineWidth: isConnecting || !networkMonitor.isConnected ? 1 : 2
+                    )
                     .opacity(host.isEmpty ? 0.5 : 1.0)
             )
             .disabled(isConnecting || host.isEmpty || !networkMonitor.isConnected)
@@ -211,8 +218,7 @@ struct ServerConfigForm: View {
     private func loadRecentServers() {
         // Load recent servers from UserDefaults
         if let data = UserDefaults.standard.data(forKey: "recentServers"),
-           let servers = try? JSONDecoder().decode([ServerConfig].self, from: data)
-        {
+           let servers = try? JSONDecoder().decode([ServerConfig].self, from: data) {
             recentServers = servers
         }
     }

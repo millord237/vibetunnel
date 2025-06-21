@@ -22,7 +22,23 @@ struct ProcessDetails {
 
     /// Check if this is one of our managed servers
     var isManagedServer: Bool {
-        name == "vibetunnel" || name.contains("node") && (path?.contains("VibeTunnel") ?? false)
+        // Direct vibetunnel binary
+        if name == "vibetunnel" || name.contains("vibetunnel") {
+            return true
+        }
+        // Node server with VibeTunnel in path
+        if name.contains("node") && (path?.contains("VibeTunnel") ?? false) {
+            return true
+        }
+        // Bun executable (our vibetunnel binary is a Bun executable)
+        if name.contains("bun") && (path?.contains("VibeTunnel") ?? false) {
+            return true
+        }
+        // Check if the path contains our bundle identifier
+        if let path = path, path.contains("sh.vibetunnel") {
+            return true
+        }
+        return false
     }
 }
 
@@ -332,22 +348,28 @@ final class PortConflictResolver {
     }
 
     private func determineAction(for process: ProcessDetails, rootProcess: ProcessDetails?) -> ConflictAction {
+        logger.debug("Determining action for process: \(process.name) (PID: \(process.pid), Path: \(process.path ?? "unknown"))")
+        
         // If it's our managed server, kill it
         if process.isManagedServer {
+            logger.info("Process identified as managed server: \(process.name)")
             return .killOurInstance(pid: process.pid, processName: process.name)
         }
 
         // If root process is VibeTunnel, kill the whole app
         if let root = rootProcess, root.isVibeTunnel {
+            logger.info("Root process identified as VibeTunnel: \(root.name)")
             return .killOurInstance(pid: root.pid, processName: root.name)
         }
 
         // If the process itself is VibeTunnel
         if process.isVibeTunnel {
+            logger.info("Process identified as VibeTunnel: \(process.name)")
             return .killOurInstance(pid: process.pid, processName: process.name)
         }
 
         // Otherwise, it's an external app
+        logger.info("Process identified as external app: \(process.name)")
         return .reportExternalApp(name: process.name)
     }
 }

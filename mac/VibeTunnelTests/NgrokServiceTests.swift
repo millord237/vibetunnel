@@ -63,8 +63,7 @@ final class MockNgrokProcess: Process, @unchecked Sendable {
 
         // Simulate ngrok output
         if let output = mockOutput,
-           let pipe = standardOutput as? Pipe
-        {
+           let pipe = standardOutput as? Pipe {
             pipe.fileHandleForWriting.write(output.data(using: .utf8)!)
         }
     }
@@ -338,8 +337,7 @@ struct NgrokServiceTests {
 
         for output in outputs {
             if let data = output.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            {
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 // Check for URL in various fields
                 let url = json["url"] as? String ?? json["addr"] as? String
                 if let url, url.starts(with: "https://") {

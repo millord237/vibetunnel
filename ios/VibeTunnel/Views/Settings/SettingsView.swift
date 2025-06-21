@@ -5,19 +5,19 @@ struct SettingsView: View {
     @Environment(\.dismiss)
     var dismiss
     @State private var selectedTab = SettingsTab.general
-    
+
     enum SettingsTab: String, CaseIterable {
         case general = "General"
         case advanced = "Advanced"
-        
+
         var icon: String {
             switch self {
-            case .general: return "gear"
-            case .advanced: return "gearshape.2"
+            case .general: "gear"
+            case .advanced: "gearshape.2"
             }
         }
     }
-    
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -37,7 +37,9 @@ struct SettingsView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, Theme.Spacing.medium)
-                            .foregroundColor(selectedTab == tab ? Theme.Colors.primaryAccent : Theme.Colors.terminalForeground.opacity(0.5))
+                            .foregroundColor(selectedTab == tab ? Theme.Colors.primaryAccent : Theme.Colors
+                                .terminalForeground.opacity(0.5)
+                            )
                             .background(
                                 selectedTab == tab ? Theme.Colors.primaryAccent.opacity(0.1) : Color.clear
                             )
@@ -46,10 +48,10 @@ struct SettingsView: View {
                     }
                 }
                 .background(Theme.Colors.cardBackground)
-                
+
                 Divider()
                     .background(Theme.Colors.terminalForeground.opacity(0.1))
-                
+
                 // Tab content
                 ScrollView {
                     VStack(spacing: Theme.Spacing.large) {
@@ -89,7 +91,7 @@ struct GeneralSettingsView: View {
     private var autoScrollEnabled = true
     @AppStorage("enableURLDetection")
     private var enableURLDetection = true
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
             // Terminal Defaults Section
@@ -97,27 +99,27 @@ struct GeneralSettingsView: View {
                 Text("Terminal Defaults")
                     .font(.headline)
                     .foregroundColor(Theme.Colors.terminalForeground)
-                
+
                 VStack(spacing: Theme.Spacing.medium) {
                     // Font Size
                     VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                         Text("Default Font Size: \(Int(defaultFontSize))pt")
                             .font(Theme.Typography.terminalSystem(size: 14))
                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
-                        
+
                         Slider(value: $defaultFontSize, in: 10...24, step: 1)
                             .accentColor(Theme.Colors.primaryAccent)
                     }
                     .padding()
                     .background(Theme.Colors.cardBackground)
                     .cornerRadius(Theme.CornerRadius.card)
-                    
+
                     // Terminal Width
                     VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                         Text("Default Terminal Width: \(defaultTerminalWidth) columns")
                             .font(Theme.Typography.terminalSystem(size: 14))
                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
-                        
+
                         Picker("Width", selection: $defaultTerminalWidth) {
                             Text("80 columns").tag(80)
                             Text("100 columns").tag(100)
@@ -129,7 +131,7 @@ struct GeneralSettingsView: View {
                     .padding()
                     .background(Theme.Colors.cardBackground)
                     .cornerRadius(Theme.CornerRadius.card)
-                    
+
                     // Auto Scroll
                     Toggle(isOn: $autoScrollEnabled) {
                         HStack {
@@ -144,7 +146,7 @@ struct GeneralSettingsView: View {
                     .padding()
                     .background(Theme.Colors.cardBackground)
                     .cornerRadius(Theme.CornerRadius.card)
-                    
+
                     // URL Detection
                     Toggle(isOn: $enableURLDetection) {
                         HStack {
@@ -166,7 +168,7 @@ struct GeneralSettingsView: View {
                     .cornerRadius(Theme.CornerRadius.card)
                 }
             }
-            
+
             Spacer()
         }
     }
@@ -178,7 +180,7 @@ struct AdvancedSettingsView: View {
     private var verboseLogging = false
     @AppStorage("debugModeEnabled")
     private var debugModeEnabled = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
             // Logging Section
@@ -186,7 +188,7 @@ struct AdvancedSettingsView: View {
                 Text("Logging & Analytics")
                     .font(.headline)
                     .foregroundColor(Theme.Colors.terminalForeground)
-                
+
                 VStack(spacing: Theme.Spacing.medium) {
                     // Verbose Logging
                     Toggle(isOn: $verboseLogging) {
@@ -209,13 +211,13 @@ struct AdvancedSettingsView: View {
                     .cornerRadius(Theme.CornerRadius.card)
                 }
             }
-            
+
             // Developer Section
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 Text("Developer")
                     .font(.headline)
                     .foregroundColor(Theme.Colors.terminalForeground)
-                
+
                 // Debug Mode Switch - Last element in Advanced section
                 Toggle(isOn: $debugModeEnabled) {
                     HStack {
@@ -240,7 +242,7 @@ struct AdvancedSettingsView: View {
                         .stroke(Theme.Colors.warningAccent.opacity(0.3), lineWidth: 1)
                 )
             }
-            
+
             Spacer()
         }
     }

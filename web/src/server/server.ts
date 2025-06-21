@@ -68,11 +68,10 @@ export function startVibeTunnelServer() {
 
 // Only start server if this is the main module (for backward compatibility)
 // When running with tsx, the main module check is different
+// NOTE: When bundled as 'vibetunnel' executable, index.ts handles the startup
 const isMainModule =
   process.argv[1]?.endsWith('server.ts') ||
-  process.argv[1]?.endsWith('server/index.ts') ||
-  process.argv[1]?.endsWith('vibetunnel') ||
-  process.argv[0]?.endsWith('vibetunnel');
+  process.argv[1]?.endsWith('server/index.ts');
 if (isMainModule) {
   startVibeTunnelServer();
 }

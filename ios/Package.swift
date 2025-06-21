@@ -1,10 +1,11 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.0
 import PackageDescription
 
 let package = Package(
     name: "VibeTunnelDependencies",
     platforms: [
-        .iOS(.v18)
+        .iOS(.v18),
+        .macOS(.v10_15)
     ],
     products: [
         .library(
@@ -20,6 +21,22 @@ let package = Package(
             name: "VibeTunnelDependencies",
             dependencies: [
                 .product(name: "SwiftTerm", package: "SwiftTerm")
+            ]
+        ),
+        .testTarget(
+            name: "VibeTunnelTests",
+            dependencies: [],
+            path: "VibeTunnelTests",
+            sources: [
+                "StandaloneTests.swift",
+                "Utilities/TestTags.swift",
+                "APIErrorTests.swift",
+                "WebSocketReconnectionTests.swift",
+                "AuthenticationTests.swift",
+                "FileSystemTests.swift",
+                "TerminalParsingTests.swift",
+                "EdgeCaseTests.swift",
+                "PerformanceTests.swift"
             ]
         )
     ]

@@ -1,6 +1,6 @@
 import Observation
-import SwiftUI
 import QuickLook
+import SwiftUI
 
 /// File browser for navigating the server's file system.
 ///
@@ -64,7 +64,7 @@ struct FileBrowserView: View {
                             }
                             .buttonStyle(TerminalButtonStyle())
                         }
-                        
+
                         // Current path display
                         HStack(spacing: 8) {
                             Image(systemName: "folder.fill")
@@ -106,25 +106,23 @@ struct FileBrowserView: View {
                                 }
                                 .transition(.opacity)
                                 // Context menu disabled - file operations not implemented in backend
-                                /*
-                                .contextMenu {
-                                    if mode == .browseFiles && !entry.isDir {
-                                        Button(action: {
-                                            selectedFile = entry
-                                            showingFileEditor = true
-                                        }) {
-                                            Label("Edit", systemImage: "pencil")
-                                        }
-                                        
-                                        Button(role: .destructive, action: {
-                                            selectedFile = entry
-                                            showingDeleteAlert = true
-                                        }) {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                                }
-                                */
+                                // .contextMenu {
+                                //    if mode == .browseFiles && !entry.isDir {
+                                //        Button(action: {
+                                //            selectedFile = entry
+                                //            showingFileEditor = true
+                                //        }) {
+                                //            Label("Edit", systemImage: "pencil")
+                                //        }
+                                //
+                                //        Button(role: .destructive, action: {
+                                //            selectedFile = entry
+                                //            showingDeleteAlert = true
+                                //        }) {
+                                //            Label("Delete", systemImage: "trash")
+                                //        }
+                                //    }
+                                // }
                             }
                         }
                         .padding(.vertical, 8)
@@ -178,26 +176,24 @@ struct FileBrowserView: View {
                                 .contentShape(Rectangle())
                         })
                         .buttonStyle(TerminalButtonStyle())
-                        
+
                         // Create file button (disabled - not implemented in backend)
                         // Uncomment when file operations are implemented
-                        /*
-                        if mode == .browseFiles {
-                            Button(action: { showingNewFileAlert = true }, label: {
-                                Label("new file", systemImage: "doc.badge.plus")
-                                    .font(.custom("SF Mono", size: 14))
-                                    .foregroundColor(Theme.Colors.terminalAccent)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 10)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Theme.Colors.terminalAccent.opacity(0.5), lineWidth: 1)
-                                    )
-                                    .contentShape(Rectangle())
-                            })
-                            .buttonStyle(TerminalButtonStyle())
-                        }
-                        */
+                        // if mode == .browseFiles {
+                        //    Button(action: { showingNewFileAlert = true }, label: {
+                        //        Label("new file", systemImage: "doc.badge.plus")
+                        //            .font(.custom("SF Mono", size: 14))
+                        //            .foregroundColor(Theme.Colors.terminalAccent)
+                        //            .padding(.horizontal, 16)
+                        //            .padding(.vertical, 10)
+                        //            .background(
+                        //                RoundedRectangle(cornerRadius: 8)
+                        //                    .stroke(Theme.Colors.terminalAccent.opacity(0.5), lineWidth: 1)
+                        //            )
+                        //            .contentShape(Rectangle())
+                        //    })
+                        //    .buttonStyle(TerminalButtonStyle())
+                        // }
 
                         // Select button (only in selectDirectory mode)
                         if mode == .selectDirectory {
@@ -308,16 +304,16 @@ struct FileBrowserView: View {
                     ZStack {
                         Color.black.opacity(0.8)
                             .ignoresSafeArea()
-                        
+
                         VStack(spacing: 20) {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: Theme.Colors.terminalAccent))
                                 .scaleEffect(1.5)
-                            
+
                             Text("Downloading file...")
                                 .font(.custom("SF Mono", size: 16))
                                 .foregroundColor(Theme.Colors.terminalWhite)
-                            
+
                             if quickLookManager.downloadProgress > 0 {
                                 ProgressView(value: quickLookManager.downloadProgress)
                                     .progressViewStyle(LinearProgressViewStyle(tint: Theme.Colors.terminalAccent))
@@ -463,7 +459,7 @@ class FileBrowserViewModel {
     var canGoUp: Bool {
         currentPath != "/" && currentPath != "~"
     }
-    
+
     var displayPath: String {
         // Show a more user-friendly path
         if currentPath == "/" {
@@ -542,14 +538,14 @@ class FileBrowserViewModel {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
-    
+
     func deleteFile(path: String) async {
         // File deletion is not yet implemented in the backend
         errorMessage = "File deletion is not available in the current server version"
         showError = true
         UINotificationFeedbackGenerator().notificationOccurred(.error)
     }
-    
+
     func previewFile(_ file: FileEntry) async {
         do {
             try await QuickLookManager.shared.previewFile(file, apiClient: apiClient)

@@ -16,6 +16,7 @@ import { createRemoteRoutes } from './routes/remotes.js';
 import { ControlDirWatcher } from './services/control-dir-watcher.js';
 import { BufferAggregator } from './services/buffer-aggregator.js';
 import { v4 as uuidv4 } from 'uuid';
+import { getVersionInfo, printVersionBanner } from './version.js';
 
 interface Config {
   port: number | null;
@@ -28,6 +29,7 @@ interface Config {
   remoteName: string | null;
   allowInsecureHQ: boolean;
   showHelp: boolean;
+  showVersion: boolean;
 }
 
 // Show help message
@@ -39,6 +41,7 @@ Usage: vibetunnel-server [options]
 
 Options:
   --help                Show this help message
+  --version             Show version information
   --port <number>       Server port (default: 4020 or PORT env var)
   --username <string>   Basic auth username (or VIBETUNNEL_USERNAME env var)
   --password <string>   Basic auth password (or VIBETUNNEL_PASSWORD env var)
@@ -88,11 +91,18 @@ function parseArgs(): Config {
     remoteName: null as string | null,
     allowInsecureHQ: false,
     showHelp: false,
+    showVersion: false,
   };
 
   // Check for help flag first
   if (args.includes('--help') || args.includes('-h')) {
     config.showHelp = true;
+    return config;
+  }
+
+  // Check for version flag
+  if (args.includes('--version') || args.includes('-v')) {
+    config.showVersion = true;
     return config;
   }
 
@@ -232,6 +242,19 @@ export function createApp(): AppInstance {
     process.exit(0);
   }
 
+  // Check if version was requested
+  if (config.showVersion) {
+    const versionInfo = getVersionInfo();
+    console.log(`VibeTunnel Server v${versionInfo.version}`);
+    console.log(`Built: ${versionInfo.buildDate}`);
+    console.log(`Platform: ${versionInfo.platform}/${versionInfo.arch}`);
+    console.log(`Node: ${versionInfo.nodeVersion}`);
+    process.exit(0);
+  }
+
+  // Print version banner on startup
+  printVersionBanner();
+
   validateConfig(config);
 
   const app = express();
@@ -299,10 +322,15 @@ export function createApp(): AppInstance {
 
   // Health check endpoint (no auth required)
   app.get('/api/health', (req, res) => {
+    const versionInfo = getVersionInfo();
     res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
       mode: config.isHQMode ? 'hq' : 'remote',
+      version: versionInfo.version,
+      buildDate: versionInfo.buildDate,
+      uptime: versionInfo.uptime,
+      pid: versionInfo.pid,
     });
   });
 

@@ -5,13 +5,13 @@ struct TerminalTheme: Identifiable, Equatable {
     let id: String
     let name: String
     let description: String
-    
+
     // Basic colors
     let background: Color
     let foreground: Color
     let selection: Color
     let cursor: Color
-    
+
     // ANSI colors (0-7)
     let black: Color
     let red: Color
@@ -21,7 +21,7 @@ struct TerminalTheme: Identifiable, Equatable {
     let magenta: Color
     let cyan: Color
     let white: Color
-    
+
     // Bright ANSI colors (8-15)
     let brightBlack: Color
     let brightRed: Color
@@ -62,7 +62,7 @@ extension TerminalTheme {
         brightCyan: Theme.Colors.ansiBrightCyan,
         brightWhite: Theme.Colors.ansiBrightWhite
     )
-    
+
     /// VS Code Dark theme
     static let vsCodeDark = TerminalTheme(
         id: "vscode-dark",
@@ -89,7 +89,7 @@ extension TerminalTheme {
         brightCyan: Color(hex: "29B8DB"),
         brightWhite: Color(hex: "FFFFFF")
     )
-    
+
     /// Solarized Dark theme
     static let solarizedDark = TerminalTheme(
         id: "solarized-dark",
@@ -116,7 +116,7 @@ extension TerminalTheme {
         brightCyan: Color(hex: "93A1A1"),
         brightWhite: Color(hex: "FDF6E3")
     )
-    
+
     /// Dracula theme
     static let dracula = TerminalTheme(
         id: "dracula",
@@ -143,7 +143,7 @@ extension TerminalTheme {
         brightCyan: Color(hex: "A4FFFF"),
         brightWhite: Color(hex: "FFFFFF")
     )
-    
+
     /// Nord theme
     static let nord = TerminalTheme(
         id: "nord",
@@ -170,7 +170,7 @@ extension TerminalTheme {
         brightCyan: Color(hex: "8FBCBB"),
         brightWhite: Color(hex: "ECEFF4")
     )
-    
+
     /// All available themes
     static let allThemes: [TerminalTheme] = [
         .vibeTunnel,
@@ -185,12 +185,13 @@ extension TerminalTheme {
 
 extension TerminalTheme {
     private static let selectedThemeKey = "selectedTerminalTheme"
-    
+
     /// Get the currently selected theme from UserDefaults
     static var selected: TerminalTheme {
         get {
             guard let themeId = UserDefaults.standard.string(forKey: selectedThemeKey),
-                  let theme = allThemes.first(where: { $0.id == themeId }) else {
+                  let theme = allThemes.first(where: { $0.id == themeId })
+            else {
                 return .vibeTunnel
             }
             return theme

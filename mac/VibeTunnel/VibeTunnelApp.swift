@@ -11,7 +11,7 @@ struct VibeTunnelApp: App {
     @State private var sessionMonitor = SessionMonitor.shared
     @State private var serverManager = ServerManager.shared
     @State private var ngrokService = NgrokService.shared
-    @State private var appleScriptPermissionManager = AppleScriptPermissionManager.shared
+    @State private var permissionManager = SystemPermissionManager.shared
     @State private var terminalLauncher = TerminalLauncher.shared
 
     init() {
@@ -37,10 +37,10 @@ struct VibeTunnelApp: App {
             .windowResizability(.contentSize)
             .defaultSize(width: 580, height: 480)
             .windowStyle(.hiddenTitleBar)
-            
+
             // Session Detail Window
             WindowGroup("Session Details", id: "session-detail", for: String.self) { $sessionId in
-                if let sessionId = sessionId,
+                if let sessionId,
                    let session = SessionMonitor.shared.sessions[sessionId] {
                     SessionDetailView(session: session)
                         .withVibeTunnelServices()
@@ -106,25 +106,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             NSClassFromString("XCTestCase") != nil
         let isRunningInPreview = processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
         #if DEBUG
-        let isRunningInDebug = true
+            let isRunningInDebug = true
         #else
-        let isRunningInDebug = processInfo.environment["DYLD_INSERT_LIBRARIES"]?
-            .contains("libMainThreadChecker.dylib") ?? false ||
-            processInfo.environment["__XCODE_BUILT_PRODUCTS_DIR_PATHS"] != nil
+            let isRunningInDebug = processInfo.environment["DYLD_INSERT_LIBRARIES"]?
+                .contains("libMainThreadChecker.dylib") ?? false ||
+                processInfo.environment["__XCODE_BUILT_PRODUCTS_DIR_PATHS"] != nil
         #endif
 
         // Handle single instance check before doing anything else
         #if DEBUG
         // Skip single instance check in debug builds
         #else
-        if !isRunningInPreview && !isRunningInTests && !isRunningInDebug {
-            handleSingleInstanceCheck()
-            registerForDistributedNotifications()
+            if !isRunningInPreview && !isRunningInTests && !isRunningInDebug {
+                handleSingleInstanceCheck()
+                registerForDistributedNotifications()
 
-            // Check if app needs to be moved to Applications folder
-            let applicationMover = ApplicationMover()
-            applicationMover.checkAndOfferToMoveToApplications()
-        }
+                // Check if app needs to be moved to Applications folder
+                let applicationMover = ApplicationMover()
+                applicationMover.checkAndOfferToMoveToApplications()
+            }
         #endif
 
         // Initialize Sparkle updater manager
@@ -180,30 +180,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         // Initialize and start HTTP server using ServerManager
         Task {
-            do {
-                logger.info("Attempting to start HTTP server using ServerManager...")
-                await serverManager.start()
+            logger.info("Attempting to start HTTP server using ServerManager...")
+            await serverManager.start()
 
-                // Check if server actually started
-                if serverManager.isRunning {
-                    logger.info("HTTP server started successfully on port \(self.serverManager.port)")
+            // Check if server actually started
+            if serverManager.isRunning {
+                logger.info("HTTP server started successfully on port \(self.serverManager.port)")
 
-                    // Start monitoring sessions after server starts
-                    sessionMonitor.startMonitoring()
-                } else {
-                    logger.error("HTTP server failed to start")
-                    if let error = serverManager.lastError {
-                        logger.error("Server start error: \(error.localizedDescription)")
-                    }
-                }
-            } catch {
-                logger.error("Failed during server startup: \(error)")
-                logger.error("Error type: \(type(of: error))")
-                logger.error("Error description: \(error.localizedDescription)")
-                if let nsError = error as NSError? {
-                    logger.error("NSError domain: \(nsError.domain)")
-                    logger.error("NSError code: \(nsError.code)")
-                    logger.error("NSError userInfo: \(nsError.userInfo)")
+                // Session monitoring starts automatically
+            } else {
+                logger.error("HTTP server failed to start")
+                if let error = serverManager.lastError {
+                    logger.error("Server start error: \(error.localizedDescription)")
                 }
             }
         }
@@ -288,11 +276,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             NSClassFromString("XCTestCase") != nil
         let isRunningInPreview = processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
         #if DEBUG
-        let isRunningInDebug = true
+            let isRunningInDebug = true
         #else
-        let isRunningInDebug = processInfo.environment["DYLD_INSERT_LIBRARIES"]?
-            .contains("libMainThreadChecker.dylib") ?? false ||
-            processInfo.environment["__XCODE_BUILT_PRODUCTS_DIR_PATHS"] != nil
+            let isRunningInDebug = processInfo.environment["DYLD_INSERT_LIBRARIES"]?
+                .contains("libMainThreadChecker.dylib") ?? false ||
+                processInfo.environment["__XCODE_BUILT_PRODUCTS_DIR_PATHS"] != nil
         #endif
 
         // Skip cleanup during tests
@@ -300,9 +288,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             logger.info("Running in test mode - skipping termination cleanup")
             return
         }
-
-        // Stop session monitoring
-        sessionMonitor.stopMonitoring()
 
         // Stop terminal spawn service
         TerminalSpawnService.shared.stop()
@@ -316,13 +301,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         #if DEBUG
         // Skip removing observer in debug builds
         #else
-        if !isRunningInPreview && !isRunningInTests && !isRunningInDebug {
-            DistributedNotificationCenter.default().removeObserver(
-                self,
-                name: Self.showSettingsNotification,
-                object: nil
-            )
-        }
+            if !isRunningInPreview && !isRunningInTests && !isRunningInDebug {
+                DistributedNotificationCenter.default().removeObserver(
+                    self,
+                    name: Self.showSettingsNotification,
+                    object: nil
+                )
+            }
         #endif
 
         // Remove update check notification observer

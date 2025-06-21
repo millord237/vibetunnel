@@ -30,8 +30,7 @@ struct VibeTunnelApp: App {
 
         if url.host == "session",
            let sessionId = url.pathComponents.last,
-           !sessionId.isEmpty
-        {
+           !sessionId.isEmpty {
             navigationManager.navigateToSession(sessionId)
         }
     }
@@ -50,6 +49,7 @@ class ConnectionManager {
             UserDefaults.standard.set(isConnected, forKey: "connectionState")
         }
     }
+
     var serverConfig: ServerConfig?
     var lastConnectionTime: Date?
 
@@ -60,21 +60,20 @@ class ConnectionManager {
 
     private func loadSavedConnection() {
         if let data = UserDefaults.standard.data(forKey: "savedServerConfig"),
-           let config = try? JSONDecoder().decode(ServerConfig.self, from: data)
-        {
+           let config = try? JSONDecoder().decode(ServerConfig.self, from: data) {
             self.serverConfig = config
         }
     }
-    
+
     private func restoreConnectionState() {
         // Restore connection state if app was terminated while connected
         let wasConnected = UserDefaults.standard.bool(forKey: "connectionState")
         if let lastConnectionData = UserDefaults.standard.object(forKey: "lastConnectionTime") as? Date {
             lastConnectionTime = lastConnectionData
-            
+
             // Only restore connection if it was within the last hour
             let timeSinceLastConnection = Date().timeIntervalSince(lastConnectionData)
-            if wasConnected && timeSinceLastConnection < 3600 && serverConfig != nil {
+            if wasConnected && timeSinceLastConnection < 3_600 && serverConfig != nil {
                 // Attempt to restore connection
                 isConnected = true
             } else {
@@ -88,7 +87,7 @@ class ConnectionManager {
         if let data = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(data, forKey: "savedServerConfig")
             self.serverConfig = config
-            
+
             // Save connection timestamp
             lastConnectionTime = Date()
             UserDefaults.standard.set(lastConnectionTime, forKey: "lastConnectionTime")
@@ -100,13 +99,13 @@ class ConnectionManager {
         UserDefaults.standard.removeObject(forKey: "connectionState")
         UserDefaults.standard.removeObject(forKey: "lastConnectionTime")
     }
-    
+
     var currentServerConfig: ServerConfig? {
         serverConfig
     }
 }
 
-// Make ConnectionManager accessible globally for APIClient
+/// Make ConnectionManager accessible globally for APIClient
 extension ConnectionManager {
     @MainActor
     static let shared = ConnectionManager()

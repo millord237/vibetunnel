@@ -16,7 +16,6 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
-VibeTunnel/Resources/tty-fwd
 
 # Xcode
 build/
@@ -85,13 +84,6 @@ web/dist/**/*.js
 web/dist/**/*.js.map
 web/public/**/*.js
 web/public/**/*.js.map
-VibeTunnel/Resources/tty-fwd
-
-# Rust/Cargo
-target/
-Cargo.lock
-**/*.rs.bk
-*.pdb
 
 # LLVM Profiling data
 *.profraw
@@ -107,16 +99,8 @@ Workspace.xcworkspace/
 private/
 
 # Built binaries (should be built during build process)
-linux/vibetunnel
-linux/vt
-linux/linux
 VibeTunnel/Resources/vt
 VibeTunnel/Resources/vibetunnel
-linux/vt-go
-linux/vibetunnel-go
-/vibetunnel-go
-/vt-go
 web/vibetunnel
-/linux/vibetunnel-new
 /server/vibetunnel-server
 server/vibetunnel-fwd

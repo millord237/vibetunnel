@@ -5,23 +5,23 @@
 1. [Executive Summary](#executive-summary)
 2. [System Architecture](#system-architecture)
 3. [Core Components](#core-components)
-4. [Server Implementations](#server-implementations)
+4. [Server Implementation](#server-implementation)
 5. [Web Frontend](#web-frontend)
-6. [Security Model](#security-model)
-7. [Session Management](#session-management)
-8. [CLI Integration](#cli-integration)
-9. [API Specifications](#api-specifications)
-10. [User Interface](#user-interface)
-11. [Configuration System](#configuration-system)
-12. [Build and Release](#build-and-release)
-13. [Testing Strategy](#testing-strategy)
-14. [Performance Requirements](#performance-requirements)
-15. [Error Handling](#error-handling)
-16. [Update System](#update-system)
-17. [Platform Integration](#platform-integration)
-18. [Data Formats](#data-formats)
-19. [Networking](#networking)
-20. [Future Roadmap](#future-roadmap)
+6. [iOS Application](#ios-application)
+7. [Security Model](#security-model)
+8. [Session Management](#session-management)
+9. [CLI Integration](#cli-integration)
+10. [API Specifications](#api-specifications)
+11. [Binary Buffer Protocol](#binary-buffer-protocol)
+12. [User Interface](#user-interface)
+13. [Configuration System](#configuration-system)
+14. [Build and Release](#build-and-release)
+15. [Testing Strategy](#testing-strategy)
+16. [Performance Requirements](#performance-requirements)
+17. [Error Handling](#error-handling)
+18. [Update System](#update-system)
+19. [Platform Integration](#platform-integration)
+20. [Data Formats](#data-formats)
 
 ## Executive Summary
 
@@ -33,19 +33,22 @@ VibeTunnel is a macOS application that provides browser-based access to Mac term
 
 - **Zero-Configuration Terminal Access**: Launch terminals with a simple `vt` command
 - **Browser-Based Interface**: Access terminals from any modern web browser
-- **Real-Time Streaming**: Live terminal updates via WebSocket
+- **Real-Time Streaming**: Live terminal updates via WebSocket with binary buffer optimization
 - **Session Recording**: Full asciinema format recording support
 - **Security Options**: Password protection, localhost-only mode, Tailscale/ngrok integration
-- **Multiple Server Backends**: Choice between Rust (tty-fwd) and Go implementations
+- **High-Performance Server**: Node.js server with Bun runtime for optimal JavaScript performance
 - **Auto-Updates**: Sparkle framework integration for seamless updates
 - **AI Agent Integration**: Special support for Claude Code with shortcuts
+- **iOS Companion App**: Mobile terminal access from iPhone/iPad
 
 ### Technical Stack
 
-- **Native App**: Swift 6.0, SwiftUI, macOS 14.0+
-- **HTTP Servers**: tty-fwd (Rust), Go server
-- **Web Frontend**: TypeScript, JavaScript, Tailwind CSS
-- **Build System**: Xcode, Swift Package Manager, Cargo
+- **Native macOS App**: Swift 6.0, SwiftUI, macOS 14.0+
+- **iOS App**: Swift 6.0, SwiftUI, iOS 17.0+
+- **Server**: Node.js/TypeScript with Bun runtime
+- **Web Frontend**: TypeScript, Lit Web Components, Tailwind CSS
+- **Terminal Emulation**: xterm.js with custom buffer optimization
+- **Build System**: Xcode, Swift Package Manager, npm/Bun
 - **Distribution**: Signed/notarized DMG with Sparkle updates
 
 ## System Architecture
@@ -61,41 +64,46 @@ VibeTunnel is a macOS application that provides browser-based access to Mac term
 │  └─────────────┘  └──────────────┘  └──────────────────┘  │
 │                           │                                  │
 │  ┌─────────────────────────────────────────────────────┐  │
-│  │                  Server Abstraction                   │  │
-│  │  ┌──────────────────┐  ┌──────────────────────┐     │  │
-│  │  │ Rust Server      │  │ Go Server            │     │  │
-│  │  │ (tty-fwd)        │  │                      │     │  │
-│  │  └──────────────────┘  └──────────────────────┘     │  │
+│  │              Node.js/Bun Server Process               │  │
+│  │  ┌──────────────────────────────────────────────┐   │  │
+│  │  │ Standalone Bun executable with embedded      │   │  │
+│  │  │ TypeScript server and native PTY modules     │   │  │
+│  │  └──────────────────────────────────────────────┘   │  │
 │  └─────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                                │
-                               ├── HTTP API
-                               ├── WebSocket
+                        ┌──────┴──────┐
+                        │ HTTP/WS API │
+                        └──────┬──────┘
                                │
-┌─────────────────────────────────────────────────────────────┐
-│                      Web Browser                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────┐   │
-│  │ Dashboard    │  │ Terminal     │  │ Asciinema      │   │
-│  │ View         │  │ Interface    │  │ Player         │   │
-│  └──────────────┘  └──────────────┘  └────────────────┘   │
+┌──────────────────────────────┴──────────────────────────────┐
+│                    Client Applications                       │
+├─────────────────────────────────────────────────────────────┤
+│     Web Browser                    iOS App                  │
+│  ┌──────────────┐              ┌──────────────┐           │
+│  │ Dashboard    │              │ Native Swift │           │
+│  │ (Lit/TS)    │              │ Terminal UI  │           │
+│  └──────────────┘              └──────────────┘           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Component Interaction Flow
 
 1. **Terminal Launch**: User executes `vt` command
-2. **Session Creation**: ServerManager creates new terminal session
-3. **PTY Allocation**: Server allocates pseudo-terminal
-4. **WebSocket Connection**: Browser establishes real-time connection
-5. **Data Streaming**: Terminal I/O streams to/from browser
-6. **Recording**: Session data recorded in asciinema format
-7. **Session Cleanup**: Resources freed on terminal exit
+2. **Server Check**: ServerManager ensures Bun server is running
+3. **Session Creation**: HTTP POST to create new terminal session
+4. **PTY Allocation**: Server allocates pseudo-terminal via node-pty
+5. **WebSocket Upgrade**: Client establishes WebSocket connection
+6. **Binary Buffer Protocol**: Optimized terminal data streaming
+7. **Recording**: Session data recorded in asciinema format
+8. **Session Cleanup**: Resources freed on terminal exit
 
 ### Design Principles
 
-- **Modularity**: Clean separation between UI, business logic, and server implementations
-- **Protocol-Oriented**: Interfaces define contracts between components
-- **Thread Safety**: Swift actors ensure concurrent access safety
+- **Single Server Implementation**: One Node.js/Bun server handles everything
+- **Protocol-Oriented Swift**: Clean interfaces between macOS components
+- **Binary Optimization**: Custom buffer protocol for efficient terminal streaming
+- **Thread Safety**: Swift actors and Node.js event loop for concurrent safety
 - **Minimal Dependencies**: Only essential third-party libraries
 - **User Privacy**: No telemetry or user tracking
 
@@ -103,249 +111,270 @@ VibeTunnel is a macOS application that provides browser-based access to Mac term
 
 ### ServerManager
 
-**Location**: `VibeTunnel/Core/Services/ServerManager.swift`
+**Location**: `mac/VibeTunnel/Core/Services/ServerManager.swift`
 
 **Responsibilities**:
-- Orchestrates server lifecycle (start/stop/restart)
-- Manages server selection (Rust vs Go)
+- Manages Bun server process lifecycle (start/stop/restart)
+- Handles server configuration (port, bind address)
+- Provides log streaming from server process
 - Coordinates with other services (Ngrok, SessionMonitor)
-- Provides unified API for UI layer
+- Manages server health checks
 
 **Key Methods**:
 ```swift
-func startServer(serverType: ServerType) async throws
-func stopServer() async
-func restartServer() async throws
-func getServerURL() -> URL?
-func isServerRunning() -> Bool
+func start() async
+func stop() async  
+func restart() async
+func clearAuthCache() async
 ```
 
 **State Management**:
-- Uses Swift actors for thread-safe state updates
-- Publishes state changes via Combine
-- Maintains server configuration
+- Uses `@Observable` for SwiftUI integration
+- `@MainActor` ensures UI thread safety
+- Publishes server state changes
+- Maintains server configuration in UserDefaults
+
+### BunServer
+
+**Location**: `mac/VibeTunnel/Core/Services/BunServer.swift`
+
+**Responsibilities**:
+- Spawns and manages the Bun executable process
+- Handles process I/O streaming
+- Monitors process health and auto-restarts
+- Passes configuration via command-line arguments
+
+**Key Features**:
+- Embedded vibetunnel binary built with Bun
+- Native PTY support via node-pty module
+- Automatic crash recovery
+- Log streaming to ServerManager
 
 ### SessionMonitor
 
-**Location**: `VibeTunnel/Core/Services/SessionMonitor.swift`
+**Location**: `mac/VibeTunnel/Core/Services/SessionMonitor.swift`
 
 **Responsibilities**:
-- Tracks active terminal sessions
-- Monitors session lifecycle
-- Collects session metrics
-- Provides session listing API
+- Polls server for active sessions
+- Tracks session lifecycle
+- Provides session counts for UI
+- Handles session cleanup
 
 **Key Features**:
-- Real-time session tracking
-- Session metadata management
-- Automatic cleanup of terminated sessions
+- Real-time session tracking via polling
+- Session metadata caching
+- Automatic cleanup detection
 - Performance monitoring
 
 ### TerminalManager
 
-**Location**: `VibeTunnel/Core/Services/TerminalManager.swift`
+**Location**: `mac/VibeTunnel/Core/Services/TerminalManager.swift`
 
 **Responsibilities**:
-- Creates new terminal processes
-- Manages PTY (pseudo-terminal) allocation
-- Handles terminal I/O redirection
-- Implements terminal control operations
-
-**Terminal Operations**:
-- Shell selection (bash, zsh, fish)
-- Environment variable management
-- Working directory configuration
-- Terminal size handling
+- Integrates with macOS terminal applications
+- Handles terminal app selection (Terminal.app, iTerm2, etc.)
+- Manages AppleScript execution for terminal launching
+- Provides terminal detection utilities
 
 ### NgrokService
 
-**Location**: `VibeTunnel/Core/Services/NgrokService.swift`
+**Location**: `mac/VibeTunnel/Core/Services/NgrokService.swift`
 
 **Responsibilities**:
 - Manages ngrok tunnel lifecycle
 - Provides secure public URLs
-- Handles authentication
+- Handles authentication token storage
 - Monitors tunnel status
 
 **Configuration**:
 - API key management via Keychain
 - Custom domain support
 - Region selection
-- Protocol configuration
+- Basic auth integration
 
-## Server Implementations
+## Server Implementation
 
-### Server Implementations
+### Node.js/Bun Server
+
+**Location**: `web/src/server/` directory
 
 **Architecture**:
-```swift
-protocol ServerProtocol {
-    func start(port: Int) async throws
-    func stop() async
-    var isRunning: Bool { get }
-    var port: Int? { get }
-}
-```
+The server is built as a standalone Bun executable that embeds:
+- TypeScript server code compiled to JavaScript
+- Native node-pty module for PTY support
+- Express.js for HTTP handling
+- ws library for WebSocket support
+- All dependencies bundled into single binary
 
-**Features**:
-- Native Swift implementation
-- Async/await concurrency
-- Built on SwiftNIO
-- Direct macOS integration
+**Key Components**:
+- `server.ts` - HTTP server initialization and lifecycle
+- `app.ts` - Express application setup and middleware
+- `fwd.ts` - Main entry point for terminal forwarding
+- `pty/pty-manager.ts` - Native PTY process management
+- `pty/session-manager.ts` - Terminal session lifecycle
+- `services/terminal-manager.ts` - High-level terminal operations
+- `services/buffer-aggregator.ts` - Binary buffer optimization
+- `routes/sessions.ts` - REST API endpoints
 
-**Endpoints**:
-- `GET /` - Dashboard HTML
-- `GET /api/sessions` - List active sessions
-- `POST /api/sessions` - Create new session
-- `GET /api/sessions/:id` - Session details
-- `DELETE /api/sessions/:id` - Terminate session
-- `WS /api/sessions/:id/stream` - Terminal WebSocket
+**Server Features**:
+- High-performance Bun runtime (3x faster than Node.js)
+- Zero-copy buffer operations
+- Native PTY handling with proper signal forwarding
+- Asciinema recording for all sessions
+- Binary buffer protocol for efficient streaming
+- Graceful shutdown handling
 
-**Middleware Stack**:
-1. CORS handling
-2. Basic authentication (optional)
-3. Request logging
-4. Error handling
-5. Static file serving
-
-### Rust Server (tty-fwd)
-
-**Location**: Binary embedded in app bundle
-
-**Features**:
-- High-performance Rust implementation
-- Native PTY handling
-- Asciinema recording built-in
-- Minimal memory footprint
-
-**Command-Line Interface**:
+**Build Process**:
 ```bash
-tty-fwd --port 9700 \
-        --auth-mode basic \
-        --username user \
-        --password pass \
-        --allowed-origins "*"
+# Build standalone executable
+cd web && node build-native.js
+# Creates web/native/vibetunnel (60MB Bun executable)
 ```
-
-**Advantages**:
-- Better terminal compatibility
-- Lower latency
-- Efficient resource usage
-- Battle-tested PTY handling
 
 ## Web Frontend
 
 ### Technology Stack
 
-**Location**: `web/` directory
+**Location**: `web/src/client/` directory
 
 **Core Technologies**:
 - TypeScript for type safety
-- Vanilla JavaScript for performance
+- Lit Web Components for modern component architecture
 - Tailwind CSS for styling
-- Asciinema player for terminal rendering
-- WebSocket API for real-time updates
+- xterm.js for terminal rendering
+- Custom WebSocket client for binary buffer protocol
 
 ### Component Architecture
 
 ```
-web/
-├── src/
-│   ├── components/
-│   │   ├── Dashboard.ts
-│   │   ├── SessionList.ts
-│   │   ├── TerminalView.ts
-│   │   └── SettingsPanel.ts
-│   ├── services/
-│   │   ├── ApiClient.ts
-│   │   ├── WebSocketClient.ts
-│   │   └── SessionManager.ts
-│   ├── utils/
-│   │   ├── Terminal.ts
-│   │   └── Authentication.ts
-│   └── styles/
-│       └── main.css
-├── public/
-│   ├── index.html
-│   └── assets/
-└── build/
+web/src/client/
+├── components/
+│   ├── app-header.ts        - Application header
+│   ├── session-list.ts      - Active session listing
+│   ├── session-card.ts      - Individual session display
+│   ├── session-view.ts      - Terminal container
+│   ├── terminal.ts          - xterm.js wrapper
+│   └── vibe-terminal-buffer.ts - Binary buffer handler
+├── services/
+│   └── buffer-subscription-service.ts - WebSocket management
+├── utils/
+│   ├── terminal-renderer.ts - Terminal rendering utilities
+│   ├── terminal-preferences.ts - User preferences
+│   └── url-highlighter.ts   - URL detection in terminal
+└── styles.css               - Tailwind configuration
 ```
 
 ### Key Features
 
 **Dashboard**:
-- Real-time session listing
+- Real-time session listing with 3-second polling
 - One-click terminal creation
-- Session metadata display
-- Server status indicators
+- Session metadata display (command, duration, status)
+- Responsive grid layout
 
 **Terminal Interface**:
-- Full ANSI color support
+- Full ANSI color support via xterm.js
+- Binary buffer protocol for efficient updates
 - Copy/paste functionality
 - Responsive terminal sizing
-- Keyboard shortcut support
-- Mobile-friendly design
+- URL highlighting and click support
+- Mobile-friendly touch interactions
 
 **Performance Optimizations**:
+- Binary message format with 0xBF magic byte
+- Delta compression for incremental updates
+- Efficient buffer aggregation
+- WebSocket reconnection logic
 - Lazy loading of terminal sessions
-- WebSocket connection pooling
-- Efficient DOM updates
-- Asset bundling and minification
+
+## iOS Application
+
+### Overview
+
+**Location**: `ios/VibeTunnel/` directory
+
+**Purpose**: Native iOS companion app for mobile terminal access
+
+### Architecture
+
+**Key Components**:
+- `VibeTunnelApp.swift` - Main app entry and lifecycle
+- `BufferWebSocketClient.swift` - WebSocket client with binary protocol
+- `TerminalView.swift` - Native terminal rendering
+- `TerminalHostingView.swift` - UIKit bridge for terminal display
+- `SessionService.swift` - Session management API client
+
+### Features
+
+- Native SwiftUI interface
+- Server connection management
+- Terminal rendering with gesture support
+- Session listing and management
+- Recording export functionality
+- Advanced keyboard support
+
+### Binary Buffer Protocol Support
+
+The iOS app implements the same binary buffer protocol as the web client:
+- Handles 0xBF magic byte messages
+- Processes buffer snapshots and deltas
+- Maintains terminal state synchronization
+- Optimized for mobile bandwidth
 
 ## Security Model
 
 ### Authentication
 
 **Basic Authentication**:
-- Username/password protection
+- Optional username/password protection
 - Credentials stored in macOS Keychain
-- Secure credential transmission
-- Session-based authentication
+- Passed to server via command-line arguments
+- HTTP Basic Auth for all API endpoints
 
 **Implementation**:
-```swift
-class LazyBasicAuthMiddleware: HTTPMiddleware {
-    func intercept(_ request: Request, next: Next) async throws -> Response {
-        guard requiresAuth(request) else {
-            return try await next(request)
-        }
-        
-        guard let auth = request.headers["Authorization"].first,
-              validateCredentials(auth) else {
-            return Response(status: .unauthorized)
-        }
-        
-        return try await next(request)
+```typescript
+// web/src/server/middleware/auth.ts
+export function createAuthMiddleware(password?: string): RequestHandler {
+  if (!password) return (req, res, next) => next();
+  
+  return (req, res, next) => {
+    const auth = req.headers.authorization;
+    if (!auth || !validateBasicAuth(auth, password)) {
+      res.status(401).send('Authentication required');
+      return;
     }
+    next();
+  };
 }
 ```
 
 ### Network Security
 
 **Access Control**:
-- Localhost-only mode by default
-- CORS configuration
-- IP whitelisting support
-- Request rate limiting
+- Localhost-only mode by default (127.0.0.1)
+- Network mode binds to 0.0.0.0
+- CORS configuration for web access
+- No built-in TLS (use reverse proxy or tunnels)
 
 **Secure Tunneling**:
 - Tailscale integration for VPN access
 - Ngrok support for secure public URLs
-- TLS encryption for remote connections
-- Certificate validation
+- Both provide TLS encryption
+- Authentication handled by tunnel providers
 
 ### System Security
 
-**Privileges**:
-- No app sandbox (required for terminal access)
-- Hardened runtime enabled
-- Code signing with Developer ID
-- Notarization for Gatekeeper
+**macOS App Privileges**:
+- Hardened runtime with specific entitlements
+- Allows unsigned executable memory (for Bun)
+- Allows DYLD environment variables
+- Code signed with Developer ID
+- Notarized for Gatekeeper approval
 
 **Data Protection**:
 - No persistent storage of terminal content
-- Session data cleared on termination
-- Secure credential storage in Keychain
+- Session recordings stored temporarily
+- Passwords in Keychain with access control
 - No telemetry or analytics
 
 ## Session Management
@@ -354,114 +383,121 @@ class LazyBasicAuthMiddleware: HTTPMiddleware {
 
 ```
 ┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐
-│ Created │ --> │ Active  │ --> │ Closing │ --> │ Closed  │
+│ Created │ --> │ Active  │ --> │ Exited  │ --> │ Cleaned │
 └─────────┘     └─────────┘     └─────────┘     └─────────┘
-     │                                                 │
-     └─────────────── Errored ────────────────────────┘
 ```
 
 ### Session Model
 
-```swift
-struct TunnelSession: Identifiable, Codable {
-    let id: String
-    let name: String
-    let command: String
-    let createdAt: Date
-    let pid: Int32?
-    let recordingPath: String?
-    var status: SessionStatus
-    var lastActivity: Date
+**TypeScript Definition** (`web/src/server/pty/types.ts`):
+```typescript
+export interface Session {
+  id: string;
+  pid: number;
+  command: string;
+  args: string[];
+  cwd: string;
+  startTime: number;
+  status: 'running' | 'exited';
+  exitCode?: number;
+  cols: number;
+  rows: number;
+  recordingPath?: string;
 }
 ```
 
 ### Session Operations
 
 **Creation**:
-1. Generate unique session ID
-2. Allocate PTY
-3. Launch shell process
-4. Initialize recording
-5. Establish WebSocket
+1. Generate unique session ID (UUID)
+2. Spawn PTY process with command
+3. Initialize asciinema recording
+4. Register with SessionManager
+5. Return session details to client
 
 **Monitoring**:
-- Process status checks
-- I/O activity tracking
-- Resource usage monitoring
-- Automatic timeout handling
+- Process exit detection
+- Automatic status updates
+- Resource usage tracking
+- Idle timeout handling (optional)
 
 **Termination**:
-- Graceful process shutdown
+- SIGTERM to process group
 - PTY cleanup
 - Recording finalization
-- WebSocket closure
-- Resource deallocation
+- WebSocket closure notification
+- Memory cleanup
 
 ## CLI Integration
 
-### vt Command Wrapper
-
-**Location**: `Resources/vt`
+### vt Command
 
 **Installation**:
-```bash
-# Automatic installation
-/Applications/VibeTunnel.app/Contents/MacOS/VibeTunnel --install-cli
+The `vt` command is installed as a wrapper script that automatically prepends 'fwd' to commands when using the Bun server.
 
-# Manual installation
-ln -s /Applications/VibeTunnel.app/Contents/Resources/vt /usr/local/bin/vt
+**Script Location**: `/usr/local/bin/vt`
+```bash
+#!/bin/bash
+# VibeTunnel CLI wrapper for Bun server
+exec /usr/local/bin/vibetunnel fwd "$@"
 ```
 
-**Usage Patterns**:
-```bash
-# Basic usage
-vt
+### vibetunnel Binary
 
-# With custom command
-vt -- npm run dev
+**Location**: Embedded in app bundle, copied to `/usr/local/bin/vibetunnel`
 
-# Claude integration
-vt --claude
-vt --claude-yolo
-
-# Custom working directory
-vt --cwd /path/to/project
-```
+**Commands**:
+- `vibetunnel serve` - Start server (used internally)
+- `vibetunnel fwd [command]` - Forward terminal session
+- `vibetunnel version` - Show version information
 
 ### CLI Features
 
 **Command Parsing**:
-- Argument forwarding to shell
-- Environment variable preservation
-- Working directory handling
-- Shell selection
+- Automatic 'fwd' prepending for vt wrapper
+- Shell detection and setup
+- Working directory preservation
+- Environment variable handling
+- Special Claude shortcuts (`--claude`, `--claude-yolo`)
 
-**App Integration**:
-- Launches VibeTunnel if not running
-- Waits for server readiness
-- Opens browser automatically
-- Returns session URL
+**Session Creation Flow**:
+1. Parse command-line arguments
+2. Ensure server is running
+3. Create session via API
+4. Open browser to session URL
+5. Return session information
 
 ## API Specifications
 
 ### RESTful API
 
-**Base URL**: `http://localhost:9700`
+**Base URL**: `http://localhost:4020` (default)
 
-**Authentication**: Optional Basic Auth
+**Authentication**: Optional HTTP Basic Auth
 
-#### Endpoints
+#### Core Endpoints
+
+**GET /api/health**
+```json
+{
+  "status": "ok",
+  "version": "1.0.0"
+}
+```
 
 **GET /api/sessions**
 ```json
 {
   "sessions": [
     {
-      "id": "abc123",
-      "name": "Terminal 1",
-      "command": "/bin/zsh",
-      "createdAt": "2024-01-20T10:30:00Z",
-      "status": "active"
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "command": "zsh",
+      "args": [],
+      "cwd": "/Users/username",
+      "startTime": 1704060000000,
+      "status": "running",
+      "cols": 80,
+      "rows": 24
     }
   ]
 }
@@ -471,106 +507,140 @@ vt --cwd /path/to/project
 ```json
 // Request
 {
-  "command": "/bin/bash",
-  "args": ["-c", "echo hello"],
+  "command": "/bin/zsh",
+  "args": ["-l"],
   "cwd": "/Users/username",
-  "env": {
-    "CUSTOM_VAR": "value"
-  }
+  "env": {},
+  "cols": 80,
+  "rows": 24,
+  "recordingEnabled": true
 }
 
 // Response
 {
-  "id": "xyz789",
-  "url": "/sessions/xyz789",
-  "websocket": "/api/sessions/xyz789/stream"
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "pid": 12345,
+  "webUrl": "/sessions/550e8400-e29b-41d4-a716-446655440000",
+  "wsUrl": "/api/sessions/550e8400-e29b-41d4-a716-446655440000/ws"
 }
 ```
 
 **DELETE /api/sessions/:id**
 ```json
 {
-  "status": "terminated"
+  "success": true
+}
+```
+
+**GET /api/sessions/:id/snapshot**
+Returns current terminal buffer state for initial render
+
+**POST /api/sessions/:id/input**
+Send keyboard input to terminal
+
+**POST /api/sessions/:id/resize**
+```json
+{
+  "cols": 120,
+  "rows": 40
 }
 ```
 
 ### WebSocket Protocol
 
-**Endpoint**: `/api/sessions/:id/stream`
+**Endpoint**: `/api/sessions/:id/ws`
 
-**Message Format**:
-```typescript
-interface TerminalMessage {
-  type: 'data' | 'resize' | 'close';
-  data?: string;  // Base64 encoded for binary safety
-  cols?: number;
-  rows?: number;
-}
-```
+**Binary Buffer Protocol**: Messages use custom format for efficiency
 
-**Connection Flow**:
-1. Client connects to WebSocket
-2. Server sends initial terminal size
-3. Bidirectional data flow begins
-4. Client sends resize events
-5. Server sends close event on termination
+## Binary Buffer Protocol
+
+### Overview
+
+The binary buffer protocol optimizes terminal data transmission by sending full buffer snapshots and incremental updates.
+
+### Message Format
+
+**Binary Message (TypedArray)**:
+- First byte: 0xBF (magic byte)
+- Remaining bytes: Terminal buffer data or commands
+
+**Text Message (JSON)**:
+- Input commands
+- Resize events
+- Control messages
+
+### Protocol Flow
+
+1. **Initial Connection**: 
+   - Client connects to WebSocket
+   - Server sends binary buffer snapshot
+   
+2. **Incremental Updates**:
+   - Server aggregates terminal output
+   - Sends deltas as text messages
+   - Periodically sends full binary snapshots
+
+3. **Client Input**:
+   - Sent as JSON text messages
+   - Contains 'input' type and data
+
+### Implementation Details
+
+**Server** (`web/src/server/services/buffer-aggregator.ts`):
+- Maintains terminal buffer state
+- Aggregates small updates
+- Sends snapshots every 5 seconds or on major changes
+
+**Web Client** (`web/src/client/components/vibe-terminal-buffer.ts`):
+- Handles binary buffer messages
+- Applies incremental updates
+- Manages terminal state
+
+**iOS Client** (`ios/VibeTunnel/Services/BufferWebSocketClient.swift`):
+- Same protocol implementation
+- Optimized for mobile performance
 
 ## User Interface
 
 ### Menu Bar Application
 
 **Components**:
-- Status icon with server state
+- Status icon indicating server state
 - Quick access menu
-- Session listing
+- Session count display
 - Settings access
 - About/Help options
 
 **State Indicators**:
 - Gray: Server stopped
-- Blue: Server running
+- Green: Server running
 - Red: Error state
 - Animated: Starting/stopping
 
 ### Settings Window
 
 **General Tab**:
-- Server selection (Rust/Go)
-- Port configuration
-- Auto-start preferences
+- Server port configuration
+- Launch at login toggle
+- Show in Dock option
 - Update channel selection
 
-**Security Tab**:
-- Authentication toggle
-- Username/password fields
-- Localhost-only mode
-- Allowed origins configuration
+**Dashboard Tab**:
+- Access mode (localhost/network)
+- Password protection toggle
+- Authentication settings
+- Dashboard URL display
 
 **Advanced Tab**:
-- Shell selection
-- Environment variables
-- Terminal preferences
+- Cleanup on startup
+- CLI tools installation
+- Server console access
 - Debug logging
 
-**Integrations Tab**:
-- Ngrok configuration
-- Tailscale settings
-- CLI installation
-- Browser selection
-
-### Design Guidelines
-
-**Visual Design**:
-- Native macOS appearance
-- System color scheme support
-- Consistent spacing (8pt grid)
-- SF Symbols for icons
-
-**Interaction Patterns**:
-- Immediate feedback for actions
-- Confirmation for destructive operations
-- Keyboard shortcuts support
-- Accessibility compliance
+**Debug Tab** (hidden by default):
+- Server type display (Bun only)
+- Console log viewer
+- Diagnostic information
 
 ## Configuration System
 
@@ -578,42 +648,30 @@ interface TerminalMessage {
 
 **Storage**: `UserDefaults.standard`
 
-**Key Structure**:
+**Key Settings**:
 ```swift
-enum UserDefaultsKeys {
-    static let serverType = "serverType"
-    static let serverPort = "serverPort"
-    static let authEnabled = "authEnabled"
-    static let localhostOnly = "localhostOnly"
-    static let autoStart = "autoStart"
-    static let updateChannel = "updateChannel"
-}
+serverPort: String = "4020"
+dashboardAccessMode: String = "localhost"
+dashboardPasswordEnabled: Bool = false
+launchAtLogin: Bool = false
+showDockIcon: Bool = false
+cleanupOnStartup: Bool = true
 ```
 
 ### Keychain Integration
 
-**Secure Storage**:
-- Authentication credentials
-- Ngrok API tokens
-- Session tokens
-- Encryption keys
+**DashboardKeychain Service**:
+- Stores dashboard password securely
+- Uses kSecClassInternetPassword
+- Server and port-specific storage
+- Handles password updates/deletion
 
-**Implementation**:
-```swift
-class KeychainService {
-    func store(_ data: Data, for key: String) throws
-    func retrieve(for key: String) throws -> Data?
-    func delete(for key: String) throws
-}
-```
+### Configuration Flow
 
-### Configuration Migration
-
-**Version Handling**:
-- Configuration version tracking
-- Automatic migration on upgrade
-- Backup before migration
-- Rollback capability
+1. **App Launch**: Load settings from UserDefaults
+2. **Server Start**: Pass configuration via CLI arguments
+3. **Runtime Changes**: Update server without restart where possible
+4. **Password Changes**: Clear server auth cache
 
 ## Build and Release
 
@@ -621,35 +679,35 @@ class KeychainService {
 
 **Requirements**:
 - Xcode 16.0+
-- Swift 6.0+
-- Rust 1.83.0+
 - macOS 14.0+ SDK
+- Node.js 20.0+
+- Bun runtime
 
-**Build Script**: `scripts/build.sh`
+**Build Process**:
 ```bash
-./scripts/build.sh [debug|release] [sign] [notarize]
+# Complete build
+cd mac && ./scripts/build.sh --configuration Release --sign
+
+# Development build
+cd mac && ./scripts/build.sh --configuration Debug
 ```
 
 **Build Phases**:
-1. Clean previous builds
-2. Build Rust components
-3. Build Swift application
-4. Copy resources
-5. Code signing
-6. Notarization
-7. DMG creation
+1. Build Bun executable from web sources
+2. Compile Swift application
+3. Copy resources (Bun binary, web assets)
+4. Code sign application
+5. Create DMG for distribution
 
 ### Code Signing
 
-**Requirements**:
-- Apple Developer ID certificate
-- Hardened runtime enabled
-- Entitlements configuration
-- Notarization credentials
-
-**Entitlements**:
+**Entitlements** (`mac/VibeTunnel/VibeTunnel.entitlements`):
 ```xml
+<key>com.apple.security.cs.allow-jit</key>
+<true/>
 <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+<true/>
+<key>com.apple.security.cs.allow-dyld-environment-variables</key>
 <true/>
 <key>com.apple.security.cs.disable-library-validation</key>
 <true/>
@@ -657,68 +715,64 @@ class KeychainService {
 
 ### Distribution
 
-**Channels**:
-- Direct download from website
-- GitHub releases
-- Homebrew cask (planned)
-- Mac App Store (future)
+**Release Process**:
+1. Build and sign application
+2. Create notarized DMG
+3. Generate Sparkle appcast
+4. Upload to GitHub releases
+5. Update appcast XML
 
-**Package Format**:
-- Signed and notarized DMG
-- Universal binary (Intel + Apple Silicon)
-- Embedded update framework
-- Version metadata
+**Package Contents**:
+- ARM64-only binary (Apple Silicon required)
+- Embedded Bun server executable
+- Web assets and resources
+- Sparkle update framework
 
 ## Testing Strategy
 
-### Unit Tests
+### macOS Tests
 
-**Coverage Areas**:
-- Session management logic
-- API endpoint handlers
-- Configuration handling
-- Utility functions
+**Framework**: Swift Testing (Swift 6)
+
+**Test Organization**:
+```
+mac/VibeTunnelTests/
+├── ServerManagerTests.swift
+├── SessionMonitorTests.swift
+├── TerminalManagerTests.swift
+├── DashboardKeychainTests.swift
+├── CLIInstallerTests.swift
+├── NetworkUtilityTests.swift
+└── Utilities/
+    ├── TestTags.swift
+    ├── TestFixtures.swift
+    └── MockHTTPClient.swift
+```
+
+**Test Tags**:
+- `.critical` - Core functionality
+- `.networking` - Network operations
+- `.concurrency` - Async operations
+- `.security` - Security features
+
+### Node.js Tests
+
+**Framework**: Vitest
 
 **Test Structure**:
-```swift
-class SessionManagerTests: XCTestCase {
-    func testSessionCreation() async throws
-    func testSessionTermination() async throws
-    func testConcurrentSessions() async throws
-}
+```
+web/src/test/
+├── e2e/
+│   ├── hq-mode.e2e.test.ts
+│   └── server-smoke.e2e.test.ts
+├── setup.ts
+└── test-utils.ts
 ```
 
-### Integration Tests
-
-**Server Tests**:
-- HTTP endpoint testing
-- WebSocket communication
-- Authentication flows
-- Error scenarios
-
-**Mock Infrastructure**:
-```swift
-class MockHTTPClient: HTTPClient {
-    var responses: [URL: Response] = [:]
-    func send(_ request: Request) async throws -> Response
-}
-```
-
-### UI Tests
-
-**Scenarios**:
-- Menu bar interactions
-- Settings window navigation
-- Session creation flow
-- Error state handling
-
-### Performance Tests
-
-**Metrics**:
-- Server startup time < 1s
-- Session creation < 100ms
-- WebSocket latency < 10ms
-- Memory usage < 50MB idle
+**Coverage Requirements**:
+- 80% line coverage
+- 80% function coverage
+- 80% branch coverage
 
 ## Performance Requirements
 
@@ -726,20 +780,21 @@ class MockHTTPClient: HTTPClient {
 
 **Terminal I/O**:
 - Keystroke to display: < 50ms
-- Command execution: < 100ms
-- Screen refresh: 60 FPS
+- Binary buffer update: < 100ms
+- WebSocket ping/pong: < 10ms
 
 **API Response Times**:
 - Session list: < 50ms
 - Session creation: < 200ms
-- Static assets: < 100ms
+- Health check: < 10ms
 
 ### Resource Usage
 
 **Memory**:
-- Base application: < 50MB
+- macOS app idle: < 50MB
+- Bun server idle: < 100MB
 - Per session: < 10MB
-- WebSocket buffer: 64KB
+- Buffer cache: 64KB per session
 
 **CPU**:
 - Idle: < 1%
@@ -750,243 +805,120 @@ class MockHTTPClient: HTTPClient {
 
 **Concurrent Sessions**:
 - Target: 50 simultaneous sessions
-- Graceful degradation beyond limit
-- Resource pooling for efficiency
+- Tested: 100+ sessions
+- Graceful degradation
+- Buffer pooling for efficiency
 
 ## Error Handling
 
 ### Error Categories
 
 **User Errors**:
+- Port already in use
 - Invalid configuration
 - Authentication failures
-- Network issues
 - Permission denied
 
 **System Errors**:
-- Server startup failures
-- PTY allocation errors
-- Process spawn failures
-- Resource exhaustion
+- Server crash/restart
+- PTY allocation failures
+- Process spawn errors
+- WebSocket disconnections
 
-**Recovery Strategies**:
-- Automatic retry with backoff
+### Error Recovery
+
+**Server Crashes**:
+- Automatic restart by ServerManager
+- Session state preserved in memory
+- Client reconnection supported
 - Graceful degradation
-- User notification
-- Error logging
 
-### Error Reporting
-
-**User Feedback**:
-```swift
-enum UserError: LocalizedError {
-    case serverStartFailed(String)
-    case authenticationFailed
-    case sessionCreationFailed(String)
-    
-    var errorDescription: String? {
-        switch self {
-        case .serverStartFailed(let reason):
-            return "Failed to start server: \(reason)"
-        // ...
-        }
-    }
-}
-```
-
-**Logging**:
-- Structured logging with SwiftLog
-- Log levels (debug, info, warning, error)
-- Rotating log files
-- Privacy-preserving logging
+**Client Disconnections**:
+- WebSocket auto-reconnect
+- Exponential backoff
+- Session state preserved
+- Buffer replay on reconnect
 
 ## Update System
 
 ### Sparkle Integration
 
 **Configuration**:
-```xml
-<key>SUFeedURL</key>
-<string>https://vibetunnel.sh/appcast.xml</string>
-<key>SUEnableAutomaticChecks</key>
-<true/>
-<key>SUScheduledCheckInterval</key>
-<integer>86400</integer>
-```
+- Update check interval: 24 hours
+- Automatic download in background
+- User prompt for installation
+- Delta updates supported
 
 **Update Channels**:
 - Stable: Production releases
-- Beta: Pre-release testing
-- Edge: Nightly builds
+- Pre-release: Beta testing
 
 ### Update Process
 
-**Flow**:
-1. Check for updates (daily)
-2. Download update in background
-3. Verify signature
+1. Check appcast.xml for updates
+2. Download update package
+3. Verify EdDSA signature
 4. Prompt user for installation
-5. Install and restart
-
-**Rollback Support**:
-- Previous version backup
-- Automatic rollback on crash
-- Manual downgrade option
+5. Install and restart application
 
 ## Platform Integration
 
 ### macOS Integration
 
 **System Features**:
-- Launch at login
-- Dock/menu bar modes
-- Notification Center
+- Launch at login via SMAppService
+- Menu bar and Dock modes
+- Notification Center support
 - Keyboard shortcuts
-- Services menu
+- AppleScript support
 
-**Accessibility**:
-- VoiceOver support
-- Keyboard navigation
-- High contrast mode
-- Reduced motion
+### Terminal Integration
 
-### Shell Integration
+**Supported Terminals**:
+- Terminal.app (default)
+- iTerm2
+- Warp
+- Alacritty
+- Hyper
+- kitty
 
-**Supported Shells**:
-- bash
-- zsh (default)
-- fish
-- sh
-- Custom shells
-
-**Environment Setup**:
-- Path preservation
-- Environment variable forwarding
-- Shell configuration sourcing
-- Terminal type setting
+**Detection Method**:
+- Check bundle identifiers
+- Verify app existence
+- User preference storage
 
 ## Data Formats
 
-### Asciinema Format
+### Asciinema Recording
 
-**Recording Structure**:
+**Format**: Asciinema v2
+
+**Header**:
 ```json
 {
   "version": 2,
   "width": 80,
   "height": 24,
-  "timestamp": 1642694400,
-  "env": {
-    "SHELL": "/bin/zsh",
-    "TERM": "xterm-256color"
-  }
-}
-```
-
-**Event Format**:
-```json
-[timestamp, "o", "output data"]
-[timestamp, "i", "input data"]
-```
-
-### Session Metadata
-
-**Storage Format**:
-```json
-{
-  "id": "session-uuid",
-  "created": "2024-01-20T10:30:00Z",
+  "timestamp": 1704060000,
   "command": "/bin/zsh",
-  "duration": 3600,
-  "size": {
-    "cols": 80,
-    "rows": 24
-  }
+  "title": "VibeTunnel Session"
 }
 ```
 
-## Networking
+**Events**: Newline-delimited JSON
+```
+[0.123456, "o", "terminal output"]
+[0.234567, "i", "keyboard input"]
+```
 
-### Protocol Support
+### Session Storage
 
-**HTTP/HTTPS**:
-- HTTP/1.1 for compatibility
-- HTTP/2 support planned
-- TLS 1.3 for secure connections
-- Certificate pinning option
-
-**WebSocket**:
-- RFC 6455 compliant
-- Binary frame support
-- Ping/pong keepalive
-- Automatic reconnection
-
-### Network Configuration
-
-**Firewall Rules**:
-- Incoming connections prompt
-- Automatic rule creation
-- Port range restrictions
-- Interface binding options
-
-**Proxy Support**:
-- System proxy settings
-- Custom proxy configuration
-- SOCKS5 support
-- Authentication handling
-
-## Future Roadmap
-
-### Version 1.0 Goals
-
-**Core Features**:
-- ✅ Basic terminal forwarding
-- ✅ Browser interface
-- ✅ Session management
-- ✅ Security options
-- ⏳ Session persistence
-- ⏳ Multi-user support
-
-### Version 2.0 Plans
-
-**Advanced Features**:
-- Terminal multiplexing
-- Session recording playback
-- Collaborative sessions
-- Terminal sharing
-- Cloud synchronization
-- Mobile app companion
-
-### Long-term Vision
-
-**Enterprise Features**:
-- LDAP/AD integration
-- Audit logging
-- Compliance reporting
-- Role-based access
-- Session policies
-- Integration APIs
-
-**Platform Expansion**:
-- Linux support
-- Windows support (WSL)
-- iOS/iPadOS app
-- Web-based management
-- Container deployment
-
-### Technical Debt
-
-**Planned Refactoring**:
-- Modularize server implementations
-- Extract shared protocol library
-- Improve test coverage
-- Performance optimizations
-- Documentation improvements
+Sessions are ephemeral and exist only in server memory. Recordings are stored temporarily in the system temp directory and cleaned up after 24 hours or on server restart with cleanup enabled.
 
 ## Conclusion
 
-VibeTunnel represents a modern approach to terminal access, combining native macOS development with web technologies to create a seamless user experience. The architecture prioritizes security, performance, and ease of use while maintaining flexibility for future enhancements.
+VibeTunnel achieves its goal of simple, secure terminal access through a carefully architected system combining native macOS development with modern web technologies. The single Node.js/Bun server implementation provides excellent performance while maintaining simplicity.
 
-The dual-server implementation strategy provides both performance (Rust) and integration (Swift) options, while the clean architectural boundaries enable independent evolution of components. With careful attention to macOS platform conventions and user expectations, VibeTunnel delivers a professional-grade solution for terminal access needs.
+The binary buffer protocol ensures efficient terminal streaming, while the clean architectural boundaries enable independent evolution of components. With careful attention to macOS platform conventions and user expectations, VibeTunnel delivers a professional-grade solution for terminal access needs.
 
-This specification serves as the authoritative reference for understanding, maintaining, and extending the VibeTunnel project. As the project evolves, this document should be updated to reflect architectural decisions, implementation details, and future directions.
+This specification serves as the authoritative reference for understanding, maintaining, and extending the VibeTunnel project.

@@ -127,13 +127,19 @@ struct GeneralSettingsView: View {
 // MARK: - Permissions Section
 
 private struct PermissionsSection: View {
-    @State private var appleScriptManager = AppleScriptPermissionManager.shared
-    @State private var accessibilityUpdateTrigger = 0
+    @State private var permissionManager = SystemPermissionManager.shared
+    @State private var permissionUpdateTrigger = 0
 
+    private var hasAppleScriptPermission: Bool {
+        // This will cause a re-read whenever permissionUpdateTrigger changes
+        _ = permissionUpdateTrigger
+        return permissionManager.hasPermission(.appleScript)
+    }
+    
     private var hasAccessibilityPermission: Bool {
-        // This will cause a re-read whenever accessibilityUpdateTrigger changes
-        _ = accessibilityUpdateTrigger
-        return AccessibilityPermissionManager.shared.hasPermission()
+        // This will cause a re-read whenever permissionUpdateTrigger changes
+        _ = permissionUpdateTrigger
+        return permissionManager.hasPermission(.accessibility)
     }
 
     var body: some View {
@@ -151,7 +157,7 @@ private struct PermissionsSection: View {
 
                     Spacer()
 
-                    if appleScriptManager.checkPermissionStatus() {
+                    if hasAppleScriptPermission {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
@@ -164,7 +170,7 @@ private struct PermissionsSection: View {
                         .frame(height: 22) // Match small button height
                     } else {
                         Button("Grant Permission") {
-                            appleScriptManager.requestPermission()
+                            permissionManager.requestPermission(.appleScript)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -198,7 +204,7 @@ private struct PermissionsSection: View {
                         .frame(height: 22) // Match small button height
                     } else {
                         Button("Grant Permission") {
-                            AccessibilityPermissionManager.shared.requestPermission()
+                            permissionManager.requestPermission(.accessibility)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -209,7 +215,7 @@ private struct PermissionsSection: View {
             Text("Permissions")
                 .font(.headline)
         } footer: {
-            if appleScriptManager.checkPermissionStatus() && hasAccessibilityPermission {
+            if hasAppleScriptPermission && hasAccessibilityPermission {
                 Text(
                     "All permissions granted. New sessions will spawn new terminal windows."
                 )
@@ -227,12 +233,12 @@ private struct PermissionsSection: View {
             }
         }
         .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
-            // Force a re-render to check accessibility permission
-            accessibilityUpdateTrigger += 1
+            // Force a re-render to check permissions
+            permissionUpdateTrigger += 1
         }
         .task {
-            // Perform a silent check that won't trigger dialog
-            _ = await appleScriptManager.silentPermissionCheck()
+            // Check all permissions
+            await permissionManager.checkAllPermissions()
         }
     }
 }

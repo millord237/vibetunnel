@@ -7,8 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		78AD8B912E051ED40009725C /* HTTPTypes in Frameworks */ = {isa = PBXBuildFile; productRef = 78AD8B902E051ED40009725C /* HTTPTypes */; };
-		78AD8B932E051ED40009725C /* HTTPTypesFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 78AD8B922E051ED40009725C /* HTTPTypesFoundation */; };
 		78AD8B952E051ED40009725C /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 78AD8B942E051ED40009725C /* Logging */; };
 		89D01D862CB5D7DC0075D8BD /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 89D01D852CB5D7DC0075D8BD /* Sparkle */; };
 /* End PBXBuildFile section */
@@ -61,8 +59,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				78AD8B912E051ED40009725C /* HTTPTypes in Frameworks */,
-				78AD8B932E051ED40009725C /* HTTPTypesFoundation in Frameworks */,
 				78AD8B952E051ED40009725C /* Logging in Frameworks */,
 				89D01D862CB5D7DC0075D8BD /* Sparkle in Frameworks */,
 			);
@@ -111,13 +107,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 788688152DFF4FCC00B22C15 /* Build configuration list for PBXNativeTarget "VibeTunnel" */;
 			buildPhases = (
+				C3D4E5F6A7B8C9D0E1F23456 /* Install Build Dependencies */,
 				788687ED2DFF4FCB00B22C15 /* Sources */,
 				788687EE2DFF4FCB00B22C15 /* Frameworks */,
 				788687EF2DFF4FCB00B22C15 /* Resources */,
 				B2C3D4E5F6A7B8C9D0E1F234 /* Build Web Frontend */,
-				C2D3E4F5A6B7C8D9E0F1A234 /* Build Go vibetunnel Universal Binary */,
-				863C9A2E8379CC685DB09770 /* Download Node.js Runtime */,
-				AF2AD3F29DC50479EE7A588C /* Build Node.js Server Bundle */,
+				A1B2C3D4E5F6789012345678 /* Build Bun Executable */,
 			);
 			buildRules = (
 			);
@@ -129,8 +124,6 @@
 			name = VibeTunnel;
 			packageProductDependencies = (
 				89D01D852CB5D7DC0075D8BD /* Sparkle */,
-				78AD8B902E051ED40009725C /* HTTPTypes */,
-				78AD8B922E051ED40009725C /* HTTPTypesFoundation */,
 				78AD8B942E051ED40009725C /* Logging */,
 			);
 			productName = VibeTunnel;
@@ -188,7 +181,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				89D01D842CB5D7DC0075D8BD /* XCRemoteSwiftPackageReference "Sparkle" */,
-				78AD8B8D2E051EA50009725C /* XCRemoteSwiftPackageReference "swift-http-types" */,
 				78AD8B8E2E051EB50009725C /* XCRemoteSwiftPackageReference "swift-log" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -220,27 +212,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		863C9A2E8379CC685DB09770 /* Download Node.js Runtime */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Download Node.js Runtime";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/node",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Download Node.js Runtime\necho \"Checking if Node.js runtime should be downloaded...\"\n\n# Only download if explicitly requested\nif [ \"${BUILD_NODE_SERVER}\" != \"true\" ]; then\n    echo \"Skipping Node.js runtime download (set BUILD_NODE_SERVER=true to enable)\"\n    exit 0\nfi\n\necho \"Downloading Node.js runtime...\"\n\n# Get the project directory\nSCRIPT_DIR=\"${SRCROOT}/Scripts\"\nDOWNLOAD_SCRIPT=\"${SCRIPT_DIR}/download-node.sh\"\n\n# Check if download script exists\nif [ ! -f \"${DOWNLOAD_SCRIPT}\" ]; then\n    echo \"error: Node.js download script not found at ${DOWNLOAD_SCRIPT}\"\n    exit 1\nfi\n\n# Make script executable\nchmod +x \"${DOWNLOAD_SCRIPT}\"\n\n# Run the download script\n\"${DOWNLOAD_SCRIPT}\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Node.js runtime download failed\"\n    exit 1\nfi\n\n# Copy Node.js runtime to app bundle from temporary location\nNODE_SOURCE=\"${SRCROOT}/.build-cache/node\"\nNODE_DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/node\"\n\nif [ -d \"${NODE_SOURCE}\" ]; then\n    echo \"Copying Node.js runtime to app bundle...\"\n    mkdir -p \"${NODE_DEST}\"\n    cp -R \"${NODE_SOURCE}/\"* \"${NODE_DEST}/\"\n    \n    # Ensure the binary is executable and signed\n    if [ -f \"${NODE_DEST}/node\" ]; then\n        chmod +x \"${NODE_DEST}/node\"\n        codesign --force --sign - \"${NODE_DEST}/node\"\n    fi\nelse\n    echo \"warning: Node.js runtime not found at ${NODE_SOURCE}\"\nfi\n\necho \"Node.js runtime setup complete\"\n";
-		};
-		AF2AD3F29DC50479EE7A588C /* Build Node.js Server Bundle */ = {
+		A1B2C3D4E5F6789012345678 /* Build Bun Executable */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -250,19 +222,17 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/../web/src/server.ts",
-				"$(SRCROOT)/../web/src/server",
-				"$(SRCROOT)/../web/package.json",
-				"$(SRCROOT)/Scripts/build-node-server.sh",
+				"$(SRCROOT)/../web/build-native.js",
 			);
-			name = "Build Node.js Server Bundle";
+			name = "Build Bun Executable";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/node-server",
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/vibetunnel",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Build Node.js Server Bundle\necho \"Checking if Node.js server should be built...\"\n\n# Only build if explicitly requested\nif [ \"${BUILD_NODE_SERVER}\" != \"true\" ]; then\n    echo \"Skipping Node.js server build (set BUILD_NODE_SERVER=true to enable)\"\n    exit 0\nfi\n\necho \"Building Node.js server bundle...\"\n\n# Get the project directory\nSCRIPT_DIR=\"${SRCROOT}/Scripts\"\nBUILD_SCRIPT=\"${SCRIPT_DIR}/build-node-server.sh\"\n\n# Check if build script exists\nif [ ! -f \"${BUILD_SCRIPT}\" ]; then\n    echo \"error: Node.js server build script not found at ${BUILD_SCRIPT}\"\n    exit 1\nfi\n\n# Make script executable\nchmod +x \"${BUILD_SCRIPT}\"\n\n# Run the build script\n\"${BUILD_SCRIPT}\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Node.js server build failed\"\n    exit 1\nfi\n\n# Copy Node.js server to app bundle from temporary location\nSERVER_SOURCE=\"${SRCROOT}/.build-cache/node-server\"\nSERVER_DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/node-server\"\n\nif [ -d \"${SERVER_SOURCE}\" ]; then\n    echo \"Copying Node.js server to app bundle...\"\n    rm -rf \"${SERVER_DEST}\"\n    mkdir -p \"${SERVER_DEST}\"\n    cp -R \"${SERVER_SOURCE}/\"* \"${SERVER_DEST}/\"\n    echo \"Node.js server copied to app bundle\"\nelse\n    echo \"error: Node.js server not found at ${SERVER_SOURCE}\"\n    exit 1\nfi\n\necho \"Node.js server bundle built successfully\"\n";
+			shellPath = /bin/bash;
+			shellScript = "# Build Bun executable\necho \"Building Bun executable...\"\n\n# Get the script directory\nSCRIPT_DIR=\"${SRCROOT}/scripts\"\nBUILD_SCRIPT=\"${SCRIPT_DIR}/build-bun-executable.sh\"\n\n# Check if build script exists\nif [ ! -f \"${BUILD_SCRIPT}\" ]; then\n    echo \"error: Bun build script not found at ${BUILD_SCRIPT}\"\n    exit 1\nfi\n\n# Make script executable\nchmod +x \"${BUILD_SCRIPT}\"\n\n# Run the build script\n\"${BUILD_SCRIPT}\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Bun executable build failed\"\n    exit 1\nfi\n\necho \"Bun executable build complete\"\n";
 		};
 		B2C3D4E5F6A7B8C9D0E1F234 /* Build Web Frontend */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -287,9 +257,9 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "# Build web frontend\necho \"Building web frontend...\"\n\n[ -f \"$HOME/.profile\" ] && . \"$HOME/.profile\"\n[ -f \"$HOME/.zprofile\" ] && . \"$HOME/.zprofile\"\n\n# Get the project directory\nPROJECT_DIR=\"${SRCROOT}\"\nWEB_DIR=\"${PROJECT_DIR}/../web\"\nPUBLIC_DIR=\"${WEB_DIR}/public\"\nDEST_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/web/public\"\n\n# Export CI environment variable to prevent interactive prompts\nexport CI=true\n\n# Check if npm is available\nif ! command -v npm &> /dev/null; then\n    echo \"error: npm could not be found in PATH\"\n    echo \"PATH is: $PATH\"\n    echo \"Please ensure Node.js is installed and available in your shell configuration\"\n    exit 1\nfi\n\n# Print npm version for debugging\necho \"Using npm version: $(npm --version)\"\necho \"Using node version: $(node --version)\"\necho \"PATH: $PATH\"\n\n# Check if web directory exists\nif [ ! -d \"${WEB_DIR}\" ]; then\n    echo \"error: Web directory not found at ${WEB_DIR}\"\n    exit 1\nfi\n\n# Change to web directory\ncd \"${WEB_DIR}\"\n\n# Install dependencies\necho \"Installing npm dependencies...\"\nnpm install --no-progress --no-audit\nif [ $? -ne 0 ]; then\n    echo \"error: npm install failed\"\n    exit 1\nfi\n\n# Fix permissions for tailwindcss executable\nif [ -f \"node_modules/.bin/tailwindcss\" ]; then\n    chmod +x \"node_modules/.bin/tailwindcss\"\nfi\nif [ -f \"node_modules/tailwindcss/lib/cli.js\" ]; then\n    chmod +x \"node_modules/tailwindcss/lib/cli.js\"\nfi\n\n# Clean up any existing output.css directory/file conflicts\nif [ -d \"public/output.css\" ]; then\n    rm -rf \"public/output.css\"\nfi\n\n# Build the web frontend\necho \"Running npm bundle...\"\nnpm run bundle\nif [ $? -ne 0 ]; then\n    echo \"error: npm run bundle failed\"\n    exit 1\nfi\n\n# Create destination directory\nmkdir -p \"${DEST_DIR}\"\n\n# Copy built files to Resources\necho \"Copying web files to app bundle...\"\nif [ -d \"${PUBLIC_DIR}\" ]; then\n    # Copy all files from public directory\n    cp -R \"${PUBLIC_DIR}/\"* \"${DEST_DIR}/\"\n    echo \"Web frontend files copied to ${DEST_DIR}\"\nelse\n    echo \"error: Public directory not found at ${PUBLIC_DIR}\"\n    exit 1\nfi\n";
+			shellScript = "# Build web frontend using Bun\necho \"Building web frontend...\"\n\n# Run the build script\n\"${SRCROOT}/scripts/build-web-frontend.sh\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Web frontend build failed\"\n    exit 1\nfi\n";
 		};
-		C2D3E4F5A6B7C8D9E0F1A234 /* Build Go vibetunnel Universal Binary */ = {
+		C3D4E5F6A7B8C9D0E1F23456 /* Install Build Dependencies */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -298,22 +268,15 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/../linux/cmd/vibetunnel/main.go",
-				"$(SRCROOT)/../linux/pkg/api/server.go",
-				"$(SRCROOT)/../linux/pkg/session/manager.go",
-				"$(SRCROOT)/../linux/pkg/session/session.go",
-				"$(SRCROOT)/../linux/go.mod",
-				"$(SRCROOT)/../linux/build-universal.sh",
 			);
-			name = "Build Go vibetunnel Universal Binary";
+			name = "Install Build Dependencies";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/vibetunnel",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Build Go vibetunnel universal binary\necho \"Building Go vibetunnel universal binary...\"\n\n# Get the project directory\nPROJECT_DIR=\"${SRCROOT}\"\nLINUX_DIR=\"${PROJECT_DIR}/../linux\"\nBUILD_SCRIPT=\"${LINUX_DIR}/build-universal.sh\"\n\n# Source Go environment\n[ -f \"$HOME/.profile\" ] && . \"$HOME/.profile\"\n[ -f \"$HOME/.zprofile\" ] && . \"$HOME/.zprofile\"\n\n# Source system PATH directories to ensure Go is available\nfor path_file in /etc/paths.d/*; do\n    [ -r \"$path_file\" ] && export PATH=\"$PATH:$(cat \"$path_file\")\"\ndone\n\n# Check if go is available\nif ! command -v go &> /dev/null; then\n    echo \"Go not found in PATH, checking alternative location...\"\n    \n    # Check if Go is installed at /usr/local/go/bin/go\n    if [ -x \"/usr/local/go/bin/go\" ]; then\n        echo \"Found Go at /usr/local/go/bin/go\"\n        export PATH=\"/usr/local/go/bin:$PATH\"\n    else\n        echo \"warning: go could not be found in PATH or at /usr/local/go/bin/go. Skipping Go binary build.\"\n        echo \"PATH is: $PATH\"\n        echo \"To enable Go server support, please install Go and ensure it's in your PATH\"\n        # Create a dummy file so the build doesn't fail\n        mkdir -p \"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources\"\n        touch \"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/vibetunnel.disabled\"\n        exit 0\n    fi\nfi\n\n# Print Go version for debugging\necho \"Using Go version: $(go version)\"\n\nSOURCE_BINARY=\"${LINUX_DIR}/build/vibetunnel-universal\"\nDEST_BINARY=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/vibetunnel\"\n\n# Check if build script exists\nif [ ! -f \"${BUILD_SCRIPT}\" ]; then\n    echo \"error: Build script not found at ${BUILD_SCRIPT}\"\n    exit 1\nfi\n\n# Make build script executable\nchmod +x \"${BUILD_SCRIPT}\"\n\n# Change to linux directory and run build\ncd \"${LINUX_DIR}\"\n./build-universal.sh\n\n# Check if build succeeded\nif [ ! -f \"${SOURCE_BINARY}\" ]; then\n    echo \"error: Universal binary not found at ${SOURCE_BINARY}\"\n    exit 1\nfi\n\n# Create Resources directory if it doesn't exist\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources\"\n\n# Copy the binary\ncp \"${SOURCE_BINARY}\" \"${DEST_BINARY}\"\nchmod +x \"${DEST_BINARY}\"\n\n# Sign the binary\necho \"Signing Go vibetunnel binary...\"\ncodesign --force --sign - \"${DEST_BINARY}\"\n\necho \"Go vibetunnel universal binary copied and signed to ${DEST_BINARY}\"\n";
+			shellPath = /bin/zsh;
+			shellScript = "# Install build dependencies\necho \"Checking build dependencies...\"\n\n# Run the install script\n\"${SRCROOT}/scripts/install-bun.sh\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Failed to install build dependencies\"\n    exit 1\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -479,7 +442,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
-				BUILD_NODE_SERVER = true;
 				CODE_SIGN_ENTITLEMENTS = VibeTunnel/VibeTunnel.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -517,7 +479,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
-				BUILD_NODE_SERVER = true;
 				CODE_SIGN_ENTITLEMENTS = VibeTunnel/VibeTunnel.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -618,14 +579,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		78AD8B8D2E051EA50009725C /* XCRemoteSwiftPackageReference "swift-http-types" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/apple/swift-http-types.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.4.0;
-			};
-		};
 		78AD8B8E2E051EB50009725C /* XCRemoteSwiftPackageReference "swift-log" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-log.git";
@@ -645,16 +598,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		78AD8B902E051ED40009725C /* HTTPTypes */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 78AD8B8D2E051EA50009725C /* XCRemoteSwiftPackageReference "swift-http-types" */;
-			productName = HTTPTypes;
-		};
-		78AD8B922E051ED40009725C /* HTTPTypesFoundation */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 78AD8B8D2E051EA50009725C /* XCRemoteSwiftPackageReference "swift-http-types" */;
-			productName = HTTPTypesFoundation;
-		};
 		78AD8B942E051ED40009725C /* Logging */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 78AD8B8E2E051EB50009725C /* XCRemoteSwiftPackageReference "swift-log" */;

@@ -18,7 +18,7 @@ struct DebugSettingsView: View {
     }
 
     private var serverPort: Int {
-        Int(serverManager.port) ?? 4020
+        Int(serverManager.port) ?? 4_020
     }
 
     var body: some View {
@@ -30,8 +30,6 @@ struct DebugSettingsView: View {
                     serverManager: serverManager,
                     getCurrentServerMode: getCurrentServerMode
                 )
-                
-                ServerTypeSection()
 
                 DebugOptionsSection(
                     debugMode: $debugMode,
@@ -40,7 +38,6 @@ struct DebugSettingsView: View {
 
                 DeveloperToolsSection(
                     showPurgeConfirmation: $showPurgeConfirmation,
-                    showServerConsole: showServerConsole,
                     openConsole: openConsole,
                     showApplicationSupport: showApplicationSupport
                 )
@@ -82,7 +79,7 @@ struct DebugSettingsView: View {
 
     private func getCurrentServerMode() -> String {
         // Server mode is fixed to Go
-        return "Go"
+        "Go"
     }
 
     private func openConsole() {
@@ -94,27 +91,6 @@ struct DebugSettingsView: View {
             let appDirectory = appSupport.appendingPathComponent("VibeTunnel")
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: appDirectory.path)
         }
-    }
-
-    private func showServerConsole() {
-        // Create a new window for the server console
-        let consoleWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        consoleWindow.title = "Server Console"
-        consoleWindow.center()
-
-        let consoleView = ServerConsoleView()
-            .onDisappear {
-                // This will be called when the window closes
-            }
-        consoleWindow.contentView = NSHostingView(rootView: consoleView)
-
-        let windowController = NSWindowController(window: consoleWindow)
-        windowController.showWindow(nil)
     }
 }
 
@@ -138,7 +114,7 @@ private struct ServerSection: View {
                         if isServerRunning {
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                                    .foregroundStyle(.green)
                                 Text("Running")
                             }
                         } else {
@@ -181,8 +157,8 @@ private struct ServerSection: View {
                                 .frame(width: 8, height: 8)
                         }
                         Text(isServerRunning ? "Server is running on port \(serverPort)" : "Server is stopped")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     Spacer()
@@ -315,26 +291,11 @@ private struct DebugOptionsSection: View {
 
 private struct DeveloperToolsSection: View {
     @Binding var showPurgeConfirmation: Bool
-    let showServerConsole: () -> Void
     let openConsole: () -> Void
     let showApplicationSupport: () -> Void
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Server Console")
-                    Spacer()
-                    Button("Show Console") {
-                        showServerConsole()
-                    }
-                    .buttonStyle(.bordered)
-                }
-                Text("View real-time server logs from the server.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("System Logs")
@@ -396,145 +357,6 @@ private struct DeveloperToolsSection: View {
         } header: {
             Text("Developer Tools")
                 .font(.headline)
-        }
-    }
-}
-
-// MARK: - Server Type Section
-
-private struct ServerTypeSection: View {
-    @State private var serverManager = ServerManager.shared
-    @State private var showingError = false
-    @State private var errorMessage = ""
-    @State private var selectedServerType: ServerType
-    
-    init() {
-        _selectedServerType = State(initialValue: ServerManager.shared.serverType)
-    }
-    
-    var body: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Server Implementation")
-                    Spacer()
-                    
-                    if serverManager.isSwitchingServer {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .frame(width: 16, height: 16)
-                    } else {
-                        Picker("", selection: $selectedServerType) {
-                            ForEach(ServerType.allCases, id: \.self) { type in
-                                Text(type.displayName)
-                                    .tag(type)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        .disabled(serverManager.isSwitchingServer)
-                        .onChange(of: selectedServerType) { _, newValue in
-                            Task {
-                                await changeServerType(to: newValue)
-                            }
-                        }
-                    }
-                }
-                
-                Text(serverManager.serverType.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                if serverManager.isSwitchingServer {
-                    HStack(spacing: 4) {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                        Text("Switching servers...")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
-                // Show current server status
-                if serverManager.isRunning {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 6, height: 6)
-                        Text("\(serverManager.serverType.displayName) server is running on port \(serverManager.port)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } else if !serverManager.isSwitchingServer {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Color.gray)
-                            .frame(width: 6, height: 6)
-                        Text("Server is not running")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
-                // Node.js server availability notice
-                if selectedServerType == .node && !isNodeServerAvailable() {
-                    HStack(spacing: 4) {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.blue)
-                            .font(.caption)
-                        Text("Node.js server not available. Build with BUILD_NODE_SERVER=true")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        } header: {
-            Text("Server Type")
-                .font(.headline)
-        } footer: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Choose your preferred server implementation:")
-                    .font(.caption)
-                Text("• Go: Fast, lightweight, minimal resource usage")
-                    .font(.caption)
-                Text("• Node.js: Original implementation, full compatibility")
-                    .font(.caption)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .alert("Server Switch Failed", isPresented: $showingError) {
-            Button("OK") {}
-        } message: {
-            Text(errorMessage)
-        }
-    }
-    
-    private func isNodeServerAvailable() -> Bool {
-        // Check if Node.js server bundle exists
-        guard let resourcesPath = Bundle.main.resourcePath else { return false }
-        let serverPath = URL(fileURLWithPath: resourcesPath).appendingPathComponent("node-server").path
-        return FileManager.default.fileExists(atPath: serverPath)
-    }
-    
-    private func changeServerType(to newType: ServerType) async {
-        guard newType != serverManager.serverType else { return }
-        
-        // Check if Node.js server is available if switching to it
-        if newType == .node && !isNodeServerAvailable() {
-            errorMessage = "Node.js server is not available in this build. Please rebuild with BUILD_NODE_SERVER=true"
-            showingError = true
-            // Reset the picker
-            selectedServerType = serverManager.serverType
-            return
-        }
-        
-        let success = await serverManager.switchServer(to: newType)
-        
-        if !success {
-            errorMessage = "Failed to switch to \(newType.displayName) server. Please check the console for details."
-            showingError = true
-            // Reset the picker to current server type
-            selectedServerType = serverManager.serverType
         }
     }
 }

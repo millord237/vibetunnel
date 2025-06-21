@@ -215,14 +215,16 @@ struct SessionCreateView: View {
                                                 .font(Theme.Typography.terminalSystem(size: 15))
                                             Spacer()
                                         }
-                                        .foregroundColor(command == item.command ? Theme.Colors.terminalBackground : Theme.Colors
+                                        .foregroundColor(command == item.command ? Theme.Colors
+                                            .terminalBackground : Theme.Colors
                                             .terminalForeground
                                         )
                                         .padding(.horizontal, Theme.Spacing.medium)
                                         .padding(.vertical, 14)
                                         .background(
                                             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                                .fill(command == item.command ? Theme.Colors.primaryAccent : Theme.Colors
+                                                .fill(command == item.command ? Theme.Colors.primaryAccent : Theme
+                                                    .Colors
                                                     .cardBackground
                                                 )
                                         )
@@ -326,7 +328,7 @@ struct SessionCreateView: View {
         let command: String
         let icon: String
     }
-    
+
     private var quickStartCommands: [QuickStartItem] {
         [
             QuickStartItem(title: "claude", command: "claude", icon: "sparkle"),
@@ -372,10 +374,10 @@ struct SessionCreateView: View {
         if let lastDir = UserDefaults.standard.string(forKey: "vibetunnel_last_working_dir"), !lastDir.isEmpty {
             workingDirectory = lastDir
         } else {
-            // Default to home directory  
+            // Default to home directory
             workingDirectory = "~/"
         }
-        
+
         // Match the web's selectedQuickStart behavior
         if quickStartCommands.contains(where: { $0.command == command }) {
             // Command matches a quick start option

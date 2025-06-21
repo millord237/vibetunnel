@@ -70,10 +70,13 @@ struct TerminalView: View {
                         Button(action: { showingTerminalWidthSheet = true }, label: {
                             Label("Terminal Width", systemImage: "arrow.left.and.right")
                         })
-                        
+
                         Button(action: { viewModel.toggleFitToWidth() }, label: {
-                            Label(viewModel.fitToWidth ? "Fixed Width" : "Fit to Width", 
-                                  systemImage: viewModel.fitToWidth ? "arrow.left.and.right.square" : "arrow.left.and.right.square.fill")
+                            Label(
+                                viewModel.fitToWidth ? "Fixed Width" : "Fit to Width",
+                                systemImage: viewModel
+                                    .fitToWidth ? "arrow.left.and.right.square" : "arrow.left.and.right.square.fill"
+                            )
                         })
 
                         Button(action: { showingTerminalThemeSheet = true }, label: {
@@ -117,10 +120,13 @@ struct TerminalView: View {
                 RecordingExportSheet(recorder: viewModel.castRecorder, sessionName: session.displayName)
             }
             .sheet(isPresented: $showingTerminalWidthSheet) {
-                TerminalWidthSheet(selectedWidth: $selectedTerminalWidth, isResizeBlockedByServer: viewModel.isResizeBlockedByServer)
-                    .onAppear {
-                        selectedTerminalWidth = viewModel.terminalCols
-                    }
+                TerminalWidthSheet(
+                    selectedWidth: $selectedTerminalWidth,
+                    isResizeBlockedByServer: viewModel.isResizeBlockedByServer
+                )
+                .onAppear {
+                    selectedTerminalWidth = viewModel.terminalCols
+                }
             }
             .sheet(isPresented: $showingTerminalThemeSheet) {
                 TerminalThemeSheet(selectedTheme: $selectedTheme)
@@ -217,7 +223,7 @@ struct TerminalView: View {
                 keyboardHeight = 0
             }
         }
-        .onChange(of: selectedTerminalWidth) { oldValue, newValue in
+        .onChange(of: selectedTerminalWidth) { _, newValue in
             if let width = newValue, width != viewModel.terminalCols {
                 // Calculate appropriate height based on aspect ratio
                 let aspectRatio = Double(viewModel.terminalRows) / Double(viewModel.terminalCols)
@@ -225,7 +231,7 @@ struct TerminalView: View {
                 viewModel.resize(cols: width, rows: newHeight)
             }
         }
-        .onChange(of: viewModel.isAtBottom) { oldValue, newValue in
+        .onChange(of: viewModel.isAtBottom) { _, newValue in
             // Update scroll button visibility
             withAnimation(Theme.Animation.smooth) {
                 showScrollToBottom = !newValue
@@ -423,7 +429,7 @@ class TerminalViewModel {
     private func loadSnapshot() async {
         do {
             let snapshot = try await APIClient.shared.getSessionSnapshot(sessionId: session.id)
-            
+
             // Process the snapshot events
             if let header = snapshot.header {
                 // Initialize terminal with dimensions from header
@@ -431,7 +437,7 @@ class TerminalViewModel {
                 terminalRows = header.height
                 print("Snapshot header: \(header.width)x\(header.height)")
             }
-            
+
             // Feed all output events to the terminal
             for event in snapshot.events {
                 if event.type == .output {
@@ -486,8 +492,7 @@ class TerminalViewModel {
             let parts = dimensions.split(separator: "x")
             if parts.count == 2,
                let cols = Int(parts[0]),
-               let rows = Int(parts[1])
-            {
+               let rows = Int(parts[1]) {
                 // Update terminal dimensions
                 terminalCols = cols
                 terminalRows = rows
@@ -506,7 +511,7 @@ class TerminalViewModel {
             if castRecorder.isRecording {
                 stopRecording()
             }
-            
+
         case .bufferUpdate(let snapshot):
             // Update terminal buffer directly
             if let coordinator = terminalCoordinator {
@@ -532,6 +537,14 @@ class TerminalViewModel {
                 // Fallback: buffer updates not available yet
                 print("Warning: Direct buffer update not available")
             }
+
+        case .bell:
+            // Terminal bell - play sound and/or haptic feedback
+            handleTerminalBell()
+
+        case .alert(let title, let message):
+            // Terminal alert - show notification
+            handleTerminalAlert(title: title, message: message)
         }
     }
 
@@ -571,7 +584,29 @@ class TerminalViewModel {
         // Terminal copy is handled by SwiftTerm's built-in functionality
         HapticFeedback.notification(.success)
     }
-    
+
+    @MainActor
+    private func handleTerminalBell() {
+        // Haptic feedback for bell
+        HapticFeedback.notification(.warning)
+
+        // Visual bell - flash the terminal briefly
+        withAnimation(.easeInOut(duration: 0.1)) {
+            // SwiftTerm handles visual bell internally
+            // but we can add additional feedback if needed
+        }
+    }
+
+    @MainActor
+    private func handleTerminalAlert(title: String?, message: String) {
+        // Log the alert
+        print("[Terminal Alert] \(title ?? "Alert"): \(message)")
+
+        // Show as a system notification if app is in background
+        // For now, just provide haptic feedback
+        HapticFeedback.notification(.error)
+    }
+
     func scrollToBottom() {
         // Signal the terminal to scroll to bottom
         isAutoScrollEnabled = true
@@ -579,23 +614,23 @@ class TerminalViewModel {
         // The actual scrolling is handled by the terminal coordinator
         terminalCoordinator?.scrollToBottom()
     }
-    
+
     func updateScrollState(isAtBottom: Bool) {
         self.isAtBottom = isAtBottom
         self.isAutoScrollEnabled = isAtBottom
     }
-    
+
     func toggleFitToWidth() {
         fitToWidth.toggle()
         HapticFeedback.impact(.light)
-        
+
         if fitToWidth {
             // Calculate optimal width to fit the screen
             let screenWidth = UIScreen.main.bounds.width
             let padding: CGFloat = 32 // Account for UI padding
             let charWidth: CGFloat = 9 // Approximate character width
             let optimalCols = Int((screenWidth - padding) / charWidth)
-            
+
             // Resize to fit
             resize(cols: optimalCols, rows: terminalRows)
         }

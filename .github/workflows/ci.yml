@@ -13,17 +13,13 @@ permissions:
   issues: write
 
 jobs:
-  swift:
-    name: Swift CI
-    uses: ./.github/workflows/swift.yml
+  mac:
+    name: Mac CI
+    uses: ./.github/workflows/mac.yml
     
   ios:
     name: iOS CI
     uses: ./.github/workflows/ios.yml
-    
-  rust:
-    name: Rust CI
-    uses: ./.github/workflows/rust.yml
     
   node:
     name: Node.js CI

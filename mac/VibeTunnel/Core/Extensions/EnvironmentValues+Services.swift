@@ -10,8 +10,8 @@ private struct NgrokServiceKey: EnvironmentKey {
     static let defaultValue: NgrokService? = nil
 }
 
-private struct AppleScriptPermissionManagerKey: EnvironmentKey {
-    static let defaultValue: AppleScriptPermissionManager? = nil
+private struct SystemPermissionManagerKey: EnvironmentKey {
+    static let defaultValue: SystemPermissionManager? = nil
 }
 
 private struct TerminalLauncherKey: EnvironmentKey {
@@ -25,17 +25,17 @@ extension EnvironmentValues {
         get { self[ServerManagerKey.self] }
         set { self[ServerManagerKey.self] = newValue }
     }
-    
+
     var ngrokService: NgrokService? {
         get { self[NgrokServiceKey.self] }
         set { self[NgrokServiceKey.self] = newValue }
     }
-    
-    var appleScriptPermissionManager: AppleScriptPermissionManager? {
-        get { self[AppleScriptPermissionManagerKey.self] }
-        set { self[AppleScriptPermissionManagerKey.self] = newValue }
+
+    var systemPermissionManager: SystemPermissionManager? {
+        get { self[SystemPermissionManagerKey.self] }
+        set { self[SystemPermissionManagerKey.self] = newValue }
     }
-    
+
     var terminalLauncher: TerminalLauncher? {
         get { self[TerminalLauncherKey.self] }
         set { self[TerminalLauncherKey.self] = newValue }
@@ -50,13 +50,17 @@ extension View {
     func withVibeTunnelServices(
         serverManager: ServerManager? = nil,
         ngrokService: NgrokService? = nil,
-        appleScriptPermissionManager: AppleScriptPermissionManager? = nil,
+        systemPermissionManager: SystemPermissionManager? = nil,
         terminalLauncher: TerminalLauncher? = nil
-    ) -> some View {
+    )
+        -> some View {
         self
             .environment(\.serverManager, serverManager ?? ServerManager.shared)
             .environment(\.ngrokService, ngrokService ?? NgrokService.shared)
-            .environment(\.appleScriptPermissionManager, appleScriptPermissionManager ?? AppleScriptPermissionManager.shared)
+            .environment(
+                \.systemPermissionManager,
+                systemPermissionManager ?? SystemPermissionManager.shared
+            )
             .environment(\.terminalLauncher, terminalLauncher ?? TerminalLauncher.shared)
     }
 }

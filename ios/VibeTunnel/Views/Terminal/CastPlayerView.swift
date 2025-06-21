@@ -231,8 +231,8 @@ struct CastTerminalView: UIViewRepresentable {
         terminal.font = font
     }
 
-    @MainActor
     /// Coordinator for managing terminal state and handling events.
+    @MainActor
     class Coordinator: NSObject {
         weak var terminal: SwiftTerm.TerminalView?
         let viewModel: CastPlayerViewModel

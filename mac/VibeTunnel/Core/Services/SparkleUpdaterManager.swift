@@ -69,9 +69,9 @@ public final class SparkleUpdaterManager: NSObject, SPUUpdaterDelegate {
         // Configure automatic updates
         if let updater = updaterController?.updater {
             #if DEBUG
-                // Enable automatic checks in debug builds for testing
+                // Enable automatic checks in debug too
                 updater.automaticallyChecksForUpdates = true
-                updater.automaticallyDownloadsUpdates = true
+                updater.automaticallyDownloadsUpdates = false
                 logger.info("Sparkle updater initialized in DEBUG mode - automatic updates enabled for testing")
             #else
                 // Enable automatic checking for updates
@@ -152,8 +152,7 @@ extension SparkleUpdaterManager {
     public nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         // Get the current update channel from UserDefaults
         if let savedChannel = UserDefaults.standard.string(forKey: "updateChannel"),
-           let channel = UpdateChannel(rawValue: savedChannel)
-        {
+           let channel = UpdateChannel(rawValue: savedChannel) {
             return channel.includesPreReleases ? Set(["", "prerelease"]) : Set([""])
         }
         return Set([""]) // Default to stable channel only
@@ -162,8 +161,7 @@ extension SparkleUpdaterManager {
     public nonisolated func feedURLString(for updater: SPUUpdater) -> String? {
         // Provide the appropriate feed URL based on the current update channel
         if let savedChannel = UserDefaults.standard.string(forKey: "updateChannel"),
-           let channel = UpdateChannel(rawValue: savedChannel)
-        {
+           let channel = UpdateChannel(rawValue: savedChannel) {
             return channel.appcastURL.absoluteString
         }
         return UpdateChannel.defaultChannel.appcastURL.absoluteString
@@ -198,8 +196,7 @@ public final class SparkleViewModel {
 
         // Load saved update channel
         if let savedChannel = UserDefaults.standard.string(forKey: "updateChannel"),
-           let channel = UpdateChannel(rawValue: savedChannel)
-        {
+           let channel = UpdateChannel(rawValue: savedChannel) {
             updateChannel = channel
         } else {
             updateChannel = UpdateChannel.stable

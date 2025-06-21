@@ -12,9 +12,6 @@ import SwiftUI
 @Observable
 class ServerManager {
     @MainActor static let shared = ServerManager()
-    
-    private(set) var serverType: ServerType = .go
-    private(set) var isSwitchingServer = false
 
     var port: String {
         get { UserDefaults.standard.string(forKey: "serverPort") ?? "4020" }
@@ -41,25 +38,21 @@ class ServerManager {
         set { UserDefaults.standard.set(newValue, forKey: "cleanupOnStartup") }
     }
 
-    private(set) var currentServer: VibeTunnelServer?
+    private(set) var bunServer: BunServer?
     private(set) var isRunning = false
     private(set) var isRestarting = false
     private(set) var lastError: Error?
+    
+    /// Track if we're in the middle of handling a crash to prevent multiple restarts
+    private var isHandlingCrash = false
+    /// Number of consecutive crashes for backoff
+    private var consecutiveCrashes = 0
+    /// Last crash time for crash rate detection
+    private var lastCrashTime: Date?
 
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "ServerManager")
-    private var logContinuation: AsyncStream<ServerLogEntry>.Continuation?
-    private var serverLogTask: Task<Void, Never>?
-    private(set) var logStream: AsyncStream<ServerLogEntry>!
 
     private init() {
-        // Load saved server type
-        if let savedType = UserDefaults.standard.string(forKey: "serverType"),
-           let type = ServerType(rawValue: savedType) {
-            self.serverType = type
-        }
-        
-        setupLogStream()
-
         // Skip observer setup and monitoring during tests
         let isRunningInTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
             ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil ||
@@ -69,18 +62,13 @@ class ServerManager {
 
         if !isRunningInTests {
             setupObservers()
+            // Start health monitoring
+            startHealthMonitoring()
         }
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        // Tasks will be cancelled when they are deallocated
-    }
-
-    private func setupLogStream() {
-        logStream = AsyncStream { continuation in
-            self.logContinuation = continuation
-        }
     }
 
     private func setupObservers() {
@@ -95,24 +83,18 @@ class ServerManager {
 
     @objc
     private nonisolated func userDefaultsDidChange() {
-        // Server mode is now fixed to Go, no need to handle changes
+        // No server-related defaults to monitor
     }
 
     /// Start the server with current configuration
     func start() async {
         // Check if we already have a running server
-        if let existingServer = currentServer {
+        if let existingServer = bunServer {
             logger.info("Server already running on port \(existingServer.port)")
 
             // Ensure our state is synced
             isRunning = true
             lastError = nil
-
-            // Log for clarity
-            logContinuation?.yield(ServerLogEntry(
-                level: .info,
-                message: "Server already running on port \(self.port)"
-            ))
             return
         }
 
@@ -124,27 +106,14 @@ class ServerManager {
             switch conflict.suggestedAction {
             case .killOurInstance(let pid, let processName):
                 logger.info("Attempting to kill conflicting process: \(processName) (PID: \(pid))")
-                logContinuation?.yield(ServerLogEntry(
-                    level: .warning,
-                    message: "Port \(self.port) is used by another instance. Terminating conflicting process..."
-                ))
 
                 do {
                     try await PortConflictResolver.shared.resolveConflict(conflict)
-                    logContinuation?.yield(ServerLogEntry(
-                        level: .info,
-                        message: "Conflicting process terminated successfully"
-                    ))
-
                     // Wait a moment for port to be fully released
                     try await Task.sleep(for: .milliseconds(500))
                 } catch {
                     logger.error("Failed to resolve port conflict: \(error)")
                     lastError = PortConflictError.failedToKillProcess(pid: pid)
-                    logContinuation?.yield(ServerLogEntry(
-                        level: .error,
-                        message: "Failed to terminate conflicting process. Please try a different port."
-                    ))
                     return
                 }
 
@@ -155,10 +124,6 @@ class ServerManager {
                     port: Int(self.port) ?? 4_020,
                     alternatives: conflict.alternativePorts
                 )
-                logContinuation?.yield(ServerLogEntry(
-                    level: .error,
-                    message: "Port \(self.port) is used by \(appName). Please choose a different port."
-                ))
                 return
 
             case .suggestAlternativePort:
@@ -167,29 +132,26 @@ class ServerManager {
             }
         }
 
-        // Log that we're starting a server
-        logContinuation?.yield(ServerLogEntry(
-            level: .info,
-            message: "Starting server on port \(self.port)..."
-        ))
-
         do {
-            let server = createServer(type: serverType)
+            let server = BunServer()
             server.port = port
             server.bindAddress = bindAddress
-
-            // Subscribe to server logs
-            serverLogTask = Task { [weak self] in
-                for await entry in server.logStream {
-                    self?.logContinuation?.yield(entry)
+            
+            // Set up crash handler
+            server.onCrash = { [weak self] exitCode in
+                Task { @MainActor in
+                    await self?.handleServerCrash(exitCode: exitCode)
                 }
             }
 
             try await server.start()
 
-            currentServer = server
+            bunServer = server
             isRunning = true
             lastError = nil
+            
+            // Reset crash counter on successful start
+            consecutiveCrashes = 0
 
             logger.info("Started server on port \(self.port)")
 
@@ -197,48 +159,39 @@ class ServerManager {
             await triggerInitialCleanup()
         } catch {
             logger.error("Failed to start server: \(error.localizedDescription)")
-            logContinuation?.yield(ServerLogEntry(
-                level: .error,
-                message: "Failed to start server: \(error.localizedDescription)"
-            ))
             lastError = error
 
             // Check if server is actually running despite the error
-            if let server = currentServer, server.isRunning {
+            if let server = bunServer, server.isRunning {
                 logger.warning("Server reported as running despite startup error, syncing state")
                 isRunning = true
             } else {
                 isRunning = false
+                bunServer = nil
             }
         }
     }
 
     /// Stop the current server
     func stop() async {
-        guard let server = currentServer else {
+        guard let server = bunServer else {
             logger.warning("No server running")
+            isRunning = false  // Ensure state is synced
             return
         }
 
         logger.info("Stopping server")
-
-        // Log that we're stopping the server
-        logContinuation?.yield(ServerLogEntry(
-            level: .info,
-            message: "Stopping server..."
-        ))
+        
+        // Clear crash handler to prevent auto-restart
+        server.onCrash = nil
 
         await server.stop()
-        serverLogTask?.cancel()
-        serverLogTask = nil
-        currentServer = nil
+        bunServer = nil
         isRunning = false
-
-        // Log that the server has stopped
-        logContinuation?.yield(ServerLogEntry(
-            level: .info,
-            message: "Server stopped"
-        ))
+        
+        // Reset crash tracking when manually stopped
+        consecutiveCrashes = 0
+        lastCrashTime = nil
     }
 
     /// Restart the current server
@@ -247,16 +200,9 @@ class ServerManager {
         isRestarting = true
         defer { isRestarting = false }
 
-        // Log that we're restarting
-        logContinuation?.yield(ServerLogEntry(
-            level: .info,
-            message: "Restarting server..."
-        ))
-
         await stop()
         await start()
     }
-
 
     /// Trigger cleanup of exited sessions after server startup
     private func triggerInitialCleanup() async {
@@ -269,7 +215,7 @@ class ServerManager {
         logger.info("Triggering initial cleanup of exited sessions")
 
         // Delay to ensure server is fully ready
-        try? await Task.sleep(for: .milliseconds(10000))
+        try? await Task.sleep(for: .milliseconds(10_000))
 
         do {
             // Create URL for cleanup endpoint
@@ -288,19 +234,10 @@ class ServerManager {
                 if httpResponse.statusCode == 200 {
                     // Try to parse the response
                     if let jsonData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let cleanedCount = jsonData["cleaned_count"] as? Int
-                    {
+                       let cleanedCount = jsonData["cleaned_count"] as? Int {
                         logger.info("Initial cleanup completed: cleaned \(cleanedCount) exited sessions")
-                        logContinuation?.yield(ServerLogEntry(
-                            level: .info,
-                            message: "Cleaned up \(cleanedCount) exited sessions on startup"
-                        ))
                     } else {
                         logger.info("Initial cleanup completed successfully")
-                        logContinuation?.yield(ServerLogEntry(
-                            level: .info,
-                            message: "Cleaned up exited sessions on startup"
-                        ))
                     }
                 } else {
                     logger.warning("Initial cleanup returned status code: \(httpResponse.statusCode)")
@@ -309,10 +246,6 @@ class ServerManager {
         } catch {
             // Log the error but don't fail startup
             logger.warning("Failed to trigger initial cleanup: \(error.localizedDescription)")
-            logContinuation?.yield(ServerLogEntry(
-                level: .warning,
-                message: "Could not clean up old sessions: \(error.localizedDescription)"
-            ))
         }
     }
 
@@ -326,85 +259,99 @@ class ServerManager {
         // Authentication cache clearing is no longer needed as external servers handle their own auth
         logger.info("Authentication cache clearing requested - handled by external server")
     }
-    
-    // MARK: - Server Type Management
-    
-    private func createServer(type: ServerType) -> VibeTunnelServer {
-        switch type {
-        case .go:
-            return GoServer()
-        case .node:
-            return NodeServer()
-        }
-    }
-    
-    /// Switch to a different server type
-    /// - Parameter newType: The server type to switch to
-    /// - Returns: True if the switch was successful, false otherwise
-    @discardableResult
-    func switchServer(to newType: ServerType) async -> Bool {
-        guard newType != serverType else {
-            logger.info("Server type already set to \(newType.displayName)")
-            return true
-        }
-        
-        guard !isSwitchingServer else {
-            logger.warning("Already switching servers")
-            return false
-        }
-        
-        isSwitchingServer = true
-        defer { isSwitchingServer = false }
-        
-        logger.info("Switching server from \(self.serverType.displayName) to \(newType.displayName)")
-        logContinuation?.yield(ServerLogEntry(
-            level: .info,
-            message: "Switching from \(self.serverType.displayName) to \(newType.displayName) server..."
-        ))
-        
-        // Stop current server if running
-        if isRunning {
-            logContinuation?.yield(ServerLogEntry(
-                level: .info,
-                message: "Stopping \(self.serverType.displayName) server..."
-            ))
-            await stop()
-        }
-        
-        // Clean up current server
-        if let server = currentServer {
-            await server.cleanup()
-            currentServer = nil
-        }
-        
-        // Update server type
-        self.serverType = newType
-        UserDefaults.standard.set(newType.rawValue, forKey: "serverType")
-        
-        // Start new server type
-        logContinuation?.yield(ServerLogEntry(
-            level: .info,
-            message: "Starting \(newType.displayName) server..."
-        ))
-        
-        await start()
-        
-        // Check if the new server started successfully
-        if isRunning {
-            logContinuation?.yield(ServerLogEntry(
-                level: .info,
-                message: "Successfully switched to \(newType.displayName) server"
-            ))
-            return true
-        } else {
-            logContinuation?.yield(ServerLogEntry(
-                level: .error,
-                message: "Failed to start \(newType.displayName) server"
-            ))
-            return false
-        }
-    }
 
+    // MARK: - Server Management
+    
+    /// Handle server crash with automatic restart logic
+    private func handleServerCrash(exitCode: Int32) async {
+        logger.error("Server crashed with exit code: \(exitCode)")
+        
+        // Update state immediately
+        isRunning = false
+        bunServer = nil
+        
+        // Prevent multiple simultaneous crash handlers
+        guard !isHandlingCrash else {
+            logger.warning("Already handling a crash, skipping duplicate handler")
+            return
+        }
+        
+        isHandlingCrash = true
+        defer { isHandlingCrash = false }
+        
+        // Check crash rate
+        let now = Date()
+        if let lastCrash = lastCrashTime {
+            let timeSinceLastCrash = now.timeIntervalSince(lastCrash)
+            if timeSinceLastCrash < 60 { // Less than 1 minute since last crash
+                consecutiveCrashes += 1
+            } else {
+                // Reset counter if it's been a while
+                consecutiveCrashes = 1
+            }
+        } else {
+            consecutiveCrashes = 1
+        }
+        lastCrashTime = now
+        
+        // Implement exponential backoff for crashes
+        let maxRetries = 3
+        guard consecutiveCrashes <= maxRetries else {
+            logger.error("Server crashed \(self.consecutiveCrashes) times in a row, giving up on auto-restart")
+            lastError = NSError(
+                domain: "sh.vibetunnel.vibetunnel.ServerManager",
+                code: 1002,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Server keeps crashing",
+                    NSLocalizedFailureReasonErrorKey: "The server crashed \(consecutiveCrashes) times in a row",
+                    NSLocalizedRecoverySuggestionErrorKey: "Check the logs for errors or try a different port"
+                ]
+            )
+            return
+        }
+        
+        // Calculate backoff delay
+        let baseDelay: TimeInterval = 2.0
+        let delay = baseDelay * pow(2.0, Double(consecutiveCrashes - 1))
+        
+        logger.info("Will restart server after \(delay) seconds (attempt \(self.consecutiveCrashes) of \(maxRetries))")
+        
+        // Wait with exponential backoff
+        try? await Task.sleep(for: .seconds(delay))
+        
+        // Only restart if we haven't been manually stopped in the meantime
+        guard bunServer == nil else {
+            logger.info("Server was manually restarted during crash recovery, skipping auto-restart")
+            return
+        }
+        
+        // Restart with full port conflict detection
+        logger.info("Auto-restarting server after crash...")
+        await start()
+    }
+    
+    /// Monitor server health periodically
+    func startHealthMonitoring() {
+        Task {
+            while true {
+                try? await Task.sleep(for: .seconds(30))
+                
+                guard let server = bunServer else { continue }
+                
+                // Check if the server process is still running
+                let health = await server.checkHealth()
+                
+                if !health && isRunning {
+                    logger.warning("Server health check failed but state shows running, syncing state")
+                    isRunning = false
+                    bunServer = nil
+                    
+                    // Trigger restart
+                    await handleServerCrash(exitCode: -1)
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Port Conflict Error Extension

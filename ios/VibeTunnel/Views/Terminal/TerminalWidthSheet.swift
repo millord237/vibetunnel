@@ -11,14 +11,14 @@ struct TerminalWidthSheet: View {
     @State private var showCustomInput = false
     @State private var customWidthText = ""
     @FocusState private var isCustomInputFocused: Bool
-    
+
     struct WidthPreset {
         let columns: Int
         let name: String
         let description: String
         let icon: String
     }
-    
+
     let widthPresets: [WidthPreset] = [
         WidthPreset(
             columns: 80,
@@ -51,7 +51,7 @@ struct TerminalWidthSheet: View {
             icon: "rectangle.grid.3x2"
         )
     ]
-    
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -62,7 +62,7 @@ struct TerminalWidthSheet: View {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 14))
                                 .foregroundColor(Theme.Colors.warningAccent)
-                            
+
                             Text("Terminal resizing is disabled by the server")
                                 .font(.caption)
                                 .foregroundColor(Theme.Colors.terminalForeground)
@@ -79,20 +79,20 @@ struct TerminalWidthSheet: View {
                         .padding(.horizontal)
                         .padding(.top)
                     }
-                    
+
                     // Info header
                     HStack(spacing: Theme.Spacing.small) {
                         Image(systemName: "info.circle")
                             .font(.system(size: 14))
                             .foregroundColor(Theme.Colors.primaryAccent)
-                        
+
                         Text("Terminal width determines how many characters fit on each line")
                             .font(.caption)
                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
                     }
                     .padding(.horizontal)
                     .padding(.top, isResizeBlockedByServer ? 0 : nil)
-                    
+
                     // Width presets
                     VStack(spacing: Theme.Spacing.medium) {
                         ForEach(widthPresets, id: \.columns) { preset in
@@ -109,27 +109,27 @@ struct TerminalWidthSheet: View {
                                         .font(.system(size: 24))
                                         .foregroundColor(Theme.Colors.primaryAccent)
                                         .frame(width: 40)
-                                    
+
                                     // Text content
                                     VStack(alignment: .leading, spacing: Theme.Spacing.extraSmall) {
                                         HStack {
                                             Text(preset.name)
                                                 .font(.headline)
                                                 .foregroundColor(Theme.Colors.terminalForeground)
-                                            
+
                                             Text("\(preset.columns) columns")
                                                 .font(.caption)
                                                 .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
                                         }
-                                        
+
                                         Text(preset.description)
                                             .font(.caption)
                                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
                                             .fixedSize(horizontal: false, vertical: true)
                                     }
-                                    
+
                                     Spacer()
-                                    
+
                                     // Selection indicator
                                     if selectedWidth == preset.columns {
                                         Image(systemName: "checkmark.circle.fill")
@@ -140,15 +140,19 @@ struct TerminalWidthSheet: View {
                                 .padding()
                                 .background(
                                     RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                        .fill(selectedWidth == preset.columns 
-                                            ? Theme.Colors.primaryAccent.opacity(0.1) 
-                                            : Theme.Colors.cardBorder.opacity(0.1))
+                                        .fill(selectedWidth == preset.columns
+                                            ? Theme.Colors.primaryAccent.opacity(0.1)
+                                            : Theme.Colors.cardBorder.opacity(0.1)
+                                        )
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                        .stroke(selectedWidth == preset.columns 
-                                            ? Theme.Colors.primaryAccent 
-                                            : Theme.Colors.cardBorder, lineWidth: 1)
+                                        .stroke(
+                                            selectedWidth == preset.columns
+                                                ? Theme.Colors.primaryAccent
+                                                : Theme.Colors.cardBorder,
+                                            lineWidth: 1
+                                        )
                                 )
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -157,7 +161,7 @@ struct TerminalWidthSheet: View {
                         }
                     }
                     .padding(.horizontal)
-                    
+
                     // Custom width option
                     VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                         Text("CUSTOM WIDTH")
@@ -165,7 +169,7 @@ struct TerminalWidthSheet: View {
                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
                             .tracking(1)
                             .padding(.horizontal)
-                        
+
                         if showCustomInput {
                             // Custom input field
                             HStack(spacing: Theme.Spacing.small) {
@@ -177,11 +181,11 @@ struct TerminalWidthSheet: View {
                                     .onSubmit {
                                         applyCustomWidth()
                                     }
-                                
+
                                 Text("columns")
                                     .font(Theme.Typography.terminalSystem(size: 14))
                                     .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
-                                
+
                                 Button(action: applyCustomWidth) {
                                     Text("Apply")
                                         .font(Theme.Typography.terminalSystem(size: 14))
@@ -226,13 +230,13 @@ struct TerminalWidthSheet: View {
                                     Image(systemName: "textformat.123")
                                         .font(.system(size: 20))
                                         .foregroundColor(Theme.Colors.primaryAccent)
-                                    
+
                                     Text("Custom width (20-500 columns)")
                                         .font(.subheadline)
                                         .foregroundColor(Theme.Colors.terminalForeground)
-                                    
+
                                     Spacer()
-                                    
+
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 14))
                                         .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
@@ -253,7 +257,7 @@ struct TerminalWidthSheet: View {
                             .padding(.horizontal)
                         }
                     }
-                    
+
                     Spacer(minLength: Theme.Spacing.large)
                 }
             }
@@ -271,13 +275,13 @@ struct TerminalWidthSheet: View {
         }
         .preferredColorScheme(.dark)
     }
-    
+
     private func applyCustomWidth() {
         guard let width = Int(customWidthText) else { return }
-        
+
         // Clamp to valid range (20-500)
         let clampedWidth = max(20, min(500, width))
-        
+
         if !isResizeBlockedByServer {
             selectedWidth = clampedWidth
             HapticFeedback.impact(.medium)

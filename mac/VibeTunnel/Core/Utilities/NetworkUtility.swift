@@ -50,8 +50,7 @@ enum NetworkUtility {
                         // Prefer addresses that look like local network addresses
                         if ipAddress.hasPrefix("192.168.") ||
                             ipAddress.hasPrefix("10.") ||
-                            ipAddress.hasPrefix("172.")
-                        {
+                            ipAddress.hasPrefix("172.") {
                             return ipAddress
                         }
 

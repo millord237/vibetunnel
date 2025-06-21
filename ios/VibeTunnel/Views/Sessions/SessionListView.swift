@@ -16,14 +16,14 @@ struct SessionListView: View {
     @State private var showingFileBrowser = false
     @State private var showingSettings = false
     @State private var searchText = ""
-    
+
     var filteredSessions: [Session] {
         let sessions = viewModel.sessions.filter { showExitedSessions || $0.isRunning }
-        
+
         if searchText.isEmpty {
             return sessions
         }
-        
+
         return sessions.filter { session in
             // Search in session name
             if let name = session.name, name.localizedCaseInsensitiveContains(searchText) {
@@ -58,7 +58,7 @@ struct SessionListView: View {
                         ErrorBanner(message: errorMessage, isOffline: !networkMonitor.isConnected)
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
-                    
+
                     if viewModel.isLoading && viewModel.sessions.isEmpty {
                         ProgressView("Loading sessions...")
                             .progressViewStyle(CircularProgressViewStyle(tint: Theme.Colors.primaryAccent))
@@ -102,7 +102,7 @@ struct SessionListView: View {
                                 .font(.title3)
                                 .foregroundColor(Theme.Colors.primaryAccent)
                         })
-                        
+
                         Button(action: {
                             HapticFeedback.impact(.light)
                             showingFileBrowser = true
@@ -111,7 +111,7 @@ struct SessionListView: View {
                                 .font(.title3)
                                 .foregroundColor(Theme.Colors.primaryAccent)
                         })
-                        
+
                         Button(action: {
                             HapticFeedback.impact(.light)
                             showingCreateSession = true
@@ -138,7 +138,7 @@ struct SessionListView: View {
                 TerminalView(session: session)
             }
             .sheet(isPresented: $showingFileBrowser) {
-                FileBrowserView(mode: .browseFiles) { path in
+                FileBrowserView(mode: .browseFiles) { _ in
                     // For browse mode, we don't need to handle path selection
                 }
             }
@@ -160,8 +160,7 @@ struct SessionListView: View {
         .onChange(of: navigationManager.shouldNavigateToSession) { _, shouldNavigate in
             if shouldNavigate,
                let sessionId = navigationManager.selectedSessionId,
-               let session = viewModel.sessions.first(where: { $0.id == sessionId })
-            {
+               let session = viewModel.sessions.first(where: { $0.id == sessionId }) {
                 selectedSession = session
                 navigationManager.clearNavigation()
             }
@@ -209,24 +208,24 @@ struct SessionListView: View {
         }
         .padding()
     }
-    
+
     private var noSearchResultsView: some View {
         VStack(spacing: Theme.Spacing.extraLarge) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 48))
                 .foregroundColor(Theme.Colors.terminalForeground.opacity(0.3))
-            
+
             VStack(spacing: Theme.Spacing.small) {
                 Text("No sessions found")
                     .font(.title2)
                     .fontWeight(.semibold)
                     .foregroundColor(Theme.Colors.terminalForeground)
-                
+
                 Text("Try searching with different keywords")
                     .font(Theme.Typography.terminalSystem(size: 14))
                     .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
             }
-            
+
             Button(action: { searchText = "" }) {
                 Label("Clear Search", systemImage: "xmark.circle.fill")
                     .font(Theme.Typography.terminalSystem(size: 14))
@@ -292,7 +291,7 @@ struct SessionListView: View {
             .animation(Theme.Animation.smooth, value: viewModel.sessions)
         }
     }
-    
+
     private var offlineStateView: some View {
         VStack(spacing: Theme.Spacing.extraLarge) {
             ZStack {
@@ -344,17 +343,17 @@ struct SessionListView: View {
 struct ErrorBanner: View {
     let message: String
     let isOffline: Bool
-    
+
     var body: some View {
         HStack {
             Image(systemName: isOffline ? "wifi.slash" : "exclamationmark.triangle")
                 .foregroundColor(.white)
-            
+
             Text(message)
                 .font(Theme.Typography.terminalSystem(size: 14))
                 .foregroundColor(.white)
                 .lineLimit(2)
-            
+
             Spacer()
         }
         .padding()

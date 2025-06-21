@@ -184,8 +184,7 @@ final class ApplicationMover {
                 if let entities = image["system-entities"] as? [[String: Any]] {
                     for entity in entities {
                         if let entityDevName = entity["dev-entry"] as? String,
-                           entityDevName == deviceName
-                        {
+                           entityDevName == deviceName {
                             logger.debug("Found matching disk image for device: \(deviceName)")
                             return deviceName
                         }

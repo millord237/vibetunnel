@@ -1,233 +1,92 @@
+<!-- Generated: 2025-06-21 10:28:45 UTC -->
 # VibeTunnel Architecture
 
-This document describes the technical architecture and implementation details of VibeTunnel.
+VibeTunnel is a modern terminal multiplexer with native macOS and iOS applications, featuring a Node.js/Bun-powered server backend and real-time web interface. The architecture prioritizes performance, security, and seamless cross-platform experience through WebSocket-based communication and native UI integration.
 
-## Architecture Overview
+The system consists of four main components: a native macOS menu bar application that manages server lifecycle, a Node.js/Bun server handling terminal sessions, an iOS companion app for mobile terminal access, and a web frontend for browser-based interaction. These components communicate through a well-defined REST API and WebSocket protocol for real-time terminal I/O streaming.
 
-VibeTunnel employs a multi-layered architecture designed for flexibility, security, and ease of use:
+## Component Map
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                   Web Browser (Client)                   │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  TypeScript/JavaScript Frontend                  │   │
-│  │  - Asciinema Player for Terminal Rendering      │   │
-│  │  - WebSocket for Real-time Updates              │   │
-│  │  - Tailwind CSS for UI                          │   │
-│  └─────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-                            ↕ HTTPS/WebSocket
-┌─────────────────────────────────────────────────────────┐
-│                    HTTP Server Layer                     │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Implementation:                                 │   │
-│  │  1. Rust Server (tty-fwd binary)                │   │
-│  │  2. Go Server (Alternative)                     │   │
-│  │  - REST APIs for session management              │   │
-│  │  - WebSocket streaming for terminal I/O         │   │
-│  └─────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-                            ↕
-┌─────────────────────────────────────────────────────────┐
-│                 macOS Application (Swift)                │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Core Components:                                │   │
-│  │  - ServerManager: Orchestrates server lifecycle  │   │
-│  │  - SessionMonitor: Tracks active sessions       │   │
-│  │  - TTYForwardManager: Handles TTY forwarding    │   │
-│  │  - TerminalManager: Terminal operations         │   │
-│  │  - NgrokService: Optional tunnel exposure       │   │
-│  └─────────────────────────────────────────────────┘   │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  UI Layer (SwiftUI):                            │   │
-│  │  - MenuBarView: System menu bar integration     │   │
-│  │  - SettingsView: Configuration interface        │   │
-│  │  - ServerConsoleView: Diagnostics & logs        │   │
-│  └─────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-```
+**macOS Application** - Native Swift app in mac/VibeTunnel/
+- ServerManager (mac/VibeTunnel/Core/Services/ServerManager.swift) - Central server lifecycle coordinator
+- BunServer (mac/VibeTunnel/Core/Services/BunServer.swift) - Bun runtime integration  
+- BaseProcessServer (mac/VibeTunnel/Core/Services/BaseProcessServer.swift) - Base class for server implementations
+- TTYForwardManager (mac/VibeTunnel/Core/Services/TTYForwardManager.swift) - Terminal forwarding logic
+- SessionMonitor (mac/VibeTunnel/Core/Services/SessionMonitor.swift) - Active session tracking
 
-## Core Components
+**Node.js/Bun Server** - JavaScript backend in web/src/server/
+- app.ts - Express application setup and configuration
+- server.ts - HTTP server initialization and shutdown handling
+- pty/pty-manager.ts - Native PTY process management
+- pty/session-manager.ts - Terminal session lifecycle
+- services/terminal-manager.ts - High-level terminal operations
+- services/buffer-aggregator.ts - Terminal buffer optimization
+- routes/sessions.ts - REST API endpoints for session management
 
-### 1. Native macOS Application
+**iOS Application** - Native iOS app in ios/VibeTunnel/
+- BufferWebSocketClient (ios/VibeTunnel/Services/BufferWebSocketClient.swift) - WebSocket client for terminal streaming
+- TerminalView (ios/VibeTunnel/Views/Terminal/TerminalView.swift) - Terminal rendering UI
+- TerminalHostingView (ios/VibeTunnel/Views/Terminal/TerminalHostingView.swift) - UIKit integration layer
 
-The main application is built with Swift and SwiftUI, providing:
+**Web Frontend** - TypeScript/React app in web/src/client/
+- Terminal rendering using xterm.js
+- WebSocket client for real-time updates
+- Session management UI
 
-- **Menu Bar Integration**: Lives in the system menu bar with optional dock mode
-- **Server Lifecycle Management**: Controls starting, stopping, and switching between server implementations
-- **System Integration**: Launch at login, single instance enforcement, application mover
-- **Auto-Updates**: Sparkle framework integration for seamless updates
+## Key Files
 
-Key files:
-- `VibeTunnel/VibeTunnelApp.swift`: Main application entry point
-- `VibeTunnel/Core/Services/ServerManager.swift`: Orchestrates server operations
-- `VibeTunnel/Core/Models/TunnelSession.swift`: Core session model
+**Server Protocol Definition**
+- mac/VibeTunnel/Core/Protocols/VibeTunnelServer.swift - Defines server interface
 
-### 2. HTTP Server Layer
+**Session Models**
+- mac/VibeTunnel/Core/Models/TunnelSession.swift - Core session data structure
+- web/src/server/pty/types.ts - TypeScript session types
 
-VibeTunnel offers multiple server implementations that can be switched at runtime:
+**Binary Integration**
+- mac/scripts/build-bun-executable.sh - Builds Bun runtime bundle
+- web/build-native.js - Native module compilation for pty.node
 
-#### Rust Server (tty-fwd)
-- External binary written in Rust for high-performance TTY forwarding
-- Spawns and manages terminal processes
-- Records sessions in asciinema format
-- WebSocket streaming for real-time terminal I/O
-- Source: `tty-fwd/` directory
+**Configuration**
+- mac/VibeTunnel/Core/Models/AppConstants.swift - Application constants
+- web/src/server/app.ts (lines 20-31) - Server configuration interface
 
-Both servers expose similar APIs:
-- `POST /sessions`: Create new terminal session
-- `GET /sessions`: List active sessions
-- `GET /sessions/:id`: Get session details
-- `POST /sessions/:id/send`: Send input to terminal
-- `GET /sessions/:id/output`: Stream terminal output
-- `DELETE /sessions/:id`: Terminate session
+## Data Flow
 
-### 3. Web Frontend
+**Session Creation Flow**
+1. Client request → POST /api/sessions (web/src/server/routes/sessions.ts:createSessionRoutes)
+2. TerminalManager.createTerminal() (web/src/server/services/terminal-manager.ts) 
+3. PtyManager.spawn() (web/src/server/pty/pty-manager.ts) - Spawns native PTY process
+4. Session stored in manager, WebSocket upgrade prepared
+5. Response with session ID and WebSocket URL
 
-A modern web interface for terminal interaction:
+**Terminal I/O Stream**
+1. User input → WebSocket message to /api/sessions/:id/ws
+2. BufferAggregator processes input (web/src/server/services/buffer-aggregator.ts)
+3. PTY process receives input via pty.write()
+4. PTY output → BufferAggregator.handleData()
+5. Binary buffer snapshot or text delta → WebSocket broadcast
+6. Client renders using xterm.js or native terminal view
 
-- **Terminal Rendering**: Uses asciinema player for accurate terminal display
-- **Real-time Updates**: WebSocket connections for live terminal output
-- **Responsive Design**: Tailwind CSS for mobile-friendly interface
-- **Session Management**: Create, list, and control multiple terminal sessions
+**Buffer Optimization Protocol**
+- Binary messages use magic byte 0xBF (ios/VibeTunnel/Services/BufferWebSocketClient.swift:50)
+- Full buffer snapshots sent periodically for synchronization
+- Text deltas for incremental updates between snapshots
+- Automatic aggregation reduces message frequency
 
-Key files:
-- `web/`: Frontend source code
-- `VibeTunnel/Resources/WebRoot/`: Bundled static assets
+**Server Lifecycle Management**
+1. ServerManager.start() (mac/VibeTunnel/Core/Services/ServerManager.swift)
+2. Creates BunServer instance
+3. BaseProcessServer.start() spawns server process
+4. Health checks via HTTP /health endpoint
+5. Log streaming through Process.standardOutput pipe
+6. Graceful shutdown on stop() with SIGTERM
 
-## Session Management Flow
+**Remote Access Architecture**
+- NgrokService (mac/VibeTunnel/Core/Services/NgrokService.swift) - Secure tunnel creation
+- HQClient (web/src/server/services/hq-client.ts) - Headquarters mode for multi-server
+- RemoteRegistry (web/src/server/services/remote-registry.ts) - Remote server discovery
 
-1. **Session Creation**:
-   ```
-   Client → POST /sessions → Server spawns terminal process → Returns session ID
-   ```
-
-2. **Command Execution**:
-   ```
-   Client → POST /sessions/:id/send → Server writes to PTY → Process executes
-   ```
-
-3. **Output Streaming**:
-   ```
-   Process → PTY output → Server captures → WebSocket/HTTP stream → Client renders
-   ```
-
-4. **Session Termination**:
-   ```
-   Client → DELETE /sessions/:id → Server kills process → Cleanup resources
-   ```
-
-## Key Features Implementation
-
-### Security & Tunneling
-- **Ngrok Integration**: Optional secure tunnel exposure for remote access
-- **Keychain Storage**: Secure storage of authentication tokens
-- **Code Signing**: Full support for macOS code signing and notarization
-- **Basic Auth**: Password protection for network access
-
-### Terminal Capabilities
-- **Full TTY Support**: Proper handling of terminal control sequences
-- **Process Management**: Spawn, monitor, and control terminal processes
-- **Session Recording**: Asciinema format recording for playback
-- **Multiple Sessions**: Concurrent terminal session support
-
-### Developer Experience
-- **Hot Reload**: Development server with live updates
-- **Comprehensive Logging**: Detailed logs for debugging
-- **Error Handling**: Robust error handling throughout the stack
-- **Swift 6 Concurrency**: Modern async/await patterns
-
-## Technology Stack
-
-### macOS Application
-- **Language**: Swift 6.0
-- **UI Framework**: SwiftUI
-- **Minimum OS**: macOS 14.0 (Sonoma)
-- **Architecture**: Universal Binary (Intel + Apple Silicon)
-
-### Dependencies
-- **Hummingbird**: HTTP server framework
-- **Sparkle**: Auto-update framework
-- **Swift Log**: Structured logging
-- **Swift HTTP Types**: Type-safe HTTP handling
-- **Swift NIO**: Network framework
-
-### Build Tools
-- **Xcode**: Main IDE and build system
-- **Swift Package Manager**: Dependency management
-- **Cargo**: Rust toolchain for tty-fwd
-- **npm**: Frontend build tooling
-
-## Project Structure
-
-```
-vibetunnel/
-├── VibeTunnel/              # macOS app source
-│   ├── Core/                # Core business logic
-│   │   ├── Services/        # Core services (servers, managers)
-│   │   ├── Models/          # Data models
-│   │   └── Utilities/       # Helper utilities
-│   ├── Presentation/        # UI layer
-│   │   ├── Views/          # SwiftUI views
-│   │   └── Utilities/      # UI utilities
-│   ├── Utilities/          # App-level utilities
-│   └── Resources/          # Assets and bundled files
-├── tty-fwd/                # Rust TTY forwarding server
-├── web/                    # TypeScript/JavaScript frontend
-├── scripts/                # Build and utility scripts
-└── Tests/                  # Unit and integration tests
-```
-
-## Key Design Patterns
-
-1. **Protocol-Oriented Design**: `ServerProtocol` allows swapping server implementations
-2. **Actor Pattern**: Swift actors for thread-safe state management
-3. **Dependency Injection**: Services are injected for testability
-4. **MVVM Architecture**: Clear separation of views and business logic
-5. **Singleton Pattern**: Used for global services like ServerManager
-
-## Development Guidelines
-
-### Code Organization
-- Services are organized by functionality in the `Core/Services` directory
-- Views follow SwiftUI best practices with separate view models when needed
-- Utilities are split between Core (business logic) and Presentation (UI)
-
-### Error Handling
-- All network operations use Swift's async/await with proper error propagation
-- User-facing errors are localized and actionable
-- Detailed logging for debugging without exposing sensitive information
-
-### Testing Strategy
-- Unit tests for core business logic
-- Integration tests for server implementations
-- UI tests for critical user flows
-
-### Performance Considerations
-- Rust server for CPU-intensive terminal operations
-- Efficient WebSocket streaming for real-time updates
-- Lazy loading of terminal sessions in the UI
-
-## Security Model
-
-1. **Local-Only Mode**: Default configuration restricts access to localhost
-2. **Password Protection**: Optional password for network access stored in Keychain
-3. **Secure Tunneling**: Integration with Tailscale/ngrok for remote access
-4. **Process Isolation**: Each terminal session runs in its own process
-5. **No Persistent Storage**: Sessions are ephemeral, recordings are opt-in
-
-## Future Architecture Considerations
-
-- **Plugin System**: Allow third-party extensions
-- **Multi-Platform Support**: Potential Linux/Windows ports
-- **Cloud Sync**: Optional session history synchronization
-- **Terminal Multiplexing**: tmux-like functionality
-- **API Extensions**: Programmatic control of sessions
-
-## Acknowledgments
-
-VibeTunnel's architecture is influenced by:
-- Modern macOS app design patterns
-- Unix philosophy of composable tools
-- Web-based terminal emulators like ttyd and gotty
-- The asciinema ecosystem for terminal recording
+**Authentication Flow**
+- Basic Auth middleware (web/src/server/middleware/auth.ts)
+- Credentials stored in macOS Keychain via DashboardKeychain service
+- Optional password protection for network access

@@ -2,11 +2,16 @@
 
 /**
  * Build standalone vibetunnel executable with native modules
+ * 
+ * Note: Bun does not support universal binaries. This builds for the native architecture only.
  */
 
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+
+console.log('Building standalone vibetunnel executable for native architecture...');
+console.log('Note: Bun does not support universal binaries');
 
 function patchNodePty() {
   console.log('Patching node-pty for standalone build...');
@@ -92,7 +97,13 @@ try {
 
   // 3. Compile with Bun
   console.log('Compiling with Bun...');
-  execSync('bun build src/index.ts --compile --outfile native/vibetunnel', { stdio: 'inherit' });
+  const buildDate = new Date().toISOString();
+  const buildTimestamp = Date.now();
+  const compileCmd = `BUILD_DATE="${buildDate}" BUILD_TIMESTAMP="${buildTimestamp}" bun build src/index.ts --compile --outfile native/vibetunnel`;
+  
+  console.log(`Running: ${compileCmd}`);
+  console.log(`Build date: ${buildDate}`);
+  execSync(compileCmd, { stdio: 'inherit', env: { ...process.env, BUILD_DATE: buildDate, BUILD_TIMESTAMP: buildTimestamp } });
 
   // 4. Copy native modules
   console.log('Creating native directory and copying modules...');

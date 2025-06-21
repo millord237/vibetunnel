@@ -42,26 +42,29 @@ final class CLIInstaller {
         Task { @MainActor in
             let vtPath = "/usr/local/bin/vt"
             let vibetunnelPath = "/usr/local/bin/vibetunnel"
-            
+
             // Both tools must be installed
             let vtInstalled = FileManager.default.fileExists(atPath: vtPath)
             let vibetunnelInstalled = FileManager.default.fileExists(atPath: vibetunnelPath)
-            
-            // Check if vt is a proper symlink pointing to vibetunnel
-            var vtIsSymlink = false
+
+            // Check if vt is configured correctly (for Bun server)
+            var vtIsCorrect = false
+
             if vtInstalled {
                 if let vtAttributes = try? FileManager.default.attributesOfItem(atPath: vtPath),
-                   let fileType = vtAttributes[.type] as? FileAttributeType,
-                   fileType == .typeSymbolicLink {
-                    // Check if it points to vibetunnel
-                    if let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: vtPath) {
-                        vtIsSymlink = destination.contains("vibetunnel") || destination == vibetunnelPath
+                   let fileType = vtAttributes[.type] as? FileAttributeType {
+                    // For Bun server, vt should be a regular file (bash script)
+                    if fileType == .typeRegular {
+                        // Check if it contains the fwd command
+                        if let content = try? String(contentsOfFile: vtPath, encoding: .utf8) {
+                            vtIsCorrect = content.contains("vibetunnel fwd")
+                        }
                     }
                 }
             }
-            
-            let installed = vtInstalled && vibetunnelInstalled
-            let needsVtMigration = vtInstalled && !vtIsSymlink
+
+            let installed = vtInstalled && vibetunnelInstalled && vtIsCorrect
+            let needsVtUpdate = vtInstalled && !vtIsCorrect
 
             // Update state without animation
             isInstalled = installed
@@ -69,8 +72,8 @@ final class CLIInstaller {
             // Capture values for use in detached task
             let capturedVtInstalled = vtInstalled
             let capturedVibetunnelInstalled = vibetunnelInstalled
-            let capturedVtIsSymlink = vtIsSymlink
-            let capturedNeedsVtMigration = needsVtMigration
+            let capturedVtIsCorrect = vtIsCorrect
+            let capturedNeedsVtUpdate = needsVtUpdate
 
             // Move version checks to background
             Task.detached(priority: .userInitiated) {
@@ -92,15 +95,17 @@ final class CLIInstaller {
                     self.bundledVersion = bundledVer
 
                     // Check if update is needed:
-                    // 1. If vt needs migration (not a symlink)
+                    // 1. If vt needs update (wrong type for server)
                     // 2. If vibetunnel is not installed
                     // 3. If versions don't match
-                    self.needsUpdate = capturedNeedsVtMigration || !capturedVibetunnelInstalled || 
-                        (capturedVibetunnelInstalled && installedVer != nil && bundledVer != nil && installedVer != bundledVer)
+                    self.needsUpdate = capturedNeedsVtUpdate || !capturedVibetunnelInstalled ||
+                        (capturedVibetunnelInstalled && installedVer != nil && bundledVer != nil && installedVer !=
+                            bundledVer
+                        )
 
                     self.logger
                         .info(
-                            "CLIInstaller: CLI tools installed: \(self.isInstalled) (vt: \(capturedVtInstalled), vibetunnel: \(capturedVibetunnelInstalled)), vt is symlink: \(capturedVtIsSymlink), installed version: \(self.installedVersion ?? "unknown"), bundled version: \(self.bundledVersion ?? "unknown"), needs update: \(self.needsUpdate)"
+                            "CLIInstaller: CLI tools installed: \(self.isInstalled) (vt: \(capturedVtInstalled), vibetunnel: \(capturedVibetunnelInstalled)), vt is correct: \(capturedVtIsCorrect), installed version: \(self.installedVersion ?? "unknown"), bundled version: \(self.bundledVersion ?? "unknown"), needs update: \(self.needsUpdate)"
                         )
                 }
             }
@@ -110,13 +115,13 @@ final class CLIInstaller {
     /// Gets the version of the installed vibetunnel binary
     private func getInstalledVersion() -> String? {
         let vibetunnelPath = "/usr/local/bin/vibetunnel"
-        
+
         // First check if vibetunnel exists
         guard FileManager.default.fileExists(atPath: vibetunnelPath) else {
             logger.info("Vibetunnel binary not found at \(vibetunnelPath)")
             return nil
         }
-        
+
         // Only check vibetunnel version since vt is now a symlink
         let vibetunnelTask = Process()
         vibetunnelTask.launchPath = vibetunnelPath
@@ -142,7 +147,7 @@ final class CLIInstaller {
         } catch {
             logger.error("Failed to get installed vibetunnel version: \(error)")
         }
-        
+
         return nil
     }
 
@@ -175,19 +180,19 @@ final class CLIInstaller {
                 logger.error("Failed to get bundled vibetunnel version: \(error)")
             }
         }
-        
+
         return nil
     }
 
     /// Gets the version of the installed vibetunnel binary (async version for background execution)
     private nonisolated func getInstalledVersionAsync() async -> String? {
         let vibetunnelPath = "/usr/local/bin/vibetunnel"
-        
+
         // First check if vibetunnel exists
         guard FileManager.default.fileExists(atPath: vibetunnelPath) else {
             return nil
         }
-        
+
         // Only check vibetunnel version since vt is now a symlink
         let vibetunnelTask = Process()
         vibetunnelTask.launchPath = vibetunnelPath
@@ -213,7 +218,7 @@ final class CLIInstaller {
         } catch {
             // Silently fail for async version
         }
-        
+
         return nil
     }
 
@@ -246,7 +251,7 @@ final class CLIInstaller {
                 // Silently fail for async version
             }
         }
-        
+
         return nil
     }
 
@@ -261,27 +266,31 @@ final class CLIInstaller {
     func updateCLITool() {
         logger.info("CLIInstaller: Starting CLI tool update...")
 
-        // Check if this is a migration from old vt script
+        // Check what type of update is needed
         let vtPath = "/usr/local/bin/vt"
-        var isMigration = false
+        // We're always using Bun server now
+        var needsServerTypeUpdate = false
+
         if FileManager.default.fileExists(atPath: vtPath) {
             if let vtAttributes = try? FileManager.default.attributesOfItem(atPath: vtPath),
-               let fileType = vtAttributes[.type] as? FileAttributeType,
-               fileType != .typeSymbolicLink {
-                isMigration = true
+               let fileType = vtAttributes[.type] as? FileAttributeType {
+                if fileType == .typeSymbolicLink {
+                    // Need to change from symlink to script
+                    needsServerTypeUpdate = true
+                }
             }
         }
 
         // Show update confirmation dialog
         let alert = NSAlert()
-        alert.messageText = isMigration ? "Migrate VT Command Line Tools" : "Update VT Command Line Tools"
-        
+        alert.messageText = needsServerTypeUpdate ? "Update VT Command Line Tools" : "Update VT Command Line Tools"
+
         var informativeText = ""
-        if isMigration {
+        if needsServerTypeUpdate {
             informativeText = """
-            The VT command line tool needs to be migrated to the new unified binary system.
-            
-            This will replace the old vt script with a symlink to vibetunnel.
+            The VT command line tool needs to be updated for the Bun server.
+
+            This will replace the vt symlink with a wrapper script that automatically prepends 'fwd' to commands.
             """
         } else {
             informativeText = """
@@ -291,11 +300,11 @@ final class CLIInstaller {
             Available version: \(bundledVersion ?? "unknown")
             """
         }
-        
+
         informativeText += "\n\nWould you like to update now? Administrator privileges will be required."
         alert.informativeText = informativeText
-        
-        alert.addButton(withTitle: isMigration ? "Migrate" : "Update")
+
+        alert.addButton(withTitle: "Update")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .informational
         alert.icon = NSApp.applicationIconImage
@@ -327,7 +336,7 @@ final class CLIInstaller {
 
         let vtTargetPath = "/usr/local/bin/vt"
         let vibetunnelTargetPath = "/usr/local/bin/vibetunnel"
-        
+
         logger.info("CLIInstaller: vibetunnel resource path: \(vibetunnelResourcePath)")
         logger.info("CLIInstaller: vt target path: \(vtTargetPath)")
         logger.info("CLIInstaller: vibetunnel target path: \(vibetunnelTargetPath)")
@@ -337,7 +346,7 @@ final class CLIInstaller {
         confirmAlert.messageText = "Install CLI Tools"
         confirmAlert
             .informativeText =
-            "This will install the 'vibetunnel' binary to /usr/local/bin and create a 'vt' symlink for easy command line access. Administrator privileges are required."
+            "This will install the 'vibetunnel' binary to /usr/local/bin and create a 'vt' wrapper script that automatically prepends 'fwd' to commands. Administrator privileges are required."
         confirmAlert.addButton(withTitle: "Install")
         confirmAlert.addButton(withTitle: "Cancel")
         confirmAlert.alertStyle = .informational
@@ -362,7 +371,9 @@ final class CLIInstaller {
 
         let vtTargetPath = "/usr/local/bin/vt"
         let vibetunnelTargetPath = "/usr/local/bin/vibetunnel"
-        
+
+        // We're always using Bun server now
+
         // Create the /usr/local/bin directory if it doesn't exist
         let binDirectory = "/usr/local/bin"
         let script = """
@@ -388,7 +399,7 @@ final class CLIInstaller {
         # Make sure vibetunnel is executable
         chmod +x "\(vibetunnelTargetPath)"
         echo "Set executable permissions on \(vibetunnelTargetPath)"
-        
+
         # Remove existing vt (whether it's a file or symlink)
         if [ -L "\(vtTargetPath)" ] || [ -f "\(vtTargetPath)" ]; then
             # Backup old vt script if it's not a symlink
@@ -401,9 +412,15 @@ final class CLIInstaller {
             echo "Removed existing file at \(vtTargetPath)"
         fi
 
-        # Create the vt symlink pointing to vibetunnel
-        ln -s "\(vibetunnelTargetPath)" "\(vtTargetPath)"
-        echo "Created symlink from \(vibetunnelTargetPath) to \(vtTargetPath)"
+        # Create vt as a bash script for Bun server
+        cat > "\(vtTargetPath)" << 'EOF'
+        #!/bin/bash
+        # VibeTunnel CLI wrapper for Bun server
+        # Automatically prepends 'fwd' command when using Bun server
+        exec /usr/local/bin/vibetunnel fwd "$@"
+        EOF
+        chmod +x "\(vtTargetPath)"
+        echo "Created vt wrapper script for Bun server at \(vtTargetPath)"
         """
 
         // Write the script to a temporary file
@@ -466,7 +483,9 @@ final class CLIInstaller {
     private func showSuccess() {
         let alert = NSAlert()
         alert.messageText = "CLI Tools Installed Successfully"
-        alert.informativeText = "The 'vibetunnel' binary and 'vt' symlink have been installed. You can now use 'vt' from the terminal."
+        alert
+            .informativeText =
+            "The 'vibetunnel' binary and 'vt' symlink have been installed. You can now use 'vt' from the terminal."
         alert.addButton(withTitle: "OK")
         alert.alertStyle = .informational
         alert.icon = NSApp.applicationIconImage

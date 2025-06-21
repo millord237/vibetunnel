@@ -5,9 +5,9 @@ This guide explains how to create and publish releases for VibeTunnel, a macOS m
 ## 🎯 Release Process Overview
 
 VibeTunnel uses an automated release process that handles all the complexity of:
-- Building and code signing
-- Notarization with Apple
-- Creating DMG disk images
+- Building universal binaries containing both arm64 (Apple Silicon) and x86_64 (Intel)
+- Code signing and notarization with Apple
+- Creating DMG and ZIP files
 - Publishing to GitHub
 - Updating Sparkle appcast files
 
@@ -200,14 +200,11 @@ YOUR_PRIVATE_KEY_CONTENT
 
 ### 3. Prerequisites
 - Xcode 16.4+ installed
-- Rust toolchain with x86_64 target:
+- Node.js 20+ and Bun (for web frontend build)
   ```bash
-  # Install Rust if needed
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  # Add x86_64 target for universal binary support
-  rustup target add x86_64-apple-darwin
+  # Install Bun
+  curl -fsSL https://bun.sh/install | bash
   ```
-- Node.js (for web frontend build)
 - GitHub CLI authenticated: `gh auth status`
 - Apple Developer ID certificate in Keychain
 - Sparkle tools in `~/.local/bin/` (sign_update, generate_appcast)
@@ -268,6 +265,18 @@ VibeTunnel supports two update channels:
 2. **Pre-release Channel** (`appcast-prerelease.xml`)
    - Includes beta, alpha, and RC versions
    - Users opt-in via Settings
+
+### Architecture Support
+
+VibeTunnel uses universal binaries that include both architectures:
+- **Apple Silicon (arm64)**: Optimized for M1/M2/M3 Macs
+- **Intel (x86_64)**: For Intel-based Macs
+
+The build system creates a single universal binary that works on all Mac architectures. This approach:
+- Simplifies distribution with one DMG/ZIP per release
+- Works seamlessly with Sparkle auto-updates
+- Provides optimal performance on each architecture
+- Follows Apple's recommended best practices
 
 ## 🐛 Common Issues and Solutions
 
@@ -334,32 +343,31 @@ VibeTunnel supports two update channels:
 If the automated script fails, here's the manual process:
 
 ### 1. Update Build Number
-Edit the project build settings in Xcode:
-- Open VibeTunnel.xcodeproj
-- Select the project
+Edit `VibeTunnel/version.xcconfig`:
+- Update MARKETING_VERSION
 - Update CURRENT_PROJECT_VERSION (build number)
 
-### 2. Clean and Build
+### 2. Clean and Build Universal Binary
 ```bash
-rm -rf build DerivedData .build
+rm -rf build DerivedData
 ./scripts/build.sh --configuration Release
 ```
 
 ### 3. Sign and Notarize
 ```bash
-./scripts/notarize-app.sh build/Build/Products/Release/VibeTunnel.app
+./scripts/sign-and-notarize.sh build/Build/Products/Release/VibeTunnel.app
 ```
 
-### 4. Create DMG
+### 4. Create DMG and ZIP
 ```bash
-./scripts/create-dmg.sh
+./scripts/create-dmg.sh build/Build/Products/Release/VibeTunnel.app
+./scripts/create-zip.sh build/Build/Products/Release/VibeTunnel.app
 ```
 
 ### 5. Sign DMG for Sparkle
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 sign_update build/VibeTunnel-X.X.X.dmg
-# Copy the sparkle:edSignature value
 ```
 
 ### 6. Create GitHub Release
@@ -368,7 +376,8 @@ gh release create "v1.0.0-beta.1" \
   --title "VibeTunnel 1.0.0-beta.1" \
   --notes "Beta release 1" \
   --prerelease \
-  build/VibeTunnel-1.0.0-beta.1.dmg
+  build/VibeTunnel-*.dmg \
+  build/VibeTunnel-*.zip
 ```
 
 ### 7. Update Appcast

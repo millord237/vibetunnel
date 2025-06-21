@@ -21,7 +21,7 @@ struct DashboardSettingsView: View {
     @State private var passwordError: String?
     @State private var passwordSaved = false
 
-    @State private var permissionManager = AppleScriptPermissionManager.shared
+    @State private var permissionManager = SystemPermissionManager.shared
 
     @State private var ngrokAuthToken = ""
     @State private var ngrokStatus: NgrokTunnelStatus?
@@ -203,10 +203,7 @@ struct DashboardSettingsView: View {
                     // Wait for server to be ready
                     try? await Task.sleep(for: .seconds(1))
 
-                    await MainActor.run {
-                        SessionMonitor.shared.stopMonitoring()
-                        SessionMonitor.shared.startMonitoring()
-                    }
+                    // Session monitoring will automatically detect the changes
                 } else {
                     // Just password change, no network mode switch
                     await Self.updateServerForPasswordChange(action: .apply, logger: logger)
@@ -227,9 +224,7 @@ struct DashboardSettingsView: View {
             // Wait for server to be fully ready before restarting session monitor
             try? await Task.sleep(for: .seconds(1))
 
-            // Restart session monitoring with new port
-            SessionMonitor.shared.stopMonitoring()
-            SessionMonitor.shared.startMonitoring()
+            // Session monitoring will automatically detect the port change
         }
     }
 
@@ -243,9 +238,7 @@ struct DashboardSettingsView: View {
             // Wait for server to be fully ready before restarting session monitor
             try? await Task.sleep(for: .seconds(1))
 
-            // Restart session monitoring
-            SessionMonitor.shared.stopMonitoring()
-            SessionMonitor.shared.startMonitoring()
+            // Session monitoring will automatically detect the bind address change
         }
     }
 

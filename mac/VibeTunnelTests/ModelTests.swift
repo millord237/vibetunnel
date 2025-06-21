@@ -248,38 +248,6 @@ struct ModelTests {
             #expect(AppConstants.UserDefaultsKeys.welcomeVersion == "welcomeVersion")
         }
     }
-
-    // MARK: - ServerLogEntry Tests
-
-    @Suite("ServerLogEntry Tests")
-    struct ServerLogEntryTests {
-        @Test("ServerLogEntry creation")
-        func creation() throws {
-            let entry = ServerLogEntry(
-                level: .info,
-                message: "Test message"
-            )
-
-            #expect(entry.level == .info)
-            #expect(entry.message == "Test message")
-            #expect(entry.timestamp <= Date())
-        }
-
-        @Test("ServerLogEntry levels", arguments: [
-            ServerLogEntry.Level.debug,
-            ServerLogEntry.Level.info,
-            ServerLogEntry.Level.warning,
-            ServerLogEntry.Level.error
-        ])
-        func logLevels(level: ServerLogEntry.Level) throws {
-            let entry = ServerLogEntry(
-                level: level,
-                message: "Test"
-            )
-
-            #expect(entry.level == level)
-        }
-    }
 }
 
 // MARK: - Test Helpers

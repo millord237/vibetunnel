@@ -1,122 +1,104 @@
 import Foundation
 import Observation
 
-/// Monitors terminal sessions and provides real-time session count.
-///
-/// `SessionMonitor` is a singleton that periodically polls the local server to track active terminal sessions.
-/// It maintains a count of running sessions and provides detailed information about each session.
-/// The monitor automatically starts and stops based on server lifecycle events.
+/// Server session information returned by the API
+struct ServerSessionInfo: Codable {
+    let id: String
+    let command: String
+    let workingDir: String
+    let status: String
+    let exitCode: Int?
+    let startedAt: String
+    let lastModified: String
+    let pid: Int
+    
+    var isRunning: Bool {
+        status == "running"
+    }
+}
+
+/// Lightweight session monitor that fetches terminal sessions on-demand
 @MainActor
 @Observable
-class SessionMonitor {
+final class SessionMonitor {
     static let shared = SessionMonitor()
-
-    var sessionCount: Int = 0
-    var sessions: [String: SessionInfo] = [:]
-    var lastError: String?
-
-    private var monitoringTask: Task<Void, Never>?
-    private let refreshInterval: TimeInterval = 5.0 // Check every 5 seconds
-    private var serverPort: Int
-
-    /// Information about a terminal session.
-    ///
-    /// Contains detailed metadata about a terminal session including its process information,
-    /// status, and I/O stream paths.
-    struct SessionInfo: Codable {
-        let id: String
-        let command: String
-        let workingDir: String
-        let status: String
-        let exitCode: Int?
-        let startedAt: String
-        let lastModified: String
-        let pid: Int
-
-        var isRunning: Bool {
-            status == "running"
-        }
-    }
-
+    
+    private(set) var sessions: [String: ServerSessionInfo] = [:]
+    private(set) var lastError: Error?
+    
+    private var lastFetch: Date?
+    private let cacheInterval: TimeInterval = 2.0
+    private let serverPort: Int
+    
     private init() {
         let port = UserDefaults.standard.integer(forKey: "serverPort")
         self.serverPort = port > 0 ? port : 4_020
     }
-
-    func startMonitoring() {
-        stopMonitoring()
-
-        // Update port from UserDefaults in case it changed
-        let port = UserDefaults.standard.integer(forKey: "serverPort")
-        self.serverPort = port > 0 ? port : 4_020
-
-        // Start monitoring task
-        monitoringTask = Task {
-            // Initial fetch
-            await fetchSessions()
-
-            // Set up periodic fetching
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(refreshInterval))
-                if !Task.isCancelled {
-                    await fetchSessions()
-                }
-            }
+    
+    /// Number of running sessions
+    var sessionCount: Int {
+        sessions.values.count { $0.isRunning }
+    }
+    
+    /// Get all sessions, using cache if available
+    func getSessions() async -> [String: ServerSessionInfo] {
+        // Use cache if available and fresh
+        if let lastFetch, Date().timeIntervalSince(lastFetch) < cacheInterval {
+            return sessions
         }
+        
+        await fetchSessions()
+        return sessions
     }
-
-    func stopMonitoring() {
-        monitoringTask?.cancel()
-        monitoringTask = nil
+    
+    /// Force refresh session data
+    func refresh() async {
+        lastFetch = nil
+        await fetchSessions()
     }
-
-    @MainActor
+    
+    // MARK: - Private Methods
+    
     private func fetchSessions() async {
         do {
-            // Fetch sessions directly
-            guard let url = URL(string: "http://127.0.0.1:\(serverPort)/api/sessions") else {
-                self.lastError = "Invalid URL"
-                return
+            // Get current port (might have changed)
+            let port = UserDefaults.standard.integer(forKey: "serverPort")
+            let actualPort = port > 0 ? port : serverPort
+            
+            guard let url = URL(string: "http://127.0.0.1:\(actualPort)/api/sessions") else {
+                throw URLError(.badURL)
             }
-            let request = URLRequest(url: url, timeoutInterval: 5.0)
+            
+            let request = URLRequest(url: url, timeoutInterval: 3.0)
             let (data, response) = try await URLSession.shared.data(for: request)
-
+            
             guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200
-            else {
-                self.lastError = "Failed to fetch sessions"
-                return
+                  httpResponse.statusCode == 200 else {
+                throw URLError(.badServerResponse)
             }
-
-            // Parse JSON response as an array
-            let sessionsArray = try JSONDecoder().decode([SessionInfo].self, from: data)
-
-            // Convert array to dictionary using session id as key
-            var sessionsDict: [String: SessionInfo] = [:]
+            
+            let sessionsArray = try JSONDecoder().decode([ServerSessionInfo].self, from: data)
+            
+            // Convert to dictionary
+            var sessionsDict: [String: ServerSessionInfo] = [:]
             for session in sessionsArray {
                 sessionsDict[session.id] = session
             }
-
-            self.sessions = sessionsDict
-
-            // Count only running sessions
-            self.sessionCount = sessionsArray.count { $0.isRunning }
-            self.lastError = nil
             
-            // Update WindowTracker with current sessions
+            self.sessions = sessionsDict
+            self.lastError = nil
+            self.lastFetch = Date()
+            
+            // Update WindowTracker
             WindowTracker.shared.updateFromSessions(sessionsArray)
+            
         } catch {
-            // Don't set error for connection issues when server is likely not running
+            // Only update error if it's not a simple connection error
             if !(error is URLError) {
-                self.lastError = "Error fetching sessions: \(error.localizedDescription)"
+                self.lastError = error
             }
-            // Clear sessions on error
             self.sessions = [:]
-            self.sessionCount = 0
+            self.lastFetch = Date() // Still update timestamp to avoid hammering
         }
-    }
-
-    func refreshNow() async {
-        await fetchSessions()
     }
 }

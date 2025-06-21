@@ -25,7 +25,7 @@
 #
 # DEPENDENCIES:
 #   - git (repository management)
-#   - cargo/rustup (Rust toolchain with x86_64-apple-darwin target)
+#   - cargo/rustup (Rust toolchain)
 #   - node/npm (web frontend build)
 #   - gh (GitHub CLI)
 #   - sign_update (Sparkle EdDSA signing)
@@ -216,12 +216,6 @@ echo "📌 Required Tools:"
 # Rust toolchain
 if command -v cargo &> /dev/null; then
     check_pass "Rust toolchain installed"
-    # Check for x86_64 target
-    if rustup target list --installed | grep -q "x86_64-apple-darwin"; then
-        check_pass "Rust x86_64-apple-darwin target installed"
-    else
-        check_fail "Rust x86_64 target missing - run: rustup target add x86_64-apple-darwin"
-    fi
 else
     check_fail "Rust not installed - visit https://rustup.rs"
 fi

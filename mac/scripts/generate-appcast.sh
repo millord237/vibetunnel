@@ -362,20 +362,27 @@ EOF
     while IFS= read -r release; do
         [ -z "$release" ] && continue
         
-        # Find DMG asset using base64 encoding for robustness
-        local dmg_asset_b64=$(echo "$release" | jq -r '.assets[] | select(.name | endswith(".dmg")) | {url: .browser_download_url, name: .name} | @base64' | head -1)
+        local tag_name=$(echo "$release" | jq -r '.tag_name')
         
-        if [ -n "$dmg_asset_b64" ] && [ "$dmg_asset_b64" != "null" ]; then
-            local dmg_url=$(echo "$dmg_asset_b64" | base64 --decode | jq -r '.url')
+        # Find the DMG asset (there should be only one universal DMG)
+        local dmg_assets_b64=$(echo "$release" | jq -r '.assets[] | select(.name | endswith(".dmg")) | {url: .browser_download_url, name: .name} | @base64')
+        
+        if [ -n "$dmg_assets_b64" ] && [ "$dmg_assets_b64" != "null" ]; then
+            local first_dmg_b64=$(echo "$dmg_assets_b64" | head -1)
+            local dmg_url=$(echo "$first_dmg_b64" | base64 --decode | jq -r '.url')
+            local dmg_name=$(echo "$first_dmg_b64" | base64 --decode | jq -r '.name')
+            
+            print_info "Using DMG: $dmg_name for $tag_name"
+            
             if [ -n "$dmg_url" ] && [ "$dmg_url" != "null" ]; then
                 if create_appcast_item "$release" "$dmg_url" "false" >> appcast.xml; then
-                    print_info "Added stable release: $(echo "$release" | jq -r '.tag_name')"
+                    print_info "Added stable release: $tag_name"
                 else
-                    print_warning "Failed to create item for stable release: $(echo "$release" | jq -r '.tag_name')"
+                    print_warning "Failed to create item for stable release: $tag_name"
                 fi
             fi
         else
-            print_warning "No DMG asset found for stable release: $(echo "$release" | jq -r '.tag_name // "unknown"')"
+            print_warning "No DMG asset found for stable release: $tag_name"
         fi
     done <<< "$stable_releases"
     
@@ -398,20 +405,27 @@ EOF
     while IFS= read -r release; do
         [ -z "$release" ] && continue
         
-        # Find DMG asset using base64 encoding for robustness
-        local dmg_asset_b64=$(echo "$release" | jq -r '.assets[] | select(.name | endswith(".dmg")) | {url: .browser_download_url, name: .name} | @base64' | head -1)
+        local tag_name=$(echo "$release" | jq -r '.tag_name')
         
-        if [ -n "$dmg_asset_b64" ] && [ "$dmg_asset_b64" != "null" ]; then
-            local dmg_url=$(echo "$dmg_asset_b64" | base64 --decode | jq -r '.url')
+        # Find the DMG asset (there should be only one universal DMG)
+        local dmg_assets_b64=$(echo "$release" | jq -r '.assets[] | select(.name | endswith(".dmg")) | {url: .browser_download_url, name: .name} | @base64')
+        
+        if [ -n "$dmg_assets_b64" ] && [ "$dmg_assets_b64" != "null" ]; then
+            local first_dmg_b64=$(echo "$dmg_assets_b64" | head -1)
+            local dmg_url=$(echo "$first_dmg_b64" | base64 --decode | jq -r '.url')
+            local dmg_name=$(echo "$first_dmg_b64" | base64 --decode | jq -r '.name')
+            
+            print_info "Using DMG: $dmg_name for $tag_name (pre-release)"
+            
             if [ -n "$dmg_url" ] && [ "$dmg_url" != "null" ]; then
                 if create_appcast_item "$release" "$dmg_url" "true" >> appcast-prerelease.xml; then
-                    print_info "Added pre-release: $(echo "$release" | jq -r '.tag_name')"
+                    print_info "Added pre-release: $tag_name"
                 else
-                    print_warning "Failed to create item for pre-release: $(echo "$release" | jq -r '.tag_name')"
+                    print_warning "Failed to create item for pre-release: $tag_name"
                 fi
             fi
         else
-            print_warning "No DMG asset found for pre-release: $(echo "$release" | jq -r '.tag_name // "unknown"')"
+            print_warning "No DMG asset found for pre-release: $tag_name"
         fi
     done <<< "$pre_releases"
     
@@ -419,20 +433,27 @@ EOF
     while IFS= read -r release; do
         [ -z "$release" ] && continue
         
-        # Find DMG asset using base64 encoding for robustness
-        local dmg_asset_b64=$(echo "$release" | jq -r '.assets[] | select(.name | endswith(".dmg")) | {url: .browser_download_url, name: .name} | @base64' | head -1)
+        local tag_name=$(echo "$release" | jq -r '.tag_name')
         
-        if [ -n "$dmg_asset_b64" ] && [ "$dmg_asset_b64" != "null" ]; then
-            local dmg_url=$(echo "$dmg_asset_b64" | base64 --decode | jq -r '.url')
+        # Find the DMG asset (there should be only one universal DMG)
+        local dmg_assets_b64=$(echo "$release" | jq -r '.assets[] | select(.name | endswith(".dmg")) | {url: .browser_download_url, name: .name} | @base64')
+        
+        if [ -n "$dmg_assets_b64" ] && [ "$dmg_assets_b64" != "null" ]; then
+            local first_dmg_b64=$(echo "$dmg_assets_b64" | head -1)
+            local dmg_url=$(echo "$first_dmg_b64" | base64 --decode | jq -r '.url')
+            local dmg_name=$(echo "$first_dmg_b64" | base64 --decode | jq -r '.name')
+            
+            print_info "Using DMG: $dmg_name for $tag_name (stable in pre-release feed)"
+            
             if [ -n "$dmg_url" ] && [ "$dmg_url" != "null" ]; then
                 if create_appcast_item "$release" "$dmg_url" "false" >> appcast-prerelease.xml; then
-                    print_info "Added stable release to pre-release feed: $(echo "$release" | jq -r '.tag_name')"
+                    print_info "Added stable release to pre-release feed: $tag_name"
                 else
-                    print_warning "Failed to create item for stable release in pre-release feed: $(echo "$release" | jq -r '.tag_name')"
+                    print_warning "Failed to create item for stable release in pre-release feed: $tag_name"
                 fi
             fi
         else
-            print_warning "No DMG asset found for stable release in pre-release feed: $(echo "$release" | jq -r '.tag_name // "unknown"')"
+            print_warning "No DMG asset found for stable release in pre-release feed: $tag_name"
         fi
     done <<< "$stable_releases"
     

@@ -75,7 +75,7 @@ struct TerminalToolbar: View {
                 }
 
                 Spacer()
-                
+
                 // Advanced keyboard
                 ToolbarButton(systemImage: "keyboard") {
                     HapticFeedback.impact(.light)

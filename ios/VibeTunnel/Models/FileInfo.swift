@@ -10,7 +10,7 @@ struct FileInfo: Codable {
     let mimeType: String
     let readable: Bool
     let executable: Bool
-    
+
     enum CodingKeys: String, CodingKey {
         case name
         case path

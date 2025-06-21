@@ -4,7 +4,7 @@ import SwiftUI
 struct ScrollToBottomButton: View {
     let isVisible: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: {
             HapticFeedback.impact(.light)
@@ -36,7 +36,8 @@ extension View {
     func scrollToBottomOverlay(
         isVisible: Bool,
         action: @escaping () -> Void
-    ) -> some View {
+    )
+        -> some View {
         self.overlay(
             ScrollToBottomButton(
                 isVisible: isVisible,
@@ -53,7 +54,7 @@ extension View {
     ZStack {
         Theme.Colors.terminalBackground
             .ignoresSafeArea()
-        
+
         ScrollToBottomButton(isVisible: true) {
             print("Scroll to bottom")
         }

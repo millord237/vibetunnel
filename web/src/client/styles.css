@@ -763,10 +763,8 @@ body {
   /* Custom morph animation from button to modal */
   @keyframes expand-from-button {
     from {
-      transform: scale(0) translate(
-        calc(var(--vt-button-x) - 50vw),
-        calc(var(--vt-button-y) - 50vh)
-      );
+      transform: scale(0)
+        translate(calc(var(--vt-button-x) - 50vw), calc(var(--vt-button-y) - 50vh));
       opacity: 0;
       border-radius: 0.5rem;
     }
@@ -783,10 +781,8 @@ body {
       opacity: 1;
     }
     to {
-      transform: scale(0) translate(
-        calc(var(--vt-button-x) - 50vw),
-        calc(var(--vt-button-y) - 50vh)
-      );
+      transform: scale(0)
+        translate(calc(var(--vt-button-x) - 50vw), calc(var(--vt-button-y) - 50vh));
       opacity: 0;
     }
   }

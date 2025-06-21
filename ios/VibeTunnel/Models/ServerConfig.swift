@@ -10,7 +10,7 @@ struct ServerConfig: Codable, Equatable {
     let port: Int
     let name: String?
     let password: String?
-    
+
     init(
         host: String,
         port: Int,

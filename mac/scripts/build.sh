@@ -69,49 +69,13 @@ done
 echo "Building VibeTunnel..."
 echo "Configuration: $CONFIGURATION"
 echo "Code signing: $SIGN_APP"
+echo "Architecture: ARM64 only"
 
 # Clean build directory only if it doesn't exist
 mkdir -p "$BUILD_DIR"
 
 
-# Build Go vibetunnel universal binary
-echo "🔨 Building Go vibetunnel universal binary..."
-if [[ -x "$PROJECT_DIR/linux/build-universal.sh" ]]; then
-    cd "$PROJECT_DIR/linux"
-    ./build-universal.sh
-    
-    # Verify the binary was built
-    if [[ -f "$PROJECT_DIR/linux/build/vibetunnel-universal" ]]; then
-        echo "✓ Go vibetunnel universal binary built successfully"
-        # Note: The Xcode build phase will copy this to the app bundle
-    else
-        echo "Error: Failed to build Go vibetunnel universal binary"
-        exit 1
-    fi
-else
-    echo "Error: Go build script not found at $PROJECT_DIR/linux/build-universal.sh"
-    exit 1
-fi
-
-# Build Node.js server bundle (optional)
-if [[ "${BUILD_NODE_SERVER:-false}" == "true" ]]; then
-    # Download Node.js runtime first if needed
-    if [[ -x "$SCRIPT_DIR/download-node.sh" ]]; then
-        echo "🔨 Downloading Node.js runtime..."
-        "$SCRIPT_DIR/download-node.sh"
-        echo "✓ Node.js runtime prepared"
-    fi
-    
-    echo "🔨 Building Node.js server bundle..."
-    if [[ -x "$SCRIPT_DIR/build-node-server.sh" ]]; then
-        "$SCRIPT_DIR/build-node-server.sh"
-        echo "✓ Node.js server bundle built successfully"
-    else
-        echo "Warning: Node.js server build script not found"
-    fi
-else
-    echo "ℹ️  Skipping Node.js server build (set BUILD_NODE_SERVER=true to enable)"
-fi
+# Bun server is built by Xcode build phase
 
 # Build the app
 cd "$MAC_DIR"
@@ -123,26 +87,32 @@ if [[ "${CI:-false}" == "true" ]] && [[ -f "$PROJECT_DIR/.xcode-ci-config.xcconf
     XCCONFIG_ARG="-xcconfig $PROJECT_DIR/.xcode-ci-config.xcconfig"
 fi
 
+# Build ARM64-only binary
+
 # Check if xcbeautify is available
 if command -v xcbeautify &> /dev/null; then
-    echo "🔨 Building with xcbeautify..."
+    echo "🔨 Building ARM64-only binary with xcbeautify..."
     xcodebuild \
         -workspace VibeTunnel.xcworkspace \
         -scheme VibeTunnel \
         -configuration "$CONFIGURATION" \
         -derivedDataPath "$BUILD_DIR" \
-        -destination "platform=macOS" \
+        -destination "platform=macOS,arch=arm64" \
         $XCCONFIG_ARG \
+        ARCHS="arm64" \
+        ONLY_ACTIVE_ARCH=NO \
         build | xcbeautify
 else
-    echo "🔨 Building (install xcbeautify for cleaner output)..."
+    echo "🔨 Building ARM64-only binary (install xcbeautify for cleaner output)..."
     xcodebuild \
         -workspace VibeTunnel.xcworkspace \
         -scheme VibeTunnel \
         -configuration "$CONFIGURATION" \
         -derivedDataPath "$BUILD_DIR" \
-        -destination "platform=macOS" \
+        -destination "platform=macOS,arch=arm64" \
         $XCCONFIG_ARG \
+        ARCHS="arm64" \
+        ONLY_ACTIVE_ARCH=NO \
         build
 fi
 

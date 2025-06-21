@@ -1,5 +1,5 @@
-import SwiftUI
 import Observation
+import SwiftUI
 
 /// File editor view for creating and editing text files.
 struct FileEditorView: View {
@@ -8,7 +8,7 @@ struct FileEditorView: View {
     @State private var showingSaveAlert = false
     @State private var showingDiscardAlert = false
     @FocusState private var isTextEditorFocused: Bool
-    
+
     init(path: String, isNewFile: Bool = false, initialContent: String = "") {
         self._viewModel = State(initialValue: FileEditorViewModel(
             path: path,
@@ -16,13 +16,13 @@ struct FileEditorView: View {
             initialContent: initialContent
         ))
     }
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Theme.Colors.terminalBackground
                     .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     // Editor
                     ScrollView {
@@ -34,7 +34,7 @@ struct FileEditorView: View {
                             .focused($isTextEditorFocused)
                     }
                     .background(Theme.Colors.terminalBackground)
-                    
+
                     // Status bar
                     HStack(spacing: Theme.Spacing.medium) {
                         if viewModel.hasChanges {
@@ -42,16 +42,16 @@ struct FileEditorView: View {
                                 .font(.caption)
                                 .foregroundColor(Theme.Colors.warningAccent)
                         }
-                        
+
                         Spacer()
-                        
+
                         Text("\(viewModel.lineCount) lines")
                             .font(Theme.Typography.terminalSystem(size: 12))
                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
-                        
+
                         Text("•")
                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.3))
-                        
+
                         Text("\(viewModel.content.count) chars")
                             .font(Theme.Typography.terminalSystem(size: 12))
                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
@@ -80,7 +80,7 @@ struct FileEditorView: View {
                     }
                     .foregroundColor(Theme.Colors.primaryAccent)
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         Task {
@@ -129,38 +129,38 @@ class FileEditorViewModel {
     var isLoading = false
     var showError = false
     var errorMessage: String?
-    
+
     let path: String
     let isNewFile: Bool
-    
+
     var filename: String {
         if isNewFile {
             return "New File"
         }
         return URL(fileURLWithPath: path).lastPathComponent
     }
-    
+
     var hasChanges: Bool {
         content != originalContent
     }
-    
+
     var lineCount: Int {
         content.isEmpty ? 1 : content.components(separatedBy: .newlines).count
     }
-    
+
     init(path: String, isNewFile: Bool, initialContent: String = "") {
         self.path = path
         self.isNewFile = isNewFile
         self.content = initialContent
         self.originalContent = initialContent
     }
-    
+
     func loadFile() async {
         // File editing is not yet implemented in the backend
         errorMessage = "File editing is not available in the current server version"
         showError = true
     }
-    
+
     func save() async {
         // File editing is not yet implemented in the backend
         errorMessage = "File editing is not available in the current server version"

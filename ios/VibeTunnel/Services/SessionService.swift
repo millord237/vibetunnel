@@ -35,7 +35,7 @@ class SessionService {
     func cleanupAllExitedSessions() async throws -> [String] {
         try await apiClient.cleanupAllExitedSessions()
     }
-    
+
     func killAllSessions() async throws {
         try await apiClient.killAllSessions()
     }

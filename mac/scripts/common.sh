@@ -279,9 +279,4 @@ export -f show_progress end_progress confirm
 export -f version_compare create_temp_file create_temp_dir
 export -f register_cleanup cleanup
 
-# Verify bash version
-BASH_MIN_VERSION="4.0"
-if ! version_compare "$BASH_VERSION" "$BASH_MIN_VERSION" || [[ $? -eq 2 ]]; then
-    print_warning "Bash version $BASH_VERSION is older than recommended $BASH_MIN_VERSION"
-    print_warning "Some features may not work as expected"
-fi
+# Note: macOS ships with bash 3.2.57 and all scripts are written to be compatible with it

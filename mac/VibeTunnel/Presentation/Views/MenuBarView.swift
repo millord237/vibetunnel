@@ -15,7 +15,7 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Server status header
-            ServerStatusView(isRunning: serverManager.isRunning, port: Int(serverManager.port) ?? 4020)
+            ServerStatusView(isRunning: serverManager.isRunning, port: Int(serverManager.port) ?? 4_020)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
 
@@ -37,7 +37,7 @@ struct MenuBarView: View {
             SessionCountView(count: sessionMonitor.sessionCount)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-            
+
             // Session list with clickable items
             if !sessionMonitor.sessions.isEmpty {
                 SessionListView(sessions: sessionMonitor.sessions)
@@ -169,6 +169,13 @@ struct MenuBarView: View {
             .keyboardShortcut("q", modifiers: .command)
         }
         .frame(minWidth: 200)
+        .task {
+            // Update sessions periodically while view is visible
+            while true {
+                _ = await sessionMonitor.getSessions()
+                try? await Task.sleep(for: .seconds(3))
+            }
+        }
     }
 
     private var appVersion: String {
@@ -227,7 +234,7 @@ struct SessionCountView: View {
 
 /// Lists active SSH sessions with truncation for large lists
 struct SessionListView: View {
-    let sessions: [String: SessionMonitor.SessionInfo]
+    let sessions: [String: ServerSessionInfo]
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -247,7 +254,7 @@ struct SessionListView: View {
         }
     }
 
-    private var activeSessions: [(key: String, value: SessionMonitor.SessionInfo)] {
+    private var activeSessions: [(key: String, value: ServerSessionInfo)] {
         sessions.filter(\.value.isRunning)
             .sorted { $0.value.startedAt > $1.value.startedAt }
     }
@@ -257,7 +264,7 @@ struct SessionListView: View {
 
 /// Individual row displaying session information
 struct SessionRowView: View {
-    let session: (key: String, value: SessionMonitor.SessionInfo)
+    let session: (key: String, value: ServerSessionInfo)
     let openWindow: OpenWindowAction
     @State private var isHovered = false
 
@@ -272,9 +279,9 @@ struct SessionRowView: View {
                     .foregroundColor(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                
+
                 Spacer()
-                
+
                 Text("PID: \(session.value.pid)")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
@@ -295,13 +302,13 @@ struct SessionRowView: View {
             Button("Focus Terminal Window") {
                 WindowTracker.shared.focusWindow(for: session.key)
             }
-            
+
             Button("View Session Details") {
                 openWindow(id: "session-detail", value: session.key)
             }
-            
+
             Divider()
-            
+
             Button("Copy Session ID") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(session.key, forType: .string)

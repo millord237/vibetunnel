@@ -8,40 +8,17 @@ We love your input! We want to make contributing to VibeTunnel as easy and trans
 - Proposing new features
 - Becoming a maintainer
 
-## We Develop with Github
-
-We use GitHub to host code, to track issues and feature requests, as well as accept pull requests.
-
-## We Use [Github Flow](https://guides.github.com/introduction/flow/index.html)
-
-Pull requests are the best way to propose changes to the codebase:
-
-1. Fork the repo and create your branch from `main`.
-2. If you've added code that should be tested, add tests.
-3. If you've changed APIs, update the documentation.
-4. Ensure the test suite passes.
-5. Make sure your code lints.
-6. Issue that pull request!
-
-## Any contributions you make will be under the MIT Software License
-
-In short, when you submit code changes, your submissions are understood to be under the same [MIT License](LICENSE) that covers the project. Feel free to contact the maintainers if that's a concern.
-
-## Report bugs using Github's [issues](https://github.com/amantus-ai/vibetunnel/issues)
-
-We use GitHub issues to track public bugs. Report a bug by [opening a new issue](https://github.com/amantus-ai/vibetunnel/issues/new).
-
-**Great Bug Reports** tend to have:
-
-- A quick summary and/or background
-- Steps to reproduce
-  - Be specific!
-  - Give sample code if you can
-- What you expected would happen
-- What actually happens
-- Notes (possibly including why you think this might be happening, or stuff you tried that didn't work)
-
 ## Development Setup
+
+### Prerequisites
+
+1. **macOS 14.0+** (Sonoma or later)
+2. **Xcode 16.0+** with Swift 6.0 support
+3. **Node.js 20+**: `brew install node`
+4. **Bun runtime**: `curl -fsSL https://bun.sh/install | bash`
+5. **Git**: For version control
+
+### Getting Started
 
 1. **Fork and clone the repository**
    ```bash
@@ -49,48 +26,271 @@ We use GitHub issues to track public bugs. Report a bug by [opening a new issue]
    cd vibetunnel
    ```
 
-2. **Install dependencies**
-   - Xcode 15.0+ for Swift development
-   - Rust toolchain: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-   - Node.js 18+: `brew install node`
-
-3. **Build the project**
+2. **Set up development environment**
    ```bash
-   # Build Rust server
-   cd tty-fwd && cargo build && cd ..
+   # Install Node.js dependencies
+   cd web
+   npm install
    
-   # Build web frontend
-   cd web && npm install && npm run build && cd ..
-   
-   # Open in Xcode
-   open VibeTunnel.xcodeproj
+   # Start the development server (keep this running)
+   npm run dev
    ```
 
-## Code Style
+3. **Open the Xcode project**
+   ```bash
+   # From the root directory
+   open mac/VibeTunnel.xcworkspace
+   ```
 
-### Swift
-- We use SwiftFormat and SwiftLint with configurations optimized for Swift 6
-- Run `swiftformat .` and `swiftlint` before committing
-- Follow Swift API Design Guidelines
+4. **Configure code signing (optional for development)**
+   - Copy `mac/Config/Local.xcconfig.template` to `mac/Config/Local.xcconfig`
+   - Add your development team ID (or leave empty for ad-hoc signing)
+   - This file is gitignored to keep your settings private
 
-### Rust
-- Use `cargo fmt` before committing
-- Run `cargo clippy` and fix any warnings
+## Development Workflow
 
-### TypeScript/JavaScript
-- We use Prettier for formatting
-- Run `npm run format` in the web directory
+### Working with the Web Server
+
+The web server (Node.js/TypeScript) runs in development mode with hot reloading:
+
+```bash
+cd web
+npm run dev  # Keep this running in a separate terminal
+```
+
+**Important**: Never manually build the web project - the development server handles all compilation automatically.
+
+### Working with the macOS App
+
+1. Open `mac/VibeTunnel.xcworkspace` in Xcode
+2. Select the VibeTunnel scheme
+3. Build and run (⌘R)
+
+The app will automatically use the development server running on `http://localhost:4020`.
+
+### Working with the iOS App
+
+1. Open `ios/VibeTunnel.xcodeproj` in Xcode
+2. Select your target device/simulator
+3. Build and run (⌘R)
+
+## Code Style Guidelines
+
+### Swift Code
+
+We use modern Swift 6.0 patterns with strict concurrency checking:
+
+- **SwiftFormat**: Automated formatting with `.swiftformat` configuration
+- **SwiftLint**: Linting rules in `.swiftlint.yml`
+- Use `@MainActor` for UI-related code
+- Use `@Observable` for SwiftUI state objects
+- Prefer `async/await` over completion handlers
+
+Run before committing:
+```bash
+cd mac
+swiftformat .
+swiftlint
+```
+
+### TypeScript/JavaScript Code
+
+- **ESLint**: For code quality checks
+- **Prettier**: For consistent formatting
+- **TypeScript**: Strict mode enabled
+
+Run before committing:
+```bash
+cd web
+npm run format      # Format with Prettier
+npm run lint        # Check with ESLint
+npm run lint:fix    # Auto-fix ESLint issues
+npm run typecheck   # Check TypeScript types
+```
+
+### Important Rules
+
+- **NEVER use `setTimeout` in frontend code** unless explicitly necessary
+- **Always fix ALL lint and type errors** before committing
+- **Never commit without user testing** the changes
+- **No hardcoded values** - use configuration files
+- **No console.log in production code** - use proper logging
+
+## Project Structure
+
+```
+vibetunnel/
+├── mac/                    # macOS application
+│   ├── VibeTunnel/        # Swift source code
+│   │   ├── Core/          # Business logic
+│   │   ├── Presentation/  # UI components
+│   │   └── Utilities/     # Helper functions
+│   ├── VibeTunnelTests/   # Unit tests
+│   └── scripts/           # Build and release scripts
+│
+├── ios/                   # iOS companion app
+│   └── VibeTunnel/        # Swift source code
+│
+├── web/                   # Web server and frontend
+│   ├── src/
+│   │   ├── server/        # Node.js server (TypeScript)
+│   │   └── client/        # Web frontend (Lit/TypeScript)
+│   └── public/            # Static assets
+│
+└── docs/                  # Documentation
+```
 
 ## Testing
 
-- Write tests for new functionality
-- Ensure all tests pass before submitting PR
+### macOS Tests
+
+We use Swift Testing framework:
+
+```bash
+# Run tests in Xcode
+xcodebuild test -workspace mac/VibeTunnel.xcworkspace -scheme VibeTunnel
+
+# Or use Xcode UI (⌘U)
+```
+
+Test categories (tags):
+- `.critical` - Must-pass tests
+- `.networking` - Network-related tests
+- `.concurrency` - Async operations
+- `.security` - Security features
+
+### Web Tests
+
+We use Vitest for Node.js testing:
+
+```bash
+cd web
+npm test          # Run tests in watch mode
+npm run test:ui   # Interactive test UI
+npm run test:run  # Single test run (CI)
+npm run test:e2e  # End-to-end tests
+```
+
+### Writing Tests
+
+- Write tests for all new features
 - Include both positive and negative test cases
+- Mock external dependencies
+- Keep tests focused and fast
+
+## Making a Pull Request
+
+1. **Create a feature branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make your changes**
+   - Follow the code style guidelines
+   - Write/update tests
+   - Update documentation if needed
+
+3. **Test your changes**
+   - Run the test suite
+   - Test manually in the app
+   - Check both macOS and web components
+
+4. **Commit your changes**
+   ```bash
+   # Web changes
+   cd web && npm run lint:fix && npm run typecheck
+   
+   # Swift changes  
+   cd mac && swiftformat . && swiftlint
+   
+   # Commit
+   git add .
+   git commit -m "feat: add amazing feature"
+   ```
+
+5. **Push and create PR**
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+   Then create a pull request on GitHub.
+
+## Commit Message Convention
+
+We follow conventional commits:
+
+- `feat:` New feature
+- `fix:` Bug fix
+- `docs:` Documentation changes
+- `style:` Code style changes (formatting, etc)
+- `refactor:` Code refactoring
+- `test:` Test changes
+- `chore:` Build process or auxiliary tool changes
+
+## Debugging Tips
+
+### macOS App
+- Use Xcode's debugger (breakpoints, LLDB)
+- Check Console.app for system logs
+- Enable debug logging in Settings → Debug
+
+### Web Server
+- Use Chrome DevTools for frontend debugging
+- Server logs appear in the terminal running `npm run dev`
+- Use `--inspect` flag for Node.js debugging
+
+### Common Issues
+
+**"Port already in use"**
+- Another instance might be running
+- Check Activity Monitor for `vibetunnel` processes
+- Try a different port in settings
+
+**"Binary not found"**
+- Run `cd web && node build-native.js` to build the Bun executable
+- Check that `web/native/vibetunnel` exists
+
+**WebSocket connection failures**
+- Ensure the server is running (`npm run dev`)
+- Check for CORS issues in browser console
+- Verify the port matches between client and server
+
+## Documentation
+
+When adding new features:
+
+1. Update the relevant documentation in `docs/`
+2. Add JSDoc/Swift documentation comments
+3. Update README.md if it's a user-facing feature
+4. Include examples in your documentation
+
+## Security Considerations
+
+- Never commit secrets or API keys
+- Use Keychain for sensitive data storage
+- Validate all user inputs
+- Follow principle of least privilege
+- Test authentication and authorization thoroughly
+
+## Getting Help
+
+- Join our [Discord server](https://discord.gg/vibetunnel) (if available)
+- Check existing issues on GitHub
+- Read the [Technical Specification](spec.md)
+- Ask questions in pull requests
+
+## Code Review Process
+
+All submissions require review before merging:
+
+1. Automated checks must pass (linting, tests)
+2. At least one maintainer approval required
+3. Resolve all review comments
+4. Keep PRs focused and reasonably sized
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under its MIT License.
+By contributing, you agree that your contributions will be licensed under the MIT License. See [LICENSE](../LICENSE) for details.
 
-## References
+## Thank You!
 
-This document was adapted from the open-source contribution guidelines for [Facebook's Draft](https://github.com/facebook/draft-js/blob/master/CONTRIBUTING.md).
+Your contributions make VibeTunnel better for everyone. We appreciate your time and effort in improving the project! 🎉

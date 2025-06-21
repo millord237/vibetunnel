@@ -143,7 +143,7 @@ enum Terminal: String, CaseIterable {
         // For all other terminals, use clipboard approach for reliability
         // This avoids issues with special characters and long commands
         // Note: The command is already copied to clipboard before this script runs
-        
+
         // Special handling for iTerm2 to ensure new window (not tab)
         if self == .iTerm2 {
             return """
@@ -162,7 +162,7 @@ enum Terminal: String, CaseIterable {
             end tell
             """
         }
-        
+
         // For other terminals, Cmd+N typically creates a new window
         return """
         tell application "\(processName)"
@@ -363,8 +363,7 @@ final class TerminalLauncher {
         var runningTerminals: [Terminal] = []
 
         for terminal in Terminal.allCases
-            where runningApps.contains(where: { $0.bundleIdentifier == terminal.bundleIdentifier })
-        {
+            where runningApps.contains(where: { $0.bundleIdentifier == terminal.bundleIdentifier }) {
             runningTerminals.append(terminal)
             logger.debug("Detected running terminal: \(terminal.rawValue)")
         }
@@ -392,27 +391,31 @@ final class TerminalLauncher {
         return actualTerminal
     }
 
-    private func launchWithConfig(_ config: TerminalLaunchConfig, sessionId: String? = nil) throws -> TerminalLaunchResult {
+    private func launchWithConfig(
+        _ config: TerminalLaunchConfig,
+        sessionId: String? = nil
+    )
+        throws -> TerminalLaunchResult {
         logger.debug("Launch config - command: \(config.command)")
         logger.debug("Launch config - fullCommand: \(config.fullCommand)")
         logger.debug("Launch config - keystrokeEscapedCommand: \(config.keystrokeEscapedCommand)")
 
         let method = config.terminal.launchMethod(for: config)
-        var tabReference: String? = nil
-        var tabID: String? = nil
-        var windowID: CGWindowID? = nil
+        var tabReference: String?
+        var tabID: String?
+        var windowID: CGWindowID?
 
         switch method {
         case .appleScript(let script):
             logger.debug("Generated AppleScript:\n\(script)")
-            
+
             // For Terminal.app and iTerm2, use enhanced scripts to get tab info
-            if let sessionId = sessionId, (config.terminal == .terminal || config.terminal == .iTerm2) {
+            if let sessionId, config.terminal == .terminal || config.terminal == .iTerm2 {
                 let enhancedScript = generateEnhancedScript(for: config, sessionId: sessionId)
                 let result = try executeAppleScriptWithResult(enhancedScript)
-                
+
                 logger.debug("Enhanced script result for \(config.terminal.rawValue): '\(result)'")
-                
+
                 // Parse the result to extract tab/window info
                 if config.terminal == .terminal {
                     // Terminal.app returns "windowID|tabID"
@@ -474,7 +477,7 @@ final class TerminalLauncher {
                 }
             }
         }
-        
+
         return TerminalLaunchResult(
             terminal: config.terminal,
             tabReference: tabReference,
@@ -516,8 +519,7 @@ final class TerminalLauncher {
         } catch let error as AppleScriptError {
             // Check if this is a permission error
             if case .executionFailed(_, let errorCode) = error,
-               let code = errorCode
-            {
+               let code = errorCode {
                 switch code {
                 case -25_211, -1_719:
                     // These error codes indicate accessibility permission issues
@@ -540,7 +542,7 @@ final class TerminalLauncher {
             throw TerminalLauncherError.appleScriptExecutionFailed(error.localizedDescription, errorCode: nil)
         }
     }
-    
+
     private func executeAppleScriptWithResult(_ script: String) throws -> String {
         do {
             // Use a longer timeout (15 seconds) for terminal launch operations
@@ -548,8 +550,7 @@ final class TerminalLauncher {
         } catch let error as AppleScriptError {
             // Check if this is a permission error
             if case .executionFailed(_, let errorCode) = error,
-               let code = errorCode
-            {
+               let code = errorCode {
                 switch code {
                 case -25_211, -1_719:
                     throw TerminalLauncherError.accessibilityPermissionDenied
@@ -567,12 +568,12 @@ final class TerminalLauncher {
             throw TerminalLauncherError.appleScriptExecutionFailed(error.localizedDescription, errorCode: nil)
         }
     }
-    
+
     private func generateEnhancedScript(for config: TerminalLaunchConfig, sessionId: String) -> String {
         switch config.terminal {
         case .terminal:
             // Terminal.app script that returns window and tab info
-            return """
+            """
             tell application "Terminal"
                 activate
                 set newTab to do script "\(config.appleScriptEscapedCommand)"
@@ -581,10 +582,10 @@ final class TerminalLauncher {
                 return (windowID as string) & "|" & (tabID as string)
             end tell
             """
-            
+
         case .iTerm2:
             // iTerm2 script that returns window info
-            return """
+            """
             tell application "iTerm2"
                 activate
                 set newWindow to (create window with default profile)
@@ -594,10 +595,10 @@ final class TerminalLauncher {
                 return id of newWindow
             end tell
             """
-            
+
         default:
             // For other terminals, use the standard script
-            return config.terminal.unifiedAppleScript(for: config)
+            config.terminal.unifiedAppleScript(for: config)
         }
     }
 
@@ -610,21 +611,12 @@ final class TerminalLauncher {
         // Escape the working directory for shell
         let escapedWorkingDir = expandedWorkingDir.replacingOccurrences(of: "\"", with: "\\\"")
 
-        // Construct the full command based on server type
-        let fullCommand: String
-        if ServerManager.shared.serverType == .node {
-            // For Node server, use fwd.ts to create sessions
-            logger.info("Using Node server session creation via fwd.ts")
-            let fwdPath = findNodeFwdPath()
-            let nodeCommand = buildNodeCommand(fwdPath: fwdPath, userCommand: command, workingDir: escapedWorkingDir)
-            fullCommand = "cd \"\(escapedWorkingDir)\" && \(nodeCommand) && exit"
-        } else {
-            // For Go server, use vibetunnel binary
-            logger.info("Using Go server session creation via vibetunnel binary")
-            let vibetunnelPath = findVibeTunnelBinary()
-            // vibetunnel will use TTY_SESSION_ID from environment
-            fullCommand = "cd \"\(escapedWorkingDir)\" && TTY_SESSION_ID=\"\(sessionId)\" \(vibetunnelPath) \(command) && exit"
-        }
+        // Construct the full command for Bun server
+        // For Bun server, use fwd to create sessions
+        logger.info("Using Bun server session creation via fwd")
+        let bunPath = findBunExecutable()
+        let bunCommand = buildBunCommand(bunPath: bunPath, userCommand: command, workingDir: escapedWorkingDir)
+        let fullCommand = "cd \"\(escapedWorkingDir)\" && \(bunCommand) && exit"
 
         // Get the preferred terminal or fallback
         let terminal = getValidTerminal()
@@ -635,10 +627,10 @@ final class TerminalLauncher {
             workingDirectory: nil,
             terminal: terminal
         )
-        
+
         // Launch the terminal and get tab/window info
         let launchResult = try launchWithConfig(config, sessionId: sessionId)
-        
+
         // Register the window with WindowTracker
         WindowTracker.shared.registerWindow(
             for: sessionId,
@@ -655,8 +647,7 @@ final class TerminalLauncher {
         sessionId: String,
         vibetunnelPath: String? = nil
     )
-        throws
-    {
+        throws {
         // Expand tilde in working directory path
         let expandedWorkingDir = (workingDirectory as NSString).expandingTildeInPath
 
@@ -666,13 +657,13 @@ final class TerminalLauncher {
 
         // Check which server type is running and use appropriate command
         let fullCommand: String
-        if ServerManager.shared.serverType == .node {
-            // For Node server, use fwd.ts to create sessions
-            logger.info("Using Node server session creation via fwd.ts")
-            
-            // Find the fwd.ts path - it should be in the node-server bundle
-            let fwdPath = findNodeFwdPath()
-            
+        if ServerManager.shared.bunServer != nil {
+            // For Bun server, use fwd command
+            logger.info("Using Bun server session creation via fwd")
+
+            // Find the Bun executable path
+            let bunPath = findBunExecutable()
+
             // When called from socket, command is already pre-formatted
             if command.contains("TTY_SESSION_ID=") {
                 // Command is pre-formatted, extract the actual command part
@@ -680,25 +671,29 @@ final class TerminalLauncher {
                 // We need to find where the actual command starts (after "vibetunnel ")
                 if let vibetunnelRange = command.range(of: "vibetunnel ") {
                     let actualCommand = String(command[vibetunnelRange.upperBound...])
-                    let nodeCommand = buildNodeCommand(fwdPath: fwdPath, userCommand: actualCommand, workingDir: escapedDir)
-                    fullCommand = "cd \"\(escapedDir)\" && \(nodeCommand) && exit"
+                    let bunCommand = buildBunCommand(
+                        bunPath: bunPath,
+                        userCommand: actualCommand,
+                        workingDir: escapedDir
+                    )
+                    fullCommand = "cd \"\(escapedDir)\" && \(bunCommand) && exit"
                 } else {
                     // Fallback if format is different
-                    let nodeCommand = buildNodeCommand(fwdPath: fwdPath, userCommand: command, workingDir: escapedDir)
-                    fullCommand = "cd \"\(escapedDir)\" && \(nodeCommand) && exit"
+                    let bunCommand = buildBunCommand(bunPath: bunPath, userCommand: command, workingDir: escapedDir)
+                    fullCommand = "cd \"\(escapedDir)\" && \(bunCommand) && exit"
                 }
             } else {
                 // Command is just the user command
-                let nodeCommand = buildNodeCommand(fwdPath: fwdPath, userCommand: command, workingDir: escapedDir)
-                fullCommand = "cd \"\(escapedDir)\" && \(nodeCommand) && exit"
+                let bunCommand = buildBunCommand(bunPath: bunPath, userCommand: command, workingDir: escapedDir)
+                fullCommand = "cd \"\(escapedDir)\" && \(bunCommand) && exit"
             }
         } else {
             // For Go server, use vibetunnel binary
             logger.info("Using Go server session creation via vibetunnel binary")
-            
+
             // Use provided vibetunnel path or find bundled one
             let vibetunnel = vibetunnelPath ?? findVibeTunnelBinary()
-            
+
             // When called from Swift server, we need to construct the full command with vibetunnel
             // When called from Go server via socket, command is already pre-formatted
             if command.contains("TTY_SESSION_ID=") {
@@ -719,10 +714,10 @@ final class TerminalLauncher {
             workingDirectory: nil,
             terminal: terminal
         )
-        
+
         // Launch the terminal and get tab/window info
         let launchResult = try launchWithConfig(config, sessionId: sessionId)
-        
+
         // Register the window with WindowTracker
         WindowTracker.shared.registerWindow(
             for: sessionId,
@@ -742,46 +737,23 @@ final class TerminalLauncher {
         logger.error("No vibetunnel binary found in app bundle, command will fail")
         return "echo 'VibeTunnel: vibetunnel binary not found in app bundle'; false"
     }
-    
-    private func findNodeFwdPath() -> String {
-        // Look for fwd.ts in the bundled node-server directory
-        if let resourcesPath = Bundle.main.resourcePath {
-            let nodeServerPath = URL(fileURLWithPath: resourcesPath).appendingPathComponent("node-server")
-            let fwdPath = nodeServerPath.appendingPathComponent("src/fwd.ts").path
-            
-            if FileManager.default.fileExists(atPath: fwdPath) {
-                logger.info("Using Node fwd.ts at: \(fwdPath)")
-                return fwdPath
+
+    private func findBunExecutable() -> String {
+        // Look for Bun executable in Resources
+        if let bundledPath = Bundle.main.path(forResource: "vibetunnel", ofType: nil) {
+            if FileManager.default.fileExists(atPath: bundledPath) {
+                logger.info("Using Bun executable at: \(bundledPath)")
+                return bundledPath
             }
         }
-        
-        logger.error("No fwd.ts found in node-server bundle, command will fail")
-        return "echo 'VibeTunnel: fwd.ts not found in node-server bundle'; false"
+
+        logger.error("No Bun executable found in app bundle, command will fail")
+        return "echo 'VibeTunnel: Bun executable not found in app bundle'; false"
     }
-    
-    private func getNodeExecutablePath() -> String? {
-        // Check for bundled Node.js runtime
-        if let bundledPath = Bundle.main.path(forResource: "node", ofType: nil, inDirectory: "node") {
-            return bundledPath
-        }
-        return nil
-    }
-    
-    private func buildNodeCommand(fwdPath: String, userCommand: String, workingDir: String) -> String {
-        // Check if we have a bundled Node.js
-        if let nodePath = getNodeExecutablePath() {
-            // Use bundled Node.js with npx
-            let nodeDir = URL(fileURLWithPath: nodePath).deletingLastPathComponent().path
-            let npxPath = URL(fileURLWithPath: nodeDir).appendingPathComponent("npx").path
-            
-            if FileManager.default.fileExists(atPath: npxPath) {
-                logger.info("Using bundled Node.js and npx")
-                return "\"\(npxPath)\" tsx \"\(fwdPath)\" \(userCommand)"
-            }
-        }
-        
-        // Fallback to system npx
-        logger.info("Using system npx (bundled Node.js not found)")
-        return "npx tsx \"\(fwdPath)\" \(userCommand)"
+
+    private func buildBunCommand(bunPath: String, userCommand: String, workingDir: String) -> String {
+        // Bun executable has fwd command built-in
+        logger.info("Using Bun executable for session creation")
+        return "\"\(bunPath)\" fwd \(userCommand)"
     }
 }

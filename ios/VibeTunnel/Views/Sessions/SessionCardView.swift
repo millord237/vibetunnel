@@ -21,8 +21,7 @@ struct SessionCardView: View {
         // Convert absolute paths back to ~ notation for display
         let homePrefix = "/Users/"
         if session.workingDir.hasPrefix(homePrefix),
-           let userEndIndex = session.workingDir[homePrefix.endIndex...].firstIndex(of: "/")
-        {
+           let userEndIndex = session.workingDir[homePrefix.endIndex...].firstIndex(of: "/") {
             let restOfPath = String(session.workingDir[userEndIndex...])
             return "~\(restOfPath)"
         }
@@ -52,7 +51,9 @@ struct SessionCardView: View {
                     }, label: {
                         Image(systemName: session.isRunning ? "xmark.circle" : "trash.circle")
                             .font(.system(size: 18))
-                            .foregroundColor(session.isRunning ? Theme.Colors.errorAccent : Theme.Colors.terminalForeground.opacity(0.6))
+                            .foregroundColor(session.isRunning ? Theme.Colors.errorAccent : Theme.Colors
+                                .terminalForeground.opacity(0.6)
+                            )
                     })
                     .buttonStyle(PlainButtonStyle())
                 }

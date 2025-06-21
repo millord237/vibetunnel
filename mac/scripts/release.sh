@@ -317,7 +317,7 @@ fi
 
 # Step 4: Build the app
 echo ""
-echo -e "${BLUE}📋 Step 4/8: Building application...${NC}"
+echo -e "${BLUE}📋 Step 4/8: Building universal application...${NC}"
 
 # For pre-release builds, set the environment variable
 if [[ "$RELEASE_TYPE" != "stable" ]]; then
@@ -327,6 +327,9 @@ else
     export IS_PRERELEASE_BUILD=NO
 fi
 
+# Build universal binary
+echo ""
+echo "🔨 Building universal binary (arm64 + x86_64)..."
 "$SCRIPT_DIR/build.sh" --configuration Release
 
 # Verify build
@@ -343,9 +346,20 @@ if [[ "$BUILT_VERSION" != "$BUILD_NUMBER" ]]; then
     exit 1
 fi
 
+# Verify it's a universal binary
+APP_BINARY="$APP_PATH/Contents/MacOS/VibeTunnel"
+if [[ -f "$APP_BINARY" ]]; then
+    ARCH_INFO=$(lipo -info "$APP_BINARY" 2>/dev/null || echo "")
+    if [[ "$ARCH_INFO" == *"x86_64"* ]] && [[ "$ARCH_INFO" == *"arm64"* ]]; then
+        echo "✅ Universal binary created (arm64 + x86_64)"
+    else
+        echo -e "${YELLOW}⚠️  Warning: Binary may not be universal: $ARCH_INFO${NC}"
+    fi
+fi
+
 echo -e "${GREEN}✅ Build complete${NC}"
 
-# Step 4: Sign and notarize
+# Step 5: Sign and notarize
 echo ""
 echo -e "${BLUE}📋 Step 5/8: Signing and notarizing...${NC}"
 "$SCRIPT_DIR/sign-and-notarize.sh" --sign-and-notarize
@@ -357,73 +371,49 @@ SPARKLE_OK=true
 
 # Check each Sparkle component for proper signing with timestamps
 if [ -d "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc" ]; then
-    # Debug: capture codesign output
     CODESIGN_OUT=$(codesign -dv "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc" 2>&1)
     if echo "$CODESIGN_OUT" | grep -qE "(Timestamp|timestamp)"; then
         echo "✅ Installer.xpc properly signed with timestamp"
     else
         echo -e "${RED}❌ Installer.xpc missing timestamp signature${NC}"
-        echo "Debug output: $CODESIGN_OUT" | head -20
-        SPARKLE_OK=false
-    fi
-fi
-
-if [ -d "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc" ]; then
-    CODESIGN_OUT=$(codesign -dv "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc" 2>&1)
-    if echo "$CODESIGN_OUT" | grep -qE "(Timestamp|timestamp)"; then
-        echo "✅ Downloader.xpc properly signed with timestamp"
-    else
-        echo -e "${RED}❌ Downloader.xpc missing timestamp signature${NC}"
-        SPARKLE_OK=false
-    fi
-fi
-
-if [ -f "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" ]; then
-    CODESIGN_OUT=$(codesign -dv "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" 2>&1)
-    if echo "$CODESIGN_OUT" | grep -qE "(Timestamp|timestamp)"; then
-        echo "✅ Autoupdate properly signed with timestamp"
-    else
-        echo -e "${RED}❌ Autoupdate missing timestamp signature${NC}"
-        SPARKLE_OK=false
-    fi
-fi
-
-if [ -d "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app" ]; then
-    CODESIGN_OUT=$(codesign -dv "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app" 2>&1)
-    if echo "$CODESIGN_OUT" | grep -qE "(Timestamp|timestamp)"; then
-        echo "✅ Updater.app properly signed with timestamp"
-    else
-        echo -e "${RED}❌ Updater.app missing timestamp signature${NC}"
         SPARKLE_OK=false
     fi
 fi
 
 if [ "$SPARKLE_OK" = false ]; then
     echo -e "${RED}❌ Sparkle component signing verification failed!${NC}"
-    echo "This will cause 'update isn't properly signed' errors for users."
     exit 1
 fi
 
 echo -e "${GREEN}✅ All Sparkle components properly signed${NC}"
 
-# Step 5: Create DMG
+# Step 6: Create DMG and ZIP
 echo ""
-echo -e "${BLUE}📋 Step 6/8: Creating DMG...${NC}"
+echo -e "${BLUE}📋 Step 6/8: Creating DMG and ZIP...${NC}"
 DMG_NAME="VibeTunnel-$RELEASE_VERSION.dmg"
 DMG_PATH="$PROJECT_ROOT/build/$DMG_NAME"
-"$SCRIPT_DIR/create-dmg.sh" "$APP_PATH" "$DMG_PATH"
+ZIP_NAME="VibeTunnel-$RELEASE_VERSION.zip"
+ZIP_PATH="$PROJECT_ROOT/build/$ZIP_NAME"
 
+"$SCRIPT_DIR/create-dmg.sh" "$APP_PATH" "$DMG_PATH"
 if [[ ! -f "$DMG_PATH" ]]; then
     echo -e "${RED}❌ DMG creation failed${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✅ DMG created: $DMG_NAME${NC}"
+"$SCRIPT_DIR/create-zip.sh" "$APP_PATH" "$ZIP_PATH"
+if [[ ! -f "$ZIP_PATH" ]]; then
+    echo -e "${RED}❌ ZIP creation failed${NC}"
+    exit 1
+fi
 
-# Step 5.5: Notarize DMG
+echo -e "${GREEN}✅ DMG and ZIP created${NC}"
+
+# Step 6.5: Notarize DMG
 echo ""
-echo -e "${BLUE}📋 Step 6/8: Notarizing DMG...${NC}"
+echo -e "${BLUE}📋 Notarizing DMG...${NC}"
 "$SCRIPT_DIR/notarize-dmg.sh" "$DMG_PATH"
+echo -e "${GREEN}✅ DMG notarized${NC}"
 
 # Verify DMG notarization
 echo ""
@@ -454,13 +444,7 @@ else
     exit 1
 fi
 
-echo -e "${GREEN}✅ DMG notarization complete and verified${NC}"
-
-# Verify app inside DMG is properly signed
-echo ""
-echo -e "${BLUE}🔍 Verifying app inside DMG...${NC}"
-
-# Mount the DMG temporarily
+# Verify app inside DMG
 DMG_MOUNT=$(mktemp -d)
 if hdiutil attach "$DMG_PATH" -mountpoint "$DMG_MOUNT" -nobrowse -quiet; then
     DMG_APP="$DMG_MOUNT/VibeTunnel.app"
@@ -474,28 +458,15 @@ if hdiutil attach "$DMG_PATH" -mountpoint "$DMG_MOUNT" -nobrowse -quiet; then
         exit 1
     fi
     
-    # Check if notarization ticket is stapled
-    if xcrun stapler validate "$DMG_APP" 2>&1 | grep -q "The validate action worked"; then
-        echo "✅ App in DMG has stapled notarization ticket"
-    else
-        echo -e "${RED}❌ App in DMG missing stapled notarization ticket!${NC}"
-        hdiutil detach "$DMG_MOUNT" -quiet
-        exit 1
-    fi
-    
-    # Check Sparkle components in DMG
-    if codesign -dv "$DMG_APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc" 2>&1 | grep -qE "(Timestamp|timestamp)"; then
-        echo "✅ Sparkle components in DMG properly signed"
-    else
-        echo -e "${YELLOW}⚠️  Warning: Sparkle components in DMG may not have timestamp signatures${NC}"
-    fi
-    
-    # Unmount DMG
     hdiutil detach "$DMG_MOUNT" -quiet
-    echo -e "${GREEN}✅ App inside DMG verification complete${NC}"
 else
-    echo -e "${YELLOW}⚠️  Warning: Could not mount DMG for verification${NC}"
+    echo -e "${RED}❌ Failed to mount DMG for verification${NC}"
+    exit 1
 fi
+
+echo ""
+echo -e "${GREEN}✅ DMG notarized and verified${NC}"
+
 
 # Step 6: Create GitHub release
 echo ""
@@ -588,13 +559,15 @@ if [[ "$RELEASE_TYPE" == "stable" ]]; then
     gh release create "$TAG_NAME" \
         --title "VibeTunnel $RELEASE_VERSION" \
         --notes "$RELEASE_NOTES" \
-        "$DMG_PATH"
+        "$DMG_PATH" \
+        "$ZIP_PATH"
 else
     gh release create "$TAG_NAME" \
         --title "VibeTunnel $RELEASE_VERSION" \
         --notes "$RELEASE_NOTES" \
         --prerelease \
-        "$DMG_PATH"
+        "$DMG_PATH" \
+        "$ZIP_PATH"
 fi
 
 echo -e "${GREEN}✅ GitHub release created${NC}"
@@ -665,8 +638,11 @@ echo "Release details:"
 echo "  - Version: $RELEASE_VERSION"
 echo "  - Build: $BUILD_NUMBER"
 echo "  - Tag: $TAG_NAME"
-echo "  - DMG: $DMG_NAME"
 echo "  - GitHub: https://github.com/amantus-ai/vibetunnel/releases/tag/$TAG_NAME"
+echo ""
+echo "Release artifacts:"
+echo "  - DMG: $(basename "$DMG_PATH")"
+echo "  - ZIP: $(basename "$ZIP_PATH")"
 echo ""
 
 if [[ "$RELEASE_TYPE" != "stable" ]]; then

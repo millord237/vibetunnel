@@ -54,7 +54,7 @@ struct ConnectionView: View {
                                 .font(Theme.Typography.terminalSystem(size: 16))
                                 .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
                                 .tracking(2)
-                            
+
                             // Network status
                             ConnectionStatusView()
                                 .padding(.top, Theme.Spacing.small)
@@ -97,7 +97,7 @@ struct ConnectionView: View {
             viewModel.errorMessage = "No internet connection available"
             return
         }
-        
+
         Task {
             await viewModel.testConnection { config in
                 connectionManager.saveConnection(config)
@@ -119,8 +119,7 @@ class ConnectionViewModel {
 
     func loadLastConnection() {
         if let config = UserDefaults.standard.data(forKey: "savedServerConfig"),
-           let serverConfig = try? JSONDecoder().decode(ServerConfig.self, from: config)
-        {
+           let serverConfig = try? JSONDecoder().decode(ServerConfig.self, from: config) {
             self.host = serverConfig.host
             self.port = String(serverConfig.port)
             self.name = serverConfig.name ?? ""
@@ -161,8 +160,7 @@ class ConnectionViewModel {
             let (_, response) = try await URLSession.shared.data(for: request)
 
             if let httpResponse = response as? HTTPURLResponse,
-               httpResponse.statusCode == 200
-            {
+               httpResponse.statusCode == 200 {
                 onSuccess(config)
             } else {
                 errorMessage = "Failed to connect to server"

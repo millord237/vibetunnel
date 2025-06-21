@@ -10,7 +10,7 @@
           "image-name" : "vibe_tunnel_clean.png",
           "name" : "vibe_tunnel_clean",
           "position" : {
-            "scale" : 1.26,
+            "scale" : 1.0,
             "translation-in-points" : [
               0,
               0
