@@ -1,3 +1,21 @@
+/**
+ * Session List Component
+ *
+ * Displays a grid of session cards and manages the session creation modal.
+ * Handles session filtering (hide/show exited) and cleanup operations.
+ *
+ * @fires navigate-to-session - When a session is selected (detail: { sessionId: string })
+ * @fires refresh - When session list needs refreshing
+ * @fires error - When an error occurs (detail: string)
+ * @fires session-created - When a new session is created (detail: { sessionId: string, message?: string })
+ * @fires create-modal-close - When create modal should close
+ * @fires hide-exited-change - When hide exited state changes (detail: boolean)
+ * @fires kill-all-sessions - When all sessions should be killed
+ *
+ * @listens session-killed - From session-card when a session is killed
+ * @listens session-kill-error - From session-card when kill fails
+ * @listens clean-exited-sessions - To trigger cleanup of exited sessions
+ */
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';

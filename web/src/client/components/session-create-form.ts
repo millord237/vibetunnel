@@ -1,3 +1,16 @@
+/**
+ * Session Create Form Component
+ *
+ * Modal dialog for creating new terminal sessions. Provides command input,
+ * working directory selection, and options for spawning in native terminal.
+ *
+ * @fires session-created - When session is successfully created (detail: { sessionId: string, message?: string })
+ * @fires cancel - When form is cancelled
+ * @fires error - When creation fails (detail: string)
+ *
+ * @listens file-selected - From file browser when directory is selected
+ * @listens browser-cancel - From file browser when cancelled
+ */
 import { LitElement, html, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import './file-browser.js';

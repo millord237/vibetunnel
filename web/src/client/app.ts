@@ -297,23 +297,38 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private async handleKillAll() {
-    // Find all session cards and trigger their kill buttons
+    // Find all session cards and call their kill method
     const sessionCards = this.querySelectorAll<SessionCard>('session-card');
+    const killPromises: Promise<boolean>[] = [];
 
     sessionCards.forEach((card: SessionCard) => {
       // Check if this session is running
       if (card.session && card.session.status === 'running') {
-        // Find all buttons within this card and look for the kill button
-        const buttons = card.querySelectorAll('button');
-        buttons.forEach((button: HTMLButtonElement) => {
-          const buttonText = button.textContent?.toLowerCase() || '';
-          if (buttonText.includes('kill') && !buttonText.includes('killing')) {
-            // This is the kill button, click it to trigger the animation
-            button.click();
-          }
-        });
+        // Call the public kill method which handles animation and API call
+        killPromises.push(card.kill());
       }
     });
+
+    if (killPromises.length === 0) {
+      return;
+    }
+
+    // Wait for all kill operations to complete
+    const results = await Promise.all(killPromises);
+    const successCount = results.filter((r) => r).length;
+
+    if (successCount === killPromises.length) {
+      this.showSuccess(`All ${successCount} sessions killed successfully`);
+    } else if (successCount > 0) {
+      this.showError(`Killed ${successCount} of ${killPromises.length} sessions`);
+    } else {
+      this.showError('Failed to kill sessions');
+    }
+
+    // Refresh the session list after a short delay to allow animations to complete
+    setTimeout(() => {
+      this.loadSessions();
+    }, 500);
   }
 
   private handleCleanExited() {

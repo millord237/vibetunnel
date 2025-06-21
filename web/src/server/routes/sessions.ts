@@ -3,6 +3,7 @@ import { PtyManager, PtyError } from '../pty/index.js';
 import { TerminalManager } from '../services/terminal-manager.js';
 import { StreamWatcher } from '../services/stream-watcher.js';
 import { RemoteRegistry } from '../services/remote-registry.js';
+import { cellsToText } from '../../shared/terminal-text-formatter.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -497,6 +498,66 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       } else {
         res.status(500).json({ error: 'Failed to cleanup exited sessions' });
       }
+    }
+  });
+
+  // Get session plain text
+  router.get('/sessions/:sessionId/text', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const includeStyles = req.query.styles !== undefined;
+
+    try {
+      // If in HQ mode, check if this is a remote session
+      if (isHQMode && remoteRegistry) {
+        const remote = remoteRegistry.getRemoteBySessionId(sessionId);
+        if (remote) {
+          // Forward text request to remote server
+          try {
+            const url = new URL(`${remote.url}/api/sessions/${sessionId}/text`);
+            if (includeStyles) {
+              url.searchParams.set('styles', '');
+            }
+
+            const response = await fetch(url.toString(), {
+              headers: {
+                Authorization: `Bearer ${remote.token}`,
+              },
+              signal: AbortSignal.timeout(5000),
+            });
+
+            if (!response.ok) {
+              return res.status(response.status).json(await response.json());
+            }
+
+            // Forward the text response
+            const text = await response.text();
+            res.setHeader('Content-Type', 'text/plain');
+            return res.send(text);
+          } catch (error) {
+            console.error(`Failed to get text from remote ${remote.name}:`, error);
+            return res.status(503).json({ error: 'Failed to reach remote server' });
+          }
+        }
+      }
+
+      // Local session handling
+      const session = ptyManager.getSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+
+      // Get terminal buffer snapshot
+      const snapshot = await terminalManager.getBufferSnapshot(sessionId);
+
+      // Use shared formatter to convert cells to text
+      const plainText = cellsToText(snapshot.cells, includeStyles);
+
+      // Send as plain text
+      res.setHeader('Content-Type', 'text/plain');
+      res.send(plainText);
+    } catch (error) {
+      console.error('Error getting plain text:', error);
+      res.status(500).json({ error: 'Failed to get terminal text' });
     }
   });
 

@@ -1,3 +1,16 @@
+/**
+ * App Header Component
+ *
+ * Displays the VibeTunnel logo, session statistics, and control buttons.
+ * Provides controls for creating sessions, toggling exited sessions visibility,
+ * killing all sessions, and cleaning up exited sessions.
+ *
+ * @fires create-session - When create button is clicked
+ * @fires hide-exited-change - When hide/show exited toggle is clicked (detail: boolean)
+ * @fires kill-all-sessions - When kill all button is clicked
+ * @fires clean-exited-sessions - When clean exited button is clicked
+ * @fires open-file-browser - When browse button is clicked
+ */
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from './session-list.js';

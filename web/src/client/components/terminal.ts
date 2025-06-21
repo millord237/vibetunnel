@@ -1,3 +1,14 @@
+/**
+ * Terminal Component
+ *
+ * Full terminal implementation with xterm.js for rendering and input handling.
+ * Supports copy/paste, URL highlighting, custom scrolling, and responsive sizing.
+ *
+ * @fires terminal-ready - When terminal is initialized and ready
+ * @fires terminal-input - When user types (detail: string)
+ * @fires terminal-resize - When terminal is resized (detail: { cols: number, rows: number })
+ * @fires url-clicked - When a URL is clicked (detail: string)
+ */
 import { LitElement, html, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { Terminal as XtermTerminal, IBufferLine, IBufferCell } from '@xterm/headless';

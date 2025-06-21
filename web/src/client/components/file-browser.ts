@@ -1,3 +1,14 @@
+/**
+ * File Browser Component
+ *
+ * Modal file browser for navigating the filesystem and selecting files/directories.
+ * Supports Git status display, file preview with Monaco editor, and diff viewing.
+ *
+ * @fires insert-path - When inserting a file path into terminal (detail: { path: string, type: 'file' | 'directory' })
+ * @fires open-in-editor - When opening a file in external editor (detail: { path: string })
+ * @fires directory-selected - When a directory is selected in 'select' mode (detail: string)
+ * @fires browser-cancel - When the browser is cancelled or closed
+ */
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from './session-list.js';

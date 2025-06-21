@@ -1,7 +1,17 @@
+/**
+ * VibeTunnel Terminal Buffer Component
+ *
+ * Displays a read-only terminal buffer snapshot with automatic resizing.
+ * Subscribes to buffer updates via WebSocket and renders the terminal content.
+ * Detects content changes and emits events when the terminal content updates.
+ *
+ * @fires content-changed - When terminal content changes (no detail)
+ */
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { TerminalRenderer, type BufferCell } from '../utils/terminal-renderer.js';
 import { bufferSubscriptionService } from '../services/buffer-subscription-service.js';
+import { cellsToText } from '../../shared/terminal-text-formatter.js';
 
 interface BufferSnapshot {
   cols: number;
@@ -25,11 +35,11 @@ export class VibeTerminalBuffer extends LitElement {
   @state() private error: string | null = null;
   @state() private displayedFontSize = 14;
   @state() private visibleRows = 0;
-  @state() private containsEscPrompt = false;
 
   private container: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private unsubscribe: (() => void) | null = null;
+  private lastTextSnapshot: string | null = null;
 
   // Moved to render() method above
 
@@ -123,8 +133,8 @@ export class VibeTerminalBuffer extends LitElement {
       this.buffer = snapshot;
       this.error = null;
 
-      // Check if buffer contains "esc to interrupt" text
-      this.checkForEscPrompt();
+      // Check for content changes
+      this.checkForContentChange();
 
       // Recalculate dimensions now that we have the actual cols
       this.calculateDimensions();
@@ -134,28 +144,25 @@ export class VibeTerminalBuffer extends LitElement {
     });
   }
 
-  private checkForEscPrompt() {
-    if (!this.buffer) {
-      this.containsEscPrompt = false;
+  private checkForContentChange() {
+    if (!this.buffer) return;
+
+    // Get current text with styles to detect any visual changes
+    const currentSnapshot = this.getTextWithStyles(true);
+
+    // Skip the first check
+    if (this.lastTextSnapshot === null) {
+      this.lastTextSnapshot = currentSnapshot;
       return;
     }
 
-    // Check if any line contains "esc to interrupt" (case insensitive)
-    const searchText = 'esc to interrupt';
-    const found = this.buffer.cells.some((row) => {
-      const lineText = row
-        .map((cell) => cell.char)
-        .join('')
-        .toLowerCase();
-      return lineText.includes(searchText);
-    });
+    // Compare with last snapshot
+    if (currentSnapshot !== this.lastTextSnapshot) {
+      this.lastTextSnapshot = currentSnapshot;
 
-    if (found !== this.containsEscPrompt) {
-      this.containsEscPrompt = found;
-      // Dispatch event to notify parent
+      // Dispatch content changed event
       this.dispatchEvent(
-        new CustomEvent('esc-prompt-change', {
-          detail: { hasEscPrompt: found },
+        new CustomEvent('content-changed', {
           bubbles: true,
           composed: true,
         })
@@ -247,5 +254,14 @@ export class VibeTerminalBuffer extends LitElement {
     if (this.buffer) {
       this.requestUpdate();
     }
+  }
+
+  /**
+   * Get the current buffer text with optional style markup
+   * Returns the text in the same format as the /api/sessions/:id/text?styles endpoint
+   */
+  getTextWithStyles(includeStyles = true): string {
+    if (!this.buffer) return '';
+    return cellsToText(this.buffer.cells, includeStyles);
   }
 }

@@ -1,3 +1,15 @@
+/**
+ * Session Card Component
+ *
+ * Displays a single terminal session with its preview, status, and controls.
+ * Shows activity indicators when terminal content changes and provides kill functionality.
+ *
+ * @fires session-select - When card is clicked (detail: Session)
+ * @fires session-killed - When session is successfully killed (detail: { sessionId: string, session: Session })
+ * @fires session-kill-error - When kill operation fails (detail: { sessionId: string, error: string })
+ *
+ * @listens content-changed - From vibe-terminal-buffer when terminal content changes
+ */
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import './vibe-terminal-buffer.js';
@@ -28,14 +40,22 @@ export class SessionCard extends LitElement {
   @property({ type: Object }) session!: Session;
   @state() private killing = false;
   @state() private killingFrame = 0;
-  @state() private hasEscPrompt = false;
+  @state() private isActive = false;
 
   private killingInterval: number | null = null;
+  private activityTimeout: number | null = null;
+
+  connectedCallback() {
+    super.connectedCallback();
+  }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     if (this.killingInterval) {
       clearInterval(this.killingInterval);
+    }
+    if (this.activityTimeout) {
+      clearTimeout(this.activityTimeout);
     }
   }
 
@@ -49,13 +69,39 @@ export class SessionCard extends LitElement {
     );
   }
 
-  private handleEscPromptChange(event: CustomEvent) {
-    this.hasEscPrompt = event.detail.hasEscPrompt;
+  private handleContentChanged() {
+    // Only track activity for running sessions
+    if (this.session.status !== 'running') {
+      return;
+    }
+
+    // Content changed, immediately mark as active
+    this.isActive = true;
+
+    // Clear existing timeout
+    if (this.activityTimeout) {
+      clearTimeout(this.activityTimeout);
+    }
+
+    // Set timeout to clear activity after 500ms of no changes
+    this.activityTimeout = window.setTimeout(() => {
+      this.isActive = false;
+      this.activityTimeout = null;
+    }, 500);
   }
 
   private async handleKillClick(e: Event) {
     e.stopPropagation();
     e.preventDefault();
+    await this.kill();
+  }
+
+  // Public method to kill the session with animation
+  public async kill(): Promise<boolean> {
+    // Don't kill if already killing or session is not running
+    if (this.killing || this.session.status !== 'running') {
+      return false;
+    }
 
     // Start killing animation
     this.killing = true;
@@ -90,6 +136,7 @@ export class SessionCard extends LitElement {
       );
 
       console.log(`Session ${this.session.id} killed successfully`);
+      return true;
     } catch (error) {
       console.error('Error killing session:', error);
 
@@ -104,6 +151,7 @@ export class SessionCard extends LitElement {
           composed: true,
         })
       );
+      return false;
     } finally {
       // Stop animation in all cases
       this.stopKillingAnimation();
@@ -172,8 +220,8 @@ export class SessionCard extends LitElement {
     return html`
       <div
         class="card cursor-pointer overflow-hidden ${this.killing ? 'opacity-60' : ''} ${this
-          .hasEscPrompt
-          ? 'border-2 border-status-warning'
+          .isActive && this.session.status === 'running'
+          ? 'border-2 border-accent-green'
           : ''}"
         @click=${this.handleCardClick}
       >
@@ -236,7 +284,7 @@ export class SessionCard extends LitElement {
                   .sessionId=${this.session.id}
                   class="w-full h-full"
                   style="pointer-events: none;"
-                  @esc-prompt-change=${this.handleEscPromptChange}
+                  @content-changed=${this.handleContentChanged}
                 ></vibe-terminal-buffer>
               `}
         </div>
@@ -249,6 +297,9 @@ export class SessionCard extends LitElement {
             <span class="${this.getStatusColor()} text-xs flex items-center gap-1 flex-shrink-0">
               <div class="w-2 h-2 rounded-full ${this.getStatusDotColor()}"></div>
               ${this.getStatusText()}
+              ${this.session.status === 'running' && this.isActive
+                ? html`<span class="text-accent-green animate-pulse ml-1">●</span>`
+                : ''}
             </span>
             ${this.session.pid
               ? html`

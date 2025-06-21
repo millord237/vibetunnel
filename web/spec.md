@@ -83,7 +83,12 @@ web/
 - `GET /api/sessions/:id/stream` (517-627): SSE streaming of asciinema cast files
 - `POST /api/sessions/:id/input` (630-695): Send input
 - `POST /api/sessions/:id/resize` (698-767): Resize terminal
-- `GET /api/sessions/:id/buffer` (455-514): Binary snapshot of current terminal view
+- `GET /api/sessions/:id/buffer` (569-631): Binary snapshot of current terminal view
+- `GET /api/sessions/:id/text` (504-654): Plain text of current terminal view
+  - Optional `?styles` query parameter adds style markup
+  - Style format: `[style fg="color" bg="color" bold italic ...]text[/style]`
+  - Colors: indexed (0-255) as `"15"`, RGB as `"255,128,0"`
+  - Attributes: bold, dim, italic, underline, inverse, invisible, strikethrough
 
 #### Remotes (`remotes.ts`) - HQ Mode Only
 - `GET /api/remotes` (15-27): List registered servers
@@ -158,30 +163,111 @@ Cells: Variable-length with type byte
 - `test-terminals-entry.ts` - Test terminals entry point
 - `styles.css` - Global styles
 
-#### Main Components
+#### Main Application Component
 - `app.ts` - Lit-based SPA (15-331)
   - URL-based routing `?session=<id>`
   - Global keyboard handlers
   - Error/success message handling (74-90)
+  - **Events fired**: 
+    - `toggle-nav` - Toggle navigation
+    - `navigate-to-list` - Navigate to session list
+    - `error` - Display error message
+    - `success` - Display success message
+    - `navigate` - Navigate to specific session
+  - **Events listened**: Various events from child components
+
+### Component Event Architecture
 
 #### Terminal Components
-- `terminal.ts` - Custom DOM terminal renderer (634-701)
-  - Virtual scrolling (537-555)
-  - Touch/momentum support
-  - URL highlighting integration
-  - Copy/paste handling
-- `session-view.ts` - Full-screen terminal view (12-1331)
-  - SSE streaming (275-333)
-  - Mobile input overlays
-  - Resize synchronization
-- `vibe-terminal-buffer.ts` - Terminal buffer display component
+
+##### `terminal.ts` - Custom DOM terminal renderer (17-1000+)
+Full terminal implementation with xterm.js for rendering and input handling.
+- Virtual scrolling (537-555)
+- Touch/momentum support
+- URL highlighting integration
+- Copy/paste handling
+- **Events fired**:
+  - `terminal-ready` - When terminal is initialized and ready
+  - `terminal-input` - When user types (detail: string)
+  - `terminal-resize` - When terminal is resized (detail: { cols: number, rows: number })
+  - `url-clicked` - When a URL is clicked (detail: string)
+
+##### `session-view.ts` - Full-screen terminal view (29-1331)
+Full-screen terminal view for an active session. Handles terminal I/O, streaming updates via SSE, file browser integration, and mobile overlays.
+- SSE streaming (275-333)
+- Mobile input overlays
+- Resize synchronization
+- **Events fired**:
+  - `navigate-to-list` - When navigating back to session list
+  - `error` - When an error occurs (detail: string)
+  - `warning` - When a warning occurs (detail: string)
+- **Events listened**:
+  - `session-exit` - From SSE stream when session exits
+  - `terminal-ready` - From terminal component when ready
+  - `file-selected` - From file browser when file is selected
+  - `browser-cancel` - From file browser when cancelled
+
+##### `vibe-terminal-buffer.ts` - Terminal buffer display (25-268)
+Displays a read-only terminal buffer snapshot with automatic resizing. Subscribes to buffer updates via WebSocket and renders the terminal content.
+- **Events fired**:
+  - `content-changed` - When terminal content changes (no detail)
+
+#### Session Management Components
+
+##### `session-list.ts` - Active sessions list view (61-700+)
+Main session list view showing all active terminal sessions with real-time updates, search/filtering, and session management capabilities.
+- **Events fired**:
+  - `navigate` - When clicking on a session (detail: { sessionId: string })
+  - `error` - When an error occurs (detail: string)
+  - `success` - When an operation succeeds (detail: string)
+  - `session-created` - When a new session is created (detail: Session)
+  - `session-updated` - When a session is updated (detail: Session)
+  - `sessions-changed` - When the session list changes
+  - `toggle-create-form` - When toggling the create form
+- **Events listened**:
+  - `session-created` - From create form
+  - `cancel` - From create form
+  - `error` - From create form
+
+##### `session-card.ts` - Individual session card (31-420+)
+Individual session card component showing terminal preview and session controls. Displays a live terminal buffer preview and detects activity changes.
+- **Events fired**:
+  - `view-session` - When viewing a session (detail: Session)
+  - `kill-session` - When killing a session (detail: Session)
+  - `copy-session-id` - When copying session ID (detail: Session)
+- **Events listened**:
+  - `content-changed` - From vibe-terminal-buffer component
+
+##### `session-create-form.ts` - New session creation form (27-381)
+Modal dialog for creating new terminal sessions. Provides command input, working directory selection, and options for spawning in native terminal.
+- **Events fired**:
+  - `session-created` - When session is successfully created (detail: { sessionId: string, message?: string })
+  - `cancel` - When form is cancelled
+  - `error` - When creation fails (detail: string)
+- **Events listened**:
+  - `file-selected` - From file browser when directory is selected
+  - `browser-cancel` - From file browser when cancelled
 
 #### UI Components
-- `app-header.ts` - Application header
-- `session-list.ts` - Active sessions list view
-- `session-card.ts` - Individual session card
-- `session-create-form.ts` - New session creation form
-- `file-browser.ts` - File browser component
+
+##### `app-header.ts` - Application header (15-280+)
+Main application header with logo, title, navigation controls, and session status.
+- **Events fired**:
+  - `toggle-nav` - Toggle navigation menu
+  - `navigate-to-list` - Navigate to session list
+  - `toggle-create-form` - Toggle session create form
+  - `toggle-theme` - Toggle dark/light theme
+  - `open-settings` - Open settings modal
+
+##### `file-browser.ts` - File browser component (48-665)
+Modal file browser for navigating the filesystem and selecting files/directories. Supports Git status display, file preview with Monaco editor, and diff viewing.
+- **Events fired**:
+  - `insert-path` - When inserting a file path into terminal (detail: { path: string, type: 'file' | 'directory' })
+  - `open-in-editor` - When opening a file in external editor (detail: { path: string })
+  - `directory-selected` - When a directory is selected in 'select' mode (detail: string)
+  - `browser-cancel` - When the browser is cancelled or closed
+
+##### Icon Components
 - `vibe-logo.ts` - Application logo
 - `terminal-icon.ts` - Terminal icon
 - `copy-icon.ts` - Copy icon
