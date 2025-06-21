@@ -604,19 +604,27 @@ final class TerminalLauncher {
     // MARK: - Terminal Session Launching
 
     func launchTerminalSession(workingDirectory: String, command: String, sessionId: String) throws {
-        // Find vibetunnel binary path
-        let vibetunnelPath = findVibeTunnelBinary()
-
         // Expand tilde in working directory path
         let expandedWorkingDir = (workingDirectory as NSString).expandingTildeInPath
 
         // Escape the working directory for shell
         let escapedWorkingDir = expandedWorkingDir.replacingOccurrences(of: "\"", with: "\\\"")
 
-        // Construct the full command with cd && vibetunnel && exit pattern
-        // vibetunnel will use TTY_SESSION_ID from environment
-        let fullCommand =
-            "cd \"\(escapedWorkingDir)\" && TTY_SESSION_ID=\"\(sessionId)\" \(vibetunnelPath) \(command) && exit"
+        // Construct the full command based on server type
+        let fullCommand: String
+        if ServerManager.shared.serverType == .node {
+            // For Node server, use fwd.ts to create sessions
+            logger.info("Using Node server session creation via fwd.ts")
+            let fwdPath = findNodeFwdPath()
+            let nodeCommand = buildNodeCommand(fwdPath: fwdPath, userCommand: command, workingDir: escapedWorkingDir)
+            fullCommand = "cd \"\(escapedWorkingDir)\" && \(nodeCommand) && exit"
+        } else {
+            // For Go server, use vibetunnel binary
+            logger.info("Using Go server session creation via vibetunnel binary")
+            let vibetunnelPath = findVibeTunnelBinary()
+            // vibetunnel will use TTY_SESSION_ID from environment
+            fullCommand = "cd \"\(escapedWorkingDir)\" && TTY_SESSION_ID=\"\(sessionId)\" \(vibetunnelPath) \(command) && exit"
+        }
 
         // Get the preferred terminal or fallback
         let terminal = getValidTerminal()
@@ -652,21 +660,54 @@ final class TerminalLauncher {
         // Expand tilde in working directory path
         let expandedWorkingDir = (workingDirectory as NSString).expandingTildeInPath
 
-        // Use provided vibetunnel path or find bundled one
-        let vibetunnel = vibetunnelPath ?? findVibeTunnelBinary()
-
         // Properly escape the directory path for shell
         let escapedDir = expandedWorkingDir.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
 
-        // When called from Swift server, we need to construct the full command with vibetunnel
-        // When called from Go server via socket, command is already pre-formatted
-        let fullCommand: String = if command.contains("TTY_SESSION_ID=") {
-            // Command is pre-formatted from Go server, add cd and exit
-            "cd \"\(escapedDir)\" && \(command) && exit"
+        // Check which server type is running and use appropriate command
+        let fullCommand: String
+        if ServerManager.shared.serverType == .node {
+            // For Node server, use fwd.ts to create sessions
+            logger.info("Using Node server session creation via fwd.ts")
+            
+            // Find the fwd.ts path - it should be in the node-server bundle
+            let fwdPath = findNodeFwdPath()
+            
+            // When called from socket, command is already pre-formatted
+            if command.contains("TTY_SESSION_ID=") {
+                // Command is pre-formatted, extract the actual command part
+                // Format: TTY_SESSION_ID="..." vibetunnel <actual_command>
+                // We need to find where the actual command starts (after "vibetunnel ")
+                if let vibetunnelRange = command.range(of: "vibetunnel ") {
+                    let actualCommand = String(command[vibetunnelRange.upperBound...])
+                    let nodeCommand = buildNodeCommand(fwdPath: fwdPath, userCommand: actualCommand, workingDir: escapedDir)
+                    fullCommand = "cd \"\(escapedDir)\" && \(nodeCommand) && exit"
+                } else {
+                    // Fallback if format is different
+                    let nodeCommand = buildNodeCommand(fwdPath: fwdPath, userCommand: command, workingDir: escapedDir)
+                    fullCommand = "cd \"\(escapedDir)\" && \(nodeCommand) && exit"
+                }
+            } else {
+                // Command is just the user command
+                let nodeCommand = buildNodeCommand(fwdPath: fwdPath, userCommand: command, workingDir: escapedDir)
+                fullCommand = "cd \"\(escapedDir)\" && \(nodeCommand) && exit"
+            }
         } else {
-            // Command is just the user command, need to add vibetunnel
-            "cd \"\(escapedDir)\" && TTY_SESSION_ID=\"\(sessionId)\" \(vibetunnel) \(command) && exit"
+            // For Go server, use vibetunnel binary
+            logger.info("Using Go server session creation via vibetunnel binary")
+            
+            // Use provided vibetunnel path or find bundled one
+            let vibetunnel = vibetunnelPath ?? findVibeTunnelBinary()
+            
+            // When called from Swift server, we need to construct the full command with vibetunnel
+            // When called from Go server via socket, command is already pre-formatted
+            if command.contains("TTY_SESSION_ID=") {
+                // Command is pre-formatted from Go server, add cd and exit
+                fullCommand = "cd \"\(escapedDir)\" && \(command) && exit"
+            } else {
+                // Command is just the user command, need to add vibetunnel
+                fullCommand = "cd \"\(escapedDir)\" && TTY_SESSION_ID=\"\(sessionId)\" \(vibetunnel) \(command) && exit"
+            }
         }
 
         // Get the preferred terminal or fallback
@@ -700,5 +741,47 @@ final class TerminalLauncher {
 
         logger.error("No vibetunnel binary found in app bundle, command will fail")
         return "echo 'VibeTunnel: vibetunnel binary not found in app bundle'; false"
+    }
+    
+    private func findNodeFwdPath() -> String {
+        // Look for fwd.ts in the bundled node-server directory
+        if let resourcesPath = Bundle.main.resourcePath {
+            let nodeServerPath = URL(fileURLWithPath: resourcesPath).appendingPathComponent("node-server")
+            let fwdPath = nodeServerPath.appendingPathComponent("src/fwd.ts").path
+            
+            if FileManager.default.fileExists(atPath: fwdPath) {
+                logger.info("Using Node fwd.ts at: \(fwdPath)")
+                return fwdPath
+            }
+        }
+        
+        logger.error("No fwd.ts found in node-server bundle, command will fail")
+        return "echo 'VibeTunnel: fwd.ts not found in node-server bundle'; false"
+    }
+    
+    private func getNodeExecutablePath() -> String? {
+        // Check for bundled Node.js runtime
+        if let bundledPath = Bundle.main.path(forResource: "node", ofType: nil, inDirectory: "node") {
+            return bundledPath
+        }
+        return nil
+    }
+    
+    private func buildNodeCommand(fwdPath: String, userCommand: String, workingDir: String) -> String {
+        // Check if we have a bundled Node.js
+        if let nodePath = getNodeExecutablePath() {
+            // Use bundled Node.js with npx
+            let nodeDir = URL(fileURLWithPath: nodePath).deletingLastPathComponent().path
+            let npxPath = URL(fileURLWithPath: nodeDir).appendingPathComponent("npx").path
+            
+            if FileManager.default.fileExists(atPath: npxPath) {
+                logger.info("Using bundled Node.js and npx")
+                return "\"\(npxPath)\" tsx \"\(fwdPath)\" \(userCommand)"
+            }
+        }
+        
+        // Fallback to system npx
+        logger.info("Using system npx (bundled Node.js not found)")
+        return "npx tsx \"\(fwdPath)\" \(userCommand)"
     }
 }
