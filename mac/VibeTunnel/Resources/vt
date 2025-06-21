@@ -1,0 +1,37 @@
+#!/bin/bash
+# VibeTunnel CLI wrapper
+
+# Try standard locations first, but verify the binary exists
+APP_PATH=""
+for TRY_PATH in "/Applications/VibeTunnel.app" "$HOME/Applications/VibeTunnel.app"; do
+    if [ -d "$TRY_PATH" ] && [ -f "$TRY_PATH/Contents/Resources/vibetunnel" ]; then
+        APP_PATH="$TRY_PATH"
+        break
+    fi
+done
+
+# If not found in standard locations with valid binary, search for it
+if [ -z "$APP_PATH" ]; then
+    # First try DerivedData (for development)
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "VibeTunnel.app" -type d 2>/dev/null | grep -v "\.dSYM" | head -1)
+    
+    # If still not found, use mdfind as last resort
+    if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+        APP_PATH=$(mdfind -name "VibeTunnel.app" 2>/dev/null | grep -v "\.dSYM" | head -1)
+    fi
+    
+    if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+        echo "Error: VibeTunnel.app not found anywhere on the system" >&2
+        exit 1
+    fi
+fi
+
+# Execute vibetunnel from app bundle
+VIBETUNNEL_BIN="$APP_PATH/Contents/Resources/vibetunnel"
+if [ ! -f "$VIBETUNNEL_BIN" ]; then
+    echo "Error: vibetunnel binary not found in app bundle at $VIBETUNNEL_BIN" >&2
+    exit 1
+fi
+
+# Run with fwd command
+exec "$VIBETUNNEL_BIN" fwd "$@"

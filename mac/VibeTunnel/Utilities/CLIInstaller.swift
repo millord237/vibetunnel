@@ -47,8 +47,7 @@ final class CLIInstaller {
                 if let content = try? String(contentsOfFile: vtPath, encoding: .utf8) {
                     // Verify it's our wrapper script with all expected components
                     isCorrectlyInstalled = content.contains("VibeTunnel CLI wrapper") &&
-                        content.contains("APP_PATH=\"/Applications/VibeTunnel.app\"") &&
-                        content.contains("$APP_PATH/Contents/Resources/vibetunnel") &&
+                        content.contains("$TRY_PATH/Contents/Resources/vibetunnel") &&
                         content.contains("exec \"$VIBETUNNEL_BIN\" fwd \"$@\"")
                 }
             }
@@ -73,11 +72,11 @@ final class CLIInstaller {
         isInstalling = true
         lastError = nil
 
-        // Verify that vibetunnel exists in the app bundle
-        guard Bundle.main.path(forResource: "vibetunnel", ofType: nil) != nil else {
-            logger.error("CLIInstaller: Could not find vibetunnel binary in app bundle")
-            lastError = "The vibetunnel binary could not be found in the application bundle."
-            showError("The vibetunnel binary could not be found in the application bundle.")
+        // Verify that vt script exists in the app bundle
+        guard let vtScriptPath = Bundle.main.path(forResource: "vt", ofType: nil) else {
+            logger.error("CLIInstaller: Could not find vt script in app bundle")
+            lastError = "The vt script could not be found in the application bundle."
+            showError("The vt script could not be found in the application bundle.")
             isInstalling = false
             return
         }
@@ -108,7 +107,15 @@ final class CLIInstaller {
 
     /// Performs the actual installation with sudo privileges
     private func performInstallation() {
-        logger.info("CLIInstaller: Creating vt wrapper script")
+        logger.info("CLIInstaller: Installing vt script")
+
+        guard let vtScriptPath = Bundle.main.path(forResource: "vt", ofType: nil) else {
+            logger.error("CLIInstaller: Could not find vt script in app bundle")
+            lastError = "The vt script could not be found in the application bundle."
+            showError("The vt script could not be found in the application bundle.")
+            isInstalling = false
+            return
+        }
 
         let vtTargetPath = "/usr/local/bin/vt"
         let binDirectory = "/usr/local/bin"
@@ -130,35 +137,10 @@ final class CLIInstaller {
             echo "Removed existing file at \(vtTargetPath)"
         fi
 
-        # Create vt wrapper script that finds and runs vibetunnel from app bundle
-        cat > "\(vtTargetPath)" << 'EOF'
-        #!/bin/bash
-        # VibeTunnel CLI wrapper
-
-        # Find VibeTunnel.app installation
-        APP_PATH="/Applications/VibeTunnel.app"
-        if [ ! -d "$APP_PATH" ]; then
-            # Try to find it in user Applications
-            APP_PATH="$HOME/Applications/VibeTunnel.app"
-            if [ ! -d "$APP_PATH" ]; then
-                echo "Error: VibeTunnel.app not found in /Applications or ~/Applications" >&2
-                exit 1
-            fi
-        fi
-
-        # Execute vibetunnel from app bundle
-        VIBETUNNEL_BIN="$APP_PATH/Contents/Resources/vibetunnel"
-        if [ ! -f "$VIBETUNNEL_BIN" ]; then
-            echo "Error: vibetunnel binary not found in app bundle" >&2
-            exit 1
-        fi
-
-        # Run with fwd command
-        exec "$VIBETUNNEL_BIN" fwd "$@"
-        EOF
-
+        # Copy vt script from app bundle
+        cp "\(vtScriptPath)" "\(vtTargetPath)"
         chmod +x "\(vtTargetPath)"
-        echo "Created vt wrapper script at \(vtTargetPath)"
+        echo "Installed vt script at \(vtTargetPath)"
 
         # Clean up old vibetunnel binary if it exists
         if [ -f "/usr/local/bin/vibetunnel" ]; then
