@@ -129,6 +129,25 @@ struct TerminalHostingView: UIViewRepresentable {
         terminal.font = font
     }
 
+    // MARK: - Buffer Types
+    
+    struct BufferSnapshot {
+        let cols: Int
+        let rows: Int
+        let viewportY: Int
+        let cursorX: Int
+        let cursorY: Int
+        let cells: [[BufferCell]]
+    }
+    
+    struct BufferCell {
+        let char: String
+        let width: Int
+        let fg: Int?
+        let bg: Int?
+        let attributes: Int?
+    }
+    
     @MainActor
     class Coordinator: NSObject {
         let onInput: (String) -> Void
@@ -150,6 +169,133 @@ struct TerminalHostingView: UIViewRepresentable {
             Task { @MainActor in
                 viewModel.terminalCoordinator = self
             }
+        }
+        
+        /// Update terminal buffer from binary buffer data using optimized ANSI sequences
+        func updateBuffer(from snapshot: BufferSnapshot) {
+            guard let terminal = terminal else { return }
+            
+            // Update terminal dimensions if needed
+            let currentCols = terminal.getTerminal().cols
+            let currentRows = terminal.getTerminal().rows
+            
+            if currentCols != snapshot.cols || currentRows != snapshot.rows {
+                terminal.resize(cols: snapshot.cols, rows: snapshot.rows)
+            }
+            
+            // Convert buffer to optimized ANSI sequences
+            let ansiData = convertBufferToOptimizedANSI(snapshot)
+            
+            // Feed the ANSI data to the terminal
+            feedData(ansiData)
+        }
+        
+        private func convertBufferToOptimizedANSI(_ snapshot: BufferSnapshot) -> String {
+            var output = ""
+            
+            // Clear screen and reset cursor
+            output += "\u{001B}[2J\u{001B}[H"
+            
+            // Track current attributes to minimize escape sequences
+            var currentFg: Int?
+            var currentBg: Int?
+            var currentAttrs: Int = 0
+            
+            // Render each row
+            for (rowIndex, row) in snapshot.cells.enumerated() {
+                if rowIndex > 0 {
+                    output += "\r\n"
+                }
+                
+                var lastNonSpaceIndex = -1
+                for (index, cell) in row.enumerated() {
+                    if cell.char != " " || cell.bg != nil {
+                        lastNonSpaceIndex = index
+                    }
+                }
+                
+                // Only render up to the last non-space character
+                for (colIndex, cell) in row.enumerated() {
+                    if colIndex > lastNonSpaceIndex {
+                        break
+                    }
+                    
+                    // Handle attributes efficiently
+                    var needsReset = false
+                    if let attrs = cell.attributes, attrs != currentAttrs {
+                        needsReset = true
+                        currentAttrs = attrs
+                    }
+                    
+                    // Handle colors efficiently
+                    if cell.fg != currentFg || cell.bg != currentBg || needsReset {
+                        if needsReset {
+                            output += "\u{001B}[0m"
+                            currentFg = nil
+                            currentBg = nil
+                            
+                            // Apply attributes
+                            if let attrs = cell.attributes {
+                                if (attrs & 0x01) != 0 { output += "\u{001B}[1m" } // Bold
+                                if (attrs & 0x02) != 0 { output += "\u{001B}[3m" } // Italic
+                                if (attrs & 0x04) != 0 { output += "\u{001B}[4m" } // Underline
+                                if (attrs & 0x08) != 0 { output += "\u{001B}[2m" } // Dim
+                                if (attrs & 0x10) != 0 { output += "\u{001B}[7m" } // Inverse
+                                if (attrs & 0x40) != 0 { output += "\u{001B}[9m" } // Strikethrough
+                            }
+                        }
+                        
+                        // Apply foreground color
+                        if cell.fg != currentFg {
+                            currentFg = cell.fg
+                            if let fg = cell.fg {
+                                if fg & 0xFF000000 != 0 {
+                                    // RGB color
+                                    let r = (fg >> 16) & 0xFF
+                                    let g = (fg >> 8) & 0xFF
+                                    let b = fg & 0xFF
+                                    output += "\u{001B}[38;2;\(r);\(g);\(b)m"
+                                } else if fg <= 255 {
+                                    // Palette color
+                                    output += "\u{001B}[38;5;\(fg)m"
+                                }
+                            } else {
+                                output += "\u{001B}[39m"
+                            }
+                        }
+                        
+                        // Apply background color
+                        if cell.bg != currentBg {
+                            currentBg = cell.bg
+                            if let bg = cell.bg {
+                                if bg & 0xFF000000 != 0 {
+                                    // RGB color
+                                    let r = (bg >> 16) & 0xFF
+                                    let g = (bg >> 8) & 0xFF
+                                    let b = bg & 0xFF
+                                    output += "\u{001B}[48;2;\(r);\(g);\(b)m"
+                                } else if bg <= 255 {
+                                    // Palette color
+                                    output += "\u{001B}[48;5;\(bg)m"
+                                }
+                            } else {
+                                output += "\u{001B}[49m"
+                            }
+                        }
+                    }
+                    
+                    // Add the character
+                    output += cell.char
+                }
+            }
+            
+            // Reset attributes
+            output += "\u{001B}[0m"
+            
+            // Position cursor
+            output += "\u{001B}[\(snapshot.cursorY + 1);\(snapshot.cursorX + 1)H"
+            
+            return output
         }
 
         func feedData(_ data: String) {

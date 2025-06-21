@@ -6,6 +6,26 @@ enum TerminalWebSocketEvent {
     case output(timestamp: Double, data: String)
     case resize(timestamp: Double, dimensions: String)
     case exit(code: Int)
+    case bufferUpdate(snapshot: BufferSnapshot)
+}
+
+/// Binary buffer snapshot data
+struct BufferSnapshot {
+    let cols: Int
+    let rows: Int
+    let viewportY: Int
+    let cursorX: Int
+    let cursorY: Int
+    let cells: [[BufferCell]]
+}
+
+/// Individual cell data
+struct BufferCell {
+    let char: String
+    let width: Int
+    let fg: Int?
+    let bg: Int?
+    let attributes: Int?
 }
 
 /// Errors that can occur during WebSocket operations.
@@ -234,30 +254,12 @@ class BufferWebSocketClient: NSObject {
             return nil
         }
         
-        // Convert buffer snapshot to terminal output
-        let outputData = convertBufferToANSI(bufferSnapshot)
-        print("[BufferWebSocket] Decoded buffer: \(bufferSnapshot.cols)x\(bufferSnapshot.rows), \(outputData.count) bytes output")
+        print("[BufferWebSocket] Decoded buffer: \(bufferSnapshot.cols)x\(bufferSnapshot.rows)")
         
-        // Return as output event with current timestamp
-        return .output(timestamp: Date().timeIntervalSince1970, data: outputData)
+        // Return buffer update event
+        return .bufferUpdate(snapshot: bufferSnapshot)
     }
     
-    private struct BufferSnapshot {
-        let cols: Int
-        let rows: Int
-        let viewportY: Int
-        let cursorX: Int
-        let cursorY: Int
-        let cells: [[BufferCell]]
-    }
-    
-    private struct BufferCell {
-        let char: String
-        let width: Int
-        let fg: Int?
-        let bg: Int?
-        let attributes: Int?
-    }
     
     private func decodeBinaryBuffer(_ data: Data) -> BufferSnapshot? {
         var offset = 0
@@ -475,93 +477,6 @@ class BufferWebSocketClient: NSObject {
         return (BufferCell(char: char, width: width, fg: fg, bg: bg, attributes: attributes), currentOffset)
     }
     
-    private func convertBufferToANSI(_ snapshot: BufferSnapshot) -> String {
-        var output = ""
-        
-        // Clear screen and move cursor to top
-        output += "\u{001B}[2J\u{001B}[H"
-        
-        // Render each row
-        for (rowIndex, row) in snapshot.cells.enumerated() {
-            if rowIndex > 0 {
-                output += "\n"
-            }
-            
-            var currentFg: Int?
-            var currentBg: Int?
-            var currentAttrs: Int = 0
-            
-            for cell in row {
-                // Handle attributes
-                if let attrs = cell.attributes, attrs != currentAttrs {
-                    // Reset all attributes
-                    output += "\u{001B}[0m"
-                    currentAttrs = attrs
-                    currentFg = nil
-                    currentBg = nil
-                    
-                    // Apply new attributes
-                    if (attrs & 0x01) != 0 { output += "\u{001B}[1m" } // Bold
-                    if (attrs & 0x02) != 0 { output += "\u{001B}[3m" } // Italic
-                    if (attrs & 0x04) != 0 { output += "\u{001B}[4m" } // Underline
-                    if (attrs & 0x08) != 0 { output += "\u{001B}[2m" } // Dim
-                    if (attrs & 0x10) != 0 { output += "\u{001B}[7m" } // Inverse
-                    if (attrs & 0x40) != 0 { output += "\u{001B}[9m" } // Strikethrough
-                }
-                
-                // Handle foreground color
-                if cell.fg != currentFg {
-                    currentFg = cell.fg
-                    if let fg = cell.fg {
-                        if fg & 0xFF000000 != 0 {
-                            // RGB color
-                            let r = (fg >> 16) & 0xFF
-                            let g = (fg >> 8) & 0xFF
-                            let b = fg & 0xFF
-                            output += "\u{001B}[38;2;\(r);\(g);\(b)m"
-                        } else if fg <= 255 {
-                            // Palette color
-                            output += "\u{001B}[38;5;\(fg)m"
-                        }
-                    } else {
-                        // Default foreground
-                        output += "\u{001B}[39m"
-                    }
-                }
-                
-                // Handle background color
-                if cell.bg != currentBg {
-                    currentBg = cell.bg
-                    if let bg = cell.bg {
-                        if bg & 0xFF000000 != 0 {
-                            // RGB color
-                            let r = (bg >> 16) & 0xFF
-                            let g = (bg >> 8) & 0xFF
-                            let b = bg & 0xFF
-                            output += "\u{001B}[48;2;\(r);\(g);\(b)m"
-                        } else if bg <= 255 {
-                            // Palette color
-                            output += "\u{001B}[48;5;\(bg)m"
-                        }
-                    } else {
-                        // Default background
-                        output += "\u{001B}[49m"
-                    }
-                }
-                
-                // Add the character
-                output += cell.char
-            }
-        }
-        
-        // Reset attributes at the end
-        output += "\u{001B}[0m"
-        
-        // Position cursor
-        output += "\u{001B}[\(snapshot.cursorY + 1);\(snapshot.cursorX + 1)H"
-        
-        return output
-    }
 
     func subscribe(to sessionId: String, handler: @escaping (TerminalWebSocketEvent) -> Void) {
         subscriptions[sessionId] = handler

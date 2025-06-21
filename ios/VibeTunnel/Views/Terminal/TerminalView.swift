@@ -506,6 +506,32 @@ class TerminalViewModel {
             if castRecorder.isRecording {
                 stopRecording()
             }
+            
+        case .bufferUpdate(let snapshot):
+            // Update terminal buffer directly
+            if let coordinator = terminalCoordinator {
+                coordinator.updateBuffer(from: TerminalHostingView.BufferSnapshot(
+                    cols: snapshot.cols,
+                    rows: snapshot.rows,
+                    viewportY: snapshot.viewportY,
+                    cursorX: snapshot.cursorX,
+                    cursorY: snapshot.cursorY,
+                    cells: snapshot.cells.map { row in
+                        row.map { cell in
+                            TerminalHostingView.BufferCell(
+                                char: cell.char,
+                                width: cell.width,
+                                fg: cell.fg,
+                                bg: cell.bg,
+                                attributes: cell.attributes
+                            )
+                        }
+                    }
+                ))
+            } else {
+                // Fallback: buffer updates not available yet
+                print("Warning: Direct buffer update not available")
+            }
         }
     }
 
