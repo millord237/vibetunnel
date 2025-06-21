@@ -92,7 +92,7 @@ try {
 
   // 3. Compile with Bun
   console.log('Compiling with Bun...');
-  execSync('bun build src/server.ts --compile --outfile native/vibetunnel', { stdio: 'inherit' });
+  execSync('bun build src/index.ts --compile --outfile native/vibetunnel', { stdio: 'inherit' });
 
   // 4. Copy native modules
   console.log('Creating native directory and copying modules...');
