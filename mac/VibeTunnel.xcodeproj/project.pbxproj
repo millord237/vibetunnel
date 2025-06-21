@@ -116,6 +116,8 @@
 				788687EF2DFF4FCB00B22C15 /* Resources */,
 				B2C3D4E5F6A7B8C9D0E1F234 /* Build Web Frontend */,
 				C2D3E4F5A6B7C8D9E0F1A234 /* Build Go vibetunnel Universal Binary */,
+				863C9A2E8379CC685DB09770 /* Download Node.js Runtime */,
+				AF2AD3F29DC50479EE7A588C /* Build Node.js Server Bundle */,
 			);
 			buildRules = (
 			);
@@ -152,8 +154,6 @@
 				788688012DFF4FCB00B22C15 /* VibeTunnelTests */,
 			);
 			name = VibeTunnelTests;
-			packageProductDependencies = (
-			);
 			productName = VibeTunnelTests;
 			productReference = 788687FE2DFF4FCB00B22C15 /* VibeTunnelTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -220,6 +220,50 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		863C9A2E8379CC685DB09770 /* Download Node.js Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Download Node.js Runtime";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/node",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Download Node.js Runtime\necho \"Checking if Node.js runtime should be downloaded...\"\n\n# Only download if explicitly requested\nif [ \"${BUILD_NODE_SERVER}\" != \"true\" ]; then\n    echo \"Skipping Node.js runtime download (set BUILD_NODE_SERVER=true to enable)\"\n    exit 0\nfi\n\necho \"Downloading Node.js runtime...\"\n\n# Get the project directory\nSCRIPT_DIR=\"${SRCROOT}/Scripts\"\nDOWNLOAD_SCRIPT=\"${SCRIPT_DIR}/download-node.sh\"\n\n# Check if download script exists\nif [ ! -f \"${DOWNLOAD_SCRIPT}\" ]; then\n    echo \"error: Node.js download script not found at ${DOWNLOAD_SCRIPT}\"\n    exit 1\nfi\n\n# Make script executable\nchmod +x \"${DOWNLOAD_SCRIPT}\"\n\n# Run the download script\n\"${DOWNLOAD_SCRIPT}\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Node.js runtime download failed\"\n    exit 1\nfi\n\n# Copy Node.js runtime to app bundle from temporary location\nNODE_SOURCE=\"${SRCROOT}/.build-cache/node\"\nNODE_DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/node\"\n\nif [ -d \"${NODE_SOURCE}\" ]; then\n    echo \"Copying Node.js runtime to app bundle...\"\n    mkdir -p \"${NODE_DEST}\"\n    cp -R \"${NODE_SOURCE}/\"* \"${NODE_DEST}/\"\n    \n    # Ensure the binary is executable and signed\n    if [ -f \"${NODE_DEST}/node\" ]; then\n        chmod +x \"${NODE_DEST}/node\"\n        codesign --force --sign - \"${NODE_DEST}/node\"\n    fi\nelse\n    echo \"warning: Node.js runtime not found at ${NODE_SOURCE}\"\nfi\n\necho \"Node.js runtime setup complete\"\n";
+		};
+		AF2AD3F29DC50479EE7A588C /* Build Node.js Server Bundle */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../web/src/server.ts",
+				"$(SRCROOT)/../web/src/server",
+				"$(SRCROOT)/../web/package.json",
+				"$(SRCROOT)/Scripts/build-node-server.sh",
+			);
+			name = "Build Node.js Server Bundle";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/node-server",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Build Node.js Server Bundle\necho \"Checking if Node.js server should be built...\"\n\n# Only build if explicitly requested\nif [ \"${BUILD_NODE_SERVER}\" != \"true\" ]; then\n    echo \"Skipping Node.js server build (set BUILD_NODE_SERVER=true to enable)\"\n    exit 0\nfi\n\necho \"Building Node.js server bundle...\"\n\n# Get the project directory\nSCRIPT_DIR=\"${SRCROOT}/Scripts\"\nBUILD_SCRIPT=\"${SCRIPT_DIR}/build-node-server.sh\"\n\n# Check if build script exists\nif [ ! -f \"${BUILD_SCRIPT}\" ]; then\n    echo \"error: Node.js server build script not found at ${BUILD_SCRIPT}\"\n    exit 1\nfi\n\n# Make script executable\nchmod +x \"${BUILD_SCRIPT}\"\n\n# Run the build script\n\"${BUILD_SCRIPT}\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Node.js server build failed\"\n    exit 1\nfi\n\n# Copy Node.js server to app bundle from temporary location\nSERVER_SOURCE=\"${SRCROOT}/.build-cache/node-server\"\nSERVER_DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/node-server\"\n\nif [ -d \"${SERVER_SOURCE}\" ]; then\n    echo \"Copying Node.js server to app bundle...\"\n    rm -rf \"${SERVER_DEST}\"\n    mkdir -p \"${SERVER_DEST}\"\n    cp -R \"${SERVER_SOURCE}/\"* \"${SERVER_DEST}/\"\n    echo \"Node.js server copied to app bundle\"\nelse\n    echo \"error: Node.js server not found at ${SERVER_SOURCE}\"\n    exit 1\nfi\n\necho \"Node.js server bundle built successfully\"\n";
+		};
 		B2C3D4E5F6A7B8C9D0E1F234 /* Build Web Frontend */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -435,6 +479,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				BUILD_NODE_SERVER = true;
 				CODE_SIGN_ENTITLEMENTS = VibeTunnel/VibeTunnel.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -472,6 +517,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				BUILD_NODE_SERVER = true;
 				CODE_SIGN_ENTITLEMENTS = VibeTunnel/VibeTunnel.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;

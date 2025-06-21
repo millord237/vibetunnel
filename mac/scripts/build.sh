@@ -93,6 +93,26 @@ else
     exit 1
 fi
 
+# Build Node.js server bundle (optional)
+if [[ "${BUILD_NODE_SERVER:-false}" == "true" ]]; then
+    # Download Node.js runtime first if needed
+    if [[ -x "$SCRIPT_DIR/download-node.sh" ]]; then
+        echo "🔨 Downloading Node.js runtime..."
+        "$SCRIPT_DIR/download-node.sh"
+        echo "✓ Node.js runtime prepared"
+    fi
+    
+    echo "🔨 Building Node.js server bundle..."
+    if [[ -x "$SCRIPT_DIR/build-node-server.sh" ]]; then
+        "$SCRIPT_DIR/build-node-server.sh"
+        echo "✓ Node.js server bundle built successfully"
+    else
+        echo "Warning: Node.js server build script not found"
+    fi
+else
+    echo "ℹ️  Skipping Node.js server build (set BUILD_NODE_SERVER=true to enable)"
+fi
+
 # Build the app
 cd "$MAC_DIR"
 

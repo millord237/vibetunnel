@@ -190,15 +190,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
                     // Start monitoring sessions after server starts
                     sessionMonitor.startMonitoring()
-
-                    // Test the server after a short delay
-                    try await Task.sleep(for: .milliseconds(500))
-                    if let url = URL(string: "http://127.0.0.1:\(serverManager.port)/api/health") {
-                        let (_, response) = try await URLSession.shared.data(from: url)
-                        if let httpResponse = response as? HTTPURLResponse {
-                            logger.info("Server health check response: \(httpResponse.statusCode)")
-                        }
-                    }
                 } else {
                     logger.error("HTTP server failed to start")
                     if let error = serverManager.lastError {

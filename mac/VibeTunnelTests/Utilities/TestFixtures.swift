@@ -84,23 +84,6 @@ enum TestFixtures {
         )
     }
 
-    // MARK: - Health Check Fixtures
-
-    static func healthCheckResponse(
-        status: String = "healthy",
-        sessions: Int = 0,
-        version: String = "1.0.0"
-    )
-        -> TunnelSession.HealthResponse
-    {
-        TunnelSession.HealthResponse(
-            status: status,
-            timestamp: Date(),
-            sessions: sessions,
-            version: version
-        )
-    }
-
     // MARK: - Error Response Fixtures
 
     static func errorResponse(

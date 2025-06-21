@@ -126,8 +126,6 @@ public struct ListSessionsResponse: Codable, Sendable {
     }
 }
 
-// MARK: - Extensions for TunnelClient
-
 extension TunnelSession {
     /// Client information for session creation.
     ///
@@ -214,24 +212,6 @@ extension TunnelSession {
             self.exitCode = exitCode
             self.stdout = stdout
             self.stderr = stderr
-        }
-    }
-
-    /// Health check response.
-    ///
-    /// Provides server status information including version,
-    /// timestamp, and active session count.
-    public struct HealthResponse: Codable, Sendable {
-        public let status: String
-        public let timestamp: Date
-        public let sessions: Int
-        public let version: String
-
-        public init(status: String, timestamp: Date, sessions: Int, version: String) {
-            self.status = status
-            self.timestamp = timestamp
-            self.sessions = sessions
-            self.version = version
         }
     }
 

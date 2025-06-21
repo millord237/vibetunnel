@@ -302,3 +302,4 @@ private struct TerminalPreferenceSection: View {
         }
     }
 }
+

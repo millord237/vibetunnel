@@ -12,6 +12,9 @@ import SwiftUI
 @Observable
 class ServerManager {
     @MainActor static let shared = ServerManager()
+    
+    private(set) var serverType: ServerType = .go
+    private(set) var isSwitchingServer = false
 
     var port: String {
         get { UserDefaults.standard.string(forKey: "serverPort") ?? "4020" }
@@ -38,14 +41,10 @@ class ServerManager {
         set { UserDefaults.standard.set(newValue, forKey: "cleanupOnStartup") }
     }
 
-    private(set) var currentServer: GoServer?
+    private(set) var currentServer: VibeTunnelServer?
     private(set) var isRunning = false
     private(set) var isRestarting = false
     private(set) var lastError: Error?
-    private(set) var crashCount = 0
-    private(set) var lastCrashTime: Date?
-    private var monitoringTask: Task<Void, Never>?
-    private var crashRecoveryTask: Task<Void, Never>?
 
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "ServerManager")
     private var logContinuation: AsyncStream<ServerLogEntry>.Continuation?
@@ -53,6 +52,12 @@ class ServerManager {
     private(set) var logStream: AsyncStream<ServerLogEntry>!
 
     private init() {
+        // Load saved server type
+        if let savedType = UserDefaults.standard.string(forKey: "serverType"),
+           let type = ServerType(rawValue: savedType) {
+            self.serverType = type
+        }
+        
         setupLogStream()
 
         // Skip observer setup and monitoring during tests
@@ -64,7 +69,6 @@ class ServerManager {
 
         if !isRunningInTests {
             setupObservers()
-            startCrashMonitoring()
         }
     }
 
@@ -170,8 +174,9 @@ class ServerManager {
         ))
 
         do {
-            let server = GoServer()
+            let server = createServer(type: serverType)
             server.port = port
+            server.bindAddress = bindAddress
 
             // Subscribe to server logs
             serverLogTask = Task { [weak self] in
@@ -263,8 +268,8 @@ class ServerManager {
 
         logger.info("Triggering initial cleanup of exited sessions")
 
-        // Small delay to ensure server is fully ready
-        try? await Task.sleep(for: .milliseconds(500))
+        // Delay to ensure server is fully ready
+        try? await Task.sleep(for: .milliseconds(10000))
 
         do {
             // Create URL for cleanup endpoint
@@ -311,119 +316,8 @@ class ServerManager {
         }
     }
 
-    // MARK: - Crash Recovery
-
-    /// Start monitoring for server crashes
-    private func startCrashMonitoring() {
-        monitoringTask = Task { [weak self] in
-            while !Task.isCancelled {
-                // Wait for 10 seconds between checks
-                try? await Task.sleep(for: .seconds(10))
-
-                guard let self else { return }
-
-                // Only monitor if server should be running
-                guard isRunning,
-                      !isRestarting else { continue }
-
-                // Check if server is responding
-                let isHealthy = await checkServerHealth()
-
-                if !isHealthy && currentServer != nil {
-                    logger.warning("Server health check failed, may have crashed")
-                    await handleServerCrash()
-                }
-            }
-        }
-    }
-
-    /// Check if the server is healthy
-    private func checkServerHealth() async -> Bool {
-        guard let url = URL(string: "http://localhost:\(self.port)/api/health") else {
-            return false
-        }
-
-        do {
-            let request = URLRequest(url: url, timeoutInterval: 5.0)
-            let (_, response) = try await URLSession.shared.data(for: request)
-
-            if let httpResponse = response as? HTTPURLResponse {
-                return httpResponse.statusCode == 200
-            }
-        } catch {
-            // Server not responding
-        }
-
-        return false
-    }
-
-    /// Handle server crash with exponential backoff
-    private func handleServerCrash() async {
-        // Update crash tracking
-        let now = Date()
-        if let lastCrash = lastCrashTime,
-           now.timeIntervalSince(lastCrash) > 300
-        { // Reset count if more than 5 minutes since last crash
-            self.crashCount = 0
-        }
-
-        self.crashCount += 1
-        lastCrashTime = now
-
-        // Log the crash
-        logger.error("Server crashed (crash #\(self.crashCount))")
-        logContinuation?.yield(ServerLogEntry(
-            level: .error,
-            message: "Server crashed unexpectedly (crash #\(self.crashCount))"
-        ))
-
-        // Clear the current server reference
-        currentServer = nil
-        isRunning = false
-
-        // Calculate backoff delay based on crash count
-        let baseDelay: Double = 2.0 // 2 seconds base delay
-        let maxDelay: Double = 60.0 // Max 1 minute delay
-        let delay = min(baseDelay * pow(2.0, Double(self.crashCount - 1)), maxDelay)
-
-        logger.info("Waiting \(delay) seconds before restart attempt...")
-        logContinuation?.yield(ServerLogEntry(
-            level: .info,
-            message: "Waiting \(Int(delay)) seconds before restart attempt..."
-        ))
-
-        // Wait with exponential backoff
-        try? await Task.sleep(for: .seconds(delay))
-
-        // Attempt to restart
-        if !Task.isCancelled {
-            logger.info("Attempting to restart server after crash...")
-            logContinuation?.yield(ServerLogEntry(
-                level: .info,
-                message: "Attempting automatic restart after crash..."
-            ))
-
-            await start()
-
-            // If server started successfully, reset crash count after some time
-            if isRunning {
-                Task {
-                    try? await Task.sleep(for: .seconds(300)) // 5 minutes
-                    if self.isRunning {
-                        self.crashCount = 0
-                        self.logger.info("Server has been stable for 5 minutes, resetting crash count")
-                    }
-                }
-            }
-        }
-    }
-
     /// Manually trigger a server restart (for UI button)
     func manualRestart() async {
-        // Reset crash count for manual restarts
-        self.crashCount = 0
-        self.lastCrashTime = nil
-
         await restart()
     }
 
@@ -431,6 +325,84 @@ class ServerManager {
     func clearAuthCache() async {
         // Authentication cache clearing is no longer needed as external servers handle their own auth
         logger.info("Authentication cache clearing requested - handled by external server")
+    }
+    
+    // MARK: - Server Type Management
+    
+    private func createServer(type: ServerType) -> VibeTunnelServer {
+        switch type {
+        case .go:
+            return GoServer()
+        case .node:
+            return NodeServer()
+        }
+    }
+    
+    /// Switch to a different server type
+    /// - Parameter newType: The server type to switch to
+    /// - Returns: True if the switch was successful, false otherwise
+    @discardableResult
+    func switchServer(to newType: ServerType) async -> Bool {
+        guard newType != serverType else {
+            logger.info("Server type already set to \(newType.displayName)")
+            return true
+        }
+        
+        guard !isSwitchingServer else {
+            logger.warning("Already switching servers")
+            return false
+        }
+        
+        isSwitchingServer = true
+        defer { isSwitchingServer = false }
+        
+        logger.info("Switching server from \(self.serverType.displayName) to \(newType.displayName)")
+        logContinuation?.yield(ServerLogEntry(
+            level: .info,
+            message: "Switching from \(self.serverType.displayName) to \(newType.displayName) server..."
+        ))
+        
+        // Stop current server if running
+        if isRunning {
+            logContinuation?.yield(ServerLogEntry(
+                level: .info,
+                message: "Stopping \(self.serverType.displayName) server..."
+            ))
+            await stop()
+        }
+        
+        // Clean up current server
+        if let server = currentServer {
+            await server.cleanup()
+            currentServer = nil
+        }
+        
+        // Update server type
+        self.serverType = newType
+        UserDefaults.standard.set(newType.rawValue, forKey: "serverType")
+        
+        // Start new server type
+        logContinuation?.yield(ServerLogEntry(
+            level: .info,
+            message: "Starting \(newType.displayName) server..."
+        ))
+        
+        await start()
+        
+        // Check if the new server started successfully
+        if isRunning {
+            logContinuation?.yield(ServerLogEntry(
+                level: .info,
+                message: "Successfully switched to \(newType.displayName) server"
+            ))
+            return true
+        } else {
+            logContinuation?.yield(ServerLogEntry(
+                level: .error,
+                message: "Failed to start \(newType.displayName) server"
+            ))
+            return false
+        }
     }
 
 }

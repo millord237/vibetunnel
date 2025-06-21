@@ -28,85 +28,14 @@ struct ServerLogEntry {
 /// provides high-performance terminal multiplexing by leveraging the Go-based
 /// vibetunnel server. It handles process lifecycle, log streaming, and error recovery.
 @MainActor
-final class GoServer {
-    private var process: Process?
-    private var stdoutPipe: Pipe?
-    private var stderrPipe: Pipe?
-    private var outputTask: Task<Void, Never>?
-    private var errorTask: Task<Void, Never>?
-
-    private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "GoServer")
-    private var logContinuation: AsyncStream<ServerLogEntry>.Continuation?
-    private let processQueue = DispatchQueue(label: "sh.vibetunnel.vibetunnel.GoServer", qos: .userInitiated)
-
-    /// Actor to handle process operations on background thread.
-    ///
-    /// Isolates process management operations to prevent blocking the main thread
-    /// while maintaining Swift concurrency safety.
-    private actor ProcessHandler {
-        private let queue = DispatchQueue(
-            label: "sh.vibetunnel.vibetunnel.GoServer.ProcessHandler",
-            qos: .userInitiated
-        )
-
-        func runProcess(_ process: Process) async throws {
-            try await withCheckedThrowingContinuation { continuation in
-                queue.async {
-                    do {
-                        try process.run()
-                        continuation.resume()
-                    } catch {
-                        continuation.resume(throwing: error)
-                    }
-                }
-            }
-        }
-
-        func waitForExit(_ process: Process) async {
-            await withCheckedContinuation { continuation in
-                queue.async {
-                    process.waitUntilExit()
-                    continuation.resume()
-                }
-            }
-        }
-
-        func terminateProcess(_ process: Process) async {
-            await withCheckedContinuation { continuation in
-                queue.async {
-                    process.terminate()
-                    continuation.resume()
-                }
-            }
-        }
-    }
-
-    private let processHandler = ProcessHandler()
-
-    private(set) var isRunning = false
-
-    var port: String = "" {
-        didSet {
-            // If server is running and port changed, we need to restart
-            if isRunning && oldValue != port {
-                Task {
-                    try? await restart()
-                }
-            }
-        }
-    }
-
-    let logStream: AsyncStream<ServerLogEntry>
+final class GoServer: BaseProcessServer {
+    override var serverType: ServerType { .go }
 
     init() {
-        var localContinuation: AsyncStream<ServerLogEntry>.Continuation?
-        self.logStream = AsyncStream { continuation in
-            localContinuation = continuation
-        }
-        self.logContinuation = localContinuation
+        super.init(loggerCategory: "GoServer")
     }
 
-    func start() async throws {
+    override func start() async throws {
         guard !isRunning else {
             logger.warning("Go server already running")
             return
@@ -284,40 +213,15 @@ final class GoServer {
                 throw GoServerError.processFailedToStart
             }
 
-            logger.info("Go server process started, performing health check...")
-            logContinuation?.yield(ServerLogEntry(level: .info, message: "Performing health check..."))
+            logger.info("Go server process started successfully")
+            logContinuation?.yield(ServerLogEntry(
+                level: .info,
+                message: "Go vibetunnel server is ready"
+            ))
 
-            // Perform health check to ensure server is actually responding
-            let isHealthy = await performHealthCheck(maxAttempts: 10, delaySeconds: 0.5)
-
-            if isHealthy {
-                logger.info("Go server started successfully and is responding")
-                logContinuation?.yield(ServerLogEntry(level: .info, message: "Health check passed ✓"))
-                logContinuation?.yield(ServerLogEntry(
-                    level: .info,
-                    message: "Go vibetunnel server is ready"
-                ))
-
-                // Monitor process termination
-                Task {
-                    await monitorProcessTermination()
-                }
-            } else {
-                // Server process is running but not responding
-                logger.error("Go server process started but is not responding to health checks")
-                logContinuation?.yield(ServerLogEntry(
-                    level: .error,
-                    message: "Health check failed - server not responding"
-                ))
-
-                // Clean up the non-responsive process
-                process.terminate()
-                self.process = nil
-                self.stdoutPipe = nil
-                self.stderrPipe = nil
-                isRunning = false
-
-                throw GoServerError.serverNotResponding
+            // Monitor process termination
+            Task {
+                await monitorProcessTermination()
             }
         } catch {
             isRunning = false
@@ -344,55 +248,6 @@ final class GoServer {
         }
     }
 
-    func stop() async {
-        guard let process, isRunning else {
-            logger.warning("Go server not running")
-            return
-        }
-
-        logger.info("Stopping Go server")
-        logContinuation?.yield(ServerLogEntry(
-            level: .info,
-            message: "Shutting down Go vibetunnel server..."
-        ))
-
-        // Cancel output monitoring tasks
-        outputTask?.cancel()
-        errorTask?.cancel()
-
-        // Terminate the process on background thread
-        await processHandler.terminateProcess(process)
-
-        // Wait for process to terminate (with timeout)
-        let terminated: Void? = await withTimeoutOrNil(seconds: 5) { [self] in
-            await self.processHandler.waitForExit(process)
-        }
-
-        if terminated == nil {
-            // Force kill if termination timeout
-            process.interrupt()
-            logger.warning("Force killed Go server after timeout")
-            logContinuation?.yield(ServerLogEntry(
-                level: .warning,
-                message: "Force killed server after timeout"
-            ))
-        }
-
-        // Clean up
-        self.process = nil
-        self.stdoutPipe = nil
-        self.stderrPipe = nil
-        self.outputTask = nil
-        self.errorTask = nil
-        isRunning = false
-
-        logger.info("Go server stopped")
-        logContinuation?.yield(ServerLogEntry(
-            level: .info,
-            message: "Go vibetunnel server shutdown complete"
-        ))
-    }
-
     func restart() async throws {
         logger.info("Restarting Go server")
         logContinuation?.yield(ServerLogEntry(level: .info, message: "Restarting server"))
@@ -400,124 +255,14 @@ final class GoServer {
         await stop()
         try await start()
     }
+    
+    override func getStaticFilesPath() -> String? {
+        guard let resourcesPath = Bundle.main.resourcePath else { return nil }
+        return URL(fileURLWithPath: resourcesPath).appendingPathComponent("web/public").path
+    }
 
     // MARK: - Private Methods
-
-    private func performHealthCheck(maxAttempts: Int, delaySeconds: Double) async -> Bool {
-        guard let healthURL = URL(string: "http://127.0.0.1:\(port)/api/health") else {
-            return false
-        }
-
-        for attempt in 1...maxAttempts {
-            do {
-                // Create request with short timeout
-                var request = URLRequest(url: healthURL)
-                request.timeoutInterval = 2.0
-
-                logContinuation?.yield(ServerLogEntry(
-                    level: .debug,
-                    message: "Health check attempt \(attempt)/\(maxAttempts)..."
-                ))
-
-                let (_, response) = try await URLSession.shared.data(for: request)
-
-                if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                    logger.debug("Health check succeeded on attempt \(attempt)")
-                    return true
-                }
-            } catch {
-                logger.debug("Health check attempt \(attempt) failed: \(error.localizedDescription)")
-                if attempt == maxAttempts {
-                    logContinuation?.yield(ServerLogEntry(
-                        level: .warning,
-                        message: "Health check failed after \(maxAttempts) attempts"
-                    ))
-                }
-            }
-
-            // Wait before next attempt (except on last attempt)
-            if attempt < maxAttempts {
-                try? await Task.sleep(for: .seconds(delaySeconds))
-            }
-        }
-
-        return false
-    }
-
-    private func startOutputMonitoring() {
-        // Capture pipes and port before starting detached tasks
-        let stdoutPipe = self.stdoutPipe
-        let stderrPipe = self.stderrPipe
-        let currentPort = self.port
-
-        // Monitor stdout on background thread
-        outputTask = Task.detached { [weak self] in
-            guard let self, let pipe = stdoutPipe else { return }
-
-            let handle = pipe.fileHandleForReading
-            self.logger.debug("Starting stdout monitoring for Go server on port \(currentPort)")
-
-            while !Task.isCancelled {
-                autoreleasepool {
-                    let data = handle.availableData
-                    if !data.isEmpty, let output = String(data: data, encoding: .utf8) {
-                        let lines = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .components(separatedBy: .newlines)
-                        for line in lines where !line.isEmpty {
-                            // Skip shell initialization messages
-                            if line.contains("zsh:") || line.hasPrefix("Last login:") {
-                                continue
-                            }
-                            Task { @MainActor [weak self] in
-                                guard let self else { return }
-                                let level = self.detectLogLevel(from: line)
-                                self.logContinuation?.yield(ServerLogEntry(
-                                    level: level,
-                                    message: line
-                                ))
-                            }
-                        }
-                    }
-                }
-            }
-
-            self.logger.debug("Stopped stdout monitoring for Go server")
-        }
-
-        // Monitor stderr on background thread
-        errorTask = Task.detached { [weak self] in
-            guard let self, let pipe = stderrPipe else { return }
-
-            let handle = pipe.fileHandleForReading
-            self.logger.debug("Starting stderr monitoring for Go server on port \(currentPort)")
-
-            while !Task.isCancelled {
-                autoreleasepool {
-                    let data = handle.availableData
-                    if !data.isEmpty, let output = String(data: data, encoding: .utf8) {
-                        let lines = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .components(separatedBy: .newlines)
-                        for line in lines where !line.isEmpty {
-                            // Skip shell initialization messages
-                            if line.contains("zsh:") || line.hasPrefix("Last login:") {
-                                continue
-                            }
-                            Task { @MainActor [weak self] in
-                                guard let self else { return }
-                                self.logContinuation?.yield(ServerLogEntry(
-                                    level: .error,
-                                    message: line
-                                ))
-                            }
-                        }
-                    }
-                }
-            }
-
-            self.logger.debug("Stopped stderr monitoring for Go server")
-        }
-    }
-
+    
     private func monitorProcessTermination() async {
         guard let process else { return }
 
@@ -549,44 +294,6 @@ final class GoServer {
             }
         }
     }
-
-    private func detectLogLevel(from line: String) -> ServerLogEntry.Level {
-        let lowercased = line.lowercased()
-        if lowercased.contains("[error]") || lowercased.contains("fatal") || lowercased.contains("error:") {
-            return .error
-        } else if lowercased.contains("[warn]") || lowercased.contains("warning") || lowercased.contains("warn:") {
-            return .warning
-        } else if lowercased.contains("[debug]") || lowercased.contains("trace") || lowercased.contains("debug:") {
-            return .debug
-        } else {
-            return .info
-        }
-    }
-
-    private func withTimeoutOrNil<T: Sendable>(
-        seconds: TimeInterval,
-        operation: @escaping @Sendable () async -> T
-    )
-        async -> T?
-    {
-        await withTaskGroup(of: T?.self) { group in
-            group.addTask {
-                await operation()
-            }
-
-            group.addTask {
-                try? await Task.sleep(for: .seconds(seconds))
-                return nil
-            }
-
-            if let result = await group.next() {
-                group.cancelAll()
-                return result
-            }
-            group.cancelAll()
-            return nil
-        }
-    }
 }
 
 // MARK: - Errors
@@ -594,7 +301,6 @@ final class GoServer {
 enum GoServerError: LocalizedError {
     case binaryNotFound
     case processFailedToStart
-    case serverNotResponding
     case invalidPort
     case goNotInstalled
 
@@ -604,8 +310,6 @@ enum GoServerError: LocalizedError {
             "The vibetunnel binary was not found in the app bundle"
         case .processFailedToStart:
             "The server process failed to start"
-        case .serverNotResponding:
-            "The server process started but is not responding to health checks"
         case .invalidPort:
             "Server port is not configured"
         case .goNotInstalled:
