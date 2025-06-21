@@ -119,3 +119,4 @@ linux/vibetunnel-go
 web/vibetunnel
 /linux/vibetunnel-new
 /server/vibetunnel-server
+server/vibetunnel-fwd
