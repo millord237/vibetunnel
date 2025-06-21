@@ -4,8 +4,14 @@ import { startVibeTunnelForward } from './server/fwd.js';
 import { startVibeTunnelServer } from './server/server.js';
 import { VERSION } from './server/version.js';
 
-// Enable source map support for better stack traces
-process.setSourceMapsEnabled(true);
+// Source maps are only included if built with --sourcemap flag
+
+// Suppress the SEA warning if running in SEA context
+// This warning is expected and harmless - we handle external modules properly
+if (!process.argv[1]) {
+  // In SEA context, argv[1] is undefined
+  process.env.NODE_NO_WARNINGS = '1';
+}
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
