@@ -2,7 +2,7 @@
 
 /**
  * Build standalone vibetunnel executable with native modules
- * 
+ *
  * Note: Bun does not support universal binaries. This builds for the native architecture only.
  */
 
@@ -99,16 +99,18 @@ try {
   console.log('Compiling with Bun...');
   const buildDate = new Date().toISOString();
   const buildTimestamp = Date.now();
-  
+
   // Detect how we're running bun
   let bunCommand = 'bun';
   if (process.argv[0].includes('npx')) {
     // We're running via npx, so bun should also be run via npx
     bunCommand = 'npx -y bun';
   }
-  
-  const compileCmd = `BUILD_DATE="${buildDate}" BUILD_TIMESTAMP="${buildTimestamp}" ${bunCommand} build src/cli.ts --compile --outfile native/vibetunnel`;
-  
+
+  // Note: Bun compile doesn't fully support sourcemaps in stack traces yet
+  // Using --minify=false to preserve more readable code structure
+  const compileCmd = `BUILD_DATE="${buildDate}" BUILD_TIMESTAMP="${buildTimestamp}" ${bunCommand} build src/cli.ts --compile --sourcemap=inline --outfile native/vibetunnel`;
+
   console.log(`Running: ${compileCmd}`);
   console.log(`Build date: ${buildDate}`);
   execSync(compileCmd, { stdio: 'inherit', env: { ...process.env, BUILD_DATE: buildDate, BUILD_TIMESTAMP: buildTimestamp } });
@@ -116,12 +118,12 @@ try {
   // 4. Copy native modules
   console.log('Creating native directory and copying modules...');
   const nativeModulesDir = 'node_modules/@homebridge/node-pty-prebuilt-multiarch/build/Release';
-  
+
   fs.copyFileSync(
     path.join(nativeModulesDir, 'pty.node'),
     'native/pty.node'
   );
-  
+
   fs.copyFileSync(
     path.join(nativeModulesDir, 'spawn-helper'),
     'native/spawn-helper'

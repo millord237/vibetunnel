@@ -4,14 +4,21 @@ import { startVibeTunnelForward } from './server/fwd.js';
 import { startVibeTunnelServer } from './server/server.js';
 import { VERSION } from './server/version.js';
 
+// Enable source map support for better stack traces
+process.setSourceMapsEnabled(true);
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
+  console.error('Stack trace:', error.stack);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled rejection at:', promise, 'reason:', reason);
+  if (reason instanceof Error) {
+    console.error('Stack trace:', reason.stack);
+  }
   process.exit(1);
 });
 
