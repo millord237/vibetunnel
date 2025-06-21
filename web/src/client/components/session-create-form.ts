@@ -357,7 +357,8 @@ export class SessionCreateForm extends LitElement {
 
       <file-browser
         .visible=${this.showFileBrowser}
-        .currentPath=${this.workingDir}
+        .mode=${'select'}
+        .session=${{ workingDir: this.workingDir } as any}
         @directory-selected=${this.handleDirectorySelected}
         @browser-cancel=${this.handleBrowserCancel}
       ></file-browser>

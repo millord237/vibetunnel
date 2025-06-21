@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from './session-list.js';
 import './terminal.js';
 import './file-browser-fab.js';
-import './file-browser-enhanced.js';
+import './file-browser.js';
 import type { Terminal } from './terminal.js';
 import { CastConverter } from '../utils/cast-converter.js';
 import {
@@ -864,6 +864,36 @@ export class SessionView extends LitElement {
     this.showFileBrowser = false;
   }
 
+  private async handleInsertPath(event: CustomEvent) {
+    const { path, type } = event.detail;
+    if (!path || !this.session) return;
+
+    // Escape the path for shell use (wrap in quotes if it contains spaces)
+    const escapedPath = path.includes(' ') ? `"${path}"` : path;
+
+    // Send the path to the terminal
+    await this.sendInputText(escapedPath);
+
+    console.log(`[SessionView] Inserted ${type} path into terminal:`, escapedPath);
+  }
+
+  private async handleOpenInEditor(event: CustomEvent) {
+    const { path } = event.detail;
+    if (!path || !this.session) return;
+
+    // Escape the path for shell use
+    const escapedPath = path.includes(' ') ? `"${path}"` : path;
+
+    // Try common editors in order of preference
+    // We'll use 'which' to check if they exist, then open with the first one found
+    const command = `(which code && code ${escapedPath}) || (which vim && vim ${escapedPath}) || (which nano && nano ${escapedPath}) || echo "No editor found. Install VS Code, vim, or nano."`;
+
+    // Send the command to the terminal
+    await this.sendInputText(command + '\n');
+
+    console.log(`[SessionView] Opening file in editor:`, escapedPath);
+  }
+
   private async sendInputText(text: string) {
     if (!this.session) return;
 
@@ -1384,11 +1414,14 @@ export class SessionView extends LitElement {
         ></file-browser-fab>
 
         <!-- File Browser Modal -->
-        <file-browser-enhanced
+        <file-browser
           .visible=${this.showFileBrowser}
           .mode=${'browse'}
+          .session=${this.session}
           @browser-cancel=${this.handleCloseFileBrowser}
-        ></file-browser-enhanced>
+          @insert-path=${this.handleInsertPath}
+          @open-in-editor=${this.handleOpenInEditor}
+        ></file-browser>
       </div>
     `;
   }

@@ -8,7 +8,7 @@ import './components/session-create-form.js';
 import './components/session-list.js';
 import './components/session-view.js';
 import './components/session-card.js';
-import './components/file-browser-enhanced.js';
+import './components/file-browser.js';
 
 import type { Session } from './components/session-list.js';
 import type { SessionCard } from './components/session-card.js';
@@ -489,12 +489,12 @@ export class VibeTunnelApp extends LitElement {
           `}
 
       <!-- File Browser Modal -->
-      <file-browser-enhanced
+      <file-browser
         .visible=${this.showFileBrowser}
         .mode=${'browse'}
         .session=${null}
         @browser-cancel=${() => (this.showFileBrowser = false)}
-      ></file-browser-enhanced>
+      ></file-browser>
     `;
   }
 }
