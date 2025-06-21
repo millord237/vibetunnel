@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Build web frontend using Bun
+# Build web frontend using npm
 echo "Building web frontend..."
 
 # Get the project directory
@@ -9,29 +9,47 @@ PUBLIC_DIR="${WEB_DIR}/public"
 DEST_DIR="${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/web/public"
 BUILD_TOOLS_DIR="${PROJECT_DIR}/.build-tools"
 
-# Add local Bun to PATH if it exists
-if [ -d "${PROJECT_DIR}/.build-tools/bun/bin" ]; then
-    export PATH="${PROJECT_DIR}/.build-tools/bun/bin:$PATH"
+# Add common Node.js installation paths to PATH
+# Homebrew on Apple Silicon
+if [ -d "/opt/homebrew/bin" ]; then
+    export PATH="/opt/homebrew/bin:$PATH"
 fi
 
-# Add system Bun to PATH if available
-if [ -d "$HOME/.bun/bin" ]; then
-    export PATH="$HOME/.bun/bin:$PATH"
+# Homebrew on Intel Macs
+if [ -d "/usr/local/bin" ]; then
+    export PATH="/usr/local/bin:$PATH"
+fi
+
+# NVM default location
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    export NVM_DIR="$HOME/.nvm"
+    . "$NVM_DIR/nvm.sh"
+fi
+
+# Node Version Manager (n)
+if [ -d "/usr/local/n/versions" ]; then
+    export PATH="/usr/local/bin:$PATH"
+fi
+
+# MacPorts
+if [ -d "/opt/local/bin" ]; then
+    export PATH="/opt/local/bin:$PATH"
 fi
 
 # Export CI environment variable to prevent interactive prompts
 export CI=true
 
-# Check if Bun is available
-if ! command -v bun &> /dev/null; then
-    echo "error: Bun could not be found in PATH"
+# Check if npm is available
+if ! command -v npm &> /dev/null; then
+    echo "error: npm could not be found in PATH"
     echo "PATH is: $PATH"
-    echo "Please run install-bun.sh or ensure Bun is installed"
+    echo "Please ensure Node.js and npm are installed"
     exit 1
 fi
 
-# Print Bun version for debugging
-echo "Using Bun version: $(bun --version)"
+# Print npm version for debugging
+echo "Using npm version: $(npm --version)"
+echo "Using Node.js version: $(node --version)"
 echo "PATH: $PATH"
 
 # Check if web directory exists
@@ -44,10 +62,10 @@ fi
 cd "${WEB_DIR}"
 
 # Install dependencies
-echo "Installing dependencies with Bun..."
-bun install --no-progress
+echo "Installing dependencies with npm..."
+npm install
 if [ $? -ne 0 ]; then
-    echo "error: bun install failed"
+    echo "error: npm install failed"
     exit 1
 fi
 
@@ -57,10 +75,10 @@ if [ -d "public/output.css" ]; then
 fi
 
 # Build the web frontend
-echo "Running bun bundle..."
-bun run bundle
+echo "Running npm build..."
+npm run build
 if [ $? -ne 0 ]; then
-    echo "error: bun run bundle failed"
+    echo "error: npm run build failed"
     exit 1
 fi
 
