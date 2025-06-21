@@ -112,7 +112,6 @@
 				788687EE2DFF4FCB00B22C15 /* Frameworks */,
 				788687EF2DFF4FCB00B22C15 /* Resources */,
 				B2C3D4E5F6A7B8C9D0E1F234 /* Build Web Frontend */,
-				A1B2C3D4E5F6789012345678 /* Build Bun Executable */,
 			);
 			buildRules = (
 			);
@@ -212,28 +211,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		A1B2C3D4E5F6789012345678 /* Build Bun Executable */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/../web/src/server.ts",
-				"$(SRCROOT)/../web/build-native.js",
-			);
-			name = "Build Bun Executable";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/vibetunnel",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "# Build Bun executable\necho \"Building Bun executable...\"\n\n# Get the script directory\nSCRIPT_DIR=\"${SRCROOT}/scripts\"\nBUILD_SCRIPT=\"${SCRIPT_DIR}/build-bun-executable.sh\"\n\n# Check if build script exists\nif [ ! -f \"${BUILD_SCRIPT}\" ]; then\n    echo \"error: Bun build script not found at ${BUILD_SCRIPT}\"\n    exit 1\nfi\n\n# Make script executable\nchmod +x \"${BUILD_SCRIPT}\"\n\n# Run the build script\n\"${BUILD_SCRIPT}\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Bun executable build failed\"\n    exit 1\nfi\n\necho \"Bun executable build complete\"\n";
-		};
 		B2C3D4E5F6A7B8C9D0E1F234 /* Build Web Frontend */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -243,17 +220,14 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/../web/package.json",
-				"$(SRCROOT)/../web/src",
-				"$(SRCROOT)/../web/tsconfig.json",
-				"$(SRCROOT)/../web/tsconfig.client.json",
-				"$(SRCROOT)/../web/tailwind.config.js",
+				"$(SRCROOT)/../web/",
 			);
 			name = "Build Web Frontend";
 			outputFileListPaths = (
 			);
 			outputPaths = (
 				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/web/public",
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/vibetunnel",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
