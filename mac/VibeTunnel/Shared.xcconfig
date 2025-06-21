@@ -6,7 +6,7 @@
 
 // Include local development settings (if exists)
 // This file is ignored by git and contains personal development team settings
-#include? "Local.xcconfig"
+#include? "../Config/Local.xcconfig"
 
 // Default values (can be overridden in Local.xcconfig)
 // These will be used if Local.xcconfig doesn't exist or doesn't define them
