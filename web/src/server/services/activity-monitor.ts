@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { SessionActivity } from '../../shared/types.js';
 import { createLogger } from '../utils/logger.js';
+import chalk from 'chalk';
 
 const logger = createLogger('activity-monitor');
 
@@ -28,10 +29,13 @@ export class ActivityMonitor {
    * Start monitoring all sessions for activity
    */
   start() {
-    logger.log('Starting activity monitoring');
+    logger.log(chalk.green('activity monitor started'));
 
     // Initial scan of existing sessions
-    this.scanSessions();
+    const sessionCount = this.scanSessions();
+    if (sessionCount > 0) {
+      logger.log(chalk.blue(`monitoring ${sessionCount} existing sessions`));
+    }
 
     // Set up periodic scanning for new sessions
     this.checkInterval = setInterval(() => {
@@ -44,7 +48,7 @@ export class ActivityMonitor {
    * Stop monitoring
    */
   stop() {
-    logger.log('Stopping activity monitoring');
+    logger.log(chalk.yellow('stopping activity monitor'));
 
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
@@ -52,24 +56,30 @@ export class ActivityMonitor {
     }
 
     // Close all watchers
+    const watcherCount = this.watchers.size;
     for (const [sessionId, watcher] of this.watchers) {
       watcher.close();
       this.watchers.delete(sessionId);
     }
 
     this.activities.clear();
+
+    if (watcherCount > 0) {
+      logger.log(chalk.gray(`closed ${watcherCount} file watchers`));
+    }
   }
 
   /**
    * Scan for sessions and start monitoring new ones
    */
-  private scanSessions() {
+  private scanSessions(): number {
     try {
       if (!fs.existsSync(this.controlPath)) {
-        return;
+        return 0;
       }
 
       const entries = fs.readdirSync(this.controlPath, { withFileTypes: true });
+      let newSessions = 0;
 
       for (const entry of entries) {
         if (entry.isDirectory()) {
@@ -84,27 +94,40 @@ export class ActivityMonitor {
 
           // Check if stdout exists
           if (fs.existsSync(streamOutPath)) {
-            this.startMonitoringSession(sessionId, streamOutPath);
+            if (this.startMonitoringSession(sessionId, streamOutPath)) {
+              newSessions++;
+            }
           }
         }
       }
 
       // Clean up sessions that no longer exist
+      const sessionsToCleanup = [];
       for (const [sessionId, _] of this.activities) {
         const sessionDir = path.join(this.controlPath, sessionId);
         if (!fs.existsSync(sessionDir)) {
+          sessionsToCleanup.push(sessionId);
+        }
+      }
+
+      if (sessionsToCleanup.length > 0) {
+        logger.log(chalk.yellow(`cleaning up ${sessionsToCleanup.length} removed sessions`));
+        for (const sessionId of sessionsToCleanup) {
           this.stopMonitoringSession(sessionId);
         }
       }
+
+      return newSessions;
     } catch (error) {
-      logger.error('Error scanning sessions:', error);
+      logger.error('failed to scan sessions:', error);
+      return 0;
     }
   }
 
   /**
    * Start monitoring a specific session
    */
-  private startMonitoringSession(sessionId: string, streamOutPath: string) {
+  private startMonitoringSession(sessionId: string, streamOutPath: string): boolean {
     try {
       const stats = fs.statSync(streamOutPath);
 
@@ -124,9 +147,11 @@ export class ActivityMonitor {
       });
 
       this.watchers.set(sessionId, watcher);
-      logger.debug(`Started monitoring session ${sessionId}`);
+      logger.debug(`started monitoring session ${sessionId}`);
+      return true;
     } catch (error) {
-      logger.error(`Error starting monitor for session ${sessionId}:`, error);
+      logger.error(`failed to start monitor for session ${sessionId}:`, error);
+      return false;
     }
   }
 
@@ -141,7 +166,7 @@ export class ActivityMonitor {
     }
 
     this.activities.delete(sessionId);
-    logger.debug(`Stopped monitoring session ${sessionId}`);
+    logger.debug(`stopped monitoring session ${sessionId}`);
   }
 
   /**
@@ -156,15 +181,21 @@ export class ActivityMonitor {
 
       // Check if file size increased (new output)
       if (stats.size > activity.lastFileSize) {
+        const wasActive = activity.isActive;
         activity.isActive = true;
         activity.lastActivityTime = Date.now();
         activity.lastFileSize = stats.size;
+
+        // Log state transition
+        if (!wasActive) {
+          logger.debug(`session ${sessionId} became active`);
+        }
 
         // Write activity status immediately
         this.writeActivityStatus(sessionId, true);
       }
     } catch (error) {
-      logger.error(`Error handling file change for session ${sessionId}:`, error);
+      logger.error(`failed to handle file change for session ${sessionId}:`, error);
     }
   }
 
@@ -177,6 +208,7 @@ export class ActivityMonitor {
     for (const [sessionId, activity] of this.activities) {
       if (activity.isActive && now - activity.lastActivityTime > this.ACTIVITY_TIMEOUT) {
         activity.isActive = false;
+        logger.debug(`session ${sessionId} became inactive`);
         this.writeActivityStatus(sessionId, false);
       }
     }
@@ -202,12 +234,13 @@ export class ActivityMonitor {
           activityData.session = sessionData;
         } catch (_error) {
           // If we can't read session.json, just proceed without session data
+          logger.debug(`could not read session.json for ${sessionId}`);
         }
       }
 
       fs.writeFileSync(activityPath, JSON.stringify(activityData, null, 2));
     } catch (error) {
-      logger.error(`Error writing activity status for session ${sessionId}:`, error);
+      logger.error(`failed to write activity status for session ${sessionId}:`, error);
     }
   }
 
@@ -216,6 +249,7 @@ export class ActivityMonitor {
    */
   getActivityStatus(): Record<string, SessionActivity> {
     const status: Record<string, SessionActivity> = {};
+    const startTime = Date.now();
 
     // Read from disk to get the most up-to-date status
     try {
@@ -237,6 +271,7 @@ export class ActivityMonitor {
               status[sessionId] = data;
             } catch (_error) {
               // If we can't read the file, create one from current state
+              logger.debug(`could not read activity.json for ${sessionId}`);
               const activity = this.activities.get(sessionId);
               if (activity) {
                 const activityStatus: SessionActivity = {
@@ -251,6 +286,9 @@ export class ActivityMonitor {
                     activityStatus.session = sessionData;
                   } catch (_error) {
                     // Ignore session.json read errors
+                    logger.debug(
+                      `could not read session.json for ${sessionId} when creating activity`
+                    );
                   }
                 }
 
@@ -268,12 +306,20 @@ export class ActivityMonitor {
               };
             } catch (_error) {
               // Ignore errors
+              logger.debug(`could not read session.json for ${sessionId}`);
             }
           }
         }
       }
+
+      const duration = Date.now() - startTime;
+      if (duration > 100) {
+        logger.warn(
+          `activity status scan took ${duration}ms for ${Object.keys(status).length} sessions`
+        );
+      }
     } catch (error) {
-      logger.error('Error reading activity status:', error);
+      logger.error('failed to read activity status:', error);
     }
 
     return status;
@@ -294,6 +340,9 @@ export class ActivityMonitor {
       }
     } catch (_error) {
       // Fall back to creating from current state
+      logger.debug(
+        `could not read activity.json for session ${sessionId}, creating from current state`
+      );
       const activity = this.activities.get(sessionId);
       if (activity) {
         const activityStatus: SessionActivity = {
@@ -308,6 +357,9 @@ export class ActivityMonitor {
             activityStatus.session = sessionData;
           } catch (_error) {
             // Ignore session.json read errors
+            logger.debug(
+              `could not read session.json for ${sessionId} in getSessionActivityStatus`
+            );
           }
         }
 
@@ -326,6 +378,7 @@ export class ActivityMonitor {
         };
       } catch (_error) {
         // Ignore errors
+        logger.debug(`could not read session.json for ${sessionId} when creating default activity`);
       }
     }
 

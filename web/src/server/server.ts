@@ -156,7 +156,7 @@ function parseArgs(): Config {
       config.debug = true;
     } else if (args[i].startsWith('--')) {
       // Unknown argument
-      logger.error(chalk.red(`ERROR: Unknown argument: ${args[i]}`));
+      logger.error(`Unknown argument: ${args[i]}`);
       logger.error('Use --help to see available options');
       process.exit(1);
     }
@@ -180,9 +180,7 @@ function validateConfig(config: ReturnType<typeof parseArgs>) {
     (config.basicAuthUsername && !config.basicAuthPassword) ||
     (!config.basicAuthUsername && config.basicAuthPassword)
   ) {
-    logger.error(
-      chalk.red('ERROR: Both username and password must be provided for authentication')
-    );
+    logger.error('Both username and password must be provided for authentication');
     logger.error(
       'Use --username and --password, or set both VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD'
     );
@@ -191,21 +189,21 @@ function validateConfig(config: ReturnType<typeof parseArgs>) {
 
   // Validate HQ registration configuration
   if (config.hqUrl && (!config.hqUsername || !config.hqPassword)) {
-    logger.error(chalk.red('ERROR: HQ username and password required when --hq-url is specified'));
+    logger.error('HQ username and password required when --hq-url is specified');
     logger.error('Use --hq-username and --hq-password with --hq-url');
     process.exit(1);
   }
 
   // Validate remote name is provided when registering with HQ
   if (config.hqUrl && !config.remoteName) {
-    logger.error(chalk.red('ERROR: Remote name required when --hq-url is specified'));
+    logger.error('Remote name required when --hq-url is specified');
     logger.error('Use --name to specify a unique name for this remote server');
     process.exit(1);
   }
 
   // Validate HQ URL is HTTPS unless explicitly allowed
   if (config.hqUrl && !config.hqUrl.startsWith('https://') && !config.allowInsecureHQ) {
-    logger.error(chalk.red('ERROR: HQ URL must use HTTPS protocol'));
+    logger.error('HQ URL must use HTTPS protocol');
     logger.error('Use --allow-insecure-hq to allow HTTP for testing');
     process.exit(1);
   }
@@ -215,26 +213,22 @@ function validateConfig(config: ReturnType<typeof parseArgs>) {
     (config.hqUrl || config.hqUsername || config.hqPassword) &&
     (!config.hqUrl || !config.hqUsername || !config.hqPassword)
   ) {
-    logger.error(
-      chalk.red('ERROR: All HQ parameters required: --hq-url, --hq-username, --hq-password')
-    );
+    logger.error('All HQ parameters required: --hq-url, --hq-username, --hq-password');
     process.exit(1);
   }
 
   // Can't be both HQ mode and register with HQ
   if (config.isHQMode && config.hqUrl) {
-    logger.error(chalk.red('ERROR: Cannot use --hq and --hq-url together'));
+    logger.error('Cannot use --hq and --hq-url together');
     logger.error('Use --hq to run as HQ server, or --hq-url to register with an HQ');
     process.exit(1);
   }
 
   // If not HQ mode and no HQ URL, warn about authentication
   if (!config.basicAuthUsername && !config.basicAuthPassword && !config.isHQMode && !config.hqUrl) {
-    logger.warn(chalk.red('WARNING: No authentication configured!'));
+    logger.warn('No authentication configured');
     logger.warn(
-      chalk.yellow(
-        'Set VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD or use --username and --password flags.'
-      )
+      'Set VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD or use --username and --password flags'
     );
   }
 }
@@ -261,7 +255,7 @@ let appCreated = false;
 export function createApp(): AppInstance {
   // Prevent multiple app instances
   if (appCreated) {
-    logger.error(chalk.red('ERROR: App already created, preventing duplicate instance'));
+    logger.error('App already created, preventing duplicate instance');
     throw new Error('Duplicate app creation detected');
   }
   appCreated = true;
@@ -289,13 +283,14 @@ export function createApp(): AppInstance {
 
   validateConfig(config);
 
-  logger.log('Creating Express app and HTTP server...');
+  logger.log('Initializing VibeTunnel server components');
   const app = express();
   const server = createServer(app);
   const wss = new WebSocketServer({ server });
 
   // Add JSON body parser middleware
   app.use(express.json());
+  logger.debug('Configured express middleware');
 
   // Control directory for session data
   const CONTROL_DIR =
@@ -305,19 +300,25 @@ export function createApp(): AppInstance {
   if (!fs.existsSync(CONTROL_DIR)) {
     fs.mkdirSync(CONTROL_DIR, { recursive: true });
     logger.log(chalk.green(`Created control directory: ${CONTROL_DIR}`));
+  } else {
+    logger.debug(`Using existing control directory: ${CONTROL_DIR}`);
   }
 
   // Initialize PTY manager
   const ptyManager = new PtyManager(CONTROL_DIR);
+  logger.debug('Initialized PTY manager');
 
   // Initialize Terminal Manager for server-side terminal state
   const terminalManager = new TerminalManager(CONTROL_DIR);
+  logger.debug('Initialized terminal manager');
 
   // Initialize stream watcher for file-based streaming
   const streamWatcher = new StreamWatcher();
+  logger.debug('Initialized stream watcher');
 
   // Initialize activity monitor
   const activityMonitor = new ActivityMonitor(CONTROL_DIR);
+  logger.debug('Initialized activity monitor');
 
   // Initialize HQ components
   let remoteRegistry: RemoteRegistry | null = null;
@@ -329,9 +330,11 @@ export function createApp(): AppInstance {
   if (config.isHQMode) {
     remoteRegistry = new RemoteRegistry();
     logger.log(chalk.green('Running in HQ mode'));
+    logger.debug('Initialized remote registry for HQ mode');
   } else if (config.hqUrl && config.hqUsername && config.hqPassword && config.remoteName) {
     // Generate bearer token for this remote server
     remoteBearerToken = uuidv4();
+    logger.debug(`Generated bearer token for remote server: ${config.remoteName}`);
   }
 
   // Initialize buffer aggregator
@@ -340,6 +343,7 @@ export function createApp(): AppInstance {
     remoteRegistry,
     isHQMode: config.isHQMode,
   });
+  logger.debug('Initialized buffer aggregator');
 
   // Set up authentication
   const authMiddleware = createAuthMiddleware({
@@ -351,10 +355,12 @@ export function createApp(): AppInstance {
 
   // Apply auth middleware to all API routes
   app.use('/api', authMiddleware);
+  logger.debug('Applied authentication middleware to /api routes');
 
   // Serve static files
   const publicPath = path.join(process.cwd(), 'public');
   app.use(express.static(publicPath));
+  logger.debug(`Serving static files from: ${publicPath}`);
 
   // Health check endpoint (no auth required)
   app.get('/api/health', (req, res) => {
@@ -382,6 +388,7 @@ export function createApp(): AppInstance {
       activityMonitor,
     })
   );
+  logger.debug('Mounted session routes');
 
   app.use(
     '/api',
@@ -390,16 +397,18 @@ export function createApp(): AppInstance {
       isHQMode: config.isHQMode,
     })
   );
+  logger.debug('Mounted remote routes');
 
   // Mount filesystem routes
   app.use('/api', createFilesystemRoutes());
+  logger.debug('Mounted filesystem routes');
 
   // WebSocket endpoint for buffer updates
   wss.on('connection', (ws, _req) => {
     if (bufferAggregator) {
       bufferAggregator.handleClientConnection(ws);
     } else {
-      logger.error(chalk.red('[WS] BufferAggregator not initialized'));
+      logger.error('BufferAggregator not initialized for WebSocket connection');
       ws.close();
     }
   });
@@ -426,7 +435,7 @@ export function createApp(): AppInstance {
   const startServer = () => {
     const requestedPort = config.port !== null ? config.port : Number(process.env.PORT) || 4020;
 
-    logger.log(`Attempting to start server on port ${requestedPort}`);
+    logger.log(`Starting server on port ${requestedPort}`);
 
     // Remove all existing error listeners first to prevent duplicates
     server.removeAllListeners('error');
@@ -434,15 +443,13 @@ export function createApp(): AppInstance {
     // Add error handler for port already in use
     server.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
-        logger.error(chalk.red(`Error: Port ${requestedPort} is already in use`));
+        logger.error(`Port ${requestedPort} is already in use`);
         logger.error(
-          chalk.yellow(
-            'Please use a different port with --port <number> or stop the existing server'
-          )
+          'Please use a different port with --port <number> or stop the existing server'
         );
         process.exit(9); // Exit with code 9 to indicate port conflict
       } else {
-        logger.error(chalk.red('Server error:'), error);
+        logger.error('Server error:', error);
         process.exit(1);
       }
     });
@@ -458,11 +465,9 @@ export function createApp(): AppInstance {
         logger.log(`Username: ${config.basicAuthUsername}`);
         logger.log(`Password: ${'*'.repeat(config.basicAuthPassword.length)}`);
       } else {
-        logger.warn(chalk.red('⚠️  WARNING: Server running without authentication!'));
+        logger.warn('Server running without authentication');
         logger.warn(
-          chalk.yellow(
-            'Anyone can access this server. Use --username and --password or set VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD.'
-          )
+          'Anyone can access this server. Use --username and --password or set VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD'
         );
       }
 
@@ -477,8 +482,10 @@ export function createApp(): AppInstance {
           remoteUrl,
           remoteBearerToken || ''
         );
-        logger.log(chalk.green('Remote mode: Will accept Bearer token for HQ access'));
-        logger.log(`Token: ${hqClient.getToken()}`);
+        logger.log(
+          chalk.green(`Remote mode: ${config.remoteName} will accept Bearer token for HQ access`)
+        );
+        logger.debug(`Bearer token: ${hqClient.getToken()}`);
       }
 
       // Send message to parent process if running as child (for testing)
@@ -489,6 +496,7 @@ export function createApp(): AppInstance {
 
       // Register with HQ if configured
       if (hqClient) {
+        logger.log(`Registering with HQ at ${config.hqUrl}`);
         hqClient.register().catch((err) => {
           logger.error('Failed to register with HQ:', err);
         });
@@ -503,9 +511,11 @@ export function createApp(): AppInstance {
         ptyManager,
       });
       controlDirWatcher.start();
+      logger.debug('Started control directory watcher');
 
       // Start activity monitor
       activityMonitor.start();
+      logger.debug('Started activity monitor');
     });
   };
 
@@ -536,13 +546,13 @@ export function startVibeTunnelServer() {
 
   // Prevent multiple server instances
   if (serverStarted) {
-    logger.error(chalk.red('ERROR: Server already started, preventing duplicate instance'));
+    logger.error('Server already started, preventing duplicate instance');
     logger.error('This should not happen - duplicate server startup detected');
     process.exit(1);
   }
   serverStarted = true;
 
-  logger.log('Creating app instance...');
+  logger.debug('Creating VibeTunnel application instance');
   // Create and configure the app
   const appInstance = createApp();
   const {
@@ -559,26 +569,26 @@ export function startVibeTunnelServer() {
   // Update debug mode based on config
   if (config.debug) {
     setDebugMode(true);
-    logger.log('Debug logging enabled');
+    logger.log(chalk.gray('Debug logging enabled'));
   }
 
-  logger.log('Starting server...');
   startServer();
 
   // Cleanup old terminals every 5 minutes
-  setInterval(
+  const _cleanupInterval = setInterval(
     () => {
       terminalManager.cleanup(5 * 60 * 1000); // 5 minutes
     },
     5 * 60 * 1000
   );
+  logger.debug('Started terminal cleanup interval (5 minutes)');
 
   // Graceful shutdown
   let localShuttingDown = false;
 
   const shutdown = async () => {
     if (localShuttingDown) {
-      logger.warn(chalk.red('Force exit...'));
+      logger.warn('Force exit...');
       process.exit(1);
     }
 
@@ -589,17 +599,21 @@ export function startVibeTunnelServer() {
     try {
       // Stop activity monitor
       activityMonitor.stop();
+      logger.debug('Stopped activity monitor');
 
       // Stop control directory watcher
       if (controlDirWatcher) {
         controlDirWatcher.stop();
+        logger.debug('Stopped control directory watcher');
       }
 
       if (hqClient) {
+        logger.debug('Destroying HQ client connection');
         await hqClient.destroy();
       }
 
       if (remoteRegistry) {
+        logger.debug('Destroying remote registry');
         remoteRegistry.destroy();
       }
 
@@ -611,12 +625,12 @@ export function startVibeTunnelServer() {
 
       // Force exit after 5 seconds if graceful shutdown fails
       setTimeout(() => {
-        logger.warn(chalk.red('Graceful shutdown timeout, forcing exit...'));
+        logger.warn('Graceful shutdown timeout, forcing exit...');
         closeLogger();
         process.exit(1);
       }, 5000);
     } catch (error) {
-      logger.error(chalk.red('Error during shutdown:'), error);
+      logger.error('Error during shutdown:', error);
       closeLogger();
       process.exit(1);
     }
@@ -624,6 +638,7 @@ export function startVibeTunnelServer() {
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  logger.debug('Registered signal handlers for graceful shutdown');
 }
 
 // Export for testing

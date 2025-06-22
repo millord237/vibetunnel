@@ -16,7 +16,7 @@ import * as os from 'os';
 import chalk from 'chalk';
 import { PtyManager } from './pty/index.js';
 import { VERSION, BUILD_DATE, GIT_COMMIT } from './version.js';
-import { createLogger, initLogger, closeLogger } from './utils/logger.js';
+import { createLogger, closeLogger } from './utils/logger.js';
 
 const logger = createLogger('fwd');
 
@@ -40,8 +40,11 @@ function showUsage() {
 }
 
 export async function startVibeTunnelForward(args: string[]) {
-  // Initialize logger
-  initLogger(args.includes('--debug'));
+  // Log startup with version (logger already initialized in cli.ts)
+  logger.log(chalk.blue(`VibeTunnel Forward v${VERSION}`) + chalk.gray(` (${BUILD_DATE})`));
+  if (args.includes('--debug')) {
+    logger.debug('Debug mode enabled');
+  }
 
   // Parse command line arguments
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
@@ -62,7 +65,7 @@ export async function startVibeTunnelForward(args: string[]) {
   const command = remainingArgs;
 
   if (command.length === 0) {
-    logger.error('Error: No command specified');
+    logger.error('No command specified');
     showUsage();
     closeLogger();
     process.exit(1);
@@ -72,6 +75,7 @@ export async function startVibeTunnelForward(args: string[]) {
 
   // Initialize PTY manager
   const controlPath = path.join(os.homedir(), '.vibetunnel', 'control');
+  logger.debug(`Control path: ${controlPath}`);
   const ptyManager = new PtyManager(controlPath);
 
   try {
@@ -80,6 +84,9 @@ export async function startVibeTunnelForward(args: string[]) {
 
     // Pre-generate session ID if not provided
     const finalSessionId = sessionId || `fwd_${Date.now()}`;
+
+    logger.log(`Creating session for command: ${command.join(' ')}`);
+    logger.debug(`Session ID: ${finalSessionId}, working directory: ${cwd}`);
 
     const result = await ptyManager.createSession(command, {
       sessionId: finalSessionId,
@@ -90,10 +97,13 @@ export async function startVibeTunnelForward(args: string[]) {
       forwardToStdout: true,
       onExit: async (exitCode: number) => {
         // Show exit message
-        logger.log(chalk.yellow('\n✓ VibeTunnel session ended'));
+        logger.log(
+          chalk.yellow(`\n✓ VibeTunnel session ended`) + chalk.gray(` (exit code: ${exitCode})`)
+        );
 
         // Restore terminal settings and clean up stdin
         if (process.stdin.isTTY) {
+          logger.debug('Restoring terminal to normal mode');
           process.stdin.setRawMode(false);
         }
         process.stdin.pause();
@@ -105,6 +115,7 @@ export async function startVibeTunnelForward(args: string[]) {
         }
 
         // Shutdown PTY manager and exit
+        logger.debug('Shutting down PTY manager');
         await ptyManager.shutdown();
 
         // Force exit
@@ -126,6 +137,7 @@ export async function startVibeTunnelForward(args: string[]) {
 
     // Set up raw mode for terminal input
     if (process.stdin.isTTY) {
+      logger.debug('Setting terminal to raw mode for input forwarding');
       process.stdin.setRawMode(true);
     }
     process.stdin.resume();
@@ -134,10 +146,6 @@ export async function startVibeTunnelForward(args: string[]) {
     // The process will stay alive because stdin is in raw mode and resumed
   } catch (error) {
     logger.error('Failed to create or manage session:', error);
-
-    if (error instanceof Error) {
-      logger.error('Error details:', error.message);
-    }
 
     closeLogger();
     process.exit(1);

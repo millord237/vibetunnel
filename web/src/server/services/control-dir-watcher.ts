@@ -23,13 +23,14 @@ export class ControlDirWatcher {
 
   constructor(config: ControlDirWatcherConfig) {
     this.config = config;
+    logger.debug(`Initialized with control dir: ${config.controlDir}, HQ mode: ${config.isHQMode}`);
   }
 
   start(): void {
     // Create control directory if it doesn't exist
     if (!fs.existsSync(this.config.controlDir)) {
       logger.log(
-        chalk.yellow(`Control directory ${this.config.controlDir} does not exist, creating it...`)
+        chalk.yellow(`Control directory ${this.config.controlDir} does not exist, creating it`)
       );
       fs.mkdirSync(this.config.controlDir, { recursive: true });
     }
@@ -53,6 +54,7 @@ export class ControlDirWatcher {
 
     try {
       // Give it a moment for the session.json to be written
+      logger.debug(`Waiting 100ms for session.json to be written for ${filename}`);
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       if (fs.existsSync(sessionJsonPath)) {
@@ -78,7 +80,7 @@ export class ControlDirWatcher {
           try {
             await this.notifyHQAboutSession(sessionId, 'created');
           } catch (error) {
-            logger.error(chalk.red(`Failed to notify HQ about new session ${sessionId}:`), error);
+            logger.error(`Failed to notify HQ about new session ${sessionId}:`, error);
           }
         }
 
@@ -87,7 +89,7 @@ export class ControlDirWatcher {
       } else if (!fs.existsSync(sessionPath)) {
         // Session directory was removed
         const sessionId = filename;
-        logger.log(chalk.yellow(`Detected removed external session: ${sessionId}`));
+        logger.log(chalk.yellow(`Detected removed session: ${sessionId}`));
 
         // If we're a remote server registered with HQ, immediately notify HQ
         if (this.config.hqClient && !isShuttingDown()) {
@@ -96,21 +98,19 @@ export class ControlDirWatcher {
           } catch (error) {
             // During shutdown, this is expected
             if (!isShuttingDown()) {
-              logger.error(
-                chalk.red(`Failed to notify HQ about deleted session ${sessionId}:`),
-                error
-              );
+              logger.error(`Failed to notify HQ about deleted session ${sessionId}:`, error);
             }
           }
         }
 
         // If in HQ mode, remove from tracking
         if (this.config.isHQMode && this.config.remoteRegistry) {
+          logger.debug(`Removing session ${sessionId} from remote registry`);
           this.config.remoteRegistry.removeSessionFromRemote(sessionId);
         }
       }
     } catch (error) {
-      logger.error(chalk.red(`Error handling file change for ${filename}:`), error);
+      logger.error(`Error handling file change for ${filename}:`, error);
     }
   }
 
@@ -118,11 +118,21 @@ export class ControlDirWatcher {
     sessionId: string,
     action: 'created' | 'deleted'
   ): Promise<void> {
-    if (!this.config.hqClient || isShuttingDown()) return;
+    if (!this.config.hqClient || isShuttingDown()) {
+      logger.debug(
+        `Skipping HQ notification for ${sessionId} (${action}): shutting down or no HQ client`
+      );
+      return;
+    }
 
     const hqUrl = this.config.hqClient.getHQUrl();
     const hqAuth = this.config.hqClient.getHQAuth();
     const remoteName = this.config.hqClient.getName();
+
+    logger.debug(
+      `Notifying HQ at ${hqUrl} about ${action} session ${sessionId} from remote ${remoteName}`
+    );
+    const startTime = Date.now();
 
     // Notify HQ about session change
     // For now, we'll trigger a session list refresh by calling the HQ's session endpoint
@@ -142,12 +152,14 @@ export class ControlDirWatcher {
     if (!response.ok) {
       // If we get a 503 during shutdown, that's expected
       if (response.status === 503 && isShuttingDown()) {
+        logger.debug(`Got expected 503 from HQ during shutdown`);
         return;
       }
-      throw new Error(`HQ responded with ${response.status}`);
+      throw new Error(`HQ responded with ${response.status}: ${await response.text()}`);
     }
 
-    logger.log(chalk.green(`Notified HQ about ${action} session ${sessionId}`));
+    const duration = Date.now() - startTime;
+    logger.log(chalk.green(`Notified HQ about ${action} session ${sessionId} (${duration}ms)`));
   }
 
   stop(): void {
@@ -155,6 +167,8 @@ export class ControlDirWatcher {
       this.watcher.close();
       this.watcher = null;
       logger.log(chalk.yellow('Control directory watcher stopped'));
+    } else {
+      logger.debug('Stop called but watcher was not running');
     }
   }
 }

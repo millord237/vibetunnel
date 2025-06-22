@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import { Response } from 'express';
+import chalk from 'chalk';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('stream-watcher');
@@ -26,12 +27,14 @@ export class StreamWatcher {
     process.on('beforeExit', () => {
       this.cleanup();
     });
+    logger.debug('stream watcher initialized');
   }
 
   /**
    * Add a client to watch a stream file
    */
   addClient(sessionId: string, streamPath: string, response: Response): void {
+    logger.debug(`adding client to session ${sessionId}`);
     const startTime = Date.now() / 1000;
     const client: StreamClient = { response, startTime };
 
@@ -39,6 +42,7 @@ export class StreamWatcher {
 
     if (!watcherInfo) {
       // Create new watcher for this session
+      logger.log(chalk.green(`creating new stream watcher for session ${sessionId}`));
       watcherInfo = {
         clients: new Set(),
         lastOffset: 0,
@@ -57,6 +61,9 @@ export class StreamWatcher {
         watcherInfo.lastOffset = stats.size;
         watcherInfo.lastSize = stats.size;
         watcherInfo.lastMtime = stats.mtimeMs;
+        logger.debug(`initial file size: ${stats.size} bytes`);
+      } else {
+        logger.debug(`stream file does not exist yet: ${streamPath}`);
       }
 
       // Start watching for new content
@@ -68,8 +75,8 @@ export class StreamWatcher {
 
     // Add client to set
     watcherInfo.clients.add(client);
-    logger.debug(
-      `Added client to session ${sessionId}, total clients: ${watcherInfo.clients.size}`
+    logger.log(
+      chalk.blue(`client connected to stream ${sessionId} (${watcherInfo.clients.size} total)`)
     );
   }
 
@@ -78,7 +85,10 @@ export class StreamWatcher {
    */
   removeClient(sessionId: string, response: Response): void {
     const watcherInfo = this.activeWatchers.get(sessionId);
-    if (!watcherInfo) return;
+    if (!watcherInfo) {
+      logger.debug(`no watcher found for session ${sessionId}`);
+      return;
+    }
 
     // Find and remove client
     let clientToRemove: StreamClient | undefined;
@@ -91,13 +101,15 @@ export class StreamWatcher {
 
     if (clientToRemove) {
       watcherInfo.clients.delete(clientToRemove);
-      logger.debug(
-        `Removed client from session ${sessionId}, remaining clients: ${watcherInfo.clients.size}`
+      logger.log(
+        chalk.yellow(
+          `client disconnected from stream ${sessionId} (${watcherInfo.clients.size} remaining)`
+        )
       );
 
       // If no more clients, stop watching
       if (watcherInfo.clients.size === 0) {
-        logger.debug(`No more clients for session ${sessionId}, stopping watcher`);
+        logger.log(chalk.yellow(`stopping watcher for session ${sessionId} (no clients)`));
         if (watcherInfo.watcher) {
           watcherInfo.watcher.close();
         }
@@ -137,8 +149,8 @@ export class StreamWatcher {
                   client.response.write(`data: ${JSON.stringify(instantEvent)}\n\n`);
                 }
               }
-            } catch (_e) {
-              // Skip invalid lines
+            } catch (e) {
+              logger.debug(`skipping invalid JSON line during replay: ${e}`);
             }
           }
         }
@@ -160,23 +172,27 @@ export class StreamWatcher {
                 client.response.write(`data: ${JSON.stringify(instantEvent)}\n\n`);
               }
             }
-          } catch (_e) {
-            // Skip invalid line
+          } catch (e) {
+            logger.debug(`skipping invalid JSON in line buffer: ${e}`);
           }
         }
 
         // If exit event found, close connection
         if (exitEventFound) {
-          logger.debug(`Session already has exit event, closing connection`);
+          logger.log(
+            chalk.yellow(
+              `session ${client.response.locals?.sessionId || 'unknown'} already ended, closing stream`
+            )
+          );
           client.response.end();
         }
       });
 
       stream.on('error', (error) => {
-        logger.error(`Error streaming existing content:`, error);
+        logger.error('failed to stream existing content:', error);
       });
     } catch (error) {
-      logger.error(`Error creating read stream:`, error);
+      logger.error('failed to create read stream:', error);
     }
   }
 
@@ -184,7 +200,7 @@ export class StreamWatcher {
    * Start watching a file for changes
    */
   private startWatching(sessionId: string, streamPath: string, watcherInfo: WatcherInfo): void {
-    logger.debug(`Using file watcher for session ${sessionId}`);
+    logger.log(chalk.green(`started watching stream file for session ${sessionId}`));
 
     // Use standard fs.watch with stat checking
     watcherInfo.watcher = fs.watch(streamPath, { persistent: true }, (eventType) => {
@@ -195,6 +211,10 @@ export class StreamWatcher {
 
           // Only process if size increased (append-only file)
           if (stats.size > watcherInfo.lastSize || stats.mtimeMs > watcherInfo.lastMtime) {
+            const sizeDiff = stats.size - watcherInfo.lastSize;
+            if (sizeDiff > 0) {
+              logger.debug(`file grew by ${sizeDiff} bytes`);
+            }
             watcherInfo.lastSize = stats.size;
             watcherInfo.lastMtime = stats.mtimeMs;
 
@@ -224,13 +244,13 @@ export class StreamWatcher {
             }
           }
         } catch (error) {
-          logger.error(`Error reading file changes:`, error);
+          logger.error('failed to read file changes:', error);
         }
       }
     });
 
     watcherInfo.watcher.on('error', (error) => {
-      logger.error(`File watcher error for session ${sessionId}:`, error);
+      logger.error(`file watcher error for session ${sessionId}:`, error);
     });
   }
 
@@ -247,7 +267,7 @@ export class StreamWatcher {
       }
       if (Array.isArray(parsed) && parsed.length >= 3) {
         if (parsed[0] === 'exit') {
-          logger.debug(`Exit event detected: ${JSON.stringify(parsed)}`);
+          logger.log(chalk.yellow(`session ${sessionId} ended with exit code ${parsed[2]}`));
           eventData = `data: ${JSON.stringify(parsed)}\n\n`;
 
           // Send exit event to all clients and close connections
@@ -256,7 +276,7 @@ export class StreamWatcher {
               client.response.write(eventData);
               client.response.end();
             } catch (error) {
-              logger.error(`Error writing to client:`, error);
+              logger.error('failed to send exit event to client:', error);
             }
           }
           return;
@@ -272,15 +292,17 @@ export class StreamWatcher {
               // @ts-expect-error - flush exists but not in types
               if (client.response.flush) client.response.flush();
             } catch (error) {
-              logger.error(`Error writing to client:`, error);
-              // Client might be disconnected
+              logger.debug(
+                `client write failed (likely disconnected): ${error instanceof Error ? error.message : String(error)}`
+              );
             }
           }
           return; // Already handled per-client
         }
       }
-    } catch (_e) {
+    } catch {
       // Handle non-JSON as raw output
+      logger.debug(`broadcasting raw output line: ${line.substring(0, 50)}...`);
       const currentTime = Date.now() / 1000;
       for (const client of watcherInfo.clients) {
         const castEvent = [currentTime - client.startTime, 'o', line];
@@ -291,7 +313,9 @@ export class StreamWatcher {
           // @ts-expect-error - flush exists but not in types
           if (client.response.flush) client.response.flush();
         } catch (error) {
-          logger.error(`Error writing to client:`, error);
+          logger.debug(
+            `client write failed (likely disconnected): ${error instanceof Error ? error.message : String(error)}`
+          );
         }
       }
       return;
@@ -302,11 +326,16 @@ export class StreamWatcher {
    * Clean up all watchers and listeners
    */
   private cleanup(): void {
-    for (const [_sessionId, watcherInfo] of this.activeWatchers) {
-      if (watcherInfo.watcher) {
-        watcherInfo.watcher.close();
+    const watcherCount = this.activeWatchers.size;
+    if (watcherCount > 0) {
+      logger.log(chalk.yellow(`cleaning up ${watcherCount} active watchers`));
+      for (const [sessionId, watcherInfo] of this.activeWatchers) {
+        if (watcherInfo.watcher) {
+          watcherInfo.watcher.close();
+        }
+        logger.debug(`closed watcher for session ${sessionId}`);
       }
+      this.activeWatchers.clear();
     }
-    this.activeWatchers.clear();
   }
 }

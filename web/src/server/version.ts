@@ -2,6 +2,7 @@
 // This file is updated during the build process
 
 import { createLogger } from './utils/logger.js';
+import chalk from 'chalk';
 
 const logger = createLogger('version');
 
@@ -17,7 +18,9 @@ export const PLATFORM = process.platform;
 export const ARCH = process.arch;
 
 export function getVersionInfo() {
-  return {
+  logger.debug('gathering version information');
+
+  const info = {
     version: VERSION,
     buildDate: BUILD_DATE,
     buildTimestamp: BUILD_TIMESTAMP,
@@ -28,11 +31,23 @@ export function getVersionInfo() {
     uptime: process.uptime(),
     pid: process.pid,
   };
+
+  logger.debug(`version info: ${JSON.stringify(info)}`);
+  return info;
 }
 
 export function printVersionBanner() {
-  logger.log(`VibeTunnel Server v${VERSION}`);
-  logger.log(`Built: ${BUILD_DATE}`);
-  logger.log(`Platform: ${PLATFORM}/${ARCH} Node ${NODE_VERSION}`);
-  logger.log(`PID: ${process.pid}`);
+  logger.log(chalk.green(`VibeTunnel Server v${VERSION}`));
+  logger.log(chalk.gray(`Built: ${BUILD_DATE}`));
+  logger.log(chalk.gray(`Platform: ${PLATFORM}/${ARCH} Node ${NODE_VERSION}`));
+  logger.log(chalk.gray(`PID: ${process.pid}`));
+
+  if (GIT_COMMIT !== 'development') {
+    logger.log(chalk.gray(`Commit: ${GIT_COMMIT}`));
+  }
+
+  // Log development mode warning
+  if (GIT_COMMIT === 'development' || !process.env.BUILD_DATE) {
+    logger.log(chalk.yellow('running in development mode'));
+  }
 }

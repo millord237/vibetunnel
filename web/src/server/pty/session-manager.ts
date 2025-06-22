@@ -13,6 +13,7 @@ import { ProcessUtils } from './process-utils.js';
 import { Session, SessionInfo } from '../../shared/types.js';
 import { spawnSync } from 'child_process';
 import { createLogger } from '../utils/logger.js';
+import chalk from 'chalk';
 
 const logger = createLogger('session-manager');
 
@@ -21,6 +22,7 @@ export class SessionManager {
 
   constructor(controlPath?: string) {
     this.controlPath = controlPath || path.join(os.homedir(), '.vibetunnel', 'control');
+    logger.debug(`initializing session manager with control path: ${this.controlPath}`);
     this.ensureControlDirectory();
   }
 
@@ -30,6 +32,7 @@ export class SessionManager {
   private ensureControlDirectory(): void {
     if (!fs.existsSync(this.controlPath)) {
       fs.mkdirSync(this.controlPath, { recursive: true });
+      logger.log(chalk.green(`control directory created: ${this.controlPath}`));
     }
   }
 
@@ -57,6 +60,7 @@ export class SessionManager {
 
     // Create FIFO pipe for stdin (or regular file on systems without mkfifo)
     this.createStdinPipe(paths.stdinPath);
+    logger.log(chalk.green(`session directory created for ${sessionId}`));
     return paths;
   }
 
@@ -69,6 +73,7 @@ export class SessionManager {
       if (process.platform !== 'win32') {
         const result = spawnSync('mkfifo', [stdinPath], { stdio: 'ignore' });
         if (result.status === 0) {
+          logger.debug(`FIFO pipe created: ${stdinPath}`);
           return; // Successfully created FIFO
         }
       }
@@ -77,8 +82,11 @@ export class SessionManager {
       if (!fs.existsSync(stdinPath)) {
         fs.writeFileSync(stdinPath, '');
       }
-    } catch (_error) {
+    } catch (error) {
       // If mkfifo fails, create regular file
+      logger.debug(
+        `mkfifo failed (${error instanceof Error ? error.message : 'unknown error'}), creating regular file: ${stdinPath}`
+      );
       if (!fs.existsSync(stdinPath)) {
         fs.writeFileSync(stdinPath, '');
       }
@@ -97,6 +105,7 @@ export class SessionManager {
       const tempPath = sessionJsonPath + '.tmp';
       fs.writeFileSync(tempPath, sessionInfoStr, 'utf8');
       fs.renameSync(tempPath, sessionJsonPath);
+      logger.debug(`session info saved for ${sessionId}`);
     } catch (error) {
       throw new PtyError(
         `Failed to save session info: ${error instanceof Error ? error.message : String(error)}`,
@@ -118,7 +127,7 @@ export class SessionManager {
       const content = fs.readFileSync(sessionJsonPath, 'utf8');
       return JSON.parse(content) as SessionInfo;
     } catch (error) {
-      logger.warn(`Failed to load session info from ${sessionJsonPath}:`, error);
+      logger.warn(`failed to load session info for ${sessionId}:`, error);
       return null;
     }
   }
@@ -141,6 +150,9 @@ export class SessionManager {
     }
 
     this.saveSessionInfo(sessionId, sessionInfo);
+    logger.log(
+      `session ${sessionId} status updated to ${status}${pid ? ` (pid: ${pid})` : ''}${exitCode !== undefined ? ` (exit code: ${exitCode})` : ''}`
+    );
   }
 
   /**
@@ -167,6 +179,11 @@ export class SessionManager {
             if (sessionInfo.status === 'running' && sessionInfo.pid) {
               // Update status if process is no longer alive
               if (!ProcessUtils.isProcessRunning(sessionInfo.pid)) {
+                logger.log(
+                  chalk.yellow(
+                    `process ${sessionInfo.pid} no longer running for session ${sessionId}`
+                  )
+                );
                 sessionInfo.status = 'exited';
                 if (sessionInfo.exitCode === undefined) {
                   sessionInfo.exitCode = 1; // Default exit code for dead processes
@@ -191,6 +208,7 @@ export class SessionManager {
         return bTime - aTime;
       });
 
+      logger.debug(`found ${sessions.length} sessions`);
       return sessions;
     } catch (error) {
       throw new PtyError(
@@ -223,6 +241,7 @@ export class SessionManager {
       if (fs.existsSync(sessionDir)) {
         // Remove directory and all contents
         fs.rmSync(sessionDir, { recursive: true, force: true });
+        logger.log(chalk.green(`session ${sessionId} cleaned up`));
       }
     } catch (error) {
       throw new PtyError(
@@ -249,6 +268,9 @@ export class SessionManager {
         }
       }
 
+      if (cleanedSessions.length > 0) {
+        logger.log(chalk.green(`cleaned up ${cleanedSessions.length} exited sessions`));
+      }
       return cleanedSessions;
     } catch (error) {
       throw new PtyError(
@@ -299,6 +321,7 @@ export class SessionManager {
       // For FIFO pipes, we need to open in append mode
       // For regular files, we also use append mode to avoid conflicts
       fs.appendFileSync(paths.stdinPath, data);
+      logger.debug(`wrote ${data.length} bytes to stdin for session ${sessionId}`);
     } catch (error) {
       throw new PtyError(
         `Failed to write to stdin for session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -323,6 +346,11 @@ export class SessionManager {
             // Process is dead, update status
             const paths = this.getSessionPaths(session.id);
             if (paths) {
+              logger.log(
+                chalk.yellow(
+                  `marking zombie process ${session.pid} as exited for session ${session.id}`
+                )
+              );
               this.updateSessionStatus(session.id, 'exited', undefined, 1);
               updatedSessions.push(session.id);
             }
@@ -332,7 +360,7 @@ export class SessionManager {
 
       return updatedSessions;
     } catch (error) {
-      logger.warn('Failed to update zombie sessions:', error);
+      logger.warn('failed to update zombie sessions:', error);
       return [];
     }
   }

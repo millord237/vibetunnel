@@ -29,6 +29,7 @@ import {
 } from '../../shared/types.js';
 import { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
 import { createLogger } from '../utils/logger.js';
+import chalk from 'chalk';
 
 const logger = createLogger('pty-manager');
 
@@ -55,6 +56,7 @@ export class PtyManager {
   private setupTerminalResizeDetection(): void {
     // Only setup resize detection if we're running in a TTY
     if (!process.stdout.isTTY) {
+      logger.debug('Not a TTY, skipping terminal resize detection');
       return;
     }
 
@@ -102,7 +104,7 @@ export class PtyManager {
       return;
     }
 
-    logger.log(`Terminal resized to ${newCols}x${newRows}, updating active sessions`);
+    logger.log(chalk.blue(`Terminal resized to ${newCols}x${newRows}`));
 
     // Update stored size
     this.lastTerminalSize = { cols: newCols, rows: newRows };
@@ -134,13 +136,13 @@ export class PtyManager {
               timestamp: currentTime,
             });
 
-            logger.debug(`Resized session ${sessionId} to ${newCols}x${newRows} (terminal resize)`);
+            logger.debug(`Resized session ${sessionId} to ${newCols}x${newRows} from terminal`);
           } catch (error) {
             logger.error(`Failed to resize session ${sessionId}:`, error);
           }
         } else {
           logger.debug(
-            `Skipping terminal resize for session ${sessionId} - browser resize takes precedence`
+            `Skipping terminal resize for session ${sessionId} (browser has precedence)`
           );
         }
       }
@@ -226,7 +228,7 @@ export class PtyManager {
           errorMessage = `Working directory does not exist: '${workingDir}'`;
         }
 
-        logger.error(`PTY spawn error for command '${command.join(' ')}':`, spawnError);
+        logger.error(`Failed to spawn PTY for command '${command.join(' ')}':`, spawnError);
         throw new PtyError(errorMessage, 'SPAWN_FAILED');
       }
 
@@ -251,6 +253,8 @@ export class PtyManager {
       sessionInfo.status = 'running';
       this.sessionManager.saveSessionInfo(sessionId, sessionInfo);
 
+      logger.log(chalk.green(`Session ${sessionId} created successfully (PID: ${ptyProcess.pid})`));
+
       // Setup PTY event handlers
       this.setupPtyHandlers(session, options.forwardToStdout || false, options.onExit);
 
@@ -260,6 +264,7 @@ export class PtyManager {
 
         // Setup stdin forwarding for fwd mode
         this.setupStdinForwarding(session);
+        logger.log(chalk.gray('Stdin forwarding enabled'));
       }
 
       return {
@@ -311,7 +316,7 @@ export class PtyManager {
           process.stdout.write(data);
         }
       } catch (error) {
-        logger.error(`Error writing PTY data for session ${session.id}:`, error);
+        logger.error(`Failed to write PTY data for session ${session.id}:`, error);
       }
     });
 
@@ -323,7 +328,9 @@ export class PtyManager {
           asciinemaWriter.writeRawJson(['exit', exitCode || 0, session.id]);
           asciinemaWriter
             .close()
-            .catch((error) => logger.error('Failed to close asciinema writer:', error));
+            .catch((error) =>
+              logger.error(`Failed to close asciinema writer for session ${session.id}:`, error)
+            );
         }
 
         // Update session status
@@ -344,8 +351,8 @@ export class PtyManager {
         if (onExit) {
           onExit(exitCode || 0, signal);
         }
-      } catch (_error) {
-        logger.error(`Error handling exit for session ${session.id}:`, _error);
+      } catch (error) {
+        logger.error(`Failed to handle exit for session ${session.id}:`, error);
       }
     });
 
@@ -365,7 +372,7 @@ export class PtyManager {
       try {
         fs.unlinkSync(socketPath);
       } catch (_e) {
-        // Ignore if doesn't exist
+        // Socket doesn't exist, this is expected
       }
 
       // Create Unix domain socket server
@@ -386,15 +393,16 @@ export class PtyManager {
         // Make socket writable by all
         try {
           fs.chmodSync(socketPath, 0o666);
-        } catch (_e) {
-          // Ignore chmod errors
+        } catch (e) {
+          logger.debug(`Failed to chmod input socket for session ${session.id}:`, e);
         }
+        logger.debug(`Input socket created for session ${session.id}`);
       });
 
       // Store server reference for cleanup
       session.inputSocketServer = inputServer;
     } catch (error) {
-      logger.warn(`Failed to create input socket for session ${session.id}:`, error);
+      logger.error(`Failed to create input socket for session ${session.id}:`, error);
     }
 
     // Socket-only approach - no FIFO monitoring
@@ -434,15 +442,15 @@ export class PtyManager {
                   const message = JSON.parse(line);
                   this.handleControlMessage(session, message);
                 } catch (_e) {
-                  logger.warn('Invalid control message:', line);
+                  logger.warn(`Invalid control message in session ${session.id}: ${line}`);
                 }
               }
             }
 
             lastControlPosition = stats.size;
           }
-        } catch (_error) {
-          // Control file might be temporarily unavailable
+        } catch (error) {
+          logger.debug(`Failed to read control data for session ${session.id}:`, error);
         }
       };
 
@@ -462,7 +470,7 @@ export class PtyManager {
       // Read any existing data
       readNewControlData();
     } catch (error) {
-      logger.warn('Failed to set up control pipe:', error);
+      logger.error(`Failed to set up control pipe for session ${session.id}:`, error);
     }
   }
 
@@ -481,7 +489,10 @@ export class PtyManager {
           session.asciinemaWriter?.writeResize(message.cols, message.rows);
         }
       } catch (error) {
-        logger.warn('Failed to resize session:', error);
+        logger.warn(
+          `Failed to resize session ${session.id} to ${message.cols}x${message.rows}:`,
+          error
+        );
       }
     } else if (message.cmd === 'kill') {
       const signal =
@@ -493,7 +504,7 @@ export class PtyManager {
           session.ptyProcess.kill(signal as string);
         }
       } catch (error) {
-        logger.warn('Failed to kill session:', error);
+        logger.warn(`Failed to kill session ${session.id} with signal ${signal}:`, error);
       }
     }
   }
@@ -550,7 +561,8 @@ export class PtyManager {
             socketClient.on('close', () => {
               this.inputSocketClients.delete(sessionId);
             });
-          } catch (_error) {
+          } catch (error) {
+            logger.debug(`Failed to connect to input socket for session ${sessionId}:`, error);
             socketClient = undefined;
           }
         }
@@ -592,7 +604,7 @@ export class PtyManager {
       fs.appendFileSync(sessionPaths.controlPipePath, messageStr);
       return true;
     } catch (error) {
-      logger.warn(`Failed to send control message to session ${sessionId}:`, error);
+      logger.error(`Failed to send control message to session ${sessionId}:`, error);
     }
     return false;
   }
@@ -641,7 +653,7 @@ export class PtyManager {
           timestamp: currentTime,
         });
 
-        logger.debug(`Resized session ${sessionId} to ${cols}x${rows} (browser resize)`);
+        logger.debug(`Resized session ${sessionId} to ${cols}x${rows} from browser`);
       } else {
         // For external sessions, try to send resize via control pipe
         const resizeMessage: ResizeControlMessage = {
@@ -710,7 +722,7 @@ export class PtyManager {
 
         if (diskSession.pid && ProcessUtils.isProcessRunning(diskSession.pid)) {
           logger.log(
-            `Killing external session ${sessionId} (PID: ${diskSession.pid}) with ${signal}...`
+            chalk.yellow(`Killing external session ${sessionId} (PID: ${diskSession.pid})`)
           );
 
           if (signal === 'SIGKILL' || signal === 9) {
@@ -731,17 +743,13 @@ export class PtyManager {
             await new Promise((resolve) => setTimeout(resolve, checkInterval));
 
             if (!ProcessUtils.isProcessRunning(diskSession.pid)) {
-              logger.log(
-                `External session ${sessionId} terminated gracefully after ${(i + 1) * checkInterval}ms`
-              );
+              logger.log(chalk.green(`External session ${sessionId} terminated gracefully`));
               return;
             }
           }
 
           // Process didn't terminate gracefully, force kill
-          logger.log(
-            `External session ${sessionId} didn't terminate gracefully, sending SIGKILL...`
-          );
+          logger.log(chalk.yellow(`External session ${sessionId} requires SIGKILL`));
           process.kill(diskSession.pid, 'SIGKILL');
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
@@ -765,7 +773,7 @@ export class PtyManager {
     }
 
     const pid = session.ptyProcess.pid;
-    logger.log(`Terminating session ${sessionId} (PID: ${pid}) with SIGTERM...`);
+    logger.log(chalk.yellow(`Terminating session ${sessionId} (PID: ${pid})`));
 
     try {
       // Send SIGTERM first
@@ -783,31 +791,29 @@ export class PtyManager {
         // Check if process is still alive
         if (!ProcessUtils.isProcessRunning(pid)) {
           // Process no longer exists - it terminated gracefully
-          logger.log(
-            `Session ${sessionId} terminated gracefully after ${(i + 1) * checkInterval}ms`
-          );
+          logger.log(chalk.green(`Session ${sessionId} terminated gracefully`));
           this.sessions.delete(sessionId);
           return;
         }
 
         // Process still exists, continue waiting
-        logger.debug(`Session ${sessionId} still alive after ${(i + 1) * checkInterval}ms...`);
+        logger.debug(`Session ${sessionId} still running after ${(i + 1) * checkInterval}ms`);
       }
 
       // Process didn't terminate gracefully within 3 seconds, force kill
-      logger.log(`Session ${sessionId} didn't terminate gracefully, sending SIGKILL...`);
+      logger.log(chalk.yellow(`Session ${sessionId} requires SIGKILL`));
       try {
         session.ptyProcess.kill('SIGKILL');
         // Wait a bit more for SIGKILL to take effect
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (_killError) {
         // Process might have died between our check and SIGKILL
-        logger.debug(`SIGKILL failed for session ${sessionId}, process likely already dead`);
+        logger.debug(`SIGKILL failed for session ${sessionId} (process already terminated)`);
       }
 
       // Remove from sessions regardless
       this.sessions.delete(sessionId);
-      logger.log(`Session ${sessionId} forcefully terminated with SIGKILL`);
+      logger.log(chalk.yellow(`Session ${sessionId} forcefully terminated`));
     } catch (error) {
       // Remove from sessions even if kill failed
       this.sessions.delete(sessionId);
@@ -869,7 +875,7 @@ export class PtyManager {
     // Kill active session if exists (fire-and-forget for cleanup)
     if (this.sessions.has(sessionId)) {
       this.killSession(sessionId).catch((error) => {
-        logger.error(`Error killing session ${sessionId} during cleanup:`, error);
+        logger.error(`Failed to kill session ${sessionId} during cleanup:`, error);
       });
     }
 
@@ -940,7 +946,7 @@ export class PtyManager {
         // Clean up all session resources
         this.cleanupSessionResources(session);
       } catch (error) {
-        logger.error(`Error cleaning up session ${sessionId}:`, error);
+        logger.error(`Failed to cleanup session ${sessionId} during shutdown:`, error);
       }
     }
 
@@ -951,7 +957,7 @@ export class PtyManager {
       try {
         socket.destroy();
       } catch (_e) {
-        // Ignore errors
+        // Socket already destroyed
       }
     }
     this.inputSocketClients.clear();
@@ -961,7 +967,7 @@ export class PtyManager {
       try {
         removeListener();
       } catch (error) {
-        logger.error('Error removing resize event listener:', error);
+        logger.error('Failed to remove resize event listener:', error);
       }
     }
     this.resizeEventListeners.length = 0;
@@ -985,7 +991,7 @@ export class PtyManager {
       try {
         session.ptyProcess?.write(data);
       } catch (error) {
-        logger.error('Failed to send input:', error);
+        logger.error(`Failed to forward stdin to session ${session.id}:`, error);
       }
     });
   }
@@ -1006,7 +1012,7 @@ export class PtyManager {
       try {
         fs.unlinkSync(path.join(session.controlDir, 'input.sock'));
       } catch (_e) {
-        // Ignore
+        // Socket already removed
       }
     }
 
@@ -1020,7 +1026,7 @@ export class PtyManager {
       try {
         fs.unlinkSync(session.controlPipePath);
       } catch (_e) {
-        // Ignore
+        // Control pipe already removed
       }
     }
   }

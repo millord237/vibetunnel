@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import mime from 'mime-types';
 import { createReadStream, statSync } from 'fs';
 import { createLogger } from '../utils/logger.js';
+import chalk from 'chalk';
 
 const logger = createLogger('filesystem');
 
@@ -106,8 +107,13 @@ export function createFilesystemRoutes(): Router {
       const showHidden = req.query.showHidden === 'true';
       const gitFilter = req.query.gitFilter as string; // 'all' | 'changed' | 'none'
 
+      logger.debug(
+        `browsing directory: ${requestedPath}, showHidden: ${showHidden}, gitFilter: ${gitFilter}`
+      );
+
       // Security check
       if (!isPathSafe(requestedPath, process.cwd())) {
+        logger.warn(`access denied for path: ${requestedPath}`);
         return res.status(403).json({ error: 'Access denied' });
       }
 
@@ -116,11 +122,16 @@ export function createFilesystemRoutes(): Router {
       // Check if path exists and is a directory
       const stats = await fs.stat(fullPath);
       if (!stats.isDirectory()) {
+        logger.warn(`path is not a directory: ${requestedPath}`);
         return res.status(400).json({ error: 'Path is not a directory' });
       }
 
       // Get Git status if requested
+      const gitStatusStart = Date.now();
       const gitStatus = gitFilter !== 'none' ? await getGitStatus(fullPath) : null;
+      if (gitFilter !== 'none') {
+        logger.debug(`git status check took ${Date.now() - gitStatusStart}ms for ${requestedPath}`);
+      }
 
       // Read directory contents
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
@@ -163,6 +174,12 @@ export function createFilesystemRoutes(): Router {
         return a.name.localeCompare(b.name);
       });
 
+      logger.log(
+        chalk.green(
+          `directory browsed successfully: ${requestedPath} (${filteredFiles.length} items)`
+        )
+      );
+
       res.json({
         path: requestedPath,
         fullPath,
@@ -170,7 +187,7 @@ export function createFilesystemRoutes(): Router {
         files: filteredFiles,
       });
     } catch (error) {
-      logger.error('Browse error:', error);
+      logger.error(`failed to browse directory ${req.query.path}:`, error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -183,8 +200,11 @@ export function createFilesystemRoutes(): Router {
         return res.status(400).json({ error: 'Path is required' });
       }
 
+      logger.debug(`previewing file: ${requestedPath}`);
+
       // Security check
       if (!isPathSafe(requestedPath, process.cwd())) {
+        logger.warn(`access denied for file preview: ${requestedPath}`);
         return res.status(403).json({ error: 'Access denied' });
       }
 
@@ -192,6 +212,7 @@ export function createFilesystemRoutes(): Router {
       const stats = await fs.stat(fullPath);
 
       if (stats.isDirectory()) {
+        logger.warn(`cannot preview directory: ${requestedPath}`);
         return res.status(400).json({ error: 'Cannot preview directories' });
       }
 
@@ -207,6 +228,9 @@ export function createFilesystemRoutes(): Router {
 
       if (isImage) {
         // For images, return URL to fetch the image
+        logger.log(
+          chalk.green(`image preview generated: ${requestedPath} (${formatBytes(stats.size)})`)
+        );
         res.json({
           type: 'image',
           mimeType,
@@ -218,6 +242,12 @@ export function createFilesystemRoutes(): Router {
         const content = await fs.readFile(fullPath, 'utf-8');
         const language = getLanguageFromPath(fullPath);
 
+        logger.log(
+          chalk.green(
+            `text file preview generated: ${requestedPath} (${formatBytes(stats.size)}, ${language})`
+          )
+        );
+
         res.json({
           type: 'text',
           content,
@@ -227,6 +257,9 @@ export function createFilesystemRoutes(): Router {
         });
       } else {
         // Binary or large files
+        logger.log(
+          `binary file preview metadata returned: ${requestedPath} (${formatBytes(stats.size)})`
+        );
         res.json({
           type: 'binary',
           mimeType,
@@ -235,7 +268,7 @@ export function createFilesystemRoutes(): Router {
         });
       }
     } catch (error) {
-      logger.error('Preview error:', error);
+      logger.error(`failed to preview file ${req.query.path}:`, error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -248,8 +281,11 @@ export function createFilesystemRoutes(): Router {
         return res.status(400).json({ error: 'Path is required' });
       }
 
+      logger.debug(`serving raw file: ${requestedPath}`);
+
       // Security check
       if (!isPathSafe(requestedPath, process.cwd())) {
+        logger.warn(`access denied for raw file: ${requestedPath}`);
         return res.status(403).json({ error: 'Access denied' });
       }
 
@@ -257,6 +293,7 @@ export function createFilesystemRoutes(): Router {
 
       // Check if file exists
       if (!statSync(fullPath).isFile()) {
+        logger.warn(`file not found for raw access: ${requestedPath}`);
         return res.status(404).json({ error: 'File not found' });
       }
 
@@ -267,8 +304,12 @@ export function createFilesystemRoutes(): Router {
       // Stream the file
       const stream = createReadStream(fullPath);
       stream.pipe(res);
+
+      stream.on('end', () => {
+        logger.log(chalk.green(`raw file served: ${requestedPath}`));
+      });
     } catch (error) {
-      logger.error('Raw file error:', error);
+      logger.error(`failed to serve raw file ${req.query.path}:`, error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -281,13 +322,18 @@ export function createFilesystemRoutes(): Router {
         return res.status(400).json({ error: 'Path is required' });
       }
 
+      logger.debug(`getting file content: ${requestedPath}`);
+
       // Security check
       if (!isPathSafe(requestedPath, process.cwd())) {
+        logger.warn(`access denied for file content: ${requestedPath}`);
         return res.status(403).json({ error: 'Access denied' });
       }
 
       const fullPath = path.resolve(process.cwd(), requestedPath);
       const content = await fs.readFile(fullPath, 'utf-8');
+
+      logger.log(chalk.green(`file content retrieved: ${requestedPath}`));
 
       res.json({
         path: requestedPath,
@@ -295,7 +341,7 @@ export function createFilesystemRoutes(): Router {
         language: getLanguageFromPath(fullPath),
       });
     } catch (error) {
-      logger.error('Content error:', error);
+      logger.error(`failed to get file content ${req.query.path}:`, error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -308,8 +354,11 @@ export function createFilesystemRoutes(): Router {
         return res.status(400).json({ error: 'Path is required' });
       }
 
+      logger.debug(`getting git diff: ${requestedPath}`);
+
       // Security check
       if (!isPathSafe(requestedPath, process.cwd())) {
+        logger.warn(`access denied for git diff: ${requestedPath}`);
         return res.status(403).json({ error: 'Access denied' });
       }
 
@@ -317,9 +366,21 @@ export function createFilesystemRoutes(): Router {
       const relativePath = path.relative(process.cwd(), fullPath);
 
       // Get git diff
+      const diffStart = Date.now();
       const { stdout: diff } = await execAsync(`git diff HEAD -- "${relativePath}"`, {
         cwd: process.cwd(),
       });
+
+      const diffTime = Date.now() - diffStart;
+      if (diffTime > 1000) {
+        logger.warn(`slow git diff operation: ${requestedPath} took ${diffTime}ms`);
+      }
+
+      logger.log(
+        chalk.green(
+          `git diff retrieved: ${requestedPath} (${diff.length > 0 ? 'has changes' : 'no changes'})`
+        )
+      );
 
       res.json({
         path: requestedPath,
@@ -327,7 +388,7 @@ export function createFilesystemRoutes(): Router {
         hasDiff: diff.length > 0,
       });
     } catch (error) {
-      logger.error('Diff error:', error);
+      logger.error(`failed to get git diff for ${req.query.path}:`, error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -341,13 +402,17 @@ export function createFilesystemRoutes(): Router {
         return res.status(400).json({ error: 'Path and name are required' });
       }
 
+      logger.log(`creating directory: ${name} in ${dirPath}`);
+
       // Validate name (no slashes, no dots at start)
       if (name.includes('/') || name.includes('\\') || name.startsWith('.')) {
+        logger.warn(`invalid directory name attempted: ${name}`);
         return res.status(400).json({ error: 'Invalid directory name' });
       }
 
       // Security check
       if (!isPathSafe(dirPath, process.cwd())) {
+        logger.warn(`access denied for mkdir: ${dirPath}/${name}`);
         return res.status(403).json({ error: 'Access denied' });
       }
 
@@ -356,12 +421,14 @@ export function createFilesystemRoutes(): Router {
       // Create directory
       await fs.mkdir(fullPath, { recursive: true });
 
+      logger.log(chalk.green(`directory created: ${path.relative(process.cwd(), fullPath)}`));
+
       res.json({
         success: true,
         path: path.relative(process.cwd(), fullPath),
       });
     } catch (error) {
-      logger.error('Mkdir error:', error);
+      logger.error(`failed to create directory ${req.body.path}/${req.body.name}:`, error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });

@@ -6,6 +6,7 @@
 
 import { spawnSync } from 'child_process';
 import { createLogger } from '../utils/logger.js';
+import chalk from 'chalk';
 
 const logger = createLogger('process-utils');
 
@@ -28,7 +29,7 @@ export class ProcessUtils {
         return ProcessUtils.isProcessRunningUnix(pid);
       }
     } catch (error) {
-      logger.warn(`Error checking if process ${pid} is running:`, error);
+      logger.warn(`error checking if process ${pid} is running:`, error);
       return false;
     }
   }
@@ -38,6 +39,7 @@ export class ProcessUtils {
    */
   private static isProcessRunningWindows(pid: number): boolean {
     try {
+      logger.debug(`checking windows process ${pid} with tasklist`);
       const result = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'], {
         encoding: 'utf8',
         windowsHide: true,
@@ -47,12 +49,15 @@ export class ProcessUtils {
       // Check if the command succeeded and PID appears in output
       if (result.status === 0 && result.stdout) {
         // tasklist outputs CSV format with PID in quotes
-        return result.stdout.includes(`"${pid}"`);
+        const exists = result.stdout.includes(`"${pid}"`);
+        logger.debug(`process ${pid} exists: ${exists}`);
+        return exists;
       }
 
+      logger.debug(`tasklist command failed with status ${result.status}`);
       return false;
     } catch (error) {
-      logger.warn(`Windows process check failed for PID ${pid}:`, error);
+      logger.warn(`windows process check failed for PID ${pid}:`, error);
       return false;
     }
   }
@@ -103,6 +108,8 @@ export class ProcessUtils {
       return false;
     }
 
+    logger.debug(`attempting to kill process ${pid} with signal ${signal}`);
+
     try {
       if (process.platform === 'win32') {
         // Windows: Use taskkill command for more reliable termination
@@ -110,14 +117,21 @@ export class ProcessUtils {
           windowsHide: true,
           timeout: 5000,
         });
-        return result.status === 0;
+        if (result.status === 0) {
+          logger.log(chalk.green(`process ${pid} killed successfully`));
+          return true;
+        } else {
+          logger.debug(`taskkill failed with status ${result.status}`);
+          return false;
+        }
       } else {
         // Unix-like: Use built-in process.kill
         process.kill(pid, signal);
+        logger.log(chalk.green(`signal ${signal} sent to process ${pid}`));
         return true;
       }
     } catch (error) {
-      logger.warn(`Error killing process ${pid}:`, error);
+      logger.warn(`error killing process ${pid}:`, error);
       return false;
     }
   }
@@ -130,13 +144,18 @@ export class ProcessUtils {
     const startTime = Date.now();
     const checkInterval = 100; // Check every 100ms
 
+    logger.debug(`waiting for process ${pid} to exit (timeout: ${timeoutMs}ms)`);
+
     while (Date.now() - startTime < timeoutMs) {
       if (!ProcessUtils.isProcessRunning(pid)) {
+        const elapsed = Date.now() - startTime;
+        logger.log(chalk.green(`process ${pid} exited after ${elapsed}ms`));
         return true;
       }
       await new Promise((resolve) => setTimeout(resolve, checkInterval));
     }
 
+    logger.log(chalk.yellow(`process ${pid} did not exit within ${timeoutMs}ms timeout`));
     return false;
   }
 }

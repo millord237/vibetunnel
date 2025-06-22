@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger } from '../utils/logger.js';
+import chalk from 'chalk';
 
 const logger = createLogger('hq-client');
 
@@ -27,9 +28,18 @@ export class HQClient {
     this.hqUsername = hqUsername;
     this.hqPassword = hqPassword;
     this.remoteUrl = remoteUrl;
+
+    logger.debug('hq client initialized', {
+      hqUrl,
+      remoteName,
+      remoteId: this.remoteId,
+      remoteUrl,
+    });
   }
 
   async register(): Promise<void> {
+    logger.log(`registering with hq at ${this.hqUrl}`);
+
     try {
       const response = await fetch(`${this.hqUrl}/api/remotes/register`, {
         method: 'POST',
@@ -47,30 +57,45 @@ export class HQClient {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({ error: response.statusText }));
+        logger.debug(`registration failed with status ${response.status}`, errorBody);
         throw new Error(`Registration failed: ${errorBody.error || response.statusText}`);
       }
 
-      logger.log(`Successfully registered with HQ at ${this.hqUrl}`);
-      logger.log(`Remote ID: ${this.remoteId}`);
-      logger.log(`Remote name: ${this.remoteName}`);
-      logger.debug(`Token: ${this.token}`);
+      logger.log(
+        chalk.green(`successfully registered with hq: ${this.remoteName} (${this.remoteId})`) +
+          chalk.gray(` at ${this.hqUrl}`)
+      );
+      logger.debug('registration details', {
+        remoteId: this.remoteId,
+        remoteName: this.remoteName,
+        token: this.token.substring(0, 8) + '...',
+      });
     } catch (error) {
-      logger.error('Failed to register with HQ:', error);
+      logger.error('failed to register with hq:', error);
       throw error; // Let the caller handle retries if needed
     }
   }
 
   async destroy(): Promise<void> {
+    logger.log(chalk.yellow(`unregistering from hq: ${this.remoteName} (${this.remoteId})`));
+
     try {
       // Try to unregister
-      await fetch(`${this.hqUrl}/api/remotes/${this.remoteId}`, {
+      const response = await fetch(`${this.hqUrl}/api/remotes/${this.remoteId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Basic ${Buffer.from(`${this.hqUsername}:${this.hqPassword}`).toString('base64')}`,
         },
       });
-    } catch {
-      // Ignore errors during shutdown
+
+      if (response.ok) {
+        logger.debug('successfully unregistered from hq');
+      } else {
+        logger.debug(`unregistration returned status ${response.status}`);
+      }
+    } catch (error) {
+      // Log but don't throw during shutdown
+      logger.debug('error during unregistration:', error);
     }
   }
 

@@ -2,6 +2,7 @@ import { Terminal as XtermTerminal } from '@xterm/headless';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createLogger } from '../utils/logger.js';
+import chalk from 'chalk';
 
 const logger = createLogger('terminal-manager');
 
@@ -62,6 +63,9 @@ export class TerminalManager {
       };
 
       this.terminals.set(sessionId, sessionTerminal);
+      logger.log(
+        chalk.green(`Terminal created for session ${sessionId} (${terminal.cols}x${terminal.rows})`)
+      );
 
       // Start watching the stream file
       await this.watchStreamFile(sessionId);
@@ -84,7 +88,7 @@ export class TerminalManager {
 
     // Check if the file exists
     if (!fs.existsSync(streamPath)) {
-      logger.warn(`Stream file does not exist for session ${sessionId}: ${streamPath}`);
+      logger.error(`Stream file does not exist for session ${sessionId}: ${streamPath}`);
       return;
     }
 
@@ -136,7 +140,7 @@ export class TerminalManager {
         }
       });
 
-      logger.log(`Watching stream file for session ${sessionId}`);
+      logger.log(chalk.green(`Watching stream file for session ${sessionId}`));
     } catch (error) {
       logger.error(`Failed to watch stream file for session ${sessionId}:`, error);
       throw error;
@@ -163,7 +167,7 @@ export class TerminalManager {
 
         if (timestamp === 'exit') {
           // Session exited
-          logger.log(`Session ${sessionId} exited with code ${data[1]}`);
+          logger.log(chalk.yellow(`Session ${sessionId} exited with code ${data[1]}`));
           if (sessionTerminal.watcher) {
             sessionTerminal.watcher.close();
           }
@@ -197,6 +201,7 @@ export class TerminalManager {
   async getBufferStats(sessionId: string) {
     const terminal = await this.getTerminal(sessionId);
     const buffer = terminal.buffer.active;
+    logger.debug(`Getting buffer stats for session ${sessionId}: ${buffer.length} total rows`);
 
     return {
       totalRows: buffer.length,
@@ -213,6 +218,7 @@ export class TerminalManager {
    * Get buffer snapshot for a session - always returns full terminal buffer (cols x rows)
    */
   async getBufferSnapshot(sessionId: string): Promise<BufferSnapshot> {
+    const startTime = Date.now();
     const terminal = await this.getTerminal(sessionId);
     const buffer = terminal.buffer.active;
 
@@ -315,6 +321,13 @@ export class TerminalManager {
     // Keep at least one row
     const trimmedCells = cells.slice(0, Math.max(1, lastNonBlankRow + 1));
 
+    const duration = Date.now() - startTime;
+    if (duration > 10) {
+      logger.debug(
+        `Buffer snapshot for session ${sessionId} took ${duration}ms (${trimmedCells.length} rows)`
+      );
+    }
+
     return {
       cols: terminal.cols,
       rows: trimmedCells.length,
@@ -329,6 +342,7 @@ export class TerminalManager {
    * Encode buffer snapshot to binary format - optimized for minimal data transmission
    */
   encodeSnapshot(snapshot: BufferSnapshot): Buffer {
+    const startTime = Date.now();
     const { cols, rows, viewportY, cursorX, cursorY, cells } = snapshot;
 
     // Pre-calculate actual data size for efficiency
@@ -410,7 +424,14 @@ export class TerminalManager {
     }
 
     // Return exact size buffer
-    return buffer.subarray(0, offset);
+    const result = buffer.subarray(0, offset);
+
+    const duration = Date.now() - startTime;
+    if (duration > 5) {
+      logger.debug(`Encoded snapshot: ${result.length} bytes in ${duration}ms (${rows} rows)`);
+    }
+
+    return result;
   }
 
   /**
@@ -568,6 +589,7 @@ export class TerminalManager {
       }
       sessionTerminal.terminal.dispose();
       this.terminals.delete(sessionId);
+      logger.log(chalk.yellow(`Terminal closed for session ${sessionId}`));
     }
   }
 
@@ -585,8 +607,12 @@ export class TerminalManager {
     }
 
     for (const sessionId of toRemove) {
-      logger.log(`Cleaning up stale terminal for session ${sessionId}`);
+      logger.log(chalk.yellow(`Cleaning up stale terminal for session ${sessionId}`));
       this.closeTerminal(sessionId);
+    }
+
+    if (toRemove.length > 0) {
+      logger.log(chalk.gray(`Cleaned up ${toRemove.length} stale terminals`));
     }
   }
 
@@ -614,6 +640,9 @@ export class TerminalManager {
     const listeners = this.bufferListeners.get(sessionId);
     if (listeners) {
       listeners.add(listener);
+      logger.log(
+        chalk.blue(`Buffer listener subscribed for session ${sessionId} (${listeners.size} total)`)
+      );
     }
 
     // Return unsubscribe function
@@ -621,6 +650,11 @@ export class TerminalManager {
       const listeners = this.bufferListeners.get(sessionId);
       if (listeners) {
         listeners.delete(listener);
+        logger.log(
+          chalk.yellow(
+            `Buffer listener unsubscribed for session ${sessionId} (${listeners.size} remaining)`
+          )
+        );
         if (listeners.size === 0) {
           this.bufferListeners.delete(sessionId);
         }
@@ -653,6 +687,8 @@ export class TerminalManager {
   private async notifyBufferChange(sessionId: string) {
     const listeners = this.bufferListeners.get(sessionId);
     if (!listeners || listeners.size === 0) return;
+
+    logger.debug(`Notifying ${listeners.size} buffer change listeners for session ${sessionId}`);
 
     try {
       // Get full buffer snapshot

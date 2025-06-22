@@ -15,17 +15,17 @@ export function createAuthMiddleware(config: AuthConfig) {
   return (req: Request, res: Response, next: NextFunction) => {
     // Skip auth for health check endpoint
     if (req.path === '/api/health') {
+      logger.debug('bypassing auth for health check endpoint');
       return next();
     }
 
     // If no auth configured, allow all requests
     if (!config.basicAuthUsername || !config.basicAuthPassword) {
+      logger.debug('no auth configured, allowing request');
       return next();
     }
 
-    logger.debug(
-      `Auth check: ${req.method} ${req.path}, auth header: ${req.headers.authorization || 'none'}`
-    );
+    logger.debug(`auth check for ${req.method} ${req.path} from ${req.ip}`);
 
     // Check for Bearer token (for HQ to remote communication)
     const authHeader = req.headers.authorization;
@@ -33,17 +33,17 @@ export function createAuthMiddleware(config: AuthConfig) {
       const token = authHeader.substring(7);
       // In HQ mode, bearer tokens are not accepted (HQ uses basic auth)
       if (config.isHQMode) {
+        logger.warn(`bearer token rejected in HQ mode from ${req.ip}`);
         res.setHeader('WWW-Authenticate', 'Basic realm="VibeTunnel"');
         return res.status(401).json({ error: 'Bearer token not accepted in HQ mode' });
       } else if (config.bearerToken && token === config.bearerToken) {
         // Token matches what this remote server expects from HQ
+        logger.log(chalk.green(`authenticated via bearer token from ${req.ip}`));
         return next();
       } else if (config.bearerToken) {
         // We have a bearer token configured but it doesn't match
-        logger.warn(`Bearer token mismatch: expected ${config.bearerToken}, got ${token}`);
+        logger.warn(`invalid bearer token from ${req.ip}`);
       }
-    } else {
-      logger.debug(`No bearer token in request, bearerToken configured: ${!!config.bearerToken}`);
     }
 
     // Check Basic auth
@@ -54,11 +54,13 @@ export function createAuthMiddleware(config: AuthConfig) {
 
       if (username === config.basicAuthUsername && password === config.basicAuthPassword) {
         return next();
+      } else {
+        logger.warn(`failed basic auth attempt from ${req.ip} for user: ${username}`);
       }
     }
 
     // No valid auth provided
-    logger.warn(chalk.red(`Unauthorized request to ${req.method} ${req.path} from ${req.ip}`));
+    logger.warn(`unauthorized request to ${req.method} ${req.path} from ${req.ip}`);
     res.setHeader('WWW-Authenticate', 'Basic realm="VibeTunnel"');
     res.status(401).json({ error: 'Authentication required' });
   };

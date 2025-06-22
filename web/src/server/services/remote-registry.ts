@@ -1,5 +1,6 @@
 import { isShuttingDown } from '../server.js';
 import { createLogger } from '../utils/logger.js';
+import chalk from 'chalk';
 
 const logger = createLogger('remote-registry');
 
@@ -23,6 +24,10 @@ export class RemoteRegistry {
 
   constructor() {
     this.startHealthChecker();
+    logger.debug('remote registry initialized with health check interval', {
+      interval: this.HEALTH_CHECK_INTERVAL,
+      timeout: this.HEALTH_CHECK_TIMEOUT,
+    });
   }
 
   register(
@@ -43,7 +48,7 @@ export class RemoteRegistry {
 
     this.remotes.set(remote.id, registeredRemote);
     this.remotesByName.set(remote.name, registeredRemote);
-    logger.log(`Remote registered: ${remote.name} (${remote.id}) from ${remote.url}`);
+    logger.log(chalk.green(`remote registered: ${remote.name} (${remote.id}) from ${remote.url}`));
 
     // Immediately check health of new remote
     this.checkRemoteHealth(registeredRemote);
@@ -54,7 +59,7 @@ export class RemoteRegistry {
   unregister(remoteId: string): boolean {
     const remote = this.remotes.get(remoteId);
     if (remote) {
-      logger.log(`Remote unregistered: ${remote.name} (${remoteId}`);
+      logger.log(chalk.yellow(`remote unregistered: ${remote.name} (${remoteId})`));
 
       // Clean up session mappings
       for (const sessionId of remote.sessionIds) {
@@ -68,7 +73,11 @@ export class RemoteRegistry {
   }
 
   getRemote(remoteId: string): RemoteServer | undefined {
-    return this.remotes.get(remoteId);
+    const remote = this.remotes.get(remoteId);
+    if (!remote) {
+      logger.debug(`remote not found: ${remoteId}`);
+    }
+    return remote;
   }
 
   getRemoteByUrl(url: string): RemoteServer | undefined {
@@ -86,7 +95,12 @@ export class RemoteRegistry {
 
   updateRemoteSessions(remoteId: string, sessionIds: string[]): void {
     const remote = this.remotes.get(remoteId);
-    if (!remote) return;
+    if (!remote) {
+      logger.debug(`cannot update sessions: remote ${remoteId} not found`);
+      return;
+    }
+
+    const oldCount = remote.sessionIds.size;
 
     // Remove old session mappings
     for (const oldSessionId of remote.sessionIds) {
@@ -98,23 +112,36 @@ export class RemoteRegistry {
     for (const sessionId of sessionIds) {
       this.sessionToRemote.set(sessionId, remoteId);
     }
+
+    logger.debug(`updated sessions for remote ${remote.name}`, {
+      oldCount,
+      newCount: sessionIds.length,
+    });
   }
 
   addSessionToRemote(remoteId: string, sessionId: string): void {
     const remote = this.remotes.get(remoteId);
-    if (!remote) return;
+    if (!remote) {
+      logger.warn(`cannot add session ${sessionId}: remote ${remoteId} not found`);
+      return;
+    }
 
     remote.sessionIds.add(sessionId);
     this.sessionToRemote.set(sessionId, remoteId);
+    logger.debug(`session ${sessionId} added to remote ${remote.name}`);
   }
 
   removeSessionFromRemote(sessionId: string): void {
     const remoteId = this.sessionToRemote.get(sessionId);
-    if (!remoteId) return;
+    if (!remoteId) {
+      logger.debug(`session ${sessionId} not mapped to any remote`);
+      return;
+    }
 
     const remote = this.remotes.get(remoteId);
     if (remote) {
       remote.sessionIds.delete(sessionId);
+      logger.debug(`session ${sessionId} removed from remote ${remote.name}`);
     }
 
     this.sessionToRemote.delete(sessionId);
@@ -145,13 +172,14 @@ export class RemoteRegistry {
 
       if (response.ok) {
         remote.lastHeartbeat = new Date();
+        logger.debug(`health check passed for ${remote.name}`);
       } else {
         throw new Error(`HTTP ${response.status}`);
       }
     } catch (error) {
       // During shutdown, don't log errors or unregister remotes
       if (!isShuttingDown()) {
-        logger.warn(`Remote failed health check: ${remote.name} (${remote.id}) - ${error}`);
+        logger.warn(`remote failed health check: ${remote.name} (${remote.id})`, error);
         // Remove the remote if it fails health check
         this.unregister(remote.id);
       }
@@ -159,6 +187,7 @@ export class RemoteRegistry {
   }
 
   private startHealthChecker() {
+    logger.debug('starting health checker');
     this.healthCheckInterval = setInterval(() => {
       // Skip health checks during shutdown
       if (isShuttingDown()) {
@@ -171,14 +200,16 @@ export class RemoteRegistry {
       );
 
       Promise.all(healthChecks).catch((err) => {
-        logger.error('Error in health checks:', err);
+        logger.error('error in health checks:', err);
       });
     }, this.HEALTH_CHECK_INTERVAL);
   }
 
   destroy() {
+    logger.log(chalk.yellow('destroying remote registry'));
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
+      logger.debug('health checker stopped');
     }
   }
 }
