@@ -119,10 +119,13 @@ if (nodeVersion < 20) {
 function patchNodePty() {
   console.log('Preparing node-pty for SEA build...');
   
-  // Always reinstall to ensure clean state
-  console.log('Reinstalling node-pty to ensure clean state...');
-  execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
-  execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit', { stdio: 'inherit' });
+  // Skip reinstall if already exists
+  if (!fs.existsSync('node_modules/@homebridge/node-pty-prebuilt-multiarch')) {
+    console.log('Installing node-pty...');
+    execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit --no-save', { stdio: 'inherit' });
+  } else {
+    console.log('node-pty already installed, skipping reinstall...');
+  }
   
   // If using custom Node.js, rebuild native modules
   if (customNodePath) {
@@ -284,11 +287,13 @@ if (process.env.NODE_PTY_SPAWN_HELPER_PATH) {
   }
 }`;
     
-    // Find and replace the helperPath section
-    content = content.replace(
-      /var helperPath;[\s\S]*?helperPath = helperPath\.replace\('node_modules\.asar', 'node_modules\.asar\.unpacked'\);/m,
-      helperPathPatch
-    );
+    // Find and replace the helperPath section - be more specific to avoid double braces
+    const helperPathRegex = /var helperPath;[\s\S]*?helperPath = helperPath\.replace\('node_modules\.asar', 'node_modules\.asar\.unpacked'\);\s*}/m;
+    if (helperPathRegex.test(content)) {
+      content = content.replace(helperPathRegex, helperPathPatch);
+    } else {
+      console.log('Warning: Could not find expected helperPath pattern in unixTerminal.js');
+    }
     
     fs.writeFileSync(unixTerminalFile, content);
   }
@@ -363,7 +368,7 @@ async function main() {
     const buildTimestamp = Date.now();
     
     // Use esbuild directly without custom loader since we're patching node-pty
-    let esbuildCmd = `npx esbuild src/cli.ts \\
+    let esbuildCmd = `npx --no-install esbuild src/cli.ts \\
       --bundle \\
       --platform=node \\
       --target=node20 \\
@@ -469,10 +474,8 @@ async function main() {
       console.log('  - Copied spawn-helper');
     }
 
-    // 9. Restore original node-pty (AFTER copying the custom-built version)
-    console.log('\nRestoring original node-pty for development...');
-    execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
-    execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit', { stdio: 'inherit' });
+    // 9. Skip restoration since we're using --no-save
+    console.log('\nKeeping patched node-pty (use npm install to restore original)...');
 
     console.log('\n✅ Build complete!');
     console.log(`\nPortable executable created in native/ directory:`);

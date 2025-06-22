@@ -14,17 +14,17 @@ execSync('node scripts/copy-assets.js', { stdio: 'inherit' });
 
 // Build CSS
 console.log('Building CSS...');
-execSync('npx tailwindcss -i ./src/client/styles.css -o ./public/bundle/styles.css --minify', { stdio: 'inherit' });
+execSync('node node_modules/tailwindcss/lib/cli.js -i ./src/client/styles.css -o ./public/bundle/styles.css --minify', { stdio: 'inherit' });
 
 // Bundle client JavaScript
 console.log('Bundling client JavaScript...');
 process.env.NODE_ENV = 'production';
 execSync('node scripts/build-client.js', { stdio: 'inherit' });
-execSync('esbuild src/client/test-terminals-entry.ts --bundle --outfile=public/bundle/terminal.js --format=esm --minify', { stdio: 'inherit' });
+execSync('./node_modules/esbuild/bin/esbuild src/client/test-terminals-entry.ts --bundle --outfile=public/bundle/terminal.js --format=esm --minify', { stdio: 'inherit' });
 
 // Build server TypeScript
 console.log('Building server...');
-execSync('tsc', { stdio: 'inherit' });
+execSync('node node_modules/typescript/lib/tsc.js', { stdio: 'inherit' });
 
 // Build native executable
 console.log('Building native executable...');

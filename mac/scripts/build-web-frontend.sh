@@ -278,6 +278,11 @@ fi
 echo "✓ All sanity checks passed"
 
 # Save the current hash as the previous hash for next build
-cp "${HASH_FILE}" "${PREVIOUS_HASH_FILE}"
+if [ -f "${HASH_FILE}" ]; then
+    cp "${HASH_FILE}" "${PREVIOUS_HASH_FILE}"
+else
+    # If hash file doesn't exist, create it with the current hash value
+    echo "${CURRENT_HASH}" > "${PREVIOUS_HASH_FILE}"
+fi
 
 echo "Web frontend build completed successfully"
