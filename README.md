@@ -134,6 +134,8 @@ For development setup and contribution guidelines, see [CONTRIBUTING.md](docs/CO
 
 macOS is finicky when it comes to permissions. The system will only remember the first path from where an app requests permissions. If subsequently the app starts somewhere else, it will silently fail. Fix: Delete the entry and restart settings, restart app and next time the permission is requested, there should be an entry in Settings again.
 
+Important: You need to set your Developer ID in Local.xcconfig. If apps are signed Ad-Hoc, each new signing will count as a new app for macOS and the permissions have to be (deleted and) requested again.
+
 If that fails, use the terminal to reset:
 
 ```
