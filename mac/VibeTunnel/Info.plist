@@ -54,5 +54,7 @@
 	<integer>86400</integer>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>VibeTunnel needs to control terminal applications to create new terminal sessions from the dashboard.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>VibeTunnel will notify you about important events such as new terminal connections, session status changes, and available updates.</string>
 </dict>
 </plist>
