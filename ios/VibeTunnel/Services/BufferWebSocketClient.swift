@@ -49,8 +49,8 @@ class BufferWebSocketClient: NSObject {
     /// Magic byte for binary messages
     private static let bufferMagicByte: UInt8 = 0xBF
 
-    private var webSocketTask: URLSessionWebSocketTask?
-    private let session = URLSession(configuration: .default)
+    private var webSocket: WebSocketProtocol?
+    private let webSocketFactory: WebSocketFactory
     private var subscriptions = [String: (TerminalWebSocketEvent) -> Void]()
     private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempts = 0
@@ -68,6 +68,11 @@ class BufferWebSocketClient: NSObject {
             return nil
         }
         return serverConfig.baseURL
+    }
+    
+    init(webSocketFactory: WebSocketFactory = DefaultWebSocketFactory()) {
+        self.webSocketFactory = webSocketFactory
+        super.init()
     }
 
     func connect() {
@@ -93,39 +98,27 @@ class BufferWebSocketClient: NSObject {
 
         print("[BufferWebSocket] Connecting to \(wsURL)")
 
-        // Cancel existing task if any
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        // Disconnect existing WebSocket if any
+        webSocket?.disconnect(with: .goingAway, reason: nil)
 
-        // Create request with authentication
-        var request = URLRequest(url: wsURL)
+        // Create new WebSocket
+        webSocket = webSocketFactory.createWebSocket()
+        webSocket?.delegate = self
 
+        // Build headers
+        var headers: [String: String] = [:]
+        
         // Add authentication header if needed
         if let config = UserDefaults.standard.data(forKey: "savedServerConfig"),
            let serverConfig = try? JSONDecoder().decode(ServerConfig.self, from: config),
            let authHeader = serverConfig.authorizationHeader {
-            request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+            headers["Authorization"] = authHeader
         }
 
-        // Create new WebSocket task
-        webSocketTask = session.webSocketTask(with: request)
-        webSocketTask?.resume()
-
-        // Start receiving messages
-        receiveMessage()
-
-        // Send initial ping to establish connection
+        // Connect
         Task {
             do {
-                try await sendPing()
-                isConnected = true
-                isConnecting = false
-                reconnectAttempts = 0
-                startPingTask()
-
-                // Re-subscribe to all sessions
-                for sessionId in subscriptions.keys {
-                    try await subscribe(to: sessionId)
-                }
+                try await webSocket?.connect(to: wsURL, with: headers)
             } catch {
                 print("[BufferWebSocket] Connection failed: \(error)")
                 connectionError = error
@@ -135,36 +128,13 @@ class BufferWebSocketClient: NSObject {
         }
     }
 
-    private func receiveMessage() {
-        webSocketTask?.receive { [weak self] result in
-            guard let self else { return }
-
-            switch result {
-            case .success(let message):
-                Task { @MainActor in
-                    self.handleMessage(message)
-                    self.receiveMessage() // Continue receiving
-                }
-
-            case .failure(let error):
-                print("[BufferWebSocket] Receive error: \(error)")
-                Task { @MainActor in
-                    self.handleDisconnection()
-                }
-            }
-        }
-    }
-
-    private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
+    private func handleMessage(_ message: WebSocketMessage) {
         switch message {
         case .data(let data):
             handleBinaryMessage(data)
 
         case .string(let text):
             handleTextMessage(text)
-
-        @unknown default:
-            break
         }
     }
 
@@ -632,7 +602,7 @@ class BufferWebSocketClient: NSObject {
     }
 
     private func sendMessage(_ message: [String: Any]) async throws {
-        guard let webSocketTask else {
+        guard let webSocket else {
             throw WebSocketError.connectionFailed
         }
 
@@ -641,11 +611,14 @@ class BufferWebSocketClient: NSObject {
             throw WebSocketError.invalidData
         }
 
-        try await webSocketTask.send(.string(string))
+        try await webSocket.send(.string(string))
     }
 
     private func sendPing() async throws {
-        try await sendMessage(["type": "ping"])
+        guard let webSocket else {
+            throw WebSocketError.connectionFailed
+        }
+        try await webSocket.sendPing()
     }
 
     private func startPingTask() {
@@ -668,7 +641,7 @@ class BufferWebSocketClient: NSObject {
 
     private func handleDisconnection() {
         isConnected = false
-        webSocketTask = nil
+        webSocket = nil
         stopPingTask()
         scheduleReconnect()
     }
@@ -697,8 +670,8 @@ class BufferWebSocketClient: NSObject {
         reconnectTask = nil
         stopPingTask()
 
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
+        webSocket?.disconnect(with: .goingAway, reason: nil)
+        webSocket = nil
 
         subscriptions.removeAll()
         isConnected = false
@@ -706,6 +679,40 @@ class BufferWebSocketClient: NSObject {
 
     deinit {
         // Tasks will be cancelled automatically when the object is deallocated
-        // WebSocket task cleanup happens in disconnect()
+        // WebSocket cleanup happens in disconnect()
+    }
+}
+
+// MARK: - WebSocketDelegate
+
+extension BufferWebSocketClient: WebSocketDelegate {
+    func webSocketDidConnect(_ webSocket: WebSocketProtocol) {
+        print("[BufferWebSocket] Connected")
+        isConnected = true
+        isConnecting = false
+        reconnectAttempts = 0
+        startPingTask()
+        
+        // Re-subscribe to all sessions
+        Task {
+            for sessionId in subscriptions.keys {
+                try? await subscribe(to: sessionId)
+            }
+        }
+    }
+    
+    func webSocket(_ webSocket: WebSocketProtocol, didReceiveMessage message: WebSocketMessage) {
+        handleMessage(message)
+    }
+    
+    func webSocket(_ webSocket: WebSocketProtocol, didFailWithError error: Error) {
+        print("[BufferWebSocket] Error: \(error)")
+        connectionError = error
+        handleDisconnection()
+    }
+    
+    func webSocketDidDisconnect(_ webSocket: WebSocketProtocol, closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        print("[BufferWebSocket] Disconnected with code: \(closeCode)")
+        handleDisconnection()
     }
 }
