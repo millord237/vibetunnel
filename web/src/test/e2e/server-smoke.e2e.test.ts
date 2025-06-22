@@ -159,7 +159,7 @@ describe('Server Smoke Test', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        command: ['echo', 'hello world'],
+        command: ['sh', '-c', 'echo "hello world"; sleep 2'],
         options: {
           sessionName: 'test-session',
           cols: 80,
