@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import { streamNotifier } from './stream-notifier.js';
 import { Response } from 'express';
 
 interface StreamClient {
@@ -14,7 +13,6 @@ interface WatcherInfo {
   lastSize: number;
   lastMtime: number;
   lineBuffer: string;
-  notificationListener?: (update: { sessionId: string; data: string; timestamp: number }) => void;
 }
 
 export class StreamWatcher {
@@ -100,10 +98,6 @@ export class StreamWatcher {
         if (watcherInfo.watcher) {
           watcherInfo.watcher.close();
         }
-        // Remove notification listener
-        if (watcherInfo.notificationListener) {
-          streamNotifier.removeListener('stream-update', watcherInfo.notificationListener);
-        }
         this.activeWatchers.delete(sessionId);
       }
     }
@@ -187,73 +181,54 @@ export class StreamWatcher {
    * Start watching a file for changes
    */
   private startWatching(sessionId: string, streamPath: string, watcherInfo: WatcherInfo): void {
-    // Check if we should use direct notifications or file watching
-    const hasListeners = streamNotifier.hasListeners(sessionId);
+    console.log(`[STREAM] Using file watcher for session ${sessionId}`);
 
-    if (hasListeners) {
-      console.log(`[STREAM] Using direct notifications for session ${sessionId}`);
+    // Use standard fs.watch with stat checking
+    watcherInfo.watcher = fs.watch(streamPath, { persistent: true }, (eventType) => {
+      if (eventType === 'change') {
+        try {
+          // Check if file actually changed by comparing stats
+          const stats = fs.statSync(streamPath);
 
-      // Set up direct notification listener for lowest latency
-      watcherInfo.notificationListener = (update) => {
-        if (update.sessionId === sessionId) {
-          // Process the notification data directly
-          const lines = update.data.split('\n').filter((line) => line.trim());
-          for (const line of lines) {
-            this.broadcastLine(sessionId, line, watcherInfo);
-          }
-        }
-      };
-      streamNotifier.on('stream-update', watcherInfo.notificationListener);
-    } else {
-      console.log(`[STREAM] Using file watcher for session ${sessionId} (cross-process)`);
+          // Only process if size increased (append-only file)
+          if (stats.size > watcherInfo.lastSize || stats.mtimeMs > watcherInfo.lastMtime) {
+            watcherInfo.lastSize = stats.size;
+            watcherInfo.lastMtime = stats.mtimeMs;
 
-      // Use standard fs.watch with stat checking for cross-process scenarios
-      watcherInfo.watcher = fs.watch(streamPath, { persistent: true }, (eventType) => {
-        if (eventType === 'change') {
-          try {
-            // Check if file actually changed by comparing stats
-            const stats = fs.statSync(streamPath);
+            // Read only new data
+            if (stats.size > watcherInfo.lastOffset) {
+              const fd = fs.openSync(streamPath, 'r');
+              const buffer = Buffer.alloc(stats.size - watcherInfo.lastOffset);
+              fs.readSync(fd, buffer, 0, buffer.length, watcherInfo.lastOffset);
+              fs.closeSync(fd);
 
-            // Only process if size increased (append-only file)
-            if (stats.size > watcherInfo.lastSize || stats.mtimeMs > watcherInfo.lastMtime) {
-              watcherInfo.lastSize = stats.size;
-              watcherInfo.lastMtime = stats.mtimeMs;
+              // Update offset
+              watcherInfo.lastOffset = stats.size;
 
-              // Read only new data
-              if (stats.size > watcherInfo.lastOffset) {
-                const fd = fs.openSync(streamPath, 'r');
-                const buffer = Buffer.alloc(stats.size - watcherInfo.lastOffset);
-                fs.readSync(fd, buffer, 0, buffer.length, watcherInfo.lastOffset);
-                fs.closeSync(fd);
+              // Process new data
+              const newData = buffer.toString('utf8');
+              watcherInfo.lineBuffer += newData;
 
-                // Update offset
-                watcherInfo.lastOffset = stats.size;
+              // Process complete lines
+              const lines = watcherInfo.lineBuffer.split('\n');
+              watcherInfo.lineBuffer = lines.pop() || '';
 
-                // Process new data
-                const newData = buffer.toString('utf8');
-                watcherInfo.lineBuffer += newData;
-
-                // Process complete lines
-                const lines = watcherInfo.lineBuffer.split('\n');
-                watcherInfo.lineBuffer = lines.pop() || '';
-
-                for (const line of lines) {
-                  if (line.trim()) {
-                    this.broadcastLine(sessionId, line, watcherInfo);
-                  }
+              for (const line of lines) {
+                if (line.trim()) {
+                  this.broadcastLine(sessionId, line, watcherInfo);
                 }
               }
             }
-          } catch (error) {
-            console.error(`[STREAM] Error reading file changes:`, error);
           }
+        } catch (error) {
+          console.error(`[STREAM] Error reading file changes:`, error);
         }
-      });
+      }
+    });
 
-      watcherInfo.watcher.on('error', (error) => {
-        console.error(`[STREAM] File watcher error for session ${sessionId}:`, error);
-      });
-    }
+    watcherInfo.watcher.on('error', (error) => {
+      console.error(`[STREAM] File watcher error for session ${sessionId}:`, error);
+    });
   }
 
   /**
@@ -327,9 +302,6 @@ export class StreamWatcher {
     for (const [_sessionId, watcherInfo] of this.activeWatchers) {
       if (watcherInfo.watcher) {
         watcherInfo.watcher.close();
-      }
-      if (watcherInfo.notificationListener) {
-        streamNotifier.removeListener('stream-update', watcherInfo.notificationListener);
       }
     }
     this.activeWatchers.clear();

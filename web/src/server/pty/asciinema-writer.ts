@@ -8,7 +8,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { AsciinemaHeader, AsciinemaEvent, PtyError } from './types.js';
-import { streamNotifier } from '../services/stream-notifier.js';
 
 export class AsciinemaWriter {
   private writeStream: fs.WriteStream;
@@ -16,17 +15,11 @@ export class AsciinemaWriter {
   private utf8Buffer: Buffer = Buffer.alloc(0);
   private headerWritten = false;
   private fd: number | null = null;
-  private sessionId: string;
 
   constructor(
     private filePath: string,
     private header: AsciinemaHeader
   ) {
-    // Extract session ID from file path
-    const pathParts = this.filePath.split(path.sep);
-    const controlIndex = pathParts.indexOf('control');
-    this.sessionId =
-      controlIndex >= 0 && pathParts[controlIndex + 1] ? pathParts[controlIndex + 1] : 'unknown';
     this.startTime = new Date();
 
     // Ensure directory exists
@@ -83,11 +76,6 @@ export class AsciinemaWriter {
     const headerJson = JSON.stringify(this.header);
     this.writeStream.write(headerJson + '\n');
     this.headerWritten = true;
-
-    // Notify about header
-    if (streamNotifier.hasListeners(this.sessionId)) {
-      streamNotifier.notifyStreamUpdate(this.sessionId, headerJson + '\n');
-    }
   }
 
   /**
@@ -160,11 +148,6 @@ export class AsciinemaWriter {
   writeRawJson(jsonValue: unknown): void {
     const jsonString = JSON.stringify(jsonValue);
     this.writeStream.write(jsonString + '\n');
-
-    // Direct notification for exit events
-    if (streamNotifier.hasListeners(this.sessionId)) {
-      streamNotifier.notifyStreamUpdate(this.sessionId, jsonString + '\n');
-    }
   }
 
   /**
@@ -176,13 +159,7 @@ export class AsciinemaWriter {
     const eventJson = JSON.stringify(eventArray);
     this.writeStream.write(eventJson + '\n');
 
-    // Direct notification for lowest latency
-    if (streamNotifier.hasListeners(this.sessionId)) {
-      streamNotifier.notifyStreamUpdate(this.sessionId, eventJson + '\n');
-    }
-
     // Force immediate disk write to trigger file watchers
-    // This is critical for real-time performance with forwarded sessions
     if (this.fd !== null) {
       try {
         fs.fsyncSync(this.fd);
