@@ -63,6 +63,38 @@ export class SessionCreateForm extends LitElement {
     this.loadFromLocalStorage();
   }
 
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    // Clean up document event listener if modal is still visible
+    if (this.visible) {
+      document.removeEventListener('keydown', this.handleGlobalKeyDown);
+    }
+  }
+
+  private handleGlobalKeyDown = (e: KeyboardEvent) => {
+    // Only handle events when modal is visible
+    if (!this.visible) return;
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleCancel();
+    } else if (e.key === 'Enter') {
+      // Don't interfere with Enter in textarea elements
+      if (e.target instanceof HTMLTextAreaElement) return;
+
+      // Check if form is valid (same conditions as Create button)
+      const canCreate =
+        !this.disabled && !this.isCreating && this.workingDir.trim() && this.command.trim();
+
+      if (canCreate) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleCreate();
+      }
+    }
+  };
+
   private loadFromLocalStorage() {
     try {
       const savedWorkingDir = localStorage.getItem(this.STORAGE_KEY_WORKING_DIR);
@@ -108,9 +140,17 @@ export class SessionCreateForm extends LitElement {
   updated(changedProperties: PropertyValues) {
     super.updated(changedProperties);
 
-    // Load from localStorage when form becomes visible
-    if (changedProperties.has('visible') && this.visible) {
-      this.loadFromLocalStorage();
+    // Handle visibility changes
+    if (changedProperties.has('visible')) {
+      if (this.visible) {
+        // Load from localStorage when form becomes visible
+        this.loadFromLocalStorage();
+        // Add global keyboard listener
+        document.addEventListener('keydown', this.handleGlobalKeyDown);
+      } else {
+        // Remove global keyboard listener when hidden
+        document.removeEventListener('keydown', this.handleGlobalKeyDown);
+      }
     }
   }
 
@@ -272,8 +312,29 @@ export class SessionCreateForm extends LitElement {
           class="modal-content font-mono text-sm w-96 lg:w-[576px] max-w-full mx-4"
           style="view-transition-name: create-session-modal"
         >
-          <div class="pb-6 mb-6 border-b border-dark-border">
+          <div class="pb-6 mb-6 border-b border-dark-border relative">
             <h2 class="text-accent-green text-lg font-bold">New Session</h2>
+            <button
+              class="absolute top-0 right-0 text-dark-text-muted hover:text-dark-text transition-colors p-1"
+              @click=${this.handleCancel}
+              title="Close"
+              aria-label="Close modal"
+            >
+              <svg
+                class="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
           </div>
 
           <div class="p-4 lg:p-8">
@@ -298,7 +359,6 @@ export class SessionCreateForm extends LitElement {
                 class="input-field"
                 .value=${this.command}
                 @input=${this.handleCommandChange}
-                @keydown=${(e: KeyboardEvent) => e.key === 'Enter' && this.handleCreate()}
                 placeholder="zsh"
                 ?disabled=${this.disabled || this.isCreating}
               />
