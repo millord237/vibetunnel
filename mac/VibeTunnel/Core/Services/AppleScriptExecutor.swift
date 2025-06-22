@@ -61,7 +61,7 @@ final class AppleScriptExecutor {
             )
         }
 
-        logger.debug("AppleScript executed successfully")
+        logger.debug("AppleScript \(script) executed successfully")
         return result
     }
 
