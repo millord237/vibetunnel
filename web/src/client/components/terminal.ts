@@ -114,6 +114,10 @@ export class Terminal extends LitElement {
       if (!this.fitHorizontally) {
         this.originalFontSize = this.fontSize;
       }
+      // Recalculate terminal dimensions when font size changes
+      if (this.terminal && this.container) {
+        this.fitTerminal();
+      }
     }
     if (changedProperties.has('fitHorizontally')) {
       if (!this.fitHorizontally) {

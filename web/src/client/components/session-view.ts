@@ -56,6 +56,7 @@ export class SessionView extends LitElement {
   @state() private showWidthSelector = false;
   @state() private customWidth = '';
   @state() private showFileBrowser = false;
+  @state() private terminalFontSize = 14;
 
   private preferencesManager = TerminalPreferencesManager.getInstance();
   @state() private reconnectCount = 0;
@@ -69,6 +70,17 @@ export class SessionView extends LitElement {
   private lastResizeHeight = 0;
 
   private keyboardHandler = (e: KeyboardEvent) => {
+    // Check if we're typing in an input field
+    const target = e.target as HTMLElement;
+    if (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT'
+    ) {
+      // Allow normal input in form fields
+      return;
+    }
+
     // Handle Cmd+O / Ctrl+O to open file browser
     if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
       e.preventDefault();
@@ -170,6 +182,7 @@ export class SessionView extends LitElement {
 
     // Load terminal preferences
     this.terminalMaxCols = this.preferencesManager.getMaxCols();
+    this.terminalFontSize = this.preferencesManager.getFontSize();
 
     // Make session-view focusable
     this.tabIndex = 0;
@@ -274,7 +287,7 @@ export class SessionView extends LitElement {
     // Configure terminal for interactive session
     this.terminal.cols = 80;
     this.terminal.rows = 24;
-    this.terminal.fontSize = 14;
+    this.terminal.fontSize = this.terminalFontSize; // Apply saved font size preference
     this.terminal.fitHorizontally = false; // Allow natural terminal sizing
     this.terminal.maxCols = this.terminalMaxCols; // Apply saved max width preference
 
@@ -880,6 +893,20 @@ export class SessionView extends LitElement {
     return commonWidth ? commonWidth.label : this.terminalMaxCols.toString();
   }
 
+  private handleFontSizeChange(newSize: number) {
+    // Clamp to reasonable bounds
+    const clampedSize = Math.max(8, Math.min(32, newSize));
+    this.terminalFontSize = clampedSize;
+    this.preferencesManager.setFontSize(clampedSize);
+
+    // Update the terminal component
+    const terminal = this.querySelector('vibe-terminal') as Terminal;
+    if (terminal) {
+      terminal.fontSize = clampedSize;
+      terminal.requestUpdate();
+    }
+  }
+
   private handleOpenFileBrowser() {
     this.showFileBrowser = true;
   }
@@ -1111,6 +1138,7 @@ export class SessionView extends LitElement {
                             .value=${this.customWidth}
                             @input=${this.handleCustomWidthInput}
                             @keydown=${this.handleCustomWidthKeydown}
+                            @click=${(e: Event) => e.stopPropagation()}
                             class="flex-1 bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs font-mono text-dark-text"
                           />
                           <button
@@ -1121,6 +1149,35 @@ export class SessionView extends LitElement {
                             parseInt(this.customWidth) > 500}
                           >
                             Set
+                          </button>
+                        </div>
+                      </div>
+                      <div class="border-t border-dark-border mt-2 pt-2">
+                        <div class="text-xs text-dark-text-muted mb-2 px-2">Font Size</div>
+                        <div class="flex items-center gap-2 px-2">
+                          <button
+                            class="btn-secondary text-xs px-2 py-1"
+                            @click=${() => this.handleFontSizeChange(this.terminalFontSize - 1)}
+                            ?disabled=${this.terminalFontSize <= 8}
+                          >
+                            −
+                          </button>
+                          <span class="font-mono text-xs text-dark-text min-w-8 text-center">
+                            ${this.terminalFontSize}px
+                          </span>
+                          <button
+                            class="btn-secondary text-xs px-2 py-1"
+                            @click=${() => this.handleFontSizeChange(this.terminalFontSize + 1)}
+                            ?disabled=${this.terminalFontSize >= 32}
+                          >
+                            +
+                          </button>
+                          <button
+                            class="btn-ghost text-xs px-2 py-1 ml-auto"
+                            @click=${() => this.handleFontSizeChange(14)}
+                            ?disabled=${this.terminalFontSize === 14}
+                          >
+                            Reset
                           </button>
                         </div>
                       </div>
@@ -1171,7 +1228,7 @@ export class SessionView extends LitElement {
             .sessionId=${this.session?.id || ''}
             .cols=${80}
             .rows=${24}
-            .fontSize=${14}
+            .fontSize=${this.terminalFontSize}
             .fitHorizontally=${false}
             .maxCols=${this.terminalMaxCols}
             class="w-full h-full"
