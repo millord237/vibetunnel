@@ -79,7 +79,11 @@ export class FileBrowser extends LitElement {
   @state() private previewLoading = false;
   @state() private showDiff = false;
 
-  private monacoEditor: any = null;
+  private monacoEditor: {
+    setValue: (value: string) => void;
+    getModel: () => unknown;
+    dispose: () => void;
+  } | null = null;
   private monacoContainer: HTMLElement | null = null;
 
   async connectedCallback() {

@@ -14,6 +14,7 @@
 import { LitElement, html, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import './file-browser.js';
+import type { Session } from './session-list.js';
 
 export interface SessionCreateData {
   command: string[];
@@ -371,7 +372,7 @@ export class SessionCreateForm extends LitElement {
       <file-browser
         .visible=${this.showFileBrowser}
         .mode=${'select'}
-        .session=${{ workingDir: this.workingDir } as any}
+        .session=${{ workingDir: this.workingDir } as Session}
         @directory-selected=${this.handleDirectorySelected}
         @browser-cancel=${this.handleBrowserCancel}
       ></file-browser>

@@ -424,7 +424,7 @@ export function createApp(): AppInstance {
     server.removeAllListeners('error');
 
     // Add error handler for port already in use
-    server.on('error', (error: any) => {
+    server.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
         console.error(chalk.red(`Error: Port ${requestedPort} is already in use`));
         console.error(

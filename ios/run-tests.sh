@@ -43,8 +43,8 @@ set -o pipefail
 if command -v xcpretty &> /dev/null; then
     echo "Running tests with xcpretty formatter..."
     xcodebuild test \
-        -project VibeTunnel.xcodeproj \
-        -scheme VibeTunnel \
+        -workspace ../VibeTunnel.xcworkspace \
+        -scheme VibeTunnel-iOS \
         -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
         -resultBundlePath TestResults.xcresult \
         2>&1 | xcpretty || {
@@ -64,8 +64,8 @@ if command -v xcpretty &> /dev/null; then
 else
     echo "Running tests without xcpretty..."
     xcodebuild test \
-        -project VibeTunnel.xcodeproj \
-        -scheme VibeTunnel \
+        -workspace ../VibeTunnel.xcworkspace \
+        -scheme VibeTunnel-iOS \
         -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
         -resultBundlePath TestResults.xcresult \
         || {

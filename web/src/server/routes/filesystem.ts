@@ -166,9 +166,9 @@ export function createFilesystemRoutes(): Router {
         gitStatus,
         files: filteredFiles,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Browse error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -231,9 +231,9 @@ export function createFilesystemRoutes(): Router {
           humanSize: formatBytes(stats.size),
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Preview error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -264,9 +264,9 @@ export function createFilesystemRoutes(): Router {
       // Stream the file
       const stream = createReadStream(fullPath);
       stream.pipe(res);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Raw file error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -291,9 +291,9 @@ export function createFilesystemRoutes(): Router {
         content,
         language: getLanguageFromPath(fullPath),
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Content error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -323,9 +323,9 @@ export function createFilesystemRoutes(): Router {
         diff,
         hasDiff: diff.length > 0,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Diff error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -357,9 +357,9 @@ export function createFilesystemRoutes(): Router {
         success: true,
         path: path.relative(process.cwd(), fullPath),
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Mkdir error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 

@@ -8,10 +8,16 @@ import { VERSION } from './server/version.js';
 
 // Prevent double execution in SEA context where require.main might be undefined
 // Use a global flag to ensure we only run once
-if ((global as any).__vibetunnelStarted) {
+interface GlobalWithVibetunnel {
+  __vibetunnelStarted?: boolean;
+}
+
+const globalWithVibetunnel = global as unknown as GlobalWithVibetunnel;
+
+if (globalWithVibetunnel.__vibetunnelStarted) {
   process.exit(0);
 }
-(global as any).__vibetunnelStarted = true;
+globalWithVibetunnel.__vibetunnelStarted = true;
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {

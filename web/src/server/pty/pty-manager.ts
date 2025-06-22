@@ -205,15 +205,19 @@ export class PtyManager {
           cwd: workingDir,
           env: ptyEnv,
         });
-      } catch (spawnError: any) {
+      } catch (spawnError) {
         // Provide better error messages for common issues
-        let errorMessage = spawnError.message;
+        let errorMessage = spawnError instanceof Error ? spawnError.message : String(spawnError);
 
-        if (spawnError.code === 'ENOENT' || errorMessage.includes('ENOENT')) {
+        const errorCode =
+          spawnError instanceof Error && 'code' in spawnError
+            ? (spawnError as NodeJS.ErrnoException).code
+            : undefined;
+        if (errorCode === 'ENOENT' || errorMessage.includes('ENOENT')) {
           errorMessage = `Command not found: '${command[0]}'. Please ensure the command exists and is in your PATH.`;
-        } else if (spawnError.code === 'EACCES' || errorMessage.includes('EACCES')) {
+        } else if (errorCode === 'EACCES' || errorMessage.includes('EACCES')) {
           errorMessage = `Permission denied: '${command[0]}'. The command exists but is not executable.`;
-        } else if (spawnError.code === 'ENXIO' || errorMessage.includes('ENXIO')) {
+        } else if (errorCode === 'ENXIO' || errorMessage.includes('ENXIO')) {
           errorMessage = `Failed to allocate terminal for '${command[0]}'. This may occur if the command doesn't exist or the system cannot create a pseudo-terminal.`;
         } else if (errorMessage.includes('cwd') || errorMessage.includes('working directory')) {
           errorMessage = `Working directory does not exist: '${workingDir}'`;

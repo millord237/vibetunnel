@@ -134,7 +134,7 @@ jobs:
         
     - name: Show build settings
       run: |
-        xcodebuild -showBuildSettings -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS -destination "platform=iOS,name=Any iOS Device"
+        xcodebuild -showBuildSettings -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS -destination "generic/platform=iOS" || true
         
     - name: Build iOS app
       run: |
@@ -142,12 +142,12 @@ jobs:
         xcodebuild build \
           -workspace VibeTunnel.xcworkspace \
           -scheme VibeTunnel-iOS \
-          -destination "platform=iOS,name=Any iOS Device" \
+          -destination "generic/platform=iOS" \
           -configuration Release \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           ONLY_ACTIVE_ARCH=NO \
-          -derivedDataPath build/DerivedData \
+          -derivedDataPath ios/build/DerivedData \
           COMPILER_INDEX_STORE_ENABLE=NO \
           2>&1 | tee build.log | xcpretty || {
             echo "Build failed. Last 100 lines of output:"
@@ -161,6 +161,8 @@ jobs:
         echo "Searching for iOS build products..."
         find ios/build -name "*.app" -type d 2>/dev/null || echo "No build products found"
         ls -la ios/build/DerivedData/Build/Products/ 2>/dev/null || echo "Build products directory not found"
+        # Also check workspace-level build directory
+        ls -la build/DerivedData/Build/Products/ 2>/dev/null || echo "Workspace build products directory not found"
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4

@@ -1,7 +1,7 @@
 declare global {
   interface Window {
-    monaco: any;
-    require: any;
+    monaco: typeof import('monaco-editor');
+    require: NodeRequire;
   }
 }
 
