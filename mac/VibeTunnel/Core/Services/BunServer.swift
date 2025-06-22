@@ -27,10 +27,10 @@ final class BunServer {
     private var stderrPipe: Pipe?
     private var outputTask: Task<Void, Never>?
     private var errorTask: Task<Void, Never>?
-    
+
     /// Server state machine - thread-safe through MainActor
     private var state: ServerState = .idle
-    
+
     /// Resource cleanup tracking
     private var isCleaningUp = false
 
@@ -65,7 +65,7 @@ final class BunServer {
             throw BunServerError.invalidState
         }
         state = .starting
-        
+
         defer {
             // Ensure we reset state on error
             if state == .starting {
@@ -204,7 +204,7 @@ final class BunServer {
 
             // Mark server as running only after successful start
             state = .running
-            
+
             logger.info("Bun server process started successfully")
 
             // Monitor process termination
@@ -239,21 +239,21 @@ final class BunServer {
             logger.warning("Bun server not running (state: \(String(describing: self.state)))")
             return
         }
-        
+
         // Prevent concurrent cleanup
         if isCleaningUp {
             logger.warning("Already cleaning up server")
             return
         }
-        
+
         state = .stopping
         isCleaningUp = true
-        
+
         defer {
             state = .idle
             isCleaningUp = false
         }
-        
+
         guard let process else {
             logger.warning("No process to stop")
             await performCleanup()
@@ -265,7 +265,7 @@ final class BunServer {
         // Cancel output monitoring tasks
         outputTask?.cancel()
         errorTask?.cancel()
-        
+
         // Close pipes to trigger EOF in monitors
         if let pipe = self.stdoutPipe {
             try? pipe.fileHandleForReading.close()
@@ -273,7 +273,7 @@ final class BunServer {
         if let pipe = self.stderrPipe {
             try? pipe.fileHandleForReading.close()
         }
-        
+
         // Give tasks a moment to complete
         try? await Task.sleep(for: .milliseconds(100))
 
@@ -314,14 +314,14 @@ final class BunServer {
     func cleanup() async {
         await stop()
     }
-    
+
     /// Get current server state
     func getState() -> ServerState {
         state
     }
 
     // MARK: - Private Methods
-    
+
     /// Perform cleanup of all resources
     private func performCleanup() async {
         self.process = nil
@@ -334,13 +334,14 @@ final class BunServer {
     private func startOutputMonitoring() {
         // Capture pipes and port before starting detached tasks
         guard let stdoutPipe = self.stdoutPipe,
-              let stderrPipe = self.stderrPipe else {
+              let stderrPipe = self.stderrPipe
+        else {
             logger.warning("No pipes available for monitoring")
             return
         }
-        
+
         let currentPort = self.port
-        
+
         // Create a sendable reference for logging
         let logHandler = LogHandler()
 
@@ -350,16 +351,16 @@ final class BunServer {
 
             let handle = pipe.fileHandleForReading
             let source = DispatchSource.makeReadSource(fileDescriptor: handle.fileDescriptor)
-            
+
             let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "BunServer")
             logger.debug("Starting stdout monitoring for Bun server on port \(currentPort)")
-            
+
             // Create a cancellation handler
             let cancelSource = {
                 source.cancel()
                 try? handle.close()
             }
-            
+
             source.setEventHandler { [logHandler] in
                 let data = handle.availableData
                 if data.isEmpty {
@@ -367,7 +368,7 @@ final class BunServer {
                     cancelSource()
                     return
                 }
-                
+
                 if let output = String(data: data, encoding: .utf8) {
                     let lines = output.trimmingCharacters(in: .whitespacesAndNewlines)
                         .components(separatedBy: .newlines)
@@ -382,18 +383,18 @@ final class BunServer {
                     }
                 }
             }
-            
+
             source.setCancelHandler {
                 logger.debug("Stopped stdout monitoring for Bun server")
             }
-            
+
             source.activate()
-            
+
             // Keep the task alive until cancelled
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(100))
             }
-            
+
             cancelSource()
         }
 
@@ -403,16 +404,16 @@ final class BunServer {
 
             let handle = pipe.fileHandleForReading
             let source = DispatchSource.makeReadSource(fileDescriptor: handle.fileDescriptor)
-            
+
             let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "BunServer")
             logger.debug("Starting stderr monitoring for Bun server on port \(currentPort)")
-            
+
             // Create a cancellation handler
             let cancelSource = {
                 source.cancel()
                 try? handle.close()
             }
-            
+
             source.setEventHandler { [logHandler] in
                 let data = handle.availableData
                 if data.isEmpty {
@@ -420,7 +421,7 @@ final class BunServer {
                     cancelSource()
                     return
                 }
-                
+
                 if let output = String(data: data, encoding: .utf8) {
                     let lines = output.trimmingCharacters(in: .whitespacesAndNewlines)
                         .components(separatedBy: .newlines)
@@ -430,18 +431,18 @@ final class BunServer {
                     }
                 }
             }
-            
+
             source.setCancelHandler {
                 logger.debug("Stopped stderr monitoring for Bun server")
             }
-            
+
             source.activate()
-            
+
             // Keep the task alive until cancelled
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(100))
             }
-            
+
             cancelSource()
         }
     }
@@ -491,7 +492,7 @@ final class BunServer {
         await process.waitUntilExitAsync()
 
         let exitCode = process.terminationStatus
-        
+
         // Check current state
         let currentState = state
         let wasRunning = currentState == .running
@@ -609,10 +610,10 @@ extension Process {
 /// A sendable log handler for use in detached tasks
 private final class LogHandler: Sendable {
     private let serverOutput = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "ServerOutput")
-    
+
     func log(_ line: String, isError: Bool) {
         let lowercased = line.lowercased()
-        
+
         if isError || lowercased.contains("error") || lowercased.contains("failed") || lowercased.contains("fatal") {
             serverOutput.error("\(line, privacy: .public)")
         } else if lowercased.contains("warn") || lowercased.contains("warning") {

@@ -11,7 +11,7 @@ struct WelcomeContentView: View {
                 Text("Welcome to VibeTunnel")
                     .font(.largeTitle)
                     .fontWeight(.semibold)
-                
+
                 Text("Turn any browser into your terminal. Command your agents on the go.")
                     .font(.body)
                     .foregroundColor(.secondary)
@@ -26,7 +26,7 @@ struct WelcomeContentView: View {
             .foregroundColor(.secondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 40)
-            
+
             Spacer()
         }
         .padding()

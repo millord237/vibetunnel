@@ -205,7 +205,13 @@ struct ServerStatusView: View {
     }
 
     private var statusText: String {
-        isRunning ? "Server running on port \(port)" : "Server stopped"
+        if isRunning {
+            // Explicitly format port without thousands separator
+            let portString = String(format: "%d", port)
+            return "Server running on port \(portString)"
+        } else {
+            return "Server stopped"
+        }
     }
 }
 

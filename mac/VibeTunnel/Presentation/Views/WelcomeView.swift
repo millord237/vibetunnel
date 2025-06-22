@@ -25,7 +25,7 @@ struct WelcomeView: View {
     private var welcomeVersion = 0
     @State private var cliInstaller = CLIInstaller()
     @State private var permissionManager = SystemPermissionManager.shared
-    
+
     private let pageWidth: CGFloat = 640
     private let contentHeight: CGFloat = 468 // Total height minus navigation area
 
@@ -41,36 +41,39 @@ struct WelcomeView: View {
             .padding(.top, 40)
             .padding(.bottom, 20) // Add padding below icon
             .frame(height: 240)
-            
+
             // Scrollable content area
-            GeometryReader { geometry in
+            GeometryReader { _ in
                 HStack(spacing: 0) {
                     // Page 1: Welcome content (without icon)
                     WelcomeContentView()
                         .frame(width: pageWidth)
-                    
+
                     // Page 2: VT Command
                     VTCommandPageView(cliInstaller: cliInstaller)
                         .frame(width: pageWidth)
-                    
+
                     // Page 3: Request Permissions
                     RequestPermissionsPageView()
                         .frame(width: pageWidth)
-                    
+
                     // Page 4: Select Terminal
                     SelectTerminalPageView()
                         .frame(width: pageWidth)
-                    
+
                     // Page 5: Protect Your Dashboard
                     ProtectDashboardPageView()
                         .frame(width: pageWidth)
-                    
+
                     // Page 6: Accessing Dashboard
                     AccessDashboardPageView()
                         .frame(width: pageWidth)
                 }
                 .offset(x: CGFloat(-currentPage) * pageWidth)
-                .animation(.interactiveSpring(response: 0.5, dampingFraction: 0.86, blendDuration: 0.25), value: currentPage)
+                .animation(
+                    .interactiveSpring(response: 0.5, dampingFraction: 0.86, blendDuration: 0.25),
+                    value: currentPage
+                )
             }
             .frame(height: 260) // Total height (560) - header (240) - navigation (60)
             .clipped()
@@ -88,7 +91,7 @@ struct WelcomeView: View {
                     .buttonStyle(.plain)
                     .opacity(0)
                     .disabled(true)
-                    
+
                     // Actual back button when needed
                     if currentPage > 0 {
                         Button(action: handleBackAction) {
@@ -104,9 +107,9 @@ struct WelcomeView: View {
                     }
                 }
                 .frame(minWidth: 80, alignment: .leading) // Same width as Next button, left-aligned
-                
+
                 Spacer()
-                
+
                 // Page indicators centered
                 HStack(spacing: 8) {
                     ForEach(0..<6) { index in
@@ -123,7 +126,7 @@ struct WelcomeView: View {
                         .pointingHandCursor()
                     }
                 }
-                
+
                 Spacer()
 
                 Button(action: handleNextAction) {

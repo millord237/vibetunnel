@@ -1,6 +1,6 @@
+import Darwin.C
 import Foundation
 import OSLog
-import Darwin.C
 
 /// Information about a process that's using a port
 struct ProcessDetails {
@@ -74,14 +74,14 @@ final class PortConflictResolver {
         if let _ = await detectConflict(on: port) {
             return false
         }
-        
+
         // Then try to actually bind to the port
         return await canBindToPort(port)
     }
-    
+
     /// Attempt to bind to a port to verify it's truly available
     func canBindToPort(_ port: Int) async -> Bool {
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let sock = socket(AF_INET, SOCK_STREAM, 0)
                 guard sock >= 0 else {
@@ -90,32 +90,44 @@ final class PortConflictResolver {
                     return
                 }
                 defer { close(sock) }
-                
+
                 // Enable SO_REUSEADDR to handle TIME_WAIT state
                 var reuseAddr = 1
-                if setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, socklen_t(MemoryLayout.size(ofValue: reuseAddr))) < 0 {
+                if setsockopt(
+                    sock,
+                    SOL_SOCKET,
+                    SO_REUSEADDR,
+                    &reuseAddr,
+                    socklen_t(MemoryLayout.size(ofValue: reuseAddr))
+                ) < 0 {
                     self.logger.debug("Failed to set SO_REUSEADDR: \(errno)")
                 }
-                
+
                 // Set SO_REUSEPORT for better compatibility
                 var reusePort = 1
-                if setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reusePort, socklen_t(MemoryLayout.size(ofValue: reusePort))) < 0 {
+                if setsockopt(
+                    sock,
+                    SOL_SOCKET,
+                    SO_REUSEPORT,
+                    &reusePort,
+                    socklen_t(MemoryLayout.size(ofValue: reusePort))
+                ) < 0 {
                     self.logger.debug("Failed to set SO_REUSEPORT: \(errno)")
                 }
-                
+
                 // Try to bind
                 var addr = sockaddr_in()
                 addr.sin_family = sa_family_t(AF_INET)
                 addr.sin_port = in_port_t(port).bigEndian
                 addr.sin_addr.s_addr = INADDR_ANY
                 addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-                
+
                 let result = withUnsafePointer(to: &addr) { ptr in
                     ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
                         bind(sock, sockPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
                     }
                 }
-                
+
                 if result == 0 {
                     self.logger.debug("Port \(port) is available (bind succeeded)")
                     continuation.resume(returning: true)
@@ -218,21 +230,21 @@ final class PortConflictResolver {
             // Wait with exponential backoff for port to be released
             var retries = 0
             let maxRetries = 5
-            
+
             while retries < maxRetries {
                 try await Task.sleep(for: .milliseconds(500 * UInt64(pow(2.0, Double(retries)))))
-                
+
                 if await canBindToPort(conflict.port) {
                     logger.info("Port \(conflict.port) successfully released after \(retries + 1) retries")
                     break
                 }
-                
+
                 retries += 1
                 if retries < maxRetries {
                     logger.debug("Port \(conflict.port) still not available, retry \(retries + 1)/\(maxRetries)")
                 }
             }
-            
+
             if retries == maxRetries {
                 throw PortConflictError.portStillInUse(port: conflict.port)
             }
@@ -273,21 +285,21 @@ final class PortConflictResolver {
         // Wait with exponential backoff for port to be released
         var retries = 0
         let maxRetries = 5
-        
+
         while retries < maxRetries {
             try await Task.sleep(for: .milliseconds(500 * UInt64(pow(2.0, Double(retries)))))
-            
+
             if await canBindToPort(conflict.port) {
                 logger.info("Port \(conflict.port) successfully released after \(retries + 1) retries")
                 break
             }
-            
+
             retries += 1
             if retries < maxRetries {
                 logger.debug("Port \(conflict.port) still not available, retry \(retries + 1)/\(maxRetries)")
             }
         }
-        
+
         if retries == maxRetries {
             throw PortConflictError.portStillInUse(port: conflict.port)
         }

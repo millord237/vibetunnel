@@ -105,7 +105,7 @@ struct RequestPermissionsPageView: View {
         .task {
             // Check permissions before first render to avoid UI flashing
             await permissionManager.checkAllPermissions()
-            
+
             // Register for continuous monitoring
             permissionManager.registerForMonitoring()
         }

@@ -56,7 +56,7 @@ struct AboutView: View {
         }
         .padding(.top, 40)
     }
-    
+
     @MainActor
     private func openWebsite() {
         guard let url = URL(string: "https://vibetunnel.sh") else { return }
@@ -144,7 +144,6 @@ struct HoverableLink: View {
         }
     }
 }
-
 
 // MARK: - Preview
 

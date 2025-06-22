@@ -91,7 +91,7 @@ class ServerManager {
         // Check if we already have a running server
         if let existingServer = bunServer {
             let state = existingServer.getState()
-            
+
             switch state {
             case .running:
                 logger.info("Server already running on port \(existingServer.port)")
@@ -115,12 +115,12 @@ class ServerManager {
 
         // First check if port is truly available by trying to bind to it
         let portNumber = Int(self.port) ?? 4_020
-        
+
         let canBind = await PortConflictResolver.shared.canBindToPort(portNumber)
         if !canBind {
             logger.warning("Cannot bind to port \(portNumber), checking for conflicts...")
         }
-        
+
         // Check for port conflicts before starting
         if let conflict = await PortConflictResolver.shared.detectConflict(on: portNumber) {
             logger.warning("Port \(self.port) is in use by \(conflict.process.name) (PID: \(conflict.process.pid))")
@@ -231,20 +231,20 @@ class ServerManager {
         let portNumber = Int(self.port) ?? 4_020
         var retries = 0
         let maxRetries = 5
-        
+
         while retries < maxRetries {
             let delay = 1.0 * pow(2.0, Double(retries)) // 1, 2, 4, 8, 16 seconds
             logger.info("Waiting \(delay) seconds for port to be released (attempt \(retries + 1)/\(maxRetries))...")
             try? await Task.sleep(for: .seconds(delay))
-            
+
             if await PortConflictResolver.shared.canBindToPort(portNumber) {
                 logger.info("Port \(portNumber) is now available")
                 break
             }
-            
+
             retries += 1
         }
-        
+
         if retries == maxRetries {
             logger.error("Port \(portNumber) still unavailable after \(maxRetries) attempts")
             lastError = PortConflictError.portStillInUse(port: portNumber)
@@ -392,24 +392,24 @@ class ServerManager {
             } else {
                 // Port might still be in TIME_WAIT state, wait with backoff
                 logger.info("Port may be in TIME_WAIT state, checking availability...")
-                
+
                 let portNumber = Int(self.port) ?? 4_020
                 var retries = 0
                 let maxRetries = 5
-                
+
                 while retries < maxRetries {
                     let delay = 2.0 * pow(2.0, Double(retries)) // 2, 4, 8, 16, 32 seconds
                     logger.info("Waiting \(delay) seconds for port to clear (attempt \(retries + 1)/\(maxRetries))...")
                     try? await Task.sleep(for: .seconds(delay))
-                    
+
                     if await PortConflictResolver.shared.canBindToPort(portNumber) {
                         logger.info("Port \(portNumber) is now available")
                         break
                     }
-                    
+
                     retries += 1
                 }
-                
+
                 if retries == maxRetries {
                     logger.error("Port \(portNumber) still in TIME_WAIT after \(maxRetries) attempts")
                     lastError = PortConflictError.portStillInUse(port: portNumber)

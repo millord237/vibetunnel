@@ -188,12 +188,12 @@ final class SystemPermissionManager {
 
     func checkAllPermissions() async {
         let oldPermissions = permissions
-        
+
         // Check each permission type
         permissions[.appleScript] = await checkAppleScriptPermission()
         permissions[.screenRecording] = checkScreenRecordingPermission()
         permissions[.accessibility] = checkAccessibilityPermission()
-        
+
         // Post notification if any permissions changed
         if oldPermissions != permissions {
             NotificationCenter.default.post(name: .permissionsUpdated, object: nil)
