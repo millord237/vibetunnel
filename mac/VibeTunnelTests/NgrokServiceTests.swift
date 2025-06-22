@@ -360,7 +360,7 @@ struct NgrokServiceTests {
 
         // Check if we have an auth token
         guard service.hasAuthToken else {
-            throw XCTSkip("Ngrok auth token not configured")
+            throw TestFixtures.TestError.skip("Ngrok auth token not configured")
         }
 
         // This would require actual ngrok installation

@@ -131,5 +131,6 @@ extension TestFixtures {
 
     enum TestError: Error {
         case timeout
+        case skip(String)
     }
 }
