@@ -19,7 +19,7 @@ const commands = [
   // Watch assets
   ['npx', ['chokidar', 'src/client/assets/**/*', '-c', 'node scripts/copy-assets.js']],
   // Watch client bundle
-  ['node', ['scripts/watch-client.js']],
+  ['npx', ['esbuild', 'src/client/app-entry.ts', '--bundle', '--outfile=public/bundle/client-bundle.js', '--format=esm', '--sourcemap', '--watch']],
   // Watch test bundle
   ['npx', ['esbuild', 'src/client/test-terminals-entry.ts', '--bundle', '--outfile=public/bundle/terminal.js', '--format=esm', '--sourcemap', '--watch']]
 ];
