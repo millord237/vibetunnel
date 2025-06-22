@@ -8,6 +8,7 @@
     "dev": "node scripts/dev.js",
     "dev:client": "node scripts/dev.js --client-only",
     "build": "node scripts/build.js",
+    "build:ci": "node scripts/build-ci.js",
     "lint": "eslint 'src/**/*.{ts,tsx}'",
     "lint:fix": "eslint 'src/**/*.{ts,tsx}' --fix",
     "typecheck": "tsc --noEmit",
