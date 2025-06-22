@@ -3,12 +3,12 @@
 /**
  * Build a custom Node.js binary with reduced size by excluding features we don't need.
  * 
- * See custom-node.md for detailed documentation, usage, and troubleshooting.
+ * See custom-node-build-flags.md for detailed documentation and size optimization results.
  * 
  * Quick usage:
- *   node build-custom-node.js               # Current version
+ *   node build-custom-node.js               # Builds Node.js 24.2.0 (recommended)
  *   node build-custom-node.js --latest      # Latest version
- *   node build-custom-node.js --version=24.1.0  # Specific version
+ *   node build-custom-node.js --version=24.2.0  # Specific version
  */
 
 const { execSync } = require('child_process');
@@ -79,12 +79,11 @@ async function buildCustomNode() {
   } else if (targetVersion) {
     nodeSourceVersion = targetVersion;
   } else {
-    // Use current Node.js version
-    const nodeVersionMatch = process.version.match(/^v(\d+)\.(\d+)\.(\d+)/);
-    nodeSourceVersion = `${nodeVersionMatch[1]}.${nodeVersionMatch[2]}.${nodeVersionMatch[3]}`;
+    // Default to Node.js 24.2.0 (recommended version)
+    nodeSourceVersion = '24.2.0';
   }
   
-  console.log(`Building custom Node.js ${nodeSourceVersion} without intl and npm...`);
+  console.log(`Building custom Node.js ${nodeSourceVersion} with all feature removals (-Os)...`);
   console.log('This will take 10-20 minutes on first run, but will be cached for future builds.');
   
   const nodeSourceUrl = `https://nodejs.org/dist/v${nodeSourceVersion}/node-v${nodeSourceVersion}.tar.gz`;
@@ -137,24 +136,22 @@ async function buildCustomNode() {
     // Configure and build
     process.chdir(versionDir);
     
-    console.log('Configuring Node.js build (without intl and npm)...');
+    console.log('Configuring Node.js build (all feature removals, -Os only)...');
     const configureArgs = [
-      '--without-intl',
-      '--without-npm',
-      '--without-corepack',
-      '--without-inspector',
-      '--without-node-snapshot',     // Disable V8 snapshot (saves ~2-3MB)
-      '--without-node-code-cache',   // Disable code cache (saves ~1-2MB)
+      '--without-intl',  // Remove internationalization support
+      '--without-npm',   // Don't include npm
+      '--without-corepack', // Don't include corepack
+      '--without-inspector', // Remove debugging/profiling features
+      '--without-node-code-cache', // Disable code cache
+      '--without-node-snapshot',  // Don't create/use startup snapshot
       '--ninja',  // Use ninja if available for faster builds
     ];
     
-    // Set optimization flags for smaller binary
-    // -Os: Optimize for size
-    // -flto: Link Time Optimization (can save 10-20%)
-    // -ffunction-sections -fdata-sections: Allow linker to remove unused code
-    process.env.CFLAGS = '-Os -flto -ffunction-sections -fdata-sections';
-    process.env.CXXFLAGS = '-Os -flto -ffunction-sections -fdata-sections';
-    process.env.LDFLAGS = '-Wl,-dead_strip'; // macOS equivalent of --gc-sections
+    // Use -Os optimization which is proven to be safe
+    process.env.CFLAGS = '-Os';
+    process.env.CXXFLAGS = '-Os';
+    // Clear LDFLAGS to avoid any issues
+    delete process.env.LDFLAGS;
     
     // Check if ninja is available, install if not
     try {
