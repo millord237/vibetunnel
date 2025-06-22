@@ -113,7 +113,9 @@ jobs:
       
     - name: Run tests
       working-directory: web
-      run: npm test
+      run: npm run test:ci
+      env:
+        CI: true
       
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
