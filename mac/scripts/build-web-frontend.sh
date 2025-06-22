@@ -107,7 +107,33 @@ BUILD_CONFIG="${CONFIGURATION:-Debug}"
 echo "Build configuration: $BUILD_CONFIG"
 
 # Check for custom Node.js build
-CUSTOM_NODE_PATH=$(find "${WEB_DIR}/.node-builds" -name "node-v*-minimal" -type d 2>/dev/null | sort -V | tail -n1)/out/Release/node
+echo "Searching for custom Node.js builds..."
+
+# Find all Node build directories
+ALL_NODE_DIRS=$(find "${WEB_DIR}/.node-builds" -name "node-v*-minimal" -type d 2>/dev/null | sort -V)
+if [ -n "$ALL_NODE_DIRS" ]; then
+    echo "Found Node.js build directories:"
+    echo "$ALL_NODE_DIRS" | while read -r dir; do
+        if [ -f "$dir/out/Release/node" ]; then
+            VERSION=$(basename "$dir" | sed 's/node-v\(.*\)-minimal/\1/')
+            echo "  ✓ $VERSION (complete build)"
+        else
+            VERSION=$(basename "$dir" | sed 's/node-v\(.*\)-minimal/\1/')
+            echo "  ✗ $VERSION (incomplete build - missing binary)"
+        fi
+    done
+fi
+
+# Find directories with complete builds (containing the actual node binary)
+CUSTOM_NODE_DIR=$(find "${WEB_DIR}/.node-builds" -name "node-v*-minimal" -type d -exec test -f {}/out/Release/node \; -print 2>/dev/null | sort -V | tail -n1)
+CUSTOM_NODE_PATH="${CUSTOM_NODE_DIR}/out/Release/node"
+
+if [ -n "$CUSTOM_NODE_DIR" ]; then
+    SELECTED_VERSION=$(basename "$CUSTOM_NODE_DIR" | sed 's/node-v\(.*\)-minimal/\1/')
+    echo "Selected custom Node.js v$SELECTED_VERSION"
+else
+    echo "No complete custom Node.js builds found"
+fi
 
 # Build the web frontend
 if [ "$BUILD_CONFIG" = "Release" ]; then
@@ -117,7 +143,8 @@ if [ "$BUILD_CONFIG" = "Release" ]; then
         echo "Custom Node.js not found, building it for optimal size..."
         echo "This will take 10-20 minutes on first run but will be cached."
         node build-custom-node.js --latest
-        CUSTOM_NODE_PATH=$(find "${WEB_DIR}/.node-builds" -name "node-v*-minimal" -type d 2>/dev/null | sort -V | tail -n1)/out/Release/node
+        CUSTOM_NODE_DIR=$(find "${WEB_DIR}/.node-builds" -name "node-v*-minimal" -type d -exec test -f {}/out/Release/node \; -print 2>/dev/null | sort -V | tail -n1)
+        CUSTOM_NODE_PATH="${CUSTOM_NODE_DIR}/out/Release/node"
     fi
     
     if [ -f "$CUSTOM_NODE_PATH" ]; then
@@ -232,14 +259,19 @@ if [ ${#MISSING_FILES[@]} -gt 0 ]; then
     exit 1
 fi
 
-# Optional: Verify the executable works
+# Verify the executable works
 echo "Verifying vibetunnel executable..."
-if "${APP_RESOURCES}/vibetunnel" --version &>/dev/null; then
-    VERSION_OUTPUT=$("${APP_RESOURCES}/vibetunnel" --version 2>&1 | head -1)
+echo "Full path: ${APP_RESOURCES}/vibetunnel"
+if "${APP_RESOURCES}/vibetunnel" version &>/dev/null; then
+    VERSION_OUTPUT=$("${APP_RESOURCES}/vibetunnel" version 2>&1 | head -1)
     echo "✓ VibeTunnel executable verified: $VERSION_OUTPUT"
 else
-    echo "error: VibeTunnel executable failed verification (--version test failed)"
-    echo "This might indicate a corrupted or incompatible binary"
+    echo "error: VibeTunnel executable failed verification (version command failed)"
+    echo "Full executable path: ${APP_RESOURCES}/vibetunnel"
+    echo "Checking if file exists and is executable:"
+    ls -la "${APP_RESOURCES}/vibetunnel" || echo "File not found!"
+    echo "Attempting to run with error output:"
+    "${APP_RESOURCES}/vibetunnel" version 2>&1 || true
     exit 1
 fi
 

@@ -124,9 +124,9 @@ function patchNodePty() {
   execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
   execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit', { stdio: 'inherit' });
   
-  // If using custom Node.js, check if we need to rebuild
+  // If using custom Node.js, rebuild native modules
   if (customNodePath) {
-    console.log('Custom Node.js detected - checking native module compatibility...');
+    console.log('Custom Node.js detected - rebuilding native modules...');
     
     // Get versions
     const customVersion = execSync(`"${customNodePath}" --version`, { encoding: 'utf8' }).trim();
@@ -135,15 +135,47 @@ function patchNodePty() {
     console.log(`Custom Node.js: ${customVersion}`);
     console.log(`System Node.js: ${systemVersion}`);
     
-    // Extract major versions
-    const customMajor = parseInt(customVersion.substring(1).split('.')[0]);
-    const systemMajor = parseInt(systemVersion.substring(1).split('.')[0]);
+    // Rebuild node-pty with the custom Node using npm rebuild
+    console.log('Rebuilding @homebridge/node-pty-prebuilt-multiarch with custom Node.js...');
     
-    if (customMajor !== systemMajor) {
-      console.warn(`WARNING: Major version mismatch (${customMajor} vs ${systemMajor})`);
-      console.warn('Native modules may not be compatible. Consider rebuilding.');
-    } else {
-      console.log('Major versions match - native modules should be compatible.');
+    try {
+      // Use the custom Node to rebuild native modules
+      execSync(`"${customNodePath}" "$(which npm)" rebuild @homebridge/node-pty-prebuilt-multiarch`, { 
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          npm_config_runtime: 'node',
+          npm_config_target: customVersion.substring(1), // Remove 'v' prefix
+          npm_config_arch: process.arch,
+          npm_config_target_arch: process.arch,
+          npm_config_disturl: 'https://nodejs.org/dist',
+          npm_config_build_from_source: 'true'
+        }
+      });
+      console.log('Native module rebuilt successfully with custom Node.js');
+    } catch (error) {
+      console.error('Failed to rebuild native module:', error.message);
+      console.error('Trying alternative rebuild method...');
+      
+      // Alternative: Force rebuild from source
+      try {
+        execSync(`rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch/build`, { stdio: 'inherit' });
+        execSync(`"${customNodePath}" "$(which npm)" install @homebridge/node-pty-prebuilt-multiarch --build-from-source`, { 
+          stdio: 'inherit',
+          env: {
+            ...process.env,
+            npm_config_runtime: 'node',
+            npm_config_target: customVersion.substring(1),
+            npm_config_arch: process.arch,
+            npm_config_target_arch: process.arch,
+            npm_config_disturl: 'https://nodejs.org/dist'
+          }
+        });
+        console.log('Native module rebuilt from source successfully');
+      } catch (error2) {
+        console.error('Alternative rebuild also failed:', error2.message);
+        process.exit(1);
+      }
     }
   }
   
@@ -405,12 +437,7 @@ async function main() {
     console.log(`Final executable size: ${(finalStats.size / 1024 / 1024).toFixed(2)} MB`);
     console.log(`Size reduction: ${((nodeStats.size - finalStats.size) / 1024 / 1024).toFixed(2)} MB`);
 
-    // 8. Restore original node-pty
-    console.log('Restoring original node-pty...');
-    execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
-    execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit', { stdio: 'inherit' });
-
-    // 9. Copy only necessary native files
+    // 8. Copy native modules BEFORE restoring (to preserve custom-built versions)
     console.log('Copying native modules...');
     const nativeModulesDir = 'node_modules/@homebridge/node-pty-prebuilt-multiarch/build/Release';
     
@@ -441,6 +468,11 @@ async function main() {
       fs.chmodSync('native/spawn-helper', 0o755);
       console.log('  - Copied spawn-helper');
     }
+
+    // 9. Restore original node-pty (AFTER copying the custom-built version)
+    console.log('\nRestoring original node-pty for development...');
+    execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
+    execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit', { stdio: 'inherit' });
 
     console.log('\n✅ Build complete!');
     console.log(`\nPortable executable created in native/ directory:`);
