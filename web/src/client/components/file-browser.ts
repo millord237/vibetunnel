@@ -82,6 +82,7 @@ export class FileBrowser extends LitElement {
   @property({ type: Object }) session: Session | null = null;
 
   @state() private currentPath = '';
+  @state() private currentFullPath = '';
   @state() private files: FileInfo[] = [];
   @state() private loading = false;
   @state() private selectedFile: FileInfo | null = null;
@@ -92,6 +93,7 @@ export class FileBrowser extends LitElement {
   @state() private gitStatus: GitStatus | null = null;
   @state() private previewLoading = false;
   @state() private showDiff = false;
+  @state() private errorMessage = '';
 
   private editorView: EditorView | null = null;
   private editorContainerRef = createRef<HTMLDivElement>();
@@ -160,6 +162,7 @@ export class FileBrowser extends LitElement {
         const data: DirectoryListing = await response.json();
         logger.debug(`received ${data.files?.length || 0} files`);
         this.currentPath = data.path;
+        this.currentFullPath = data.fullPath;
         this.files = data.files || [];
         this.gitStatus = data.gitStatus;
       } else {
@@ -367,11 +370,23 @@ export class FileBrowser extends LitElement {
   private insertPathIntoTerminal() {
     if (!this.selectedFile) return;
 
-    // Dispatch event with the file path
+    // Construct absolute path by joining the current directory's full path with the file name
+    let absolutePath: string;
+    if (this.currentFullPath && this.selectedFile.name) {
+      // Join the directory path with the file name
+      absolutePath = this.currentFullPath.endsWith('/')
+        ? this.currentFullPath + this.selectedFile.name
+        : this.currentFullPath + '/' + this.selectedFile.name;
+    } else {
+      // Fallback to relative path if absolute path construction fails
+      absolutePath = this.selectedFile.path;
+    }
+
+    // Dispatch event with the absolute file path
     this.dispatchEvent(
       new CustomEvent('insert-path', {
         detail: {
-          path: this.selectedFile.path,
+          path: absolutePath,
           type: this.selectedFile.type,
         },
         bubbles: true,
@@ -391,14 +406,27 @@ export class FileBrowser extends LitElement {
       new CustomEvent('open-in-editor', {
         detail: {
           path: this.selectedFile.path,
+          onSuccess: () => {
+            // Close the file browser only on success
+            this.dispatchEvent(new CustomEvent('browser-cancel'));
+          },
+          onError: (message: string) => {
+            // Show error message to user
+            this.showErrorMessage(message);
+          },
         },
         bubbles: true,
         composed: true,
       })
     );
+  }
 
-    // Close the file browser
-    this.dispatchEvent(new CustomEvent('browser-cancel'));
+  private showErrorMessage(message: string) {
+    this.errorMessage = message;
+    // Clear error message after 5 seconds
+    setTimeout(() => {
+      this.errorMessage = '';
+    }, 5000);
   }
 
   private handleParentClick() {
@@ -775,6 +803,15 @@ export class FileBrowser extends LitElement {
                   `
                 : ''}
             </div>
+            ${this.errorMessage
+              ? html`
+                  <div
+                    class="bg-red-500/20 border border-red-500 text-red-400 px-3 py-2 rounded-lg text-sm"
+                  >
+                    ${this.errorMessage}
+                  </div>
+                `
+              : ''}
             <button
               @click=${this.handleCancel}
               class="text-dark-text-muted hover:text-dark-text transition-colors"

@@ -35,10 +35,10 @@ interface GitStatus {
 export function createFilesystemRoutes(): Router {
   const router = Router();
 
-  // Helper to check if path is safe (no directory traversal)
-  function isPathSafe(requestedPath: string, basePath: string): boolean {
-    const resolved = path.resolve(basePath, requestedPath);
-    return resolved.startsWith(path.resolve(basePath));
+  // Helper to check if path is safe (no directory traversal) - DISABLED for full filesystem access
+  function isPathSafe(_requestedPath: string, _basePath: string): boolean {
+    // Security check disabled - allow access to all directories
+    return true;
   }
 
   // Helper to get Git status for a directory

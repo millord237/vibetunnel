@@ -929,20 +929,39 @@ export class SessionView extends LitElement {
   }
 
   private async handleOpenInEditor(event: CustomEvent) {
-    const { path } = event.detail;
-    if (!path || !this.session) return;
+    const { path, onSuccess, onError } = event.detail;
 
-    // Escape the path for shell use
-    const escapedPath = path.includes(' ') ? `"${path}"` : path;
+    if (!path) {
+      onError?.('No file path provided');
+      return;
+    }
 
-    // Try common editors in order of preference
-    // We'll use 'which' to check if they exist, then open with the first one found
-    const command = `(which code && code ${escapedPath}) || (which vim && vim ${escapedPath}) || (which nano && nano ${escapedPath}) || echo "No editor found. Install VS Code, vim, or nano."`;
+    if (!this.session) {
+      onError?.('No active terminal session. Please create a new session first.');
+      return;
+    }
 
-    // Send the command to the terminal
-    await this.sendInputText(command + '\n');
+    try {
+      // Escape the path for shell use
+      const escapedPath = path.includes(' ') ? `"${path}"` : path;
 
-    logger.log(`opening file in editor: ${escapedPath}`);
+      // Try common editors in order of preference
+      // We'll use 'which' to check if they exist, then open with the first one found
+      const command = `(which code && code ${escapedPath}) || (which vim && vim ${escapedPath}) || (which nano && nano ${escapedPath}) || echo "No editor found. Install VS Code, vim, or nano."`;
+
+      // Send the command to the terminal
+      await this.sendInputText(command + '\n');
+
+      logger.log(`opening file in editor: ${escapedPath}`);
+
+      // Call success callback to close the file browser
+      onSuccess?.();
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to send command to terminal';
+      logger.error('Error opening file in editor:', error);
+      onError?.(errorMessage);
+    }
   }
 
   private async sendInputText(text: string) {
