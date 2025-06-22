@@ -26,3 +26,6 @@ xcuserdata/
 # Old location (can be removed)
 VibeTunnel/Resources/node/
 VibeTunnel/Resources/node-server/
+
+# Local development configuration
+VibeTunnel/Local.xcconfig
