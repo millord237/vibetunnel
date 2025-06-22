@@ -111,7 +111,6 @@
 				788687ED2DFF4FCB00B22C15 /* Sources */,
 				788687EE2DFF4FCB00B22C15 /* Frameworks */,
 				788687EF2DFF4FCB00B22C15 /* Resources */,
-				A1B2C3D4E5F6789012345678 /* Calculate Web Hash */,
 				B2C3D4E5F6A7B8C9D0E1F234 /* Build Web Frontend */,
 			);
 			buildRules = (
@@ -212,7 +211,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		A1B2C3D4E5F6789012345678 /* Calculate Web Hash */ = {
+		B2C3D4E5F6A7B8C9D0E1F234 /* Build Web Frontend */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -221,26 +220,6 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-			);
-			name = "Calculate Web Hash";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/.web-content-hash",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/zsh;
-			shellScript = "# Calculate hash of web content\necho \"Calculating web content hash...\"\n\n# Run the hash calculation script\n\"${SRCROOT}/scripts/calculate-web-hash.sh\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Failed to calculate web hash\"\n    exit 1\nfi\n";
-		};
-		B2C3D4E5F6A7B8C9D0E1F234 /* Build Web Frontend */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/.web-content-hash",
 			);
 			name = "Build Web Frontend";
 			outputFileListPaths = (
@@ -251,7 +230,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "# Build web frontend conditionally based on hash\necho \"Checking if web frontend needs rebuild...\"\n\n# Run the conditional build script\n\"${SRCROOT}/scripts/build-web-frontend-conditional.sh\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Web frontend build failed\"\n    exit 1\nfi\n";
+			shellScript = "# Build web frontend using Bun\necho \"Building web frontend...\"\n\n# Run the build script\n\"${SRCROOT}/scripts/build-web-frontend.sh\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Web frontend build failed\"\n    exit 1\nfi\n";
 		};
 		C3D4E5F6A7B8C9D0E1F23456 /* Install Build Dependencies */ = {
 			isa = PBXShellScriptBuildPhase;
