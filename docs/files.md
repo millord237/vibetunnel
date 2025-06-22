@@ -88,7 +88,7 @@ The project structure emphasizes modularity with separate build systems for each
 ## Platform Implementation
 
 ### macOS Platform Files
-- `mac/Config/Local.xcconfig` - Local build configuration
+- `apple/Local.xcconfig` - Local build configuration
 - `mac/VibeTunnel/Shared.xcconfig` - Shared build settings
 - `mac/VibeTunnel/version.xcconfig` - Version configuration
 - `mac/VibeTunnel.entitlements` - App entitlements

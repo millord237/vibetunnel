@@ -97,6 +97,11 @@ The server runs as a standalone Bun executable with embedded Node.js modules, pr
 git clone https://github.com/amantus-ai/vibetunnel.git
 cd vibetunnel
 
+# Set up code signing (required for macOS/iOS development)
+# Copy the template and add your Apple Developer Team ID
+cp apple/Local.xcconfig.template apple/Local.xcconfig
+# Edit apple/Local.xcconfig and set DEVELOPMENT_TEAM = YOUR_TEAM_ID
+
 # Build the web server
 cd web
 npm install

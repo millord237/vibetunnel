@@ -1,4 +1,4 @@
-// Shared Configuration
+// Shared Configuration for iOS App
 // This file contains settings shared across all configurations
 
 // Include version configuration
@@ -16,3 +16,11 @@ CODE_SIGN_STYLE = $(inherited)
 // Swift version and concurrency settings
 SWIFT_VERSION = 6.0
 SWIFT_STRICT_CONCURRENCY = complete
+
+// iOS deployment target
+IPHONEOS_DEPLOYMENT_TARGET = 18.0
+
+// Other iOS-specific settings
+TARGETED_DEVICE_FAMILY = 1,2
+SUPPORTS_MACCATALYST = YES
+SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES

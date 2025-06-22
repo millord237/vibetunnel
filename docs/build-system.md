@@ -96,7 +96,7 @@ cd mac
 - Sparkle EdDSA keys in `mac/private/`
 
 **Configuration Files**:
-- `mac/Config/Local.xcconfig` - Local development settings
+- `apple/Local.xcconfig` - Local development settings
 - `mac/VibeTunnel/version.xcconfig` - Version numbers
 - `mac/Shared.xcconfig` - Shared build settings
 
@@ -161,7 +161,7 @@ cd mac
 **Common Issues**:
 
 1. **Bun build fails** - Check `web/build-native.js` patches (lines 11-79)
-2. **Code signing errors** - Verify `mac/Config/Local.xcconfig` settings
+2. **Code signing errors** - Verify `apple/Local.xcconfig` settings
 3. **Notarization fails** - Check API keys in environment
 4. **Version mismatch** - Update `mac/VibeTunnel/version.xcconfig`
 

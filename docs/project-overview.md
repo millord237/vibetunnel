@@ -17,7 +17,7 @@ The project provides a native macOS menu bar application that runs a local HTTP 
 - `web/package.json` - Node.js dependencies and build scripts
 - `mac/VibeTunnel.xcodeproj/project.pbxproj` - Xcode project configuration
 - `mac/VibeTunnel/version.xcconfig` - Version management
-- `mac/Config/Local.xcconfig.template` - Developer configuration template
+- `apple/Local.xcconfig.template` - Developer configuration template
 
 ## Technology Stack
 

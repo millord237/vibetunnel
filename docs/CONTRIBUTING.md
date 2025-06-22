@@ -43,7 +43,7 @@ We love your input! We want to make contributing to VibeTunnel as easy and trans
    ```
 
 4. **Configure code signing (optional for development)**
-   - Copy `mac/Config/Local.xcconfig.template` to `mac/Config/Local.xcconfig`
+   - Copy `apple/Local.xcconfig.template` to `apple/Local.xcconfig`
    - Add your development team ID (or leave empty for ad-hoc signing)
    - This file is gitignored to keep your settings private
 
