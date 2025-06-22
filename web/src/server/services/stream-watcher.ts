@@ -75,7 +75,7 @@ export class StreamWatcher {
   /**
    * Remove a client
    */
-  removeClient(sessionId: string, response: import('express').Response): void {
+  removeClient(sessionId: string, response: Response): void {
     const watcherInfo = this.activeWatchers.get(sessionId);
     if (!watcherInfo) return;
 
@@ -115,7 +115,6 @@ export class StreamWatcher {
   private sendExistingContent(streamPath: string, client: StreamClient): void {
     try {
       const stream = fs.createReadStream(streamPath, { encoding: 'utf8' });
-      let headerSent = false;
       let exitEventFound = false;
       let lineBuffer = '';
 
@@ -129,8 +128,8 @@ export class StreamWatcher {
             try {
               const parsed = JSON.parse(line);
               if (parsed.version && parsed.width && parsed.height) {
+                // Send header as-is
                 client.response.write(`data: ${line}\n\n`);
-                headerSent = true;
               } else if (Array.isArray(parsed) && parsed.length >= 3) {
                 if (parsed[0] === 'exit') {
                   exitEventFound = true;
@@ -153,9 +152,8 @@ export class StreamWatcher {
         if (lineBuffer.trim()) {
           try {
             const parsed = JSON.parse(lineBuffer);
-            if (parsed.version && parsed.width && parsed.height && !headerSent) {
+            if (parsed.version && parsed.width && parsed.height) {
               client.response.write(`data: ${lineBuffer}\n\n`);
-              headerSent = true;
             } else if (Array.isArray(parsed) && parsed.length >= 3) {
               if (parsed[0] === 'exit') {
                 exitEventFound = true;
@@ -170,18 +168,6 @@ export class StreamWatcher {
           }
         }
 
-        // Send default header if none found
-        if (!headerSent) {
-          const defaultHeader = {
-            version: 2,
-            width: 80,
-            height: 24,
-            timestamp: Math.floor(client.startTime),
-            env: { TERM: 'xterm-256color' },
-          };
-          client.response.write(`data: ${JSON.stringify(defaultHeader)}\n\n`);
-        }
-
         // If exit event found, close connection
         if (exitEventFound) {
           console.log(`[STREAM] Session already has exit event, closing connection`);
@@ -191,17 +177,6 @@ export class StreamWatcher {
 
       stream.on('error', (error) => {
         console.error(`[STREAM] Error streaming existing content:`, error);
-        // Send default header if stream fails
-        if (!headerSent) {
-          const defaultHeader = {
-            version: 2,
-            width: 80,
-            height: 24,
-            timestamp: Math.floor(client.startTime),
-            env: { TERM: 'xterm-256color' },
-          };
-          client.response.write(`data: ${JSON.stringify(defaultHeader)}\n\n`);
-        }
       });
     } catch (error) {
       console.error(`[STREAM] Error creating read stream:`, error);
