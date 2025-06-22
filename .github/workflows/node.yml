@@ -11,14 +11,14 @@ permissions:
 jobs:
   lint:
     name: Lint TypeScript/JavaScript Code
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
     - name: Setup Node.js
-      uses: useblacksmith/setup-node@v5
+      uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'
@@ -90,14 +90,14 @@ jobs:
 
   build-and-test:
     name: Build and Test
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
     - name: Setup Node.js
-      uses: useblacksmith/setup-node@v5
+      uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'
@@ -127,14 +127,14 @@ jobs:
 
   type-check:
     name: TypeScript Type Checking
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
     - name: Setup Node.js
-      uses: useblacksmith/setup-node@v5
+      uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'
@@ -150,14 +150,14 @@ jobs:
 
   audit:
     name: Security Audit
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
     - name: Setup Node.js
-      uses: useblacksmith/setup-node@v5
+      uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'

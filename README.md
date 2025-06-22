@@ -130,6 +130,10 @@ For development setup and contribution guidelines, see [CONTRIBUTING.md](docs/CO
 - [Architecture](docs/architecture.md) - System design overview
 - [Build System](docs/build-system.md) - Build process details
 
+## Mac Permissions
+
+macOS is finicky when it comes to permissions. 
+
 ## Credits
 
 Created with ❤️ by:

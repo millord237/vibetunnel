@@ -129,25 +129,22 @@ jobs:
 
     - name: Show build settings
       run: |
-        cd ios
-        xcodebuild -showBuildSettings -project VibeTunnel.xcodeproj -scheme VibeTunnel -destination generic/platform=iOS
+        xcodebuild -showBuildSettings -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS -destination generic/platform=iOS
 
     - name: Resolve Dependencies
       run: |
-        cd ios
         echo "Resolving iOS package dependencies..."
-        xcodebuild -resolvePackageDependencies -project VibeTunnel.xcodeproj -scheme VibeTunnel || {
+        xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS || {
           echo "Failed to resolve dependencies. Retrying with verbose output..."
-          xcodebuild -resolvePackageDependencies -project VibeTunnel.xcodeproj -scheme VibeTunnel -verbose
+          xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS -verbose
         }
         
     - name: Build iOS app
       run: |
-        cd ios
         set -o pipefail
         xcodebuild build \
-          -project VibeTunnel.xcodeproj \
-          -scheme VibeTunnel \
+          -workspace VibeTunnel.xcworkspace \
+          -scheme VibeTunnel-iOS \
           -destination "generic/platform=iOS" \
           -configuration Release \
           CODE_SIGNING_ALLOWED=NO \
@@ -197,9 +194,8 @@ jobs:
 
     - name: Resolve Test Dependencies
       run: |
-        cd ios
         echo "Resolving dependencies for tests..."
-        xcodebuild -resolvePackageDependencies -project VibeTunnel.xcodeproj -scheme VibeTunnel
+        xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS
         
     - name: Run iOS tests
       run: |

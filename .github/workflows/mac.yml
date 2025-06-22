@@ -152,7 +152,6 @@ jobs:
         
     - name: Resolve Dependencies
       run: |
-        cd mac
         echo "Resolving Swift package dependencies..."
         xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel -quiet || {
           echo "Failed to resolve dependencies. Retrying with verbose output..."
@@ -162,7 +161,6 @@ jobs:
     - name: Build Debug (Native Architecture)
       timeout-minutes: 30
       run: |
-        cd mac
         set -o pipefail && \
         xcodebuild build \
           -workspace VibeTunnel.xcworkspace \
@@ -181,7 +179,6 @@ jobs:
     - name: Build Release (Native Architecture)
       timeout-minutes: 30
       run: |
-        cd mac
         set -o pipefail && \
         xcodebuild build \
           -workspace VibeTunnel.xcworkspace \
@@ -200,9 +197,14 @@ jobs:
     - name: Run tests
       timeout-minutes: 20
       run: |
-        cd mac
-        # Use swift test instead of xcodebuild for Swift Testing support
-        swift test --verbose || {
+        # Use xcodebuild test for workspace testing
+        set -o pipefail && \
+        xcodebuild test \
+          -workspace VibeTunnel.xcworkspace \
+          -scheme VibeTunnel \
+          -configuration Debug \
+          -destination "platform=macOS" \
+          | xcbeautify || {
           echo "::error::Tests failed"
           exit 1
         }
