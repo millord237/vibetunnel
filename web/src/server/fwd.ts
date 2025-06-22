@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as os from 'os';
 import chalk from 'chalk';
 import { PtyManager } from './pty/index.js';
+import { VERSION, BUILD_DATE, GIT_COMMIT } from './version.js';
 
 function showUsage() {
   console.log('VibeTunnel Forward (fwd.ts)');
@@ -108,10 +109,11 @@ export async function startVibeTunnelForward(args: string[]) {
     if (!session) {
       throw new Error('Session not found after creation');
     }
-
-    console.log(chalk.green('✓ VibeTunnel session started'));
+    // Log session info with version
+    console.log(chalk.green(`✓ VibeTunnel session started`) + chalk.gray(` (v${VERSION})`));
     console.log(chalk.gray('Command:'), command.join(' '));
     console.log(chalk.gray('Control directory:'), path.join(controlPath, result.sessionId));
+    console.log(chalk.gray('Build:'), `${BUILD_DATE} | Commit: ${GIT_COMMIT}`);
 
     // Set up raw mode for terminal input
     if (process.stdin.isTTY) {
