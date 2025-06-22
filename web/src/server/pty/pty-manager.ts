@@ -586,7 +586,7 @@ export class PtyManager {
 
     try {
       const messageStr = JSON.stringify(message) + '\n';
-      fs.writeFileSync(sessionPaths.controlPipePath, messageStr);
+      fs.appendFileSync(sessionPaths.controlPipePath, messageStr);
       return true;
     } catch (error) {
       console.warn(`Failed to send control message to session ${sessionId}:`, error);
