@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import { OptimizedFileWatcher } from './optimized-file-watcher.js';
+import { streamNotifier } from './stream-notifier.js';
 
 interface StreamClient {
   response: import('express').Response;
@@ -7,13 +9,21 @@ interface StreamClient {
 
 interface WatcherInfo {
   clients: Set<StreamClient>;
-  watcher?: fs.FSWatcher;
+  watcher?: OptimizedFileWatcher;
   lastOffset: number;
   lineBuffer: string;
+  notificationListener?: (update: { sessionId: string; data: string; timestamp: number }) => void;
 }
 
 export class StreamWatcher {
   private activeWatchers: Map<string, WatcherInfo> = new Map();
+
+  constructor() {
+    // Clean up notification listeners on exit
+    process.on('beforeExit', () => {
+      this.cleanup();
+    });
+  }
 
   /**
    * Add a client to watch a stream file
@@ -82,7 +92,11 @@ export class StreamWatcher {
       if (watcherInfo.clients.size === 0) {
         console.log(`[STREAM] No more clients for session ${sessionId}, stopping watcher`);
         if (watcherInfo.watcher) {
-          watcherInfo.watcher.close();
+          watcherInfo.watcher.stop();
+        }
+        // Remove notification listener
+        if (watcherInfo.notificationListener) {
+          streamNotifier.removeListener('stream-update', watcherInfo.notificationListener);
         }
         this.activeWatchers.delete(sessionId);
       }
@@ -192,11 +206,31 @@ export class StreamWatcher {
    * Start watching a file for changes
    */
   private startWatching(sessionId: string, streamPath: string, watcherInfo: WatcherInfo): void {
-    // Use options for more responsive watching
-    watcherInfo.watcher = fs.watch(streamPath, { persistent: true }, (eventType) => {
-      if (eventType === 'change') {
+    // Check if we should use direct notifications or file watching
+    const hasListeners = streamNotifier.hasListeners(sessionId);
+
+    if (hasListeners) {
+      console.log(`[STREAM] Using direct notifications for session ${sessionId}`);
+
+      // Set up direct notification listener for lowest latency
+      watcherInfo.notificationListener = (update) => {
+        if (update.sessionId === sessionId) {
+          // Process the notification data directly
+          const lines = update.data.split('\n').filter((line) => line.trim());
+          for (const line of lines) {
+            this.broadcastLine(sessionId, line, watcherInfo);
+          }
+        }
+      };
+      streamNotifier.on('stream-update', watcherInfo.notificationListener);
+    } else {
+      console.log(`[STREAM] Using file watcher for session ${sessionId} (cross-process)`);
+
+      // Use optimized file watcher for cross-process scenarios
+      watcherInfo.watcher = new OptimizedFileWatcher(streamPath, { persistent: true });
+
+      watcherInfo.watcher.on('change', (stats) => {
         try {
-          const stats = fs.statSync(streamPath);
           if (stats.size > watcherInfo.lastOffset) {
             // Read only new data
             const fd = fs.openSync(streamPath, 'r');
@@ -215,7 +249,6 @@ export class StreamWatcher {
             const lines = watcherInfo.lineBuffer.split('\n');
             watcherInfo.lineBuffer = lines.pop() || '';
 
-            console.log(`[STREAM] New data: ${newData}`);
             for (const line of lines) {
               if (line.trim()) {
                 this.broadcastLine(sessionId, line, watcherInfo);
@@ -225,10 +258,15 @@ export class StreamWatcher {
         } catch (error) {
           console.error(`[STREAM] Error reading file changes:`, error);
         }
-      }
-    });
+      });
 
-    console.log(`[STREAM] Started watching file for session ${sessionId}`);
+      watcherInfo.watcher.on('error', (error) => {
+        console.error(`[STREAM] File watcher error for session ${sessionId}:`, error);
+      });
+
+      // Start the watcher
+      watcherInfo.watcher.start();
+    }
   }
 
   /**
@@ -293,5 +331,20 @@ export class StreamWatcher {
       }
       return;
     }
+  }
+
+  /**
+   * Clean up all watchers and listeners
+   */
+  private cleanup(): void {
+    for (const [_sessionId, watcherInfo] of this.activeWatchers) {
+      if (watcherInfo.watcher) {
+        watcherInfo.watcher.stop();
+      }
+      if (watcherInfo.notificationListener) {
+        streamNotifier.removeListener('stream-update', watcherInfo.notificationListener);
+      }
+    }
+    this.activeWatchers.clear();
   }
 }

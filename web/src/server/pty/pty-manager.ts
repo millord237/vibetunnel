@@ -515,6 +515,7 @@ export class PtyManager {
       if (memorySession?.ptyProcess) {
         memorySession.ptyProcess.write(dataToSend);
         memorySession.asciinemaWriter?.writeInput(dataToSend);
+        return; // Important: return here to avoid socket path
       } else {
         const sessionPaths = this.sessionManager.getSessionPaths(sessionId);
         if (!sessionPaths) {
