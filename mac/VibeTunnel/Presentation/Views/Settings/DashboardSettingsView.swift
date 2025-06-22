@@ -600,7 +600,7 @@ private struct PortConfigurationView: View {
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "PortConfiguration")
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("Server port:")
                 Spacer()
@@ -737,12 +737,11 @@ private struct PortConfigurationView: View {
                         .font(.caption)
                         .foregroundColor(.red)
                 }
+            } else {
+                Text("The server will automatically restart when the port is changed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            
-            Text("The server will automatically restart when the port is changed.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
         }
     }
 
