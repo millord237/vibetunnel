@@ -13,11 +13,7 @@ struct VibeTunnelApp: App {
     @State private var ngrokService = NgrokService.shared
     @State private var permissionManager = SystemPermissionManager.shared
     @State private var terminalLauncher = TerminalLauncher.shared
-
-    init() {
-        // No special initialization needed
-    }
-
+    
     var body: some Scene {
         #if os(macOS)
             // Hidden WindowGroup to make Settings work in MenuBarExtra-only apps
@@ -265,6 +261,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// Public method to show welcome screen (can be called from settings)
     static func showWelcomeScreen() {
         WelcomeWindowController.shared.show()
+    }
+
+    /// Creates a custom dock menu when the user right-clicks on the dock icon.
+    ///
+    /// IMPORTANT: Due to a known SwiftUI bug with NSApplicationDelegateAdaptor, this method
+    /// is NOT called when running the app from Xcode. However, it DOES work correctly when:
+    /// - The app is launched manually from Finder
+    /// - The app is launched from a built/archived version
+    /// - The app is running in production
+    ///
+    /// This is a debugging limitation only and does not affect end users.
+    /// See: https://github.com/feedback-assistant/reports/issues/246
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let dockMenu = NSMenu()
+        
+        // Dashboard menu item
+        let dashboardItem = NSMenuItem(
+            title: "Open Dashboard",
+            action: #selector(openDashboard),
+            keyEquivalent: ""
+        )
+        dashboardItem.target = self
+        dockMenu.addItem(dashboardItem)
+        
+        // Settings menu item
+        let settingsItem = NSMenuItem(
+            title: "Settings...",
+            action: #selector(openSettings),
+            keyEquivalent: ""
+        )
+        settingsItem.target = self
+        dockMenu.addItem(settingsItem)
+        
+        return dockMenu
+    }
+    
+    @objc private func openDashboard() {
+        if let url = URL(string: "http://localhost:\(serverManager.port)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    
+    @objc private func openSettings() {
+        SettingsOpener.openSettings()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
