@@ -204,23 +204,27 @@ jobs:
     - name: Run iOS tests
       run: |
         cd ios
-        echo "Running iOS tests..."
-        # TODO: The run-tests.sh script needs adjustments for CI environment
-        # For now, just verify tests can be built
-        echo "Building test targets..."
-        xcodebuild build-for-testing \
+        echo "Running iOS tests on simulator..."
+        # First, list available simulators
+        xcrun simctl list devices available | grep iPhone | head -5
+        
+        # Run tests with a more flexible destination
+        xcodebuild test \
           -project VibeTunnel.xcodeproj \
           -scheme VibeTunnel \
           -destination "platform=iOS Simulator,name=iPhone 16 Pro" \
           -configuration Debug \
+          -derivedDataPath build/DerivedData \
+          -resultBundlePath TestResults.xcresult \
           -quiet || {
-          echo "::error::Failed to build iOS tests"
+          echo "::error::iOS tests failed"
           exit 1
         }
-        echo "::warning::iOS test execution temporarily disabled - tests built successfully"
         
-    - name: Upload test logs on failure
-      if: failure()
-      run: |
-        echo "Tests failed. Check the logs above for details."
-        # Swift Testing doesn't produce xcresult bundles with run-tests.sh
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: ios-test-results
+        path: ios/TestResults.xcresult
+        retention-days: 7
