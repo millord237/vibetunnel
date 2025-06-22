@@ -105,19 +105,27 @@ export class SessionCard extends LitElement {
       this.requestUpdate();
     }, 200);
 
-    // Send kill request
+    // Send kill or cleanup request based on session status
     try {
-      const response = await fetch(`/api/sessions/${this.session.id}`, {
+      // Use different endpoint based on session status
+      const endpoint =
+        this.session.status === 'exited'
+          ? `/api/sessions/${this.session.id}/cleanup`
+          : `/api/sessions/${this.session.id}`;
+
+      const action = this.session.status === 'exited' ? 'cleanup' : 'kill';
+
+      const response = await fetch(endpoint, {
         method: 'DELETE',
       });
 
       if (!response.ok) {
         const errorData = await response.text();
-        logger.error('Failed to kill session', { errorData, sessionId: this.session.id });
-        throw new Error(`Kill failed: ${response.status}`);
+        logger.error(`Failed to ${action} session`, { errorData, sessionId: this.session.id });
+        throw new Error(`${action} failed: ${response.status}`);
       }
 
-      // Kill succeeded - dispatch event to notify parent components
+      // Kill/cleanup succeeded - dispatch event to notify parent components
       this.dispatchEvent(
         new CustomEvent('session-killed', {
           detail: {
@@ -129,7 +137,9 @@ export class SessionCard extends LitElement {
         })
       );
 
-      logger.log('Session killed successfully', { sessionId: this.session.id });
+      logger.log(
+        `Session ${this.session.id} ${action === 'cleanup' ? 'cleaned up' : 'killed'} successfully`
+      );
       return true;
     } catch (error) {
       logger.error('Error killing session', { error, sessionId: this.session.id });
