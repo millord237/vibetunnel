@@ -101,7 +101,7 @@ final class SessionMonitorTests {
     @Test("Session updates are reflected")
     func sessionUpdates() async {
         // Get initial state
-        let initialCount = monitor.sessionCount
+        _ = monitor.sessionCount
         
         // Refresh to get latest
         await monitor.refresh()
