@@ -7,6 +7,8 @@
 import type { SessionInfo } from '../../shared/types.js';
 import type { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
 import type { AsciinemaWriter } from './asciinema-writer.js';
+import type * as net from 'net';
+import type * as fs from 'fs';
 
 export interface AsciinemaHeader {
   version: number;
@@ -60,6 +62,10 @@ export interface PtySession {
   controlPipePath: string;
   sessionJsonPath: string;
   startTime: Date;
+  // Optional fields for resource cleanup
+  inputSocketServer?: net.Server;
+  controlWatcher?: fs.FSWatcher;
+  stdinHandler?: (data: string) => void;
 }
 
 export class PtyError extends Error {

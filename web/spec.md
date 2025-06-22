@@ -58,10 +58,14 @@ web/
 
 #### PTY Manager (`pty/pty-manager.ts`)
 - `createSession()` (72-167): Spawns PTY processes
+  - Supports `forwardToStdout` option for direct stdout forwarding
+  - Supports `onExit` callback for handling process termination
 - `sendInput()` (265-315): Handles keyboard input
 - `killSession()` (453-537): SIGTERM→SIGKILL escalation
 - `resizeSession()` (394-447): Terminal dimension changes
-- Control pipe support for external sessions (320-349)
+- Control pipe support using file watching on all platforms (320-349)
+- `shutdown()` (794-821): Clean termination of all active sessions
+- Proper TypeScript types throughout (no "as any" assertions)
 
 #### Session Manager (`pty/session-manager.ts`)
 - Session persistence in `~/.vibetunnel/control/`
@@ -346,22 +350,22 @@ Modal file browser for navigating the filesystem and selecting files/directories
 ## Forward Tool (`src/server/fwd.ts`)
 
 ### Purpose
-CLI tool that spawns PTY sessions integrated with VibeTunnel infrastructure.
+Simplified CLI tool that spawns PTY sessions using VibeTunnel infrastructure.
 
 ### Key Features
-- Interactive terminal forwarding (295-312)
-- Control pipe handling (140-287)
-- Session persistence (439-446)
+- Interactive terminal forwarding with colorful output (chalk)
+- Session creation with pre-generated IDs support
+- Graceful cleanup on exit
 
 ### Usage
 ```bash
-npx tsx src/fwd.ts <command> [args...]
+npx tsx src/fwd.ts [--session-id <id>] <command> [args...]
 ```
 
 ### Integration Points
-- Uses same PtyManager as server (63)
-- Creates sessions in control directory
-- Supports resize/kill via control pipe
+- Uses PtyManager for all session management
+- Control pipe and stdin forwarding handled by PtyManager
+- Automatic cleanup via PtyManager's shutdown() method
 
 ## Key Files Quick Reference
 
@@ -371,13 +375,13 @@ npx tsx src/fwd.ts <command> [args...]
 - `src/server/app.ts`: App configuration, CLI parsing
 - `src/server/middleware/auth.ts`: Authentication logic
 - `src/server/routes/sessions.ts`: Session API endpoints
-- `src/server/pty/pty-manager.ts`: PTY process management
+- `src/server/pty/pty-manager.ts`: PTY process management with file-watching control pipes
 - `src/server/pty/asciinema-writer.ts`: Cast file writer
 - `src/server/services/terminal-manager.ts`: Terminal state & binary protocol
 - `src/server/services/buffer-aggregator.ts`: WebSocket buffer distribution
 - `src/server/services/stream-watcher.ts`: SSE file streaming
 - `src/server/services/activity-monitor.ts`: Session activity detection
-- `src/server/fwd.ts`: CLI forwarding tool
+- `src/server/fwd.ts`: Simplified CLI forwarding tool
 
 ### Client Core
 - `src/client/app-entry.ts`: Application entry point
@@ -408,6 +412,13 @@ Each session has a directory in `~/.vibetunnel/control/[sessionId]/` containing:
 - `activity.json`: Activity status (written by ActivityMonitor)
 
 ## Development Notes
+
+### Architecture Changes (Recent)
+- PTY Manager now uses file watching for control pipes on all platforms (not just FIFO)
+- No global exit handlers - clean shutdown via `shutdown()` method
+- Simplified fwd.ts - control pipe and stdin forwarding handled by PTY Manager
+- Added proper TypeScript types throughout (removed all "as any" assertions)
+- Cleaned up logging and added colorful output messages using chalk
 
 ### Build System
 - `npm run dev`: Auto-rebuilds TypeScript

@@ -12,6 +12,7 @@ VibeTunnel is a macOS application that allows users to access their terminal ses
 ## Critical Development Rules
 
 - **Never commit and/or push before the user has tested your changes!**
+- **ABSOLUTELY SUPER IMPORTANT & CRITICAL**: NEVER USE git rebase --skip EVER
 
 ## Web Development Commands
 

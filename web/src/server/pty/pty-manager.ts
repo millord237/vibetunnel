@@ -9,7 +9,7 @@ import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import * as fs from 'fs';
-import { onExit } from 'signal-exit';
+import * as net from 'net';
 import {
   PtySession,
   SessionCreationResult,
@@ -33,41 +33,10 @@ export class PtyManager {
   private sessions = new Map<string, PtySession>();
   private sessionManager: SessionManager;
   private defaultTerm = 'xterm-256color';
-  private cleanupRegistered = false;
+  private inputSocketClients = new Map<string, net.Socket>(); // Cache socket connections
 
   constructor(controlPath?: string) {
     this.sessionManager = new SessionManager(controlPath);
-    this.registerCleanupHandlers();
-  }
-
-  /**
-   * Register cleanup handlers for graceful shutdown
-   */
-  private registerCleanupHandlers(): void {
-    if (this.cleanupRegistered) return;
-
-    try {
-      onExit(() => {
-        console.log('PTY Manager shutting down, cleaning up sessions...');
-        this.cleanup();
-      });
-    } catch (error) {
-      console.warn('Failed to register signal-exit handler:', error);
-      // Fallback to basic process event handlers
-      process.on('SIGINT', () => {
-        console.log('PTY Manager shutting down (SIGINT), cleaning up sessions...');
-        this.cleanup();
-        process.exit(0);
-      });
-
-      process.on('SIGTERM', () => {
-        console.log('PTY Manager shutting down (SIGTERM), cleaning up sessions...');
-        this.cleanup();
-        process.exit(0);
-      });
-    }
-
-    this.cleanupRegistered = true;
   }
 
   /**
@@ -75,12 +44,12 @@ export class PtyManager {
    */
   async createSession(
     command: string[],
-    options: SessionCreateOptions
+    options: SessionCreateOptions & {
+      forwardToStdout?: boolean;
+      onExit?: (exitCode: number, signal?: number) => void;
+    }
   ): Promise<SessionCreationResult> {
     const sessionId = options.sessionId || uuidv4();
-    console.log(
-      `[PTY] Creating session - provided ID: ${options.sessionId}, using ID: ${sessionId}`
-    );
     const sessionName = options.name || path.basename(command[0]);
     const workingDir = options.workingDir || process.cwd();
     const term = this.defaultTerm;
@@ -117,13 +86,6 @@ export class PtyManager {
       // Create PTY process
       let ptyProcess;
       try {
-        // Log the command we're about to spawn for debugging
-        console.log(
-          `[PTY] Spawning command: ${command[0]} with args: ${JSON.stringify(command.slice(1))}`
-        );
-        console.log(`[PTY] Working directory: ${workingDir}`);
-        console.log(`[PTY] Terminal: ${term}, Size: ${cols}x${rows}`);
-
         // Set up environment like Linux implementation
         const ptyEnv = {
           ...process.env,
@@ -178,7 +140,15 @@ export class PtyManager {
       this.sessionManager.saveSessionInfo(sessionId, sessionInfo);
 
       // Setup PTY event handlers
-      this.setupPtyHandlers(session);
+      this.setupPtyHandlers(session, options.forwardToStdout || false, options.onExit);
+
+      // Setup control pipe if forwarding to stdout
+      if (options.forwardToStdout) {
+        this.setupControlPipe(session);
+
+        // Setup stdin forwarding for fwd mode
+        this.setupStdinForwarding(session);
+      }
 
       return {
         sessionId,
@@ -207,10 +177,18 @@ export class PtyManager {
     return session?.ptyProcess || null;
   }
 
+  public getInternalSession(sessionId: string): PtySession | undefined {
+    return this.sessions.get(sessionId);
+  }
+
   /**
    * Setup event handlers for a PTY process
    */
-  private setupPtyHandlers(session: PtySession): void {
+  private setupPtyHandlers(
+    session: PtySession,
+    forwardToStdout: boolean,
+    onExit?: (exitCode: number, signal?: number) => void
+  ): void {
     const { ptyProcess, asciinemaWriter } = session;
 
     // Handle PTY data output
@@ -218,6 +196,11 @@ export class PtyManager {
       try {
         // Write to asciinema file
         asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
+
+        // Forward to stdout if requested (for fwd.ts)
+        if (forwardToStdout) {
+          process.stdout.write(data);
+        }
       } catch (error) {
         console.error(`Error writing PTY data for session ${session.id}:`, error);
       }
@@ -226,8 +209,6 @@ export class PtyManager {
     // Handle PTY exit
     ptyProcess?.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
       try {
-        console.log(`Session ${session.id} exited with code ${exitCode}, signal ${signal}`);
-
         // Write exit event to asciinema
         if (asciinemaWriter?.isOpen()) {
           asciinemaWriter.writeRawJson(['exit', exitCode || 0, session.id]);
@@ -242,8 +223,16 @@ export class PtyManager {
           exitCode || (signal ? 128 + (typeof signal === 'number' ? signal : 1) : 1)
         );
 
+        // Clean up session resources
+        this.cleanupSessionResources(session);
+
         // Remove from active sessions
         this.sessions.delete(session.id);
+
+        // Call exit callback if provided (for fwd.ts)
+        if (onExit) {
+          onExit(exitCode || 0, signal);
+        }
       } catch (_error) {
         console.error(`Error handling exit for session ${session.id}:`, _error);
       }
@@ -254,37 +243,146 @@ export class PtyManager {
   }
 
   /**
-   * Monitor stdin file for input data
+   * Monitor stdin file for input data using Unix socket for lowest latency
    */
   private monitorStdinFile(session: PtySession): void {
-    let lastSize = 0;
+    // Create Unix domain socket for fast IPC
+    const socketPath = path.join(session.controlDir, 'input.sock');
 
-    fs.watchFile(session.stdinPath, { interval: 50 }, (curr, _prev) => {
+    try {
+      // Remove existing socket if it exists
       try {
-        if (curr.size > lastSize) {
-          // Read new data
-          const fd = fs.openSync(session.stdinPath, 'r');
-          const buffer = Buffer.alloc(curr.size - lastSize);
-          const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, lastSize);
-          fs.closeSync(fd);
-
-          if (bytesRead > 0) {
-            const data = buffer.subarray(0, bytesRead).toString('utf8');
-            session.ptyProcess?.write(data);
-            session.asciinemaWriter?.writeInput(data);
-          }
-
-          lastSize = curr.size;
-        }
-      } catch (_error) {
-        // File might not exist or be readable, ignore
+        fs.unlinkSync(socketPath);
+      } catch (_e) {
+        // Ignore if doesn't exist
       }
-    });
 
-    // Clean up file watcher when session ends
-    session.ptyProcess?.onExit(() => {
-      fs.unwatchFile(session.stdinPath);
-    });
+      // Create Unix domain socket server
+      const inputServer = net.createServer((client) => {
+        client.setNoDelay(true);
+        client.on('data', (data) => {
+          const text = data.toString('utf8');
+          if (session.ptyProcess) {
+            session.ptyProcess.write(text);
+            session.asciinemaWriter?.writeInput(text);
+          }
+        });
+      });
+
+      inputServer.listen(socketPath, () => {
+        // Make socket writable by all
+        try {
+          fs.chmodSync(socketPath, 0o666);
+        } catch (_e) {
+          // Ignore chmod errors
+        }
+      });
+
+      // Store server reference for cleanup
+      session.inputSocketServer = inputServer;
+    } catch (error) {
+      console.warn(`Failed to create input socket for session ${session.id}:`, error);
+    }
+
+    // Socket-only approach - no FIFO monitoring
+  }
+
+  /**
+   * Setup control pipe for fwd mode to handle resize and kill commands
+   */
+  private setupControlPipe(session: PtySession): void {
+    const controlPipePath = session.controlPipePath;
+
+    try {
+      // Create control file if it doesn't exist
+      if (!fs.existsSync(controlPipePath)) {
+        fs.writeFileSync(controlPipePath, '');
+      }
+
+      // Use file watching approach for all platforms
+      let lastControlPosition = 0;
+
+      const readNewControlData = () => {
+        try {
+          if (!fs.existsSync(controlPipePath)) return;
+
+          const stats = fs.statSync(controlPipePath);
+          if (stats.size > lastControlPosition) {
+            const fd = fs.openSync(controlPipePath, 'r');
+            const buffer = Buffer.allocUnsafe(stats.size - lastControlPosition);
+            fs.readSync(fd, buffer, 0, buffer.length, lastControlPosition);
+            fs.closeSync(fd);
+            const data = buffer.toString('utf8');
+
+            const lines = data.split('\n');
+            for (const line of lines) {
+              if (line.trim()) {
+                try {
+                  const message = JSON.parse(line);
+                  this.handleControlMessage(session, message);
+                } catch (_e) {
+                  console.warn('Invalid control message:', line);
+                }
+              }
+            }
+
+            lastControlPosition = stats.size;
+          }
+        } catch (_error) {
+          // Control file might be temporarily unavailable
+        }
+      };
+
+      // Use file watcher
+      const watcher = fs.watch(controlPipePath, (eventType) => {
+        if (eventType === 'change') {
+          readNewControlData();
+        }
+      });
+
+      // Store watcher for cleanup
+      session.controlWatcher = watcher;
+
+      // Unref the watcher so it doesn't keep the process alive
+      watcher.unref();
+
+      // Read any existing data
+      readNewControlData();
+    } catch (error) {
+      console.warn('Failed to set up control pipe:', error);
+    }
+  }
+
+  /**
+   * Handle control messages from control pipe
+   */
+  private handleControlMessage(session: PtySession, message: Record<string, unknown>): void {
+    if (
+      message.cmd === 'resize' &&
+      typeof message.cols === 'number' &&
+      typeof message.rows === 'number'
+    ) {
+      try {
+        if (session.ptyProcess) {
+          session.ptyProcess.resize(message.cols, message.rows);
+          session.asciinemaWriter?.writeResize(message.cols, message.rows);
+        }
+      } catch (error) {
+        console.warn('Failed to resize session:', error);
+      }
+    } else if (message.cmd === 'kill') {
+      const signal =
+        typeof message.signal === 'string' || typeof message.signal === 'number'
+          ? message.signal
+          : 'SIGTERM';
+      try {
+        if (session.ptyProcess) {
+          session.ptyProcess.kill(signal as string);
+        }
+      } catch (error) {
+        console.warn('Failed to kill session:', error);
+      }
+    }
   }
 
   /**
@@ -315,7 +413,40 @@ export class PtyManager {
             sessionId
           );
         }
-        fs.appendFileSync(sessionPaths.stdinPath, dataToSend);
+        // Try Unix domain socket first for lowest latency
+        const socketPath = path.join(sessionPaths.controlDir, 'input.sock');
+
+        // Check if we have a cached socket connection
+        let socketClient = this.inputSocketClients.get(sessionId);
+
+        if (!socketClient || socketClient.destroyed) {
+          // Try to connect to the socket
+          try {
+            socketClient = net.createConnection(socketPath);
+            socketClient.setNoDelay(true);
+            this.inputSocketClients.set(sessionId, socketClient);
+
+            socketClient.on('error', () => {
+              this.inputSocketClients.delete(sessionId);
+            });
+
+            socketClient.on('close', () => {
+              this.inputSocketClients.delete(sessionId);
+            });
+          } catch (_error) {
+            socketClient = undefined;
+          }
+        }
+
+        if (socketClient && !socketClient.destroyed) {
+          socketClient.write(dataToSend);
+        } else {
+          throw new PtyError(
+            `No socket connection available for session ${sessionId}`,
+            'NO_SOCKET_CONNECTION',
+            sessionId
+          );
+        }
       }
     } catch (error) {
       throw new PtyError(
@@ -430,7 +561,6 @@ export class PtyManager {
 
         const sentControl = this.sendControlMessage(sessionId, killMessage);
         if (sentControl) {
-          console.log(`Sent kill command via control pipe to session ${sessionId}`);
           // Wait a bit for the control message to be processed
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
@@ -556,8 +686,15 @@ export class PtyManager {
    * List all sessions (both active and persisted)
    */
   listSessions() {
-    // Update zombie sessions first
-    this.sessionManager.updateZombieSessions();
+    // Update zombie sessions first and clean up socket connections
+    const zombieSessionIds = this.sessionManager.updateZombieSessions();
+    for (const sessionId of zombieSessionIds) {
+      const socket = this.inputSocketClients.get(sessionId);
+      if (socket) {
+        socket.destroy();
+        this.inputSocketClients.delete(sessionId);
+      }
+    }
 
     // Return all sessions from storage
     return this.sessionManager.listSessions();
@@ -601,6 +738,13 @@ export class PtyManager {
 
     // Remove from storage
     this.sessionManager.cleanupSession(sessionId);
+
+    // Clean up socket connection if any
+    const socket = this.inputSocketClients.get(sessionId);
+    if (socket) {
+      socket.destroy();
+      this.inputSocketClients.delete(sessionId);
+    }
   }
 
   /**
@@ -645,25 +789,35 @@ export class PtyManager {
   }
 
   /**
-   * Cleanup all active sessions
+   * Shutdown all active sessions and clean up resources
    */
-  private cleanup(): void {
-    console.log(`Cleaning up ${this.sessions.size} active sessions...`);
-
+  async shutdown(): Promise<void> {
     for (const [sessionId, session] of Array.from(this.sessions.entries())) {
       try {
         if (session.ptyProcess) {
           session.ptyProcess.kill();
         }
         if (session.asciinemaWriter?.isOpen()) {
-          session.asciinemaWriter.close().catch(console.error);
+          await session.asciinemaWriter.close();
         }
+        // Clean up all session resources
+        this.cleanupSessionResources(session);
       } catch (error) {
         console.error(`Error cleaning up session ${sessionId}:`, error);
       }
     }
 
     this.sessions.clear();
+
+    // Clean up all socket clients
+    for (const [_sessionId, socket] of this.inputSocketClients.entries()) {
+      try {
+        socket.destroy();
+      } catch (_e) {
+        // Ignore errors
+      }
+    }
+    this.inputSocketClients.clear();
   }
 
   /**
@@ -671,5 +825,53 @@ export class PtyManager {
    */
   getSessionManager(): SessionManager {
     return this.sessionManager;
+  }
+
+  /**
+   * Setup stdin forwarding for fwd mode
+   */
+  private setupStdinForwarding(session: PtySession): void {
+    if (!session.ptyProcess) return;
+
+    // Forward stdin to PTY with maximum speed
+    process.stdin.on('data', (data: string) => {
+      try {
+        session.ptyProcess?.write(data);
+      } catch (error) {
+        console.error('Failed to send input:', error);
+      }
+    });
+  }
+
+  /**
+   * Clean up all resources associated with a session
+   */
+  private cleanupSessionResources(session: PtySession): void {
+    // Clean up input socket server
+    if (session.inputSocketServer) {
+      // Close the server and wait for it to close
+      session.inputSocketServer.close();
+      // Unref the server so it doesn't keep the process alive
+      session.inputSocketServer.unref();
+      try {
+        fs.unlinkSync(path.join(session.controlDir, 'input.sock'));
+      } catch (_e) {
+        // Ignore
+      }
+    }
+
+    // Close control watcher
+    if (session.controlWatcher) {
+      session.controlWatcher.close();
+    }
+
+    // Remove control pipe
+    if (fs.existsSync(session.controlPipePath)) {
+      try {
+        fs.unlinkSync(session.controlPipePath);
+      } catch (_e) {
+        // Ignore
+      }
+    }
   }
 }
