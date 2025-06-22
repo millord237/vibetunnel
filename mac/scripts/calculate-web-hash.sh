@@ -32,7 +32,7 @@ CONTENT_HASH=$(find . \
     -type f \
     \( -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.html" \
        -o -name "*.tsx" -o -name "*.jsx" -o -name "*.vue" -o -name "*.svelte" \
-       -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" \) \
+       -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.d.ts" \) \
     -not -path "./node_modules/*" \
     -not -path "./dist/*" \
     -not -path "./public/*" \
