@@ -202,23 +202,10 @@ jobs:
       run: |
         cd mac
         # Use swift test instead of xcodebuild for Swift Testing support
-        # Run tests and capture output
-        swift test --verbose 2>&1 | tee test-output.txt || TEST_FAILED=1
-        
-        # Check if the only failure is the expected NgrokServiceTests
-        if [ "$TEST_FAILED" = "1" ]; then
-          # Count the number of failures
-          FAILURES=$(grep -c "✘ Test" test-output.txt || true)
-          NGROK_FAILURES=$(grep "✘ Test.*fullIntegration.*Ngrok auth token not configured" test-output.txt | wc -l || true)
-          
-          if [ "$FAILURES" -eq "$NGROK_FAILURES" ] && [ "$NGROK_FAILURES" -gt 0 ]; then
-            echo "::warning::Tests passed with expected Ngrok auth token failure"
-            exit 0
-          else
-            echo "::error::Tests failed with unexpected failures"
-            exit 1
-          fi
-        fi
+        swift test --verbose || {
+          echo "::error::Tests failed"
+          exit 1
+        }
           
     - name: Upload test logs on failure
       if: failure()
