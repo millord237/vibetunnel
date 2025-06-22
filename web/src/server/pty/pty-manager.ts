@@ -34,9 +34,89 @@ export class PtyManager {
   private sessionManager: SessionManager;
   private defaultTerm = 'xterm-256color';
   private inputSocketClients = new Map<string, net.Socket>(); // Cache socket connections
+  private lastTerminalSize: { cols: number; rows: number } | null = null;
+  private resizeEventListeners: Array<() => void> = [];
 
   constructor(controlPath?: string) {
     this.sessionManager = new SessionManager(controlPath);
+    this.setupTerminalResizeDetection();
+  }
+
+  /**
+   * Setup terminal resize detection for when the hosting terminal is resized
+   */
+  private setupTerminalResizeDetection(): void {
+    // Only setup resize detection if we're running in a TTY
+    if (!process.stdout.isTTY) {
+      return;
+    }
+
+    // Store initial terminal size
+    this.lastTerminalSize = {
+      cols: process.stdout.columns || 80,
+      rows: process.stdout.rows || 24,
+    };
+
+    // Method 1: Listen for Node.js TTY resize events (most reliable)
+    const handleStdoutResize = () => {
+      const newCols = process.stdout.columns || 80;
+      const newRows = process.stdout.rows || 24;
+      this.handleTerminalResize(newCols, newRows);
+    };
+
+    process.stdout.on('resize', handleStdoutResize);
+    this.resizeEventListeners.push(() => {
+      process.stdout.removeListener('resize', handleStdoutResize);
+    });
+
+    // Method 2: Listen for SIGWINCH signals (backup for Unix systems)
+    const handleSigwinch = () => {
+      const newCols = process.stdout.columns || 80;
+      const newRows = process.stdout.rows || 24;
+      this.handleTerminalResize(newCols, newRows);
+    };
+
+    process.on('SIGWINCH', handleSigwinch);
+    this.resizeEventListeners.push(() => {
+      process.removeListener('SIGWINCH', handleSigwinch);
+    });
+  }
+
+  /**
+   * Handle terminal resize events from the hosting terminal
+   */
+  private handleTerminalResize(newCols: number, newRows: number): void {
+    // Skip if size hasn't actually changed
+    if (
+      this.lastTerminalSize &&
+      this.lastTerminalSize.cols === newCols &&
+      this.lastTerminalSize.rows === newRows
+    ) {
+      return;
+    }
+
+    console.log(`Terminal resized to ${newCols}x${newRows}, updating active sessions`);
+
+    // Update stored size
+    this.lastTerminalSize = { cols: newCols, rows: newRows };
+
+    // Forward resize to all active sessions
+    // Note: We only resize sessions that don't have custom sizes set
+    for (const [sessionId, session] of this.sessions) {
+      if (session.ptyProcess && session.sessionInfo.status === 'running') {
+        try {
+          // Resize the PTY process
+          session.ptyProcess.resize(newCols, newRows);
+
+          // Record the resize event in the asciinema file
+          session.asciinemaWriter?.writeResize(newCols, newRows);
+
+          console.log(`Resized session ${sessionId} to ${newCols}x${newRows}`);
+        } catch (error) {
+          console.error(`Failed to resize session ${sessionId}:`, error);
+        }
+      }
+    }
   }
 
   /**
@@ -824,6 +904,16 @@ export class PtyManager {
       }
     }
     this.inputSocketClients.clear();
+
+    // Clean up resize event listeners
+    for (const removeListener of this.resizeEventListeners) {
+      try {
+        removeListener();
+      } catch (error) {
+        console.error('Error removing resize event listener:', error);
+      }
+    }
+    this.resizeEventListeners.length = 0;
   }
 
   /**
