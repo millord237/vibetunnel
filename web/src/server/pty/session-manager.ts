@@ -173,9 +173,9 @@ export class SessionManager {
             }
             if (fs.existsSync(stdoutPath)) {
               const lastModified = fs.statSync(stdoutPath).mtime.toISOString();
-              sessions.push({ ...sessionInfo, lastModified });
+              sessions.push({ ...sessionInfo, id: sessionId, lastModified });
             } else {
-              sessions.push({ ...sessionInfo, lastModified: sessionInfo.startedAt });
+              sessions.push({ ...sessionInfo, id: sessionId, lastModified: sessionInfo.startedAt });
             }
           }
         }
@@ -210,6 +210,10 @@ export class SessionManager {
    * Cleanup a specific session
    */
   cleanupSession(sessionId: string): void {
+    if (!sessionId) {
+      throw new PtyError('Session ID is required for cleanup', 'INVALID_SESSION_ID');
+    }
+
     try {
       const sessionDir = path.join(this.controlPath, sessionId);
 
@@ -236,7 +240,7 @@ export class SessionManager {
       const sessions = this.listSessions();
 
       for (const session of sessions) {
-        if (session.status === 'exited') {
+        if (session.status === 'exited' && session.id) {
           this.cleanupSession(session.id);
           cleanedSessions.push(session.id);
         }
