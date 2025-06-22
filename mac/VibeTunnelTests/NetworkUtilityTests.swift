@@ -73,7 +73,7 @@ struct NetworkUtilityTests {
         // Verify our preference logic
         for ip in mockIPs {
             if ip.hasPrefix("192.168.") || ip.hasPrefix("10.") || ip.hasPrefix("172.") {
-                #expect(true, "IP \(ip) should be preferred")
+                #expect(Bool(true), "IP \(ip) should be preferred")
             }
         }
     }
