@@ -107,18 +107,6 @@ jobs:
       working-directory: web
       run: npm ci
       
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      
-    - name: Cache Rust dependencies
-      uses: useblacksmith/rust-cache@v3
-      with:
-        workspaces: tty-fwd
-        
-    - name: Build tty-fwd binary
-      working-directory: tty-fwd
-      run: cargo build --release
-      
     - name: Build frontend and backend
       working-directory: web
       run: npm run build
