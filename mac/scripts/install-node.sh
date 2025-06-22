@@ -33,6 +33,11 @@ if [ -s "$HOME/.nvm/nvm.sh" ]; then
     . "$NVM_DIR/nvm.sh"
 fi
 
+# Volta
+if [ -d "$HOME/.volta/bin" ]; then
+    export PATH="$HOME/.volta/bin:$PATH"
+fi
+
 # Check if Node.js is available
 if command -v node &> /dev/null; then
     echo "✓ Node.js found: $(which node)"
@@ -63,6 +68,7 @@ else
     echo "  - Homebrew: brew install node"
     echo "  - Download from: https://nodejs.org/"
     echo "  - Using nvm: nvm install 20"
+    echo "  - Using volta: volta install node@20"
     echo ""
     echo "PATH checked: $PATH"
     exit 1

@@ -70,6 +70,9 @@ if [ -s "$HOME/.nvm/nvm.sh" ]; then
     . "$NVM_DIR/nvm.sh"
 fi
 
+# Put volta on the path if it exists
+export PATH="$HOME/.volta/bin:$PATH"
+
 # Export CI to prevent interactive prompts
 export CI=true
 
