@@ -15,6 +15,9 @@ import { LitElement, html, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import './file-browser.js';
 import type { Session } from './session-list.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('session-create-form');
 
 export interface SessionCreateData {
   command: string[];
@@ -65,7 +68,9 @@ export class SessionCreateForm extends LitElement {
       const savedWorkingDir = localStorage.getItem(this.STORAGE_KEY_WORKING_DIR);
       const savedCommand = localStorage.getItem(this.STORAGE_KEY_COMMAND);
 
-      console.log('Loading from localStorage:', { savedWorkingDir, savedCommand });
+      logger.debug(
+        `loading from localStorage: workingDir=${savedWorkingDir}, command=${savedCommand}`
+      );
 
       if (savedWorkingDir) {
         this.workingDir = savedWorkingDir;
@@ -76,8 +81,8 @@ export class SessionCreateForm extends LitElement {
 
       // Force re-render to update the input values
       this.requestUpdate();
-    } catch (error) {
-      console.warn('Failed to load from localStorage:', error);
+    } catch (_error) {
+      logger.warn('failed to load from localStorage');
     }
   }
 
@@ -86,7 +91,7 @@ export class SessionCreateForm extends LitElement {
       const workingDir = this.workingDir.trim();
       const command = this.command.trim();
 
-      console.log('Saving to localStorage:', { workingDir, command });
+      logger.debug(`saving to localStorage: workingDir=${workingDir}, command=${command}`);
 
       // Only save non-empty values
       if (workingDir) {
@@ -95,8 +100,8 @@ export class SessionCreateForm extends LitElement {
       if (command) {
         localStorage.setItem(this.STORAGE_KEY_COMMAND, command);
       }
-    } catch (error) {
-      console.warn('Failed to save to localStorage:', error);
+    } catch (_error) {
+      logger.warn('failed to save to localStorage');
     }
   }
 
@@ -203,7 +208,7 @@ export class SessionCreateForm extends LitElement {
         );
       }
     } catch (error) {
-      console.error('Error creating session:', error);
+      logger.error('error creating session:', error);
       this.dispatchEvent(
         new CustomEvent('error', {
           detail: 'Failed to create session',

@@ -22,6 +22,9 @@ import { repeat } from 'lit/directives/repeat.js';
 import type { Session } from '../../shared/types.js';
 import './session-create-form.js';
 import './session-card.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('session-list');
 
 // Re-export Session type for backward compatibility
 export type { Session };
@@ -60,7 +63,7 @@ export class SessionList extends LitElement {
 
   private handleSessionKilled(e: CustomEvent) {
     const { sessionId } = e.detail;
-    console.log(`Session ${sessionId} killed, updating session list...`);
+    logger.debug(`session ${sessionId} killed, updating session list`);
 
     // Immediately remove the session from the local state for instant UI feedback
     this.sessions = this.sessions.filter((session) => session.id !== sessionId);
@@ -71,7 +74,7 @@ export class SessionList extends LitElement {
 
   private handleSessionKillError(e: CustomEvent) {
     const { sessionId, error } = e.detail;
-    console.error(`Failed to kill session ${sessionId}:`, error);
+    logger.error(`failed to kill session ${sessionId}:`, error);
 
     // Dispatch error event to parent for user notification
     this.dispatchEvent(
@@ -100,7 +103,7 @@ export class SessionList extends LitElement {
         );
       }
     } catch (error) {
-      console.error('Error cleaning up exited sessions:', error);
+      logger.error('error cleaning up exited sessions:', error);
       this.dispatchEvent(new CustomEvent('error', { detail: 'Failed to cleanup exited sessions' }));
     } finally {
       this.cleaningExited = false;

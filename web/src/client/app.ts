@@ -5,6 +5,9 @@ import { keyed } from 'lit/directives/keyed.js';
 // Import shared types
 import type { Session } from '../shared/types.js';
 
+// Import logger
+import { createLogger } from './utils/logger.js';
+
 // Import components
 import './components/app-header.js';
 import './components/session-create-form.js';
@@ -12,8 +15,11 @@ import './components/session-list.js';
 import './components/session-view.js';
 import './components/session-card.js';
 import './components/file-browser.js';
+import './components/log-viewer.js';
 
 import type { SessionCard } from './components/session-card.js';
+
+const logger = createLogger('app');
 
 @customElement('vibetunnel-app')
 export class VibeTunnelApp extends LitElement {
@@ -129,7 +135,7 @@ export class VibeTunnelApp extends LitElement {
         this.showError('Failed to load sessions');
       }
     } catch (error) {
-      console.error('Error loading sessions:', error);
+      logger.error('error loading sessions:', error);
       this.showError('Failed to load sessions');
     } finally {
       this.loading = false;
@@ -189,12 +195,12 @@ export class VibeTunnelApp extends LitElement {
     }
 
     // If we get here, session creation might have failed
-    console.log('Session not found after all attempts');
+    logger.log('session not found after all attempts');
     this.showError('Session created but could not be found. Please refresh.');
   }
 
   private handleSessionKilled(e: CustomEvent) {
-    console.log('Session killed:', e.detail);
+    logger.log(`session ${e.detail} killed`);
     this.loadSessions(); // Refresh the list
   }
 
@@ -239,9 +245,9 @@ export class VibeTunnelApp extends LitElement {
     // Check if View Transitions API is supported
     if ('startViewTransition' in document && typeof document.startViewTransition === 'function') {
       // Debug: Check what elements have view-transition-name before transition
-      console.log('Before transition - elements with view-transition-name:');
+      logger.debug('before transition - elements with view-transition-name:');
       document.querySelectorAll('[style*="view-transition-name"]').forEach((el) => {
-        console.log('Element:', el, 'Style:', el.getAttribute('style'));
+        logger.debug('element:', el, 'style:', el.getAttribute('style'));
       });
 
       // Use View Transitions API for smooth animation
@@ -255,19 +261,19 @@ export class VibeTunnelApp extends LitElement {
         await this.updateComplete;
 
         // Debug: Check what elements have view-transition-name after transition
-        console.log('After transition - elements with view-transition-name:');
+        logger.debug('after transition - elements with view-transition-name:');
         document.querySelectorAll('[style*="view-transition-name"]').forEach((el) => {
-          console.log('Element:', el, 'Style:', el.getAttribute('style'));
+          logger.debug('element:', el, 'style:', el.getAttribute('style'));
         });
       });
 
       // Log if transition is ready
       transition.ready
         .then(() => {
-          console.log('View transition ready');
+          logger.debug('view transition ready');
         })
         .catch((err) => {
-          console.error('View transition failed:', err);
+          logger.error('view transition failed:', err);
         });
     } else {
       // Fallback for browsers without View Transitions support
@@ -349,7 +355,7 @@ export class VibeTunnelApp extends LitElement {
       const saved = localStorage.getItem('hideExitedSessions');
       return saved !== null ? saved === 'true' : true; // Default to true if not set
     } catch (error) {
-      console.error('Error loading hideExited state:', error);
+      logger.error('error loading hideExited state:', error);
       return true; // Default to true on error
     }
   }
@@ -358,7 +364,7 @@ export class VibeTunnelApp extends LitElement {
     try {
       localStorage.setItem('hideExitedSessions', String(value));
     } catch (error) {
-      console.error('Error saving hideExited state:', error);
+      logger.error('error saving hideExited state:', error);
     }
   }
 
@@ -416,7 +422,7 @@ export class VibeTunnelApp extends LitElement {
           }
         };
       } catch (error) {
-        console.log('Error setting up hot reload:', error);
+        logger.log('error setting up hot reload:', error);
       }
     }
   }

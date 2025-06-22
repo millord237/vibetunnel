@@ -1,4 +1,7 @@
 import { BufferCell } from '../utils/terminal-renderer.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('buffer-subscription-service');
 
 interface BufferSnapshot {
   cols: number;
@@ -36,14 +39,14 @@ export class BufferSubscriptionService {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/buffers`;
 
-    console.log('[BufferSubscriptionService] Connecting to', wsUrl);
+    logger.log(`connecting to ${wsUrl}`);
 
     try {
       this.ws = new WebSocket(wsUrl);
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {
-        console.log('[BufferSubscriptionService] Connected');
+        logger.log('connected');
         this.isConnecting = false;
         this.reconnectAttempts = 0;
 
@@ -69,18 +72,18 @@ export class BufferSubscriptionService {
       };
 
       this.ws.onerror = (error) => {
-        console.error('[BufferSubscriptionService] WebSocket error:', error);
+        logger.error('websocket error', error);
       };
 
       this.ws.onclose = () => {
-        console.log('[BufferSubscriptionService] Disconnected');
+        logger.log('disconnected');
         this.isConnecting = false;
         this.ws = null;
         this.stopPingPong();
         this.scheduleReconnect();
       };
     } catch (error) {
-      console.error('[BufferSubscriptionService] Failed to create WebSocket:', error);
+      logger.error('failed to create websocket', error);
       this.isConnecting = false;
       this.scheduleReconnect();
     }
@@ -92,9 +95,7 @@ export class BufferSubscriptionService {
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
     this.reconnectAttempts++;
 
-    console.log(
-      `[BufferSubscriptionService] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`
-    );
+    logger.log(`reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
@@ -146,7 +147,7 @@ export class BufferSubscriptionService {
       switch (message.type) {
         case 'connected':
           // Server confirmed connection, version info available in message.version
-          console.log('[BufferSubscriptionService] Connected to server, version:', message.version);
+          logger.log(`connected to server, version: ${message.version}`);
           break;
 
         case 'ping':
@@ -154,14 +155,14 @@ export class BufferSubscriptionService {
           break;
 
         case 'error':
-          console.error('[BufferSubscriptionService] Server error:', message.message);
+          logger.error(`server error: ${message.message}`);
           break;
 
         default:
-          console.warn('[BufferSubscriptionService] Unknown message type:', message.type);
+          logger.warn(`unknown message type: ${message.type}`);
       }
     } catch (error) {
-      console.error('[BufferSubscriptionService] Failed to parse JSON message:', error);
+      logger.error('failed to parse JSON message', error);
     }
   }
 
@@ -175,7 +176,7 @@ export class BufferSubscriptionService {
       offset += 1;
 
       if (magic !== BUFFER_MAGIC_BYTE) {
-        console.error('[BufferSubscriptionService] Invalid magic byte:', magic);
+        logger.error(`invalid magic byte: ${magic}`);
         return;
       }
 
@@ -202,13 +203,13 @@ export class BufferSubscriptionService {
             try {
               handler(snapshot);
             } catch (error) {
-              console.error('[BufferSubscriptionService] Error in update handler:', error);
+              logger.error('error in update handler', error);
             }
           });
         }
       });
     } catch (error) {
-      console.error('[BufferSubscriptionService] Failed to parse binary message:', error);
+      logger.error('failed to parse binary message', error);
     }
   }
 

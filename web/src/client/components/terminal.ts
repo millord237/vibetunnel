@@ -13,6 +13,9 @@ import { LitElement, html, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { Terminal as XtermTerminal, IBufferLine, IBufferCell } from '@xterm/headless';
 import { UrlHighlighter } from '../utils/url-highlighter.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('terminal');
 
 @customElement('vibe-terminal')
 export class Terminal extends LitElement {
@@ -163,7 +166,9 @@ export class Terminal extends LitElement {
       this.container = this.querySelector('#terminal-container') as HTMLElement;
 
       if (!this.container) {
-        throw new Error('Terminal container not found');
+        const error = new Error('Terminal container not found');
+        logger.error('terminal container not found', error);
+        throw error;
       }
 
       await this.setupTerminal();
@@ -171,7 +176,8 @@ export class Terminal extends LitElement {
       this.setupScrolling();
 
       this.requestUpdate();
-    } catch (_error: unknown) {
+    } catch (error: unknown) {
+      logger.error('failed to initialize terminal:', error);
       this.requestUpdate();
     }
   }
@@ -236,7 +242,7 @@ export class Terminal extends LitElement {
       // Set terminal size - don't call .open() to keep it headless
       this.terminal.resize(this.cols, this.rows);
     } catch (error) {
-      console.error('Failed to create terminal:', error);
+      logger.error('failed to create terminal:', error);
       throw error;
     }
   }

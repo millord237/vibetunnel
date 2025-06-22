@@ -13,6 +13,9 @@
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from '../../shared/types.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('session-card');
 import './vibe-terminal-buffer.js';
 import './copy-icon.js';
 
@@ -105,7 +108,7 @@ export class SessionCard extends LitElement {
 
       if (!response.ok) {
         const errorData = await response.text();
-        console.error('Failed to kill session:', errorData);
+        logger.error('Failed to kill session', { errorData, sessionId: this.session.id });
         throw new Error(`Kill failed: ${response.status}`);
       }
 
@@ -121,10 +124,10 @@ export class SessionCard extends LitElement {
         })
       );
 
-      console.log(`Session ${this.session.id} killed successfully`);
+      logger.log('Session killed successfully', { sessionId: this.session.id });
       return true;
     } catch (error) {
-      console.error('Error killing session:', error);
+      logger.error('Error killing session', { error, sessionId: this.session.id });
 
       // Show error to user (keep animation to indicate something went wrong)
       this.dispatchEvent(
@@ -164,9 +167,9 @@ export class SessionCard extends LitElement {
     if (this.session.pid) {
       try {
         await navigator.clipboard.writeText(this.session.pid.toString());
-        console.log('PID copied to clipboard:', this.session.pid);
+        logger.log('PID copied to clipboard', { pid: this.session.pid });
       } catch (error) {
-        console.error('Failed to copy PID to clipboard:', error);
+        logger.error('Failed to copy PID to clipboard', { error, pid: this.session.pid });
         // Fallback: select text manually
         this.fallbackCopyToClipboard(this.session.pid.toString());
       }
@@ -181,9 +184,9 @@ export class SessionCard extends LitElement {
     textArea.select();
     try {
       document.execCommand('copy');
-      console.log('Text copied to clipboard (fallback):', text);
+      logger.log('Text copied to clipboard (fallback)', { text });
     } catch (error) {
-      console.error('Fallback copy failed:', error);
+      logger.error('Fallback copy failed', { error });
     }
     document.body.removeChild(textArea);
   }
@@ -194,9 +197,9 @@ export class SessionCard extends LitElement {
 
     try {
       await navigator.clipboard.writeText(this.session.workingDir);
-      console.log('Path copied to clipboard:', this.session.workingDir);
+      logger.log('Path copied to clipboard', { path: this.session.workingDir });
     } catch (error) {
-      console.error('Failed to copy path to clipboard:', error);
+      logger.error('Failed to copy path to clipboard', { error, path: this.session.workingDir });
       // Fallback: select text manually
       this.fallbackCopyToClipboard(this.session.workingDir);
     }

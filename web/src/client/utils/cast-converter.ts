@@ -1,6 +1,10 @@
 // Utility class to convert asciinema cast files to data for DOM terminal
 // Converts cast format to string data that can be written via terminal.write()
 
+import { createLogger } from './logger.js';
+
+const logger = createLogger('cast-converter');
+
 interface CastHeader {
   version: number;
   width: number;
@@ -68,8 +72,8 @@ export class CastConverter {
             outputChunks.push(event.data);
           }
         }
-      } catch (error) {
-        console.warn('Failed to parse cast line:', line, error);
+      } catch (_error) {
+        logger.warn('failed to parse cast line');
       }
     }
 
@@ -398,26 +402,26 @@ export class CastConverter {
           } else if (type === 'i') {
             // Ignore 'i' (input) events - those are for sending to server, not displaying
           } else {
-            console.error('Unknown stream message format:', data);
+            logger.error('unknown stream message format');
           }
         }
       } catch (error) {
-        console.error('Failed to parse stream message:', event.data, error);
+        logger.error('failed to parse stream message:', error);
       }
     };
 
     // Handle connection errors
     eventSource.onerror = (error) => {
-      console.error('Stream connection error:', error);
+      logger.error('stream connection error:', error);
 
       if (eventSource.readyState === EventSource.CLOSED) {
-        console.log('Stream connection closed');
+        logger.debug('stream connection closed');
       }
     };
 
     // Handle connection open
     eventSource.onopen = () => {
-      console.log('Stream connection established to:', streamUrl);
+      logger.debug(`stream connection established to: ${streamUrl}`);
     };
 
     return {

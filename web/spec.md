@@ -112,6 +112,14 @@ web/
 - `POST /api/remotes/register` (30-52): Remote registration
 - `DELETE /api/remotes/:id` (55-69): Unregister remote
 
+#### Logs (`logs.ts`)
+- `POST /api/logs/client` (24-56): Client-side log submission
+  - Accepts: `{ level, module, args }`
+  - Prefixes module with `CLIENT:` for identification
+- `GET /api/logs/raw` (59-76): Stream raw log file
+- `GET /api/logs/info` (79-104): Log file metadata
+- `DELETE /api/logs/clear` (107-121): Clear log file
+
 ### Binary Buffer Protocol
 
 **Note**: "Buffer" refers to the current terminal display state (visible viewport) without scrollback history - just what's currently shown at the bottom of the terminal. This is used for rendering terminal previews in the session list.
@@ -204,6 +212,23 @@ Monitors all terminal sessions for activity by watching `stream-out` file change
 #### HQ Client (`services/hq-client.ts`)
 - Registration with HQ (29-58)
 - Unregister on shutdown (60-72)
+
+### Logging Infrastructure (`utils/logger.ts`)
+
+#### Server Logger
+- Unified logging with file and console output
+- Log levels: log, warn, error, debug
+- File output to `~/.vibetunnel/log.txt`
+- Formatted timestamps and module names
+- Debug mode toggle
+- Style guide compliance (see LOGGING_STYLE_GUIDE.md)
+
+#### Client Logger (`client/utils/logger.ts`)
+- Mirrors server logger interface
+- Logs to browser console
+- Sends logs to `/api/logs/client` endpoint
+- Objects formatted as JSON before sending
+- Integrates with server logging system
 
 ## Client Architecture (`src/client/`)
 
@@ -318,6 +343,22 @@ Modal file browser for navigating the filesystem and selecting files/directories
   - `directory-selected` - When a directory is selected in 'select' mode (detail: string)
   - `browser-cancel` - When the browser is cancelled or closed
 
+##### `log-viewer.ts` - System log viewer (1-432)
+Real-time log viewer with filtering and search capabilities.
+- SSE-style polling every 2 seconds
+- Client/server log distinction
+- Log level filtering
+- Relative timestamps
+- Mobile-responsive layout
+- Mac-style auto-hiding scrollbars
+- **Features**:
+  - Filter by log level (error, warn, log, debug)
+  - Toggle client/server logs
+  - Search/filter by text
+  - Auto-scroll (smart - only when near bottom)
+  - Download logs
+  - Clear logs
+
 ##### Icon Components
 - `vibe-logo.ts` - Application logo
 - `terminal-icon.ts` - Terminal icon
@@ -396,6 +437,7 @@ npx tsx src/fwd.ts [--session-id <id>] <command> [args...]
 ### Configuration
 - Environment: `PORT`, `VIBETUNNEL_USERNAME`, `VIBETUNNEL_PASSWORD`
 - CLI: `--port`, `--username`, `--password`, `--hq`, `--hq-url`, `--name`
+- Express static: `.html` extension handling for clean URLs
 
 ### Protocols
 - REST API: Session CRUD, terminal I/O, activity status
@@ -419,6 +461,13 @@ Each session has a directory in `~/.vibetunnel/control/[sessionId]/` containing:
 - Simplified fwd.ts - control pipe and stdin forwarding handled by PTY Manager
 - Added proper TypeScript types throughout (removed all "as any" assertions)
 - Cleaned up logging and added colorful output messages using chalk
+- **Unified logging infrastructure**:
+  - Server-wide adoption of structured logger
+  - Client-side logger with server integration
+  - Centralized log viewer at `/logs`
+  - Consistent style guide (LOGGING_STYLE_GUIDE.md)
+- **Express enhancements**:
+  - Auto `.html` extension resolution for static files
 
 ### Build System
 - `npm run dev`: Auto-rebuilds TypeScript

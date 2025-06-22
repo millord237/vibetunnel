@@ -25,6 +25,9 @@ import {
   TerminalPreferencesManager,
   COMMON_TERMINAL_WIDTHS,
 } from '../utils/terminal-preferences.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('session-view');
 
 @customElement('session-view')
 export class SessionView extends LitElement {
@@ -328,11 +331,11 @@ export class SessionView extends LitElement {
       this.reconnectCount++;
       lastErrorTime = now;
 
-      console.log(`Stream error #${this.reconnectCount} for session ${this.session?.id}`);
+      logger.log(`stream error #${this.reconnectCount} for session ${this.session?.id}`);
 
       // If we've had too many reconnects, mark session as exited
       if (this.reconnectCount >= reconnectThreshold) {
-        console.log(`Session ${this.session?.id} marked as exited due to excessive reconnections`);
+        logger.warn(`session ${this.session?.id} marked as exited due to excessive reconnections`);
 
         if (this.session && this.session.status !== 'exited') {
           this.session = { ...this.session, status: 'exited' };
@@ -361,7 +364,7 @@ export class SessionView extends LitElement {
 
     // Don't send input to exited sessions
     if (this.session.status === 'exited') {
-      console.log('Ignoring keyboard input - session has exited');
+      logger.log('ignoring keyboard input - session has exited');
       return;
     }
 
@@ -468,18 +471,18 @@ export class SessionView extends LitElement {
 
       if (!response.ok) {
         if (response.status === 400) {
-          console.log('Session no longer accepting input (likely exited)');
+          logger.log('session no longer accepting input (likely exited)');
           // Update session status to exited if we get 400 error
           if (this.session && (this.session.status as string) !== 'exited') {
             this.session = { ...this.session, status: 'exited' };
             this.requestUpdate();
           }
         } else {
-          console.error('Failed to send input to session:', response.status);
+          logger.error('failed to send input to session', { status: response.status });
         }
       }
     } catch (error) {
-      console.error('Error sending input:', error);
+      logger.error('error sending input', error);
     }
   }
 
@@ -495,7 +498,7 @@ export class SessionView extends LitElement {
 
   private handleSessionExit(e: Event) {
     const customEvent = e as CustomEvent;
-    console.log('Session exit event received:', customEvent.detail);
+    logger.log('session exit event received', customEvent.detail);
 
     if (this.session && customEvent.detail.sessionId === this.session.id) {
       // Update session status to exited
@@ -531,7 +534,7 @@ export class SessionView extends LitElement {
         }
       });
     } catch (error) {
-      console.error('Failed to load session snapshot:', error);
+      logger.error('failed to load session snapshot', error);
     }
   }
 
@@ -551,15 +554,15 @@ export class SessionView extends LitElement {
     this.resizeTimeout = window.setTimeout(async () => {
       // Only send resize request if dimensions actually changed
       if (cols === this.lastResizeWidth && rows === this.lastResizeHeight) {
-        console.log(`Skipping redundant resize request: ${cols}x${rows}`);
+        logger.debug(`skipping redundant resize request: ${cols}x${rows}`);
         return;
       }
 
       // Send resize request to backend if session is active
       if (this.session && this.session.status !== 'exited') {
         try {
-          console.log(
-            `Sending resize request: ${cols}x${rows} (was ${this.lastResizeWidth}x${this.lastResizeHeight})`
+          logger.debug(
+            `sending resize request: ${cols}x${rows} (was ${this.lastResizeWidth}x${this.lastResizeHeight})`
           );
 
           const response = await fetch(`/api/sessions/${this.session.id}/resize`, {
@@ -573,10 +576,10 @@ export class SessionView extends LitElement {
             this.lastResizeWidth = cols;
             this.lastResizeHeight = rows;
           } else {
-            console.warn(`Failed to resize session: ${response.status}`);
+            logger.warn(`failed to resize session: ${response.status}`);
           }
         } catch (error) {
-          console.warn('Failed to send resize request:', error);
+          logger.warn('failed to send resize request', error);
         }
       }
     }, 250) as unknown as number; // 250ms debounce delay
@@ -737,7 +740,7 @@ export class SessionView extends LitElement {
       // Refresh terminal scroll position after closing mobile input
       this.refreshTerminalAfterMobileInput();
     } catch (error) {
-      console.error('Error sending mobile input:', error);
+      logger.error('error sending mobile input', error);
       // Don't hide the overlay if there was an error
     }
   }
@@ -769,7 +772,7 @@ export class SessionView extends LitElement {
       // Refresh terminal scroll position after closing mobile input
       this.refreshTerminalAfterMobileInput();
     } catch (error) {
-      console.error('Error sending mobile input:', error);
+      logger.error('error sending mobile input', error);
       // Don't hide the overlay if there was an error
     }
   }
@@ -889,7 +892,7 @@ export class SessionView extends LitElement {
     // Send the path to the terminal
     await this.sendInputText(escapedPath);
 
-    console.log(`[SessionView] Inserted ${type} path into terminal:`, escapedPath);
+    logger.log(`inserted ${type} path into terminal: ${escapedPath}`);
   }
 
   private async handleOpenInEditor(event: CustomEvent) {
@@ -906,7 +909,7 @@ export class SessionView extends LitElement {
     // Send the command to the terminal
     await this.sendInputText(command + '\n');
 
-    console.log(`[SessionView] Opening file in editor:`, escapedPath);
+    logger.log(`opening file in editor: ${escapedPath}`);
   }
 
   private async sendInputText(text: string) {
@@ -936,10 +939,10 @@ export class SessionView extends LitElement {
       });
 
       if (!response.ok) {
-        console.error('Failed to send input to session');
+        logger.error('failed to send input to session', { status: response.status });
       }
     } catch (error) {
-      console.error('Error sending input:', error);
+      logger.error('error sending input', error);
     }
   }
 

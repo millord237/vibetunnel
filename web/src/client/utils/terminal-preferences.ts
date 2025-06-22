@@ -3,6 +3,10 @@
  * Handles saving and loading terminal-related user preferences
  */
 
+import { createLogger } from './logger.js';
+
+const logger = createLogger('terminal-preferences');
+
 export interface TerminalPreferences {
   maxCols: number; // 0 means no limit, positive numbers set max width
   fontSize: number;
@@ -51,7 +55,7 @@ export class TerminalPreferencesManager {
         return { ...DEFAULT_PREFERENCES, ...parsed };
       }
     } catch (error) {
-      console.warn('Failed to load terminal preferences:', error);
+      logger.warn('Failed to load terminal preferences', { error });
     }
     return { ...DEFAULT_PREFERENCES };
   }
@@ -60,7 +64,7 @@ export class TerminalPreferencesManager {
     try {
       localStorage.setItem(STORAGE_KEY_TERMINAL_PREFS, JSON.stringify(this.preferences));
     } catch (error) {
-      console.warn('Failed to save terminal preferences:', error);
+      logger.warn('Failed to save terminal preferences', { error });
     }
   }
 

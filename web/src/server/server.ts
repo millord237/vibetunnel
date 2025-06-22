@@ -14,6 +14,7 @@ import { createAuthMiddleware } from './middleware/auth.js';
 import { createSessionRoutes } from './routes/sessions.js';
 import { createRemoteRoutes } from './routes/remotes.js';
 import { createFilesystemRoutes } from './routes/filesystem.js';
+import { createLogRoutes } from './routes/logs.js';
 import { ControlDirWatcher } from './services/control-dir-watcher.js';
 import { BufferAggregator } from './services/buffer-aggregator.js';
 import { ActivityMonitor } from './services/activity-monitor.js';
@@ -357,9 +358,13 @@ export function createApp(): AppInstance {
   app.use('/api', authMiddleware);
   logger.debug('Applied authentication middleware to /api routes');
 
-  // Serve static files
+  // Serve static files with .html extension handling
   const publicPath = path.join(process.cwd(), 'public');
-  app.use(express.static(publicPath));
+  app.use(
+    express.static(publicPath, {
+      extensions: ['html'], // This allows /logs to resolve to /logs.html
+    })
+  );
   logger.debug(`Serving static files from: ${publicPath}`);
 
   // Health check endpoint (no auth required)
@@ -402,6 +407,10 @@ export function createApp(): AppInstance {
   // Mount filesystem routes
   app.use('/api', createFilesystemRoutes());
   logger.debug('Mounted filesystem routes');
+
+  // Mount log routes
+  app.use('/api', createLogRoutes());
+  logger.debug('Mounted log routes');
 
   // WebSocket endpoint for buffer updates
   wss.on('connection', (ws, _req) => {

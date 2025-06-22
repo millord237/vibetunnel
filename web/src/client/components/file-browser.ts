@@ -12,6 +12,9 @@
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from './session-list.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('file-browser');
 
 interface FileInfo {
   name: string;
@@ -120,23 +123,23 @@ export class FileBrowser extends LitElement {
       });
 
       const url = `/api/fs/browse?${params}`;
-      console.log(`[FileBrowser] Loading directory: ${dirPath}`);
-      console.log(`[FileBrowser] Fetching URL: ${url}`);
+      logger.debug(`loading directory: ${dirPath}`);
+      logger.debug(`fetching URL: ${url}`);
       const response = await fetch(url);
-      console.log(`[FileBrowser] Response status: ${response.status}`);
+      logger.debug(`response status: ${response.status}`);
 
       if (response.ok) {
         const data: DirectoryListing = await response.json();
-        console.log(`[FileBrowser] Received ${data.files?.length || 0} files`);
+        logger.debug(`received ${data.files?.length || 0} files`);
         this.currentPath = data.path;
         this.files = data.files || [];
         this.gitStatus = data.gitStatus;
       } else {
         const errorData = await response.text();
-        console.error(`[FileBrowser] Failed to load directory: ${response.status}`, errorData);
+        logger.error(`failed to load directory: ${response.status}`, new Error(errorData));
       }
     } catch (error) {
-      console.error('[FileBrowser] Error loading directory:', error);
+      logger.error('error loading directory:', error);
     } finally {
       this.loading = false;
     }
@@ -150,8 +153,8 @@ export class FileBrowser extends LitElement {
     this.showDiff = false;
 
     try {
-      console.log('[FileBrowser] Loading preview for file:', file);
-      console.log('[FileBrowser] File path:', file.path);
+      logger.debug(`loading preview for file: ${file.name}`);
+      logger.debug(`file path: ${file.path}`);
 
       const response = await fetch(`/api/fs/preview?path=${encodeURIComponent(file.path)}`);
       if (response.ok) {
@@ -161,10 +164,10 @@ export class FileBrowser extends LitElement {
           this.updateMonacoContent();
         }
       } else {
-        console.error('[FileBrowser] Preview failed:', response.status, await response.text());
+        logger.error(`preview failed: ${response.status}`, new Error(await response.text()));
       }
     } catch (error) {
-      console.error('Error loading preview:', error);
+      logger.error('error loading preview:', error);
     } finally {
       this.previewLoading = false;
     }
@@ -182,7 +185,7 @@ export class FileBrowser extends LitElement {
         this.diff = await response.json();
       }
     } catch (error) {
-      console.error('Error loading diff:', error);
+      logger.error('error loading diff:', error);
     } finally {
       this.previewLoading = false;
     }
@@ -223,9 +226,9 @@ export class FileBrowser extends LitElement {
   private async copyToClipboard(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      console.log('[FileBrowser] Copied to clipboard:', text);
+      logger.debug(`copied to clipboard: ${text}`);
     } catch (err) {
-      console.error('[FileBrowser] Failed to copy to clipboard:', err);
+      logger.error('failed to copy to clipboard:', err);
     }
   }
 
