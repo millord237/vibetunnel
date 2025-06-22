@@ -80,7 +80,7 @@ export class AppHeader extends LitElement {
           <div class="text-center flex flex-col items-center gap-2">
             <h1 class="text-2xl font-bold text-accent-green flex items-center gap-3 font-mono">
               <terminal-icon size="28"></terminal-icon>
-              <span>vibetunnel</span>
+              <span>VibeTunnel</span>
             </h1>
             <p class="text-dark-text-muted text-sm font-mono">
               ${runningSessions.length} ${runningSessions.length === 1 ? 'session' : 'sessions'}
@@ -156,7 +156,7 @@ export class AppHeader extends LitElement {
           <div class="flex items-center gap-3">
             <terminal-icon size="32"></terminal-icon>
             <div>
-              <h1 class="text-xl font-bold text-accent-green font-mono">vibetunnel</h1>
+              <h1 class="text-xl font-bold text-accent-green font-mono">VibeTunnel</h1>
               <p class="text-dark-text-muted text-sm font-mono">
                 ${runningSessions.length} ${runningSessions.length === 1 ? 'session' : 'sessions'}
                 ${exitedSessions.length > 0 ? `• ${exitedSessions.length} exited` : ''}
