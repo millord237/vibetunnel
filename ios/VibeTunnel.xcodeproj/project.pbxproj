@@ -7,31 +7,31 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		06ECA329368202D20FD844AA /* WebSocketReconnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1393D995F2696F98C1C89C /* WebSocketReconnectionTests.swift */; };
-		158D44621685751B0546D5DA /* ServerConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59CED367898C474069E3213 /* ServerConfigTests.swift */; };
-		23C8978B50197BF9555617D1 /* AuthenticationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EFF4F4FCC68ABD2DD61236A /* AuthenticationTests.swift */; };
-		28025FD8BA23E09ACC5D5DBE /* StandaloneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F9E6847DB24AB31B79892D /* StandaloneTests.swift */; };
-		2EC33DEC43FC1B852E14D68D /* BufferWebSocketClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAD9ACCCA0484E98E19EA526 /* BufferWebSocketClientTests.swift */; };
-		37F443E4197823FDF8CA606B /* PerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B55C6306EFFA815DD4FEACF /* PerformanceTests.swift */; };
-		4978D383FA22582253F0A235 /* TestTags.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DEFD2BEC22AD6C63662BBCC /* TestTags.swift */; };
-		4D7390893EEFAF2D477F5743 /* APIErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C89DCBC77E29C4BB101AD9B1 /* APIErrorTests.swift */; };
+		0DE52F23A39D42802C0A6FA5 /* ServerConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26508D4774F932BE603A3A92 /* ServerConfigTests.swift */; };
+		19D4521F6D3D74D22F5300BF /* EdgeCaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210B160CA1C5185A85EE359C /* EdgeCaseTests.swift */; };
+		2B54F778A3BC2CBBBB80E5D7 /* BufferWebSocketClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C90343824B8E77C08ECFC3B1 /* BufferWebSocketClientTests.swift */; };
+		30930920937DDB40554E42F3 /* ConnectionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA3E0BED8017D7540A6B822 /* ConnectionManagerTests.swift */; };
+		365CCFA1CC50361FFC9B354A /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCEB1F27FFC1C75B53ED3EE5 /* MockURLProtocol.swift */; };
+		3B287C1FA60A638751E34631 /* PerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D852A5C2BBD22D92B578BFE /* PerformanceTests.swift */; };
+		42139B23F5E381A7E9CB20C6 /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C009651579E8C0E4ADD20DC /* APIClientTests.swift */; };
+		51D8512C630C0A818A2651F4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7C27ECCFC47CD72452A9FD3E /* Foundation.framework */; };
+		52F27E28E407419D23E6178B /* TestTags.swift in Sources */ = {isa = PBXBuildFile; fileRef = D020D89B8296E14F390D9C03 /* TestTags.swift */; };
 		7272E2FE084BB86440A69701 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 51D59A51D50DE7492ECEAA6F /* SwiftTerm */; };
-		7B26854C04FF5D1C038A5037 /* FileSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7944FA0BCAF473B70BF3CCB /* FileSystemTests.swift */; };
-		7F3D27715A3983AB6666B17B /* MockAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32821B5412285EF9E3A0ED96 /* MockAPIClient.swift */; };
-		83D559A0E9AF0E6E365BF637 /* TerminalParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC5C7443FDF6C2B6F949714 /* TerminalParsingTests.swift */; };
-		9BE0B545CA3C78905CDCB053 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7C27ECCFC47CD72452A9FD3E /* Foundation.framework */; };
-		A3299C08C2C42CD0D9E9C08F /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52361AC13872777FE89E7E7 /* TestFixtures.swift */; };
-		AB3AFB39B209E322F1E0A2DB /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC86F879E130343AB24FBC99 /* APIClientTests.swift */; };
-		BC32BACD47537C1C014B084F /* SessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEB4832D7AB18C7D4D500375 /* SessionTests.swift */; };
-		CC64F5D820A1B2CDD15DF6B6 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBA03CD68BCDD47398BD5513 /* MockURLProtocol.swift */; };
-		CCEA9D5E1E964C42B3C8A08D /* VibeTunnelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79BB14B2ABAB59101C1824AC /* VibeTunnelTests.swift */; };
-		E03460669899D86C399F175F /* MockWebSocketTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33A722A5D0F48FEE3FAE17D2 /* MockWebSocketTask.swift */; };
-		EBF9090E9233DCF36E50BCF3 /* EdgeCaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8DE4AA813BD980C6B7AC67F /* EdgeCaseTests.swift */; };
-		F68FB5FDD77B3717A8BD0AE9 /* ConnectionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73EFBF1304211320146BEEEC /* ConnectionManagerTests.swift */; };
+		8C09457B954A8495B78173D1 /* MockAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2D6C604D5F6878F2F6337E /* MockAPIClient.swift */; };
+		8E34DF84C86F98478D12452D /* APIErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31BCE90BB6113D30ABBD29B2 /* APIErrorTests.swift */; };
+		99BDF6EDB39E853DBABFC6BF /* MockWebSocketTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 778FE49DC79E8514CD11A94F /* MockWebSocketTask.swift */; };
+		A16695E8AAEDEA40299D6471 /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38BEE7FE833B6FDC3A56BCE /* TestFixtures.swift */; };
+		A937560409D02D2B5F4CF5C1 /* StandaloneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA051A5F108D190542BC035 /* StandaloneTests.swift */; };
+		B204F9E31D856D1C7EF682AC /* TerminalParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A118F0B3208513EEF0373B69 /* TerminalParsingTests.swift */; };
+		C6460D6D0DC21C3A4D946D35 /* VibeTunnelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64175D4F50D00AA004E41143 /* VibeTunnelTests.swift */; };
+		CCAECFDA5A092DC60C117DD2 /* SessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6282B1FFEB2C1844BD4BC05 /* SessionTests.swift */; };
+		D939ED550D6C0D978BD8C4B4 /* AuthenticationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7FB8482C0055D3A8D80EE21 /* AuthenticationTests.swift */; };
+		E08E940B186A0335737B81CF /* WebSocketReconnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB3C38909F88E2D50282BC51 /* WebSocketReconnectionTests.swift */; };
+		EDBCD977F9C7836FBF3E46DC /* FileSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36DEB689EB0358B8710343B9 /* FileSystemTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		41231DF120B7AB8B65987026 /* PBXContainerItemProxy */ = {
+		FE415EBDC086853977484B28 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 4C82CEFDA8E4EFE0B37538D7 /* Project object */;
 			proxyType = 1;
@@ -41,28 +41,29 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		1B55C6306EFFA815DD4FEACF /* PerformanceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PerformanceTests.swift; path = VibeTunnelTests/PerformanceTests.swift; sourceTree = "<group>"; };
+		1D852A5C2BBD22D92B578BFE /* PerformanceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PerformanceTests.swift; path = VibeTunnelTests/PerformanceTests.swift; sourceTree = "<group>"; };
+		210B160CA1C5185A85EE359C /* EdgeCaseTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EdgeCaseTests.swift; path = VibeTunnelTests/EdgeCaseTests.swift; sourceTree = "<group>"; };
 		216D52E392D8F0CDC6358BB8 /* VibeTunnel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeTunnel.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		32821B5412285EF9E3A0ED96 /* MockAPIClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MockAPIClient.swift; path = VibeTunnelTests/Mocks/MockAPIClient.swift; sourceTree = "<group>"; };
-		33A722A5D0F48FEE3FAE17D2 /* MockWebSocketTask.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MockWebSocketTask.swift; path = VibeTunnelTests/Mocks/MockWebSocketTask.swift; sourceTree = "<group>"; };
-		4EFF4F4FCC68ABD2DD61236A /* AuthenticationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AuthenticationTests.swift; path = VibeTunnelTests/AuthenticationTests.swift; sourceTree = "<group>"; };
-		58F9E6847DB24AB31B79892D /* StandaloneTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StandaloneTests.swift; path = VibeTunnelTests/StandaloneTests.swift; sourceTree = "<group>"; };
-		73EFBF1304211320146BEEEC /* ConnectionManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConnectionManagerTests.swift; path = VibeTunnelTests/Services/ConnectionManagerTests.swift; sourceTree = "<group>"; };
-		79BB14B2ABAB59101C1824AC /* VibeTunnelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VibeTunnelTests.swift; path = VibeTunnelTests/VibeTunnelTests.swift; sourceTree = "<group>"; };
-		7C1393D995F2696F98C1C89C /* WebSocketReconnectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WebSocketReconnectionTests.swift; path = VibeTunnelTests/WebSocketReconnectionTests.swift; sourceTree = "<group>"; };
+		26508D4774F932BE603A3A92 /* ServerConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ServerConfigTests.swift; path = VibeTunnelTests/Models/ServerConfigTests.swift; sourceTree = "<group>"; };
+		31BCE90BB6113D30ABBD29B2 /* APIErrorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = APIErrorTests.swift; path = VibeTunnelTests/APIErrorTests.swift; sourceTree = "<group>"; };
+		36DEB689EB0358B8710343B9 /* FileSystemTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FileSystemTests.swift; path = VibeTunnelTests/FileSystemTests.swift; sourceTree = "<group>"; };
+		5C009651579E8C0E4ADD20DC /* APIClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = APIClientTests.swift; path = VibeTunnelTests/Services/APIClientTests.swift; sourceTree = "<group>"; };
+		64175D4F50D00AA004E41143 /* VibeTunnelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VibeTunnelTests.swift; path = VibeTunnelTests/VibeTunnelTests.swift; sourceTree = "<group>"; };
+		651BDD47248F3D9D55994B3E /* VibeTunnelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeTunnelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		778FE49DC79E8514CD11A94F /* MockWebSocketTask.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MockWebSocketTask.swift; path = VibeTunnelTests/Mocks/MockWebSocketTask.swift; sourceTree = "<group>"; };
 		7C27ECCFC47CD72452A9FD3E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		7DEFD2BEC22AD6C63662BBCC /* TestTags.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TestTags.swift; path = VibeTunnelTests/Utilities/TestTags.swift; sourceTree = "<group>"; };
 		93A0E229E7C701C7D6AD921B /* VibeTunnelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeTunnelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		AAD9ACCCA0484E98E19EA526 /* BufferWebSocketClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BufferWebSocketClientTests.swift; path = VibeTunnelTests/Services/BufferWebSocketClientTests.swift; sourceTree = "<group>"; };
-		AEB4832D7AB18C7D4D500375 /* SessionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SessionTests.swift; path = VibeTunnelTests/Models/SessionTests.swift; sourceTree = "<group>"; };
-		BAC5C7443FDF6C2B6F949714 /* TerminalParsingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TerminalParsingTests.swift; path = VibeTunnelTests/TerminalParsingTests.swift; sourceTree = "<group>"; };
-		C59CED367898C474069E3213 /* ServerConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ServerConfigTests.swift; path = VibeTunnelTests/Models/ServerConfigTests.swift; sourceTree = "<group>"; };
-		C89DCBC77E29C4BB101AD9B1 /* APIErrorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = APIErrorTests.swift; path = VibeTunnelTests/APIErrorTests.swift; sourceTree = "<group>"; };
-		D52361AC13872777FE89E7E7 /* TestFixtures.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TestFixtures.swift; path = VibeTunnelTests/Utilities/TestFixtures.swift; sourceTree = "<group>"; };
-		D7944FA0BCAF473B70BF3CCB /* FileSystemTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FileSystemTests.swift; path = VibeTunnelTests/FileSystemTests.swift; sourceTree = "<group>"; };
-		DBA03CD68BCDD47398BD5513 /* MockURLProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MockURLProtocol.swift; path = VibeTunnelTests/Mocks/MockURLProtocol.swift; sourceTree = "<group>"; };
-		DC86F879E130343AB24FBC99 /* APIClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = APIClientTests.swift; path = VibeTunnelTests/Services/APIClientTests.swift; sourceTree = "<group>"; };
-		E8DE4AA813BD980C6B7AC67F /* EdgeCaseTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EdgeCaseTests.swift; path = VibeTunnelTests/EdgeCaseTests.swift; sourceTree = "<group>"; };
+		A118F0B3208513EEF0373B69 /* TerminalParsingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TerminalParsingTests.swift; path = VibeTunnelTests/TerminalParsingTests.swift; sourceTree = "<group>"; };
+		AB3C38909F88E2D50282BC51 /* WebSocketReconnectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WebSocketReconnectionTests.swift; path = VibeTunnelTests/WebSocketReconnectionTests.swift; sourceTree = "<group>"; };
+		B38BEE7FE833B6FDC3A56BCE /* TestFixtures.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TestFixtures.swift; path = VibeTunnelTests/Utilities/TestFixtures.swift; sourceTree = "<group>"; };
+		B7FB8482C0055D3A8D80EE21 /* AuthenticationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AuthenticationTests.swift; path = VibeTunnelTests/AuthenticationTests.swift; sourceTree = "<group>"; };
+		C90343824B8E77C08ECFC3B1 /* BufferWebSocketClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BufferWebSocketClientTests.swift; path = VibeTunnelTests/Services/BufferWebSocketClientTests.swift; sourceTree = "<group>"; };
+		CCEB1F27FFC1C75B53ED3EE5 /* MockURLProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MockURLProtocol.swift; path = VibeTunnelTests/Mocks/MockURLProtocol.swift; sourceTree = "<group>"; };
+		D020D89B8296E14F390D9C03 /* TestTags.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TestTags.swift; path = VibeTunnelTests/Utilities/TestTags.swift; sourceTree = "<group>"; };
+		D6282B1FFEB2C1844BD4BC05 /* SessionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SessionTests.swift; path = VibeTunnelTests/Models/SessionTests.swift; sourceTree = "<group>"; };
+		DA2D6C604D5F6878F2F6337E /* MockAPIClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MockAPIClient.swift; path = VibeTunnelTests/Mocks/MockAPIClient.swift; sourceTree = "<group>"; };
+		DFA051A5F108D190542BC035 /* StandaloneTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StandaloneTests.swift; path = VibeTunnelTests/StandaloneTests.swift; sourceTree = "<group>"; };
+		EFA3E0BED8017D7540A6B822 /* ConnectionManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConnectionManagerTests.swift; path = VibeTunnelTests/Services/ConnectionManagerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -87,19 +88,19 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		050F0F5073334BBC53FFBEE5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				51D8512C630C0A818A2651F4 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2FD464BF4BA1F22E2EBF0847 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				7272E2FE084BB86440A69701 /* SwiftTerm in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		6E9F3C599E68BCE98C39FB07 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				9BE0B545CA3C78905CDCB053 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,25 +120,25 @@
 		762BBB767A3EED9FAC65416B /* VibeTunnelTests */ = {
 			isa = PBXGroup;
 			children = (
-				C89DCBC77E29C4BB101AD9B1 /* APIErrorTests.swift */,
-				4EFF4F4FCC68ABD2DD61236A /* AuthenticationTests.swift */,
-				E8DE4AA813BD980C6B7AC67F /* EdgeCaseTests.swift */,
-				D7944FA0BCAF473B70BF3CCB /* FileSystemTests.swift */,
-				32821B5412285EF9E3A0ED96 /* MockAPIClient.swift */,
-				DBA03CD68BCDD47398BD5513 /* MockURLProtocol.swift */,
-				33A722A5D0F48FEE3FAE17D2 /* MockWebSocketTask.swift */,
-				C59CED367898C474069E3213 /* ServerConfigTests.swift */,
-				AEB4832D7AB18C7D4D500375 /* SessionTests.swift */,
-				1B55C6306EFFA815DD4FEACF /* PerformanceTests.swift */,
-				DC86F879E130343AB24FBC99 /* APIClientTests.swift */,
-				AAD9ACCCA0484E98E19EA526 /* BufferWebSocketClientTests.swift */,
-				73EFBF1304211320146BEEEC /* ConnectionManagerTests.swift */,
-				58F9E6847DB24AB31B79892D /* StandaloneTests.swift */,
-				BAC5C7443FDF6C2B6F949714 /* TerminalParsingTests.swift */,
-				D52361AC13872777FE89E7E7 /* TestFixtures.swift */,
-				7DEFD2BEC22AD6C63662BBCC /* TestTags.swift */,
-				79BB14B2ABAB59101C1824AC /* VibeTunnelTests.swift */,
-				7C1393D995F2696F98C1C89C /* WebSocketReconnectionTests.swift */,
+				31BCE90BB6113D30ABBD29B2 /* APIErrorTests.swift */,
+				B7FB8482C0055D3A8D80EE21 /* AuthenticationTests.swift */,
+				210B160CA1C5185A85EE359C /* EdgeCaseTests.swift */,
+				36DEB689EB0358B8710343B9 /* FileSystemTests.swift */,
+				1D852A5C2BBD22D92B578BFE /* PerformanceTests.swift */,
+				DFA051A5F108D190542BC035 /* StandaloneTests.swift */,
+				A118F0B3208513EEF0373B69 /* TerminalParsingTests.swift */,
+				64175D4F50D00AA004E41143 /* VibeTunnelTests.swift */,
+				AB3C38909F88E2D50282BC51 /* WebSocketReconnectionTests.swift */,
+				DA2D6C604D5F6878F2F6337E /* MockAPIClient.swift */,
+				CCEB1F27FFC1C75B53ED3EE5 /* MockURLProtocol.swift */,
+				778FE49DC79E8514CD11A94F /* MockWebSocketTask.swift */,
+				26508D4774F932BE603A3A92 /* ServerConfigTests.swift */,
+				D6282B1FFEB2C1844BD4BC05 /* SessionTests.swift */,
+				5C009651579E8C0E4ADD20DC /* APIClientTests.swift */,
+				C90343824B8E77C08ECFC3B1 /* BufferWebSocketClientTests.swift */,
+				EFA3E0BED8017D7540A6B822 /* ConnectionManagerTests.swift */,
+				B38BEE7FE833B6FDC3A56BCE /* TestFixtures.swift */,
+				D020D89B8296E14F390D9C03 /* TestTags.swift */,
 			);
 			name = VibeTunnelTests;
 			path = VibeTunnelTests;
@@ -148,6 +149,7 @@
 			children = (
 				216D52E392D8F0CDC6358BB8 /* VibeTunnel.app */,
 				93A0E229E7C701C7D6AD921B /* VibeTunnelTests.xctest */,
+				651BDD47248F3D9D55994B3E /* VibeTunnelTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -171,6 +173,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		04469FB37E8A42F9D06BF670 /* VibeTunnelTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E2F3E41AD9740FC10D5963F6 /* Build configuration list for PBXNativeTarget "VibeTunnelTests" */;
+			buildPhases = (
+				62833EC4917888F3D96423A2 /* Sources */,
+				050F0F5073334BBC53FFBEE5 /* Frameworks */,
+				2FCC8DEBCE2261F1453AA9F2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AE0F4BA931358FE4AFA17B94 /* PBXTargetDependency */,
+			);
+			name = VibeTunnelTests;
+			productName = VibeTunnelTests;
+			productReference = 651BDD47248F3D9D55994B3E /* VibeTunnelTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		788687F02DFF4FCB00B22C15 /* VibeTunnel */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 8D99F6108356CC0D04FBF9FD /* Build configuration list for PBXNativeTarget "VibeTunnel" */;
@@ -193,24 +213,6 @@
 			productName = VibeTunnel;
 			productReference = 216D52E392D8F0CDC6358BB8 /* VibeTunnel.app */;
 			productType = "com.apple.product-type.application";
-		};
-		ACF7BE3D1928F9FE0EFDC3D6 /* VibeTunnelTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = CD6729C3C50838EA5DF394FF /* Build configuration list for PBXNativeTarget "VibeTunnelTests" */;
-			buildPhases = (
-				B348AC4C8A59DD3336F28A5C /* Sources */,
-				6E9F3C599E68BCE98C39FB07 /* Frameworks */,
-				B3F0FE536B63D27A238D904E /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				D454F02DC1E9F1C4037ADC23 /* PBXTargetDependency */,
-			);
-			name = VibeTunnelTests;
-			productName = VibeTunnelTests;
-			productReference = 93A0E229E7C701C7D6AD921B /* VibeTunnelTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -245,20 +247,20 @@
 			projectRoot = "";
 			targets = (
 				788687F02DFF4FCB00B22C15 /* VibeTunnel */,
-				ACF7BE3D1928F9FE0EFDC3D6 /* VibeTunnelTests */,
+				04469FB37E8A42F9D06BF670 /* VibeTunnelTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		A1EBEB60F7F8C33C5FF37ACF /* Resources */ = {
+		2FCC8DEBCE2261F1453AA9F2 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		B3F0FE536B63D27A238D904E /* Resources */ = {
+		A1EBEB60F7F8C33C5FF37ACF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -268,6 +270,32 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		62833EC4917888F3D96423A2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8E34DF84C86F98478D12452D /* APIErrorTests.swift in Sources */,
+				D939ED550D6C0D978BD8C4B4 /* AuthenticationTests.swift in Sources */,
+				19D4521F6D3D74D22F5300BF /* EdgeCaseTests.swift in Sources */,
+				EDBCD977F9C7836FBF3E46DC /* FileSystemTests.swift in Sources */,
+				3B287C1FA60A638751E34631 /* PerformanceTests.swift in Sources */,
+				A937560409D02D2B5F4CF5C1 /* StandaloneTests.swift in Sources */,
+				B204F9E31D856D1C7EF682AC /* TerminalParsingTests.swift in Sources */,
+				C6460D6D0DC21C3A4D946D35 /* VibeTunnelTests.swift in Sources */,
+				E08E940B186A0335737B81CF /* WebSocketReconnectionTests.swift in Sources */,
+				8C09457B954A8495B78173D1 /* MockAPIClient.swift in Sources */,
+				365CCFA1CC50361FFC9B354A /* MockURLProtocol.swift in Sources */,
+				99BDF6EDB39E853DBABFC6BF /* MockWebSocketTask.swift in Sources */,
+				0DE52F23A39D42802C0A6FA5 /* ServerConfigTests.swift in Sources */,
+				CCAECFDA5A092DC60C117DD2 /* SessionTests.swift in Sources */,
+				42139B23F5E381A7E9CB20C6 /* APIClientTests.swift in Sources */,
+				2B54F778A3BC2CBBBB80E5D7 /* BufferWebSocketClientTests.swift in Sources */,
+				30930920937DDB40554E42F3 /* ConnectionManagerTests.swift in Sources */,
+				A16695E8AAEDEA40299D6471 /* TestFixtures.swift in Sources */,
+				52F27E28E407419D23E6178B /* TestTags.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6B5EFF9E40E19685A12D29C9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -275,40 +303,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		B348AC4C8A59DD3336F28A5C /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				4D7390893EEFAF2D477F5743 /* APIErrorTests.swift in Sources */,
-				23C8978B50197BF9555617D1 /* AuthenticationTests.swift in Sources */,
-				EBF9090E9233DCF36E50BCF3 /* EdgeCaseTests.swift in Sources */,
-				7B26854C04FF5D1C038A5037 /* FileSystemTests.swift in Sources */,
-				7F3D27715A3983AB6666B17B /* MockAPIClient.swift in Sources */,
-				CC64F5D820A1B2CDD15DF6B6 /* MockURLProtocol.swift in Sources */,
-				E03460669899D86C399F175F /* MockWebSocketTask.swift in Sources */,
-				158D44621685751B0546D5DA /* ServerConfigTests.swift in Sources */,
-				BC32BACD47537C1C014B084F /* SessionTests.swift in Sources */,
-				37F443E4197823FDF8CA606B /* PerformanceTests.swift in Sources */,
-				AB3AFB39B209E322F1E0A2DB /* APIClientTests.swift in Sources */,
-				2EC33DEC43FC1B852E14D68D /* BufferWebSocketClientTests.swift in Sources */,
-				F68FB5FDD77B3717A8BD0AE9 /* ConnectionManagerTests.swift in Sources */,
-				28025FD8BA23E09ACC5D5DBE /* StandaloneTests.swift in Sources */,
-				83D559A0E9AF0E6E365BF637 /* TerminalParsingTests.swift in Sources */,
-				A3299C08C2C42CD0D9E9C08F /* TestFixtures.swift in Sources */,
-				4978D383FA22582253F0A235 /* TestTags.swift in Sources */,
-				CCEA9D5E1E964C42B3C8A08D /* VibeTunnelTests.swift in Sources */,
-				06ECA329368202D20FD844AA /* WebSocketReconnectionTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		D454F02DC1E9F1C4037ADC23 /* PBXTargetDependency */ = {
+		AE0F4BA931358FE4AFA17B94 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = VibeTunnel;
 			target = 788687F02DFF4FCB00B22C15 /* VibeTunnel */;
-			targetProxy = 41231DF120B7AB8B65987026 /* PBXContainerItemProxy */;
+			targetProxy = FE415EBDC086853977484B28 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -394,7 +396,7 @@
 			};
 			name = Debug;
 		};
-		53D1373B70D93C63849036D1 /* Release */ = {
+		6BD919EBC6E8FC8AE5C0AD08 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
@@ -403,11 +405,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vibetunnel.VibeTunnelTests;
-				PRODUCT_NAME = VibeTunnelTests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				VALIDATE_PRODUCT = YES;
-				WRAPPER_EXTENSION = xctest;
 			};
 			name = Release;
 		};
@@ -485,7 +485,7 @@
 			};
 			name = Release;
 		};
-		90CA90ABE902B93A619D638D /* Debug */ = {
+		AB5CCE958CDF40666B1D5C7F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
@@ -494,10 +494,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vibetunnel.VibeTunnelTests;
-				PRODUCT_NAME = VibeTunnelTests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
-				WRAPPER_EXTENSION = xctest;
 			};
 			name = Debug;
 		};
@@ -640,11 +638,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		CD6729C3C50838EA5DF394FF /* Build configuration list for PBXNativeTarget "VibeTunnelTests" */ = {
+		E2F3E41AD9740FC10D5963F6 /* Build configuration list for PBXNativeTarget "VibeTunnelTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				53D1373B70D93C63849036D1 /* Release */,
-				90CA90ABE902B93A619D638D /* Debug */,
+				6BD919EBC6E8FC8AE5C0AD08 /* Release */,
+				AB5CCE958CDF40666B1D5C7F /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
