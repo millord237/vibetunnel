@@ -13,6 +13,8 @@ interface WatcherInfo {
   lastOffset: number;
   lineBuffer: string;
   notificationListener?: (update: { sessionId: string; data: string; timestamp: number }) => void;
+  lastBroadcastTime: number;
+  recentBroadcasts: Set<string>;
 }
 
 export class StreamWatcher {
@@ -40,6 +42,8 @@ export class StreamWatcher {
         clients: new Set(),
         lastOffset: 0,
         lineBuffer: '',
+        lastBroadcastTime: 0,
+        recentBroadcasts: new Set(),
       };
       this.activeWatchers.set(sessionId, watcherInfo);
 
@@ -269,6 +273,23 @@ export class StreamWatcher {
    * Broadcast a line to all clients
    */
   private broadcastLine(sessionId: string, line: string, watcherInfo: WatcherInfo): void {
+    // Deduplication: check if we've broadcast this line very recently
+    const now = Date.now();
+    const lineHash = `${line.substring(0, 100)}_${line.length}`; // Simple hash
+
+    if (watcherInfo.recentBroadcasts.has(lineHash) && now - watcherInfo.lastBroadcastTime < 50) {
+      // Skip duplicate within 50ms window
+      return;
+    }
+
+    // Clean up old broadcasts
+    if (now - watcherInfo.lastBroadcastTime > 100) {
+      watcherInfo.recentBroadcasts.clear();
+    }
+
+    watcherInfo.recentBroadcasts.add(lineHash);
+    watcherInfo.lastBroadcastTime = now;
+
     let eventData: string | null = null;
 
     try {
