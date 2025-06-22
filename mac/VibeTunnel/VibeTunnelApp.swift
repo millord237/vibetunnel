@@ -332,9 +332,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // Stop terminal spawn service
         TerminalSpawnService.shared.stop()
 
-        // Stop HTTP server
+        // Stop HTTP server synchronously to ensure it completes before app exits
+        let semaphore = DispatchSemaphore(value: 0)
         Task {
             await serverManager.stop()
+            semaphore.signal()
+        }
+        // Wait up to 5 seconds for server to stop
+        let timeout = DispatchTime.now() + .seconds(5)
+        if semaphore.wait(timeout: timeout) == .timedOut {
+            logger.warning("Server stop timed out during app termination")
         }
 
         // Remove distributed notification observer

@@ -145,8 +145,23 @@ final class BunServer {
             }
         }
 
-        // Create wrapper to run vibetunnel
-        let vibetunnelCommand = "exec \(binaryPath) \(vibetunnelArgs)"
+        // Create wrapper to run vibetunnel with a parent death signal
+        // Using a subshell that monitors parent process and kills vibetunnel if parent dies
+        let parentPid = ProcessInfo.processInfo.processIdentifier
+        let vibetunnelCommand = """
+            # Start vibetunnel in background
+            \(binaryPath) \(vibetunnelArgs) &
+            VIBETUNNEL_PID=$!
+            
+            # Monitor parent process
+            while kill -0 \(parentPid) 2>/dev/null; do
+                sleep 1
+            done
+            
+            # Parent died, kill vibetunnel
+            kill -TERM $VIBETUNNEL_PID 2>/dev/null
+            wait $VIBETUNNEL_PID
+            """
         process.arguments = ["-l", "-c", vibetunnelCommand]
 
         logger.info("Executing command: /bin/zsh -l -c \"\(vibetunnelCommand)\"")
