@@ -63,17 +63,8 @@ final class SystemPermissionManager {
         category: "SystemPermissions"
     )
 
-    private var monitoringTask: Task<Void, Never>?
-
     private init() {
-        // Start monitoring immediately
-        startMonitoring()
-    }
-
-    deinit {
-        // Task cancellation is thread-safe, but we can't access
-        // main actor-isolated properties from deinit
-        // The task will be cancelled automatically when deallocated
+        // No automatic monitoring - UI components will check when visible
     }
 
     // MARK: - Public API
@@ -136,19 +127,7 @@ final class SystemPermissionManager {
         }
     }
 
-    // MARK: - Private Methods
-
-    private func startMonitoring() {
-        monitoringTask = Task {
-            while !Task.isCancelled {
-                await checkAllPermissions()
-
-                // Check more frequently if permissions are missing
-                let interval: TimeInterval = hasAllPermissions ? 30.0 : 5.0
-                try? await Task.sleep(for: .seconds(interval))
-            }
-        }
-    }
+    // MARK: - Permission Checking
 
     func checkAllPermissions() async {
         // Check each permission type
