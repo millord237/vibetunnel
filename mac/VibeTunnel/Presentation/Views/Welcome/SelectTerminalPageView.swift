@@ -22,23 +22,19 @@ struct SelectTerminalPageView: View {
 
     var body: some View {
         VStack(spacing: 30) {
-            // App icon
-            Image(nsImage: NSImage(named: "AppIcon") ?? NSImage())
-                .resizable()
-                .frame(width: 156, height: 156)
-                .shadow(radius: 10)
-
             VStack(spacing: 16) {
                 Text("Select Terminal")
                     .font(.largeTitle)
                     .fontWeight(.semibold)
 
-                Text("VibeTunnel can spawn new sessions and open a terminal for you.\nThis will require permissions.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 480)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "VibeTunnel can spawn new sessions and open a terminal for you.\nSelect your preferred Terminal and test permissions."
+                )
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 480)
+                .fixedSize(horizontal: false, vertical: true)
 
                 // Terminal selector and test button
                 VStack(spacing: 16) {
@@ -66,8 +62,8 @@ struct SelectTerminalPageView: View {
                     .frame(width: 200)
                 }
             }
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
         .alert(errorTitle, isPresented: $showingError) {
             Button("OK") {}

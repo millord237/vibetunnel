@@ -17,7 +17,7 @@ final class WelcomeWindowController: NSWindowController, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: welcomeView)
 
         let window = NSWindow(contentViewController: hostingController)
-        window.title = ""
+        window.title = "Welcome to VibeTunnel"
         window.styleMask = [.titled, .closable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden

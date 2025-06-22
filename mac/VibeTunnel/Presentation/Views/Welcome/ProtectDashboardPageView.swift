@@ -31,12 +31,6 @@ struct ProtectDashboardPageView: View {
 
     var body: some View {
         VStack(spacing: 30) {
-            // App icon
-            Image(nsImage: NSImage(named: "AppIcon") ?? NSImage())
-                .resizable()
-                .frame(width: 156, height: 156)
-                .shadow(radius: 10)
-
             VStack(spacing: 16) {
                 Text("Protect Your Dashboard")
                     .font(.largeTitle)
@@ -100,8 +94,8 @@ struct ProtectDashboardPageView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
     }
 

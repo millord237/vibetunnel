@@ -27,12 +27,6 @@ struct AccessDashboardPageView: View {
 
     var body: some View {
         VStack(spacing: 30) {
-            // App icon
-            Image(nsImage: NSImage(named: "AppIcon") ?? NSImage())
-                .resizable()
-                .frame(width: 156, height: 156)
-                .shadow(radius: 10)
-
             VStack(spacing: 16) {
                 Text("Accessing Your Dashboard")
                     .font(.largeTitle)
@@ -89,8 +83,8 @@ struct AccessDashboardPageView: View {
                     CreditLink(name: "@steipete", url: "https://steipete.me")
                 }
             }
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
     }
 }

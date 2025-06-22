@@ -25,53 +25,89 @@ struct WelcomeView: View {
     private var welcomeVersion = 0
     @State private var cliInstaller = CLIInstaller()
     @State private var permissionManager = SystemPermissionManager.shared
+    
+    private let pageWidth: CGFloat = 640
+    private let contentHeight: CGFloat = 468 // Total height minus navigation area
 
     var body: some View {
         VStack(spacing: 0) {
-            // Custom page view implementation for macOS
-            ZStack {
-                // Page 1: Welcome
-                if currentPage == 0 {
-                    WelcomePageView()
-                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-                }
-
-                // Page 2: VT Command
-                if currentPage == 1 {
+            // Fixed header with animated app icon
+            GlowingAppIcon(
+                size: 156,
+                enableFloating: true,
+                enableInteraction: false,
+                glowIntensity: 0.3
+            )
+            .padding(.top, 40)
+            .padding(.bottom, 20) // Add padding below icon
+            .frame(height: 240)
+            
+            // Scrollable content area
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    // Page 1: Welcome content (without icon)
+                    WelcomeContentView()
+                        .frame(width: pageWidth)
+                    
+                    // Page 2: VT Command
                     VTCommandPageView(cliInstaller: cliInstaller)
-                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-                }
-
-                // Page 3: Request Permissions
-                if currentPage == 2 {
+                        .frame(width: pageWidth)
+                    
+                    // Page 3: Request Permissions
                     RequestPermissionsPageView()
-                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-                }
-
-                // Page 4: Select Terminal
-                if currentPage == 3 {
+                        .frame(width: pageWidth)
+                    
+                    // Page 4: Select Terminal
                     SelectTerminalPageView()
-                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-                }
-
-                // Page 5: Protect Your Dashboard
-                if currentPage == 4 {
+                        .frame(width: pageWidth)
+                    
+                    // Page 5: Protect Your Dashboard
                     ProtectDashboardPageView()
-                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-                }
-
-                // Page 6: Accessing Dashboard
-                if currentPage == 5 {
+                        .frame(width: pageWidth)
+                    
+                    // Page 6: Accessing Dashboard
                     AccessDashboardPageView()
-                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
+                        .frame(width: pageWidth)
                 }
+                .offset(x: CGFloat(-currentPage) * pageWidth)
+                .animation(.interactiveSpring(response: 0.5, dampingFraction: 0.86, blendDuration: 0.25), value: currentPage)
             }
-            .frame(maxHeight: .infinity)
-            .animation(.easeInOut, value: currentPage)
+            .frame(height: 260) // Total height (560) - header (240) - navigation (60)
+            .clipped()
 
-            // Custom page indicators and navigation - Fixed height container
-            VStack(spacing: 0) {
-                // Page indicators
+            // Navigation bar with dots and buttons in same row
+            HStack(spacing: 20) {
+                // Back button - only visible when not on first page
+                // Back button with consistent space reservation
+                ZStack(alignment: .leading) {
+                    // Invisible placeholder that's always there
+                    Button(action: {}) {
+                        Label("Back", systemImage: "chevron.left")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(0)
+                    .disabled(true)
+                    
+                    // Actual back button when needed
+                    if currentPage > 0 {
+                        Button(action: handleBackAction) {
+                            Label("Back", systemImage: "chevron.left")
+                                .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.secondary)
+                        .opacity(0.7)
+                        .pointingHandCursor()
+                        .help("Go back to previous page")
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    }
+                }
+                .frame(minWidth: 80, alignment: .leading) // Same width as Next button, left-aligned
+                
+                Spacer()
+                
+                // Page indicators centered
                 HStack(spacing: 8) {
                     ForEach(0..<6) { index in
                         Button {
@@ -87,37 +123,18 @@ struct WelcomeView: View {
                         .pointingHandCursor()
                     }
                 }
-                .frame(height: 32) // Fixed height for indicator area
+                
+                Spacer()
 
-                // Navigation buttons
-                HStack {
-                    // Back button - only visible when not on first page
-                    if currentPage > 0 {
-                        Button(action: handleBackAction) {
-                            Label("Back", systemImage: "chevron.left")
-                                .labelStyle(.iconOnly)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.secondary)
-                        .opacity(0.7)
-                        .pointingHandCursor()
-                        .help("Go back to previous page")
-                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
-                    }
-
-                    Spacer()
-
-                    Button(action: handleNextAction) {
-                        Text(buttonTitle)
-                            .frame(minWidth: 80)
-                    }
-                    .keyboardShortcut(.return)
-                    .buttonStyle(.borderedProminent)
+                Button(action: handleNextAction) {
+                    Text(buttonTitle)
+                        .frame(minWidth: 80)
                 }
-                .padding(.horizontal, 20)
-                .frame(height: 60) // Fixed height for button area
+                .keyboardShortcut(.return)
+                .buttonStyle(.borderedProminent)
             }
-            .frame(height: 92) // Total fixed height: 32 + 60
+            .padding(.horizontal, 20)
+            .frame(height: 60)
         }
         .frame(width: 640, height: 560)
         .background(Color(NSColor.windowBackgroundColor))

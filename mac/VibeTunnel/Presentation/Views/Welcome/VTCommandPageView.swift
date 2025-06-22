@@ -23,12 +23,6 @@ struct VTCommandPageView: View {
 
     var body: some View {
         VStack(spacing: 30) {
-            // App icon
-            Image(nsImage: NSImage(named: "AppIcon") ?? NSImage())
-                .resizable()
-                .frame(width: 156, height: 156)
-                .shadow(radius: 10)
-
             VStack(spacing: 16) {
                 Text("Capturing Terminal Apps")
                     .font(.largeTitle)
@@ -88,8 +82,8 @@ struct VTCommandPageView: View {
                     }
                 }
             }
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
         .onAppear {
             // Check installation status synchronously on appear

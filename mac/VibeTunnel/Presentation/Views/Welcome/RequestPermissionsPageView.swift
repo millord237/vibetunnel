@@ -42,12 +42,6 @@ struct RequestPermissionsPageView: View {
 
     var body: some View {
         VStack(spacing: 30) {
-            // App icon
-            Image(nsImage: NSImage(named: "AppIcon") ?? NSImage())
-                .resizable()
-                .frame(width: 156, height: 156)
-                .shadow(radius: 10)
-
             VStack(spacing: 16) {
                 Text("Request Permissions")
                     .font(.largeTitle)
@@ -105,8 +99,8 @@ struct RequestPermissionsPageView: View {
                     }
                 }
             }
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
         .task {
             // Check permissions before first render to avoid UI flashing

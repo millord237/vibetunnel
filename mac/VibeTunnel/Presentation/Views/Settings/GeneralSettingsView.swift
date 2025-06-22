@@ -231,7 +231,7 @@ private struct PermissionsSection: View {
                 .foregroundColor(.green)
             } else {
                 Text(
-                    "Terminals can be controlled without permissions, however new sessions won't load."
+                    "Terminals can be captured without permissions, however new sessions won't load."
                 )
                 .font(.caption)
                 .frame(maxWidth: .infinity)
