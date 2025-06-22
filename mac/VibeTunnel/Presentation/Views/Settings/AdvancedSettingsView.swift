@@ -17,6 +17,7 @@ struct AdvancedSettingsView: View {
     @AppStorage("showInDock")
     private var showInDock = false
     @State private var cliInstaller = CLIInstaller()
+    @State private var showingVtConflictAlert = false
 
     var body: some View {
         NavigationStack {
@@ -74,14 +75,28 @@ struct AdvancedSettingsView: View {
                             Text(error)
                                 .font(.caption)
                                 .foregroundColor(.red)
-                        } else if cliInstaller.isInstalled {
-                            Text("The 'vt' command line tool is installed at /usr/local/bin/vt")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         } else {
-                            Text("Install the 'vt' command line tool to /usr/local/bin for terminal access.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            HStack(alignment: .center, spacing: 8) {
+                                if cliInstaller.isInstalled {
+                                    Text("The 'vt' command line tool is installed at /usr/local/bin/vt")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("Install the 'vt' command line tool to /usr/local/bin for terminal access.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    showingVtConflictAlert = true
+                                }) {
+                                    Text("Use a different name")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.link)
+                            }
                         }
                     }
                 } header: {
@@ -137,6 +152,14 @@ struct AdvancedSettingsView: View {
         .onAppear {
             cliInstaller.checkInstallationStatus()
         }
+        .alert("Using a Different Command Name", isPresented: $showingVtConflictAlert) {
+            Button("OK") {}
+            Button("Copy to Clipboard") {
+                copyCommandToClipboard()
+            }
+        } message: {
+            Text(vtConflictMessage)
+        }
     }
 
     private var showInDockBinding: Binding<Bool> {
@@ -159,12 +182,9 @@ struct AdvancedSettingsView: View {
     
     private var vtConflictMessage: String {
         """
-        If 'vt' is already in use on your system, you can copy the VibeTunnel command script with a different name.
+        You can install the `vt` bash script with a different name. For example:
 
-        Copy command:
         cp "\(vtScriptPath)" /usr/local/bin/vtunnel && chmod +x /usr/local/bin/vtunnel
-
-        This will create 'vtunnel' as an alternative command name.
         """
     }
     
@@ -293,14 +313,6 @@ private struct TerminalPreferenceSection: View {
             .font(.caption)
             .frame(maxWidth: .infinity)
             .multilineTextAlignment(.center)
-        }
-        .alert("Using a Different Command Name", isPresented: $showingVtConflictAlert) {
-            Button("OK") {}
-            Button("Copy to Clipboard") {
-                copyCommandToClipboard()
-            }
-        } message: {
-            Text(vtConflictMessage)
         }
         .alert(errorTitle, isPresented: $showingError) {
             Button("OK") {}
