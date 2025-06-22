@@ -150,6 +150,16 @@ if [[ "$CLEAN_ALL" == "true" ]]; then
     remove_item "web/.next" "Next.js build cache"
 fi
 
+# Clean web build artifacts (always clean these)
+if [[ -d "$PROJECT_ROOT/../web" ]]; then
+    remove_item "$PROJECT_ROOT/../web/native" "Web native executables"
+    remove_item "$PROJECT_ROOT/../web/dist" "Web dist directory"
+    remove_item "$PROJECT_ROOT/../web/public/bundle" "Web bundle directory"
+    remove_item "$PROJECT_ROOT/../web/public/output.css" "Web CSS output"
+    remove_item "$PROJECT_ROOT/../web/build" "Web build directory"
+    remove_item "$PROJECT_ROOT/../web/.node-builds" "Custom Node.js builds"
+fi
+
 # Clean Python caches
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find . -type f -name "*.pyc" -delete 2>/dev/null || true

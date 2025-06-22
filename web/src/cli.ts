@@ -6,6 +6,16 @@ import { VERSION } from './server/version.js';
 
 // Source maps are only included if built with --sourcemap flag
 
+// Prevent double execution in SEA context where require.main might be undefined
+// Use a global flag to ensure we only run once
+if ((global as any).__vibetunnelStarted) {
+  console.log('VibeTunnel already started, skipping duplicate execution');
+  console.log('Global flag was already set, exiting to prevent duplicate server');
+  process.exit(0);
+}
+(global as any).__vibetunnelStarted = true;
+console.log('Setting global flag to prevent duplicate execution');
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
@@ -21,14 +31,25 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
-if (process.argv[2] === 'version') {
-  console.log(`VibeTunnel Linux v${VERSION}`);
-  process.exit(0);
-} else if (process.argv[2] === 'fwd') {
-  startVibeTunnelForward(process.argv.slice(3)).catch((error) => {
-    console.error('Fatal error:', error);
-    process.exit(1);
-  });
+// Only execute if this is the main module (or in SEA where require.main is undefined)
+if (!module.parent && (require.main === module || require.main === undefined)) {
+  console.log('Main module check passed, proceeding with server startup');
+  console.log('module.parent:', module.parent);
+  console.log('require.main === module:', require.main === module);
+  console.log('require.main:', require.main);
+
+  if (process.argv[2] === 'version') {
+    console.log(`VibeTunnel Server v${VERSION}`);
+    process.exit(0);
+  } else if (process.argv[2] === 'fwd') {
+    startVibeTunnelForward(process.argv.slice(3)).catch((error) => {
+      console.error('Fatal error:', error);
+      process.exit(1);
+    });
+  } else {
+    console.log('Starting VibeTunnel server...');
+    startVibeTunnelServer();
+  }
 } else {
-  startVibeTunnelServer();
+  console.log('Not main module, skipping server startup');
 }

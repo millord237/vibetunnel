@@ -251,7 +251,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "# Build web frontend conditionally based on hash\necho \"Checking if web frontend needs rebuild...\"\n\n# Run the conditional build script\n\"${SRCROOT}/scripts/build-web-frontend-conditional.sh\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Web frontend build failed\"\n    exit 1\nfi\n";
+			shellScript = "# Build web frontend conditionally based on hash\necho \"Checking if web frontend needs rebuild...\"\n\n# Run the conditional build script\n\"${SRCROOT}/scripts/build-web-frontend.sh\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Web frontend build failed\"\n    exit 1\nfi\n";
 		};
 		C3D4E5F6A7B8C9D0E1F23456 /* Install Build Dependencies */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -270,7 +270,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "# Install build dependencies\necho \"Checking build dependencies...\"\n\n# Run the install script\n\"${SRCROOT}/scripts/install-bun.sh\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Failed to install build dependencies\"\n    exit 1\nfi\n";
+			shellScript = "# Check for Node.js availability\necho \"Checking build dependencies...\"\n\n# Run the install script\n\"${SRCROOT}/scripts/install-node.sh\"\n\nif [ $? -ne 0 ]; then\n    echo \"error: Node.js is required to build VibeTunnel\"\n    exit 1\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

@@ -247,7 +247,17 @@ interface AppInstance {
   activityMonitor: ActivityMonitor;
 }
 
+// Track if app has been created
+let appCreated = false;
+
 export function createApp(): AppInstance {
+  // Prevent multiple app instances
+  if (appCreated) {
+    console.error(chalk.red('ERROR: App already created, preventing duplicate instance'));
+    throw new Error('Duplicate app creation detected');
+  }
+  appCreated = true;
+
   const config = parseArgs();
 
   // Check if help was requested
@@ -271,6 +281,7 @@ export function createApp(): AppInstance {
 
   validateConfig(config);
 
+  console.log('Creating Express app and HTTP server...');
   const app = express();
   const server = createServer(app);
   const wss = new WebSocketServer({ server });
@@ -406,6 +417,28 @@ export function createApp(): AppInstance {
   // Start server function
   const startServer = () => {
     const requestedPort = config.port !== null ? config.port : Number(process.env.PORT) || 4020;
+
+    console.log(`Attempting to start server on port ${requestedPort}`);
+
+    // Remove all existing error listeners first to prevent duplicates
+    server.removeAllListeners('error');
+
+    // Add error handler for port already in use
+    server.on('error', (error: any) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(chalk.red(`Error: Port ${requestedPort} is already in use`));
+        console.error(
+          chalk.yellow(
+            'Please use a different port with --port <number> or stop the existing server'
+          )
+        );
+        process.exit(9); // Exit with code 9 to indicate port conflict
+      } else {
+        console.error(chalk.red('Server error:'), error);
+        process.exit(1);
+      }
+    });
+
     server.listen(requestedPort, () => {
       const address = server.address();
       const actualPort =
@@ -485,8 +518,20 @@ export function createApp(): AppInstance {
   };
 }
 
+// Track if server has been started
+let serverStarted = false;
+
 // Export a function to start the server
 export function startVibeTunnelServer() {
+  // Prevent multiple server instances
+  if (serverStarted) {
+    console.error(chalk.red('ERROR: Server already started, preventing duplicate instance'));
+    console.error('This should not happen - duplicate server startup detected');
+    process.exit(1);
+  }
+  serverStarted = true;
+
+  console.log('Creating app instance...');
   // Create and configure the app
   const appInstance = createApp();
   const {
@@ -499,6 +544,7 @@ export function startVibeTunnelServer() {
     activityMonitor,
   } = appInstance;
 
+  console.log('Starting server...');
   startServer();
 
   // Cleanup old terminals every 5 minutes

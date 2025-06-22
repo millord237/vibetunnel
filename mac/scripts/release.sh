@@ -319,6 +319,38 @@ fi
 echo ""
 echo -e "${BLUE}📋 Step 4/8: Building universal application...${NC}"
 
+# Check for custom Node.js build
+echo ""
+echo "🔍 Checking for custom Node.js build..."
+WEB_DIR="$PROJECT_ROOT/../web"
+CUSTOM_NODE_PATH=$(find "$WEB_DIR/.node-builds" -name "node-v*-minimal" -type d 2>/dev/null | sort -V | tail -n1)/out/Release/node
+
+if [[ ! -f "$CUSTOM_NODE_PATH" ]]; then
+    echo -e "${YELLOW}⚠️  Custom Node.js not found. Building for optimal app size...${NC}"
+    echo "   This will take 10-20 minutes on first run."
+    
+    # Build custom Node.js
+    pushd "$WEB_DIR" > /dev/null
+    if node build-custom-node.js --latest; then
+        echo -e "${GREEN}✅ Custom Node.js built successfully${NC}"
+        CUSTOM_NODE_PATH=$(find "$WEB_DIR/.node-builds" -name "node-v*-minimal" -type d 2>/dev/null | sort -V | tail -n1)/out/Release/node
+        if [[ -f "$CUSTOM_NODE_PATH" ]]; then
+            CUSTOM_NODE_SIZE=$(ls -lh "$CUSTOM_NODE_PATH" | awk '{print $5}')
+            echo "   Size: $CUSTOM_NODE_SIZE (vs ~110MB for standard Node.js)"
+        fi
+    else
+        echo -e "${RED}❌ Failed to build custom Node.js${NC}"
+        echo "   Continuing with standard Node.js (larger app size)"
+    fi
+    popd > /dev/null
+else
+    CUSTOM_NODE_SIZE=$(ls -lh "$CUSTOM_NODE_PATH" | awk '{print $5}')
+    CUSTOM_NODE_VERSION=$("$CUSTOM_NODE_PATH" --version 2>/dev/null || echo "unknown")
+    echo -e "${GREEN}✅ Found custom Node.js${NC}"
+    echo "   Version: $CUSTOM_NODE_VERSION"
+    echo "   Size: $CUSTOM_NODE_SIZE"
+fi
+
 # For pre-release builds, set the environment variable
 if [[ "$RELEASE_TYPE" != "stable" ]]; then
     echo "📝 Marking build as pre-release..."

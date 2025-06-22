@@ -41,8 +41,13 @@
  * 
  * ## Usage
  * ```bash
- * node build-native-node.js           # Build without sourcemaps (default)
- * node build-native-node.js --sourcemap  # Build with inline sourcemaps
+ * node build-native.js                    # Build with system Node.js
+ * node build-native.js --sourcemap        # Build with inline sourcemaps
+ * node build-native.js --custom-node=/path/to/node  # Use custom Node.js binary
+ * 
+ * # Build custom Node.js first:
+ * node build-custom-node.js               # Build minimal Node.js for current version
+ * node build-custom-node.js --version=24.2.0  # Build specific version
  * ```
  * 
  * ## Requirements
@@ -61,9 +66,45 @@ const path = require('path');
 
 // Parse command line arguments
 const includeSourcemaps = process.argv.includes('--sourcemap');
+let customNodePath = null;
+
+// Parse --custom-node argument
+for (let i = 0; i < process.argv.length; i++) {
+  const arg = process.argv[i];
+  if (arg.startsWith('--custom-node=')) {
+    customNodePath = arg.split('=')[1];
+  } else if (arg === '--custom-node') {
+    // Check if next argument is a path
+    if (i + 1 < process.argv.length && !process.argv[i + 1].startsWith('--')) {
+      customNodePath = process.argv[i + 1];
+    } else {
+      // No path provided, search for custom Node.js build
+      console.log('Searching for custom Node.js build...');
+      const customBuildsDir = path.join(__dirname, '.node-builds');
+      if (fs.existsSync(customBuildsDir)) {
+        const dirs = fs.readdirSync(customBuildsDir)
+          .filter(dir => dir.startsWith('node-v') && dir.endsWith('-minimal'))
+          .map(dir => ({
+            name: dir,
+            path: path.join(customBuildsDir, dir, 'out/Release/node'),
+            mtime: fs.statSync(path.join(customBuildsDir, dir)).mtime
+          }))
+          .filter(item => fs.existsSync(item.path))
+          .sort((a, b) => b.mtime - a.mtime); // Sort by modification time, newest first
+        
+        if (dirs.length > 0) {
+          customNodePath = dirs[0].path;
+          console.log(`Found custom Node.js at: ${customNodePath}`);
+        } else {
+          console.log('No custom Node.js builds found in .node-builds/');
+        }
+      }
+    }
+  }
+}
 
 console.log('Building standalone vibetunnel executable using Node.js SEA...');
-console.log(`Node.js version: ${process.version}`);
+console.log(`System Node.js version: ${process.version}`);
 if (includeSourcemaps) {
   console.log('Including sourcemaps in build');
 }
@@ -228,11 +269,38 @@ async function main() {
       fs.mkdirSync('native');
     }
 
-    // 0. Patch node-pty
+    // 0. Determine which Node.js to use
+    let nodeExe = process.execPath;
+    if (customNodePath) {
+      // Validate custom node exists
+      if (!fs.existsSync(customNodePath)) {
+        console.error(`Error: Custom Node.js not found at ${customNodePath}`);
+        console.error('Build one using: node build-custom-node.js');
+        process.exit(1);
+      }
+      nodeExe = customNodePath;
+    }
+    
+    console.log(`Using Node.js binary: ${nodeExe}`);
+    const nodeStats = fs.statSync(nodeExe);
+    console.log(`Node.js binary size: ${(nodeStats.size / 1024 / 1024).toFixed(2)} MB`);
+    
+    // Get version of the Node.js we're using
+    if (customNodePath) {
+      try {
+        const customVersion = execSync(`"${nodeExe}" --version`, { encoding: 'utf8' }).trim();
+        console.log(`Custom Node.js version: ${customVersion}`);
+        console.log('This minimal build excludes intl, npm, inspector, and other unused features.');
+      } catch (e) {
+        console.log('Could not determine custom Node.js version');
+      }
+    }
+
+    // 1. Patch node-pty
     patchNodePty();
 
-    // 1. Bundle TypeScript with esbuild using custom loader
-    console.log('Bundling TypeScript with esbuild...');
+    // 2. Bundle TypeScript with esbuild using custom loader
+    console.log('\nBundling TypeScript with esbuild...');
     const buildDate = new Date().toISOString();
     const buildTimestamp = Date.now();
     
@@ -272,7 +340,6 @@ async function main() {
 
     // 4. Create executable
     console.log('\nCreating executable...');
-    const nodeExe = process.execPath;
     const targetExe = process.platform === 'win32' ? 'native/vibetunnel.exe' : 'native/vibetunnel';
     
     // Copy node binary
@@ -292,18 +359,32 @@ async function main() {
     
     execSync(postjectCmd, { stdio: 'inherit' });
 
-    // 6. Sign on macOS
+    // 6. Strip the executable first (before signing)
+    console.log('Stripping final executable...');
+    // Note: This will show a warning about invalidating code signature, which is expected
+    // since we're modifying a signed Node.js binary. We'll re-sign it in the next step.
+    execSync(`strip -S ${targetExe} 2>&1 | grep -v "warning: changes being made" || true`, { 
+      stdio: 'inherit',
+      shell: true 
+    });
+
+    // 7. Sign on macOS (after stripping)
     if (process.platform === 'darwin') {
       console.log('Signing executable...');
       execSync(`codesign --sign - ${targetExe}`, { stdio: 'inherit' });
     }
+    
+    // Check final size
+    const finalStats = fs.statSync(targetExe);
+    console.log(`Final executable size: ${(finalStats.size / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`Size reduction: ${((nodeStats.size - finalStats.size) / 1024 / 1024).toFixed(2)} MB`);
 
-    // 7. Restore original node-pty
+    // 8. Restore original node-pty
     console.log('Restoring original node-pty...');
     execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
     execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit', { stdio: 'inherit' });
 
-    // 8. Copy only necessary native files
+    // 9. Copy only necessary native files
     console.log('Copying native modules...');
     const nativeModulesDir = 'node_modules/@homebridge/node-pty-prebuilt-multiarch/build/Release';
     

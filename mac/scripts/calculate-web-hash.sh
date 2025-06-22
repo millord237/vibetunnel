@@ -27,7 +27,7 @@ cd "${WEB_DIR}"
 
 # Find all relevant files and calculate their size, modification time, and content hash
 # This approach is more reliable than just content hash as it catches permission changes
-# Exclude: node_modules, dist, public (all build outputs), package-lock.json
+# Exclude: node_modules, dist, public (all build outputs), package-lock.json, and build directories
 CONTENT_HASH=$(find . \
     -type f \
     \( -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.html" \
@@ -39,6 +39,9 @@ CONTENT_HASH=$(find . \
     -not -path "./.next/*" \
     -not -path "./coverage/*" \
     -not -path "./.cache/*" \
+    -not -path "./.node-builds/*" \
+    -not -path "./build/*" \
+    -not -path "./native/*" \
     -not -name "package-lock.json" \
     -exec stat -f "%m %z %p" {} \; \
     -exec shasum -a 256 {} \; | \

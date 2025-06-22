@@ -27,6 +27,16 @@ execSync('tsc', { stdio: 'inherit' });
 
 // Build native executable
 console.log('Building native executable...');
-execSync('node build-native.js', { stdio: 'inherit' });
+
+// Check for --custom-node flag
+const useCustomNode = process.argv.includes('--custom-node');
+
+if (useCustomNode) {
+  console.log('Using custom Node.js for smaller binary size...');
+  execSync('node build-native.js --custom-node', { stdio: 'inherit' });
+} else {
+  console.log('Using system Node.js...');
+  execSync('node build-native.js', { stdio: 'inherit' });
+}
 
 console.log('Build completed successfully!');
