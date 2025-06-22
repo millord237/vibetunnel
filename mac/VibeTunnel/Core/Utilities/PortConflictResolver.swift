@@ -1,6 +1,6 @@
 import Foundation
 import OSLog
-import Darwin
+import Darwin.C
 
 /// Information about a process that's using a port
 struct ProcessDetails {

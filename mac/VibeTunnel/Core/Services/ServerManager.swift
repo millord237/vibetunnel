@@ -90,16 +90,39 @@ class ServerManager {
     func start() async {
         // Check if we already have a running server
         if let existingServer = bunServer {
-            logger.info("Server already running on port \(existingServer.port)")
-
-            // Ensure our state is synced
-            isRunning = true
-            lastError = nil
-            return
+            let state = existingServer.getState()
+            
+            switch state {
+            case .running:
+                logger.info("Server already running on port \(existingServer.port)")
+                // Ensure our state is synced
+                isRunning = true
+                lastError = nil
+                return
+            case .starting:
+                logger.info("Server is already starting")
+                return
+            case .stopping:
+                logger.warning("Cannot start server while it's stopping")
+                lastError = BunServerError.invalidState
+                return
+            case .crashed, .idle:
+                // Clean up and proceed with start
+                bunServer = nil
+                isRunning = false
+            }
         }
 
+        // First check if port is truly available by trying to bind to it
+        let portNumber = Int(self.port) ?? 4_020
+        
+        let canBind = await PortConflictResolver.shared.canBindToPort(portNumber)
+        if !canBind {
+            logger.warning("Cannot bind to port \(portNumber), checking for conflicts...")
+        }
+        
         // Check for port conflicts before starting
-        if let conflict = await PortConflictResolver.shared.detectConflict(on: Int(self.port) ?? 4_020) {
+        if let conflict = await PortConflictResolver.shared.detectConflict(on: portNumber) {
             logger.warning("Port \(self.port) is in use by \(conflict.process.name) (PID: \(conflict.process.pid))")
 
             // Handle based on conflict type
@@ -109,8 +132,7 @@ class ServerManager {
 
                 do {
                     try await PortConflictResolver.shared.resolveConflict(conflict)
-                    // Wait a moment for port to be fully released
-                    try await Task.sleep(for: .milliseconds(500))
+                    // resolveConflict now includes exponential backoff
                 } catch {
                     logger.error("Failed to resolve port conflict: \(error)")
                     lastError = PortConflictError.failedToKillProcess(pid: pid)
@@ -147,11 +169,19 @@ class ServerManager {
             try await server.start()
 
             bunServer = server
-            isRunning = true
-            lastError = nil
-
-            // Reset crash counter on successful start
-            consecutiveCrashes = 0
+            // Check server state to ensure it's actually running
+            if server.getState() == .running {
+                isRunning = true
+                lastError = nil
+                // Reset crash counter on successful start
+                consecutiveCrashes = 0
+            } else {
+                logger.error("Server started but not in running state")
+                isRunning = false
+                bunServer = nil
+                lastError = BunServerError.processFailedToStart
+                return
+            }
 
             logger.info("Started server on port \(self.port)")
 
@@ -161,14 +191,9 @@ class ServerManager {
             logger.error("Failed to start server: \(error.localizedDescription)")
             lastError = error
 
-            // Check if server is actually running despite the error
-            if let server = bunServer, server.isRunning {
-                logger.warning("Server reported as running despite startup error, syncing state")
-                isRunning = true
-            } else {
-                isRunning = false
-                bunServer = nil
-            }
+            // Always clean up on error
+            isRunning = false
+            bunServer = nil
         }
     }
 
@@ -202,8 +227,29 @@ class ServerManager {
 
         await stop()
 
-        // Add a brief delay to ensure the port is released by the OS
-        try? await Task.sleep(for: .milliseconds(500))
+        // Wait with exponential backoff for port to be available
+        let portNumber = Int(self.port) ?? 4_020
+        var retries = 0
+        let maxRetries = 5
+        
+        while retries < maxRetries {
+            let delay = 1.0 * pow(2.0, Double(retries)) // 1, 2, 4, 8, 16 seconds
+            logger.info("Waiting \(delay) seconds for port to be released (attempt \(retries + 1)/\(maxRetries))...")
+            try? await Task.sleep(for: .seconds(delay))
+            
+            if await PortConflictResolver.shared.canBindToPort(portNumber) {
+                logger.info("Port \(portNumber) is now available")
+                break
+            }
+            
+            retries += 1
+        }
+        
+        if retries == maxRetries {
+            logger.error("Port \(portNumber) still unavailable after \(maxRetries) attempts")
+            lastError = PortConflictError.portStillInUse(port: portNumber)
+            return
+        }
 
         await start()
     }
@@ -268,7 +314,12 @@ class ServerManager {
 
     /// Handle server crash with automatic restart logic
     private func handleServerCrash(exitCode: Int32) async {
-        logger.error("Server crashed with exit code: \(exitCode)")
+        // Special handling for exit code 9 (port in use)
+        if exitCode == 9 {
+            logger.error("Server failed to start: Port \(self.port) is already in use")
+        } else {
+            logger.error("Server crashed with exit code: \(exitCode)")
+        }
 
         // Update state immediately
         isRunning = false
@@ -314,14 +365,69 @@ class ServerManager {
             return
         }
 
-        // Calculate backoff delay
-        let baseDelay: TimeInterval = 2.0
-        let delay = baseDelay * pow(2.0, Double(consecutiveCrashes - 1))
+        // Special handling for exit code 9 (port already in use)
+        if exitCode == 9 {
+            logger.info("Port \(self.port) is in use, checking for conflicts...")
 
-        logger.info("Will restart server after \(delay) seconds (attempt \(self.consecutiveCrashes) of \(maxRetries))")
+            // Check for port conflicts
+            if let conflict = await PortConflictResolver.shared.detectConflict(on: Int(self.port) ?? 4_020) {
+                logger.warning("Found port conflict: \(conflict.process.name) (PID: \(conflict.process.pid))")
 
-        // Wait with exponential backoff
-        try? await Task.sleep(for: .seconds(delay))
+                // Try to resolve the conflict
+                if case .killOurInstance(let pid, let processName) = conflict.suggestedAction {
+                    logger.info("Attempting to kill conflicting process: \(processName) (PID: \(pid))")
+
+                    do {
+                        try await PortConflictResolver.shared.resolveConflict(conflict)
+                        // resolveConflict now includes exponential backoff
+                    } catch {
+                        logger.error("Failed to resolve port conflict: \(error)")
+                        lastError = PortConflictError.failedToKillProcess(pid: pid)
+                        return
+                    }
+                } else {
+                    logger.error("Cannot auto-resolve port conflict")
+                    return
+                }
+            } else {
+                // Port might still be in TIME_WAIT state, wait with backoff
+                logger.info("Port may be in TIME_WAIT state, checking availability...")
+                
+                let portNumber = Int(self.port) ?? 4_020
+                var retries = 0
+                let maxRetries = 5
+                
+                while retries < maxRetries {
+                    let delay = 2.0 * pow(2.0, Double(retries)) // 2, 4, 8, 16, 32 seconds
+                    logger.info("Waiting \(delay) seconds for port to clear (attempt \(retries + 1)/\(maxRetries))...")
+                    try? await Task.sleep(for: .seconds(delay))
+                    
+                    if await PortConflictResolver.shared.canBindToPort(portNumber) {
+                        logger.info("Port \(portNumber) is now available")
+                        break
+                    }
+                    
+                    retries += 1
+                }
+                
+                if retries == maxRetries {
+                    logger.error("Port \(portNumber) still in TIME_WAIT after \(maxRetries) attempts")
+                    lastError = PortConflictError.portStillInUse(port: portNumber)
+                    return
+                }
+            }
+        } else {
+            // Normal crash handling with exponential backoff
+            let baseDelay: TimeInterval = 2.0
+            let delay = baseDelay * pow(2.0, Double(consecutiveCrashes - 1))
+
+            logger
+                .info("Will restart server after \(delay) seconds (attempt \(self.consecutiveCrashes) of \(maxRetries))"
+                )
+
+            // Wait with exponential backoff
+            try? await Task.sleep(for: .seconds(delay))
+        }
 
         // Only restart if we haven't been manually stopped in the meantime
         guard bunServer == nil else {
@@ -342,16 +448,19 @@ class ServerManager {
 
                 guard let server = bunServer else { continue }
 
-                // Check if the server process is still running
+                // Check server state and process health
+                let state = server.getState()
                 let health = await server.checkHealth()
 
-                if !health && isRunning {
+                if (!health || state == .crashed) && isRunning {
                     logger.warning("Server health check failed but state shows running, syncing state")
                     isRunning = false
                     bunServer = nil
 
-                    // Trigger restart
-                    await handleServerCrash(exitCode: -1)
+                    // Only trigger restart if not already handling a crash
+                    if !isHandlingCrash {
+                        await handleServerCrash(exitCode: -1)
+                    }
                 }
             }
         }

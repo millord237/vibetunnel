@@ -1,6 +1,15 @@
 import Foundation
 import OSLog
 
+/// Server state enumeration
+enum ServerState {
+    case idle
+    case starting
+    case running
+    case stopping
+    case crashed
+}
+
 /// Bun vibetunnel server implementation.
 ///
 /// Manages the Bun-based vibetunnel server as a subprocess. This implementation
@@ -18,11 +27,19 @@ final class BunServer {
     private var stderrPipe: Pipe?
     private var outputTask: Task<Void, Never>?
     private var errorTask: Task<Void, Never>?
+    
+    /// Server state machine - thread-safe through MainActor
+    private var state: ServerState = .idle
+    
+    /// Resource cleanup tracking
+    private var isCleaningUp = false
 
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "BunServer")
     private let serverOutput = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "ServerOutput")
 
-    var isRunning = false
+    var isRunning: Bool {
+        state == .running
+    }
 
     var port: String = ""
 
@@ -37,9 +54,23 @@ final class BunServer {
     // MARK: - Public Methods
 
     func start() async throws {
-        guard !isRunning else {
-            logger.warning("Bun server already running")
+        // Update state atomically using MainActor
+        let currentState = state
+        if currentState == .running || currentState == .starting {
+            logger.warning("Bun server already running or starting")
             return
+        }
+        if currentState == .stopping {
+            logger.warning("Cannot start server while stopping")
+            throw BunServerError.invalidState
+        }
+        state = .starting
+        
+        defer {
+            // Ensure we reset state on error
+            if state == .starting {
+                state = .idle
+            }
         }
 
         guard !port.isEmpty else {
@@ -88,7 +119,7 @@ final class BunServer {
         // Set working directory to Resources/web directory where public folder is located
         let webPath = URL(fileURLWithPath: resourcesPath).appendingPathComponent("web").path
         process.currentDirectoryURL = URL(fileURLWithPath: webPath)
-        logger.info("Working directory: \(webPath)")
+        logger.info("Process working directory: \(webPath)")
 
         // Static files are always at Resources/web/public
         let staticPath = URL(fileURLWithPath: resourcesPath).appendingPathComponent("web/public").path
@@ -119,7 +150,7 @@ final class BunServer {
         process.arguments = ["-l", "-c", vibetunnelCommand]
 
         logger.info("Executing command: /bin/zsh -l -c \"\(vibetunnelCommand)\"")
-        logger.info("Working directory: \(resourcesPath)")
+        logger.info("Binary location: \(resourcesPath)")
 
         // Set up environment - login shell will load the rest
         let environment = ProcessInfo.processInfo.environment
@@ -142,9 +173,6 @@ final class BunServer {
             // Start the process (this just launches it and returns immediately)
             try await process.runAsync()
 
-            // Mark server as running
-            isRunning = true
-
             logger.info("Bun server process started")
 
             // Give the process a moment to start before checking for early failures
@@ -152,9 +180,14 @@ final class BunServer {
 
             // Check if process exited immediately (indicating failure)
             if !process.isRunning {
-                isRunning = false
                 let exitCode = process.terminationStatus
-                logger.error("Process exited immediately with code: \(exitCode)")
+
+                // Special handling for exit code 9 (port in use)
+                if exitCode == 9 {
+                    logger.error("Process exited immediately: Port \(self.port) is already in use (exit code: 9)")
+                } else {
+                    logger.error("Process exited immediately with code: \(exitCode)")
+                }
 
                 // Try to read any error output
                 var errorDetails = "Exit code: \(exitCode)"
@@ -169,6 +202,9 @@ final class BunServer {
                 throw BunServerError.processFailedToStart
             }
 
+            // Mark server as running only after successful start
+            state = .running
+            
             logger.info("Bun server process started successfully")
 
             // Monitor process termination
@@ -176,8 +212,6 @@ final class BunServer {
                 await monitorProcessTermination()
             }
         } catch {
-            isRunning = false
-
             // Log more detailed error information
             let errorMessage: String
             if let bunError = error as? BunServerError {
@@ -197,8 +231,32 @@ final class BunServer {
     }
 
     func stop() async {
-        guard let process, isRunning else {
-            logger.warning("Bun server not running")
+        // Update state atomically using MainActor
+        switch state {
+        case .running, .crashed:
+            break // Continue with stop
+        default:
+            logger.warning("Bun server not running (state: \(String(describing: self.state)))")
+            return
+        }
+        
+        // Prevent concurrent cleanup
+        if isCleaningUp {
+            logger.warning("Already cleaning up server")
+            return
+        }
+        
+        state = .stopping
+        isCleaningUp = true
+        
+        defer {
+            state = .idle
+            isCleaningUp = false
+        }
+        
+        guard let process else {
+            logger.warning("No process to stop")
+            await performCleanup()
             return
         }
 
@@ -207,6 +265,17 @@ final class BunServer {
         // Cancel output monitoring tasks
         outputTask?.cancel()
         errorTask?.cancel()
+        
+        // Close pipes to trigger EOF in monitors
+        if let pipe = self.stdoutPipe {
+            try? pipe.fileHandleForReading.close()
+        }
+        if let pipe = self.stderrPipe {
+            try? pipe.fileHandleForReading.close()
+        }
+        
+        // Give tasks a moment to complete
+        try? await Task.sleep(for: .milliseconds(100))
 
         // Terminate the process
         await process.terminateAsync()
@@ -221,12 +290,7 @@ final class BunServer {
         }
 
         // Clean up
-        self.process = nil
-        self.stdoutPipe = nil
-        self.stderrPipe = nil
-        self.outputTask = nil
-        self.errorTask = nil
-        isRunning = false
+        await performCleanup()
 
         logger.info("Bun server stopped")
     }
@@ -250,70 +314,135 @@ final class BunServer {
     func cleanup() async {
         await stop()
     }
+    
+    /// Get current server state
+    func getState() -> ServerState {
+        state
+    }
 
     // MARK: - Private Methods
+    
+    /// Perform cleanup of all resources
+    private func performCleanup() async {
+        self.process = nil
+        self.stdoutPipe = nil
+        self.stderrPipe = nil
+        self.outputTask = nil
+        self.errorTask = nil
+    }
 
     private func startOutputMonitoring() {
         // Capture pipes and port before starting detached tasks
-        let stdoutPipe = self.stdoutPipe
-        let stderrPipe = self.stderrPipe
+        guard let stdoutPipe = self.stdoutPipe,
+              let stderrPipe = self.stderrPipe else {
+            logger.warning("No pipes available for monitoring")
+            return
+        }
+        
         let currentPort = self.port
+        
+        // Create a sendable reference for logging
+        let logHandler = LogHandler()
 
-        // Monitor stdout on background thread
-        outputTask = Task.detached { [weak self] in
-            guard let self, let pipe = stdoutPipe else { return }
+        // Monitor stdout on background thread with DispatchSource
+        outputTask = Task.detached { [logHandler] in
+            let pipe = stdoutPipe
 
             let handle = pipe.fileHandleForReading
-            self.logger.debug("Starting stdout monitoring for Bun server on port \(currentPort)")
-
-            while !Task.isCancelled {
-                autoreleasepool {
-                    let data = handle.availableData
-                    if !data.isEmpty, let output = String(data: data, encoding: .utf8) {
-                        let lines = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .components(separatedBy: .newlines)
-                        for line in lines where !line.isEmpty {
-                            // Skip shell initialization messages
-                            if line.contains("zsh:") || line.hasPrefix("Last login:") {
-                                continue
-                            }
-
-                            // Log to OSLog with appropriate level
-                            Task { @MainActor in
-                                self.logServerOutput(line, isError: false)
-                            }
+            let source = DispatchSource.makeReadSource(fileDescriptor: handle.fileDescriptor)
+            
+            let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "BunServer")
+            logger.debug("Starting stdout monitoring for Bun server on port \(currentPort)")
+            
+            // Create a cancellation handler
+            let cancelSource = {
+                source.cancel()
+                try? handle.close()
+            }
+            
+            source.setEventHandler { [logHandler] in
+                let data = handle.availableData
+                if data.isEmpty {
+                    // EOF reached
+                    cancelSource()
+                    return
+                }
+                
+                if let output = String(data: data, encoding: .utf8) {
+                    let lines = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                        .components(separatedBy: .newlines)
+                    for line in lines where !line.isEmpty {
+                        // Skip shell initialization messages
+                        if line.contains("zsh:") || line.hasPrefix("Last login:") {
+                            continue
                         }
+
+                        // Log to OSLog with appropriate level
+                        logHandler.log(line, isError: false)
                     }
                 }
             }
-
-            self.logger.debug("Stopped stdout monitoring for Bun server")
+            
+            source.setCancelHandler {
+                logger.debug("Stopped stdout monitoring for Bun server")
+            }
+            
+            source.activate()
+            
+            // Keep the task alive until cancelled
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            
+            cancelSource()
         }
 
-        // Monitor stderr on background thread
-        errorTask = Task.detached { [weak self] in
-            guard let self, let pipe = stderrPipe else { return }
+        // Monitor stderr on background thread with DispatchSource
+        errorTask = Task.detached { [logHandler] in
+            let pipe = stderrPipe
 
             let handle = pipe.fileHandleForReading
-            self.logger.debug("Starting stderr monitoring for Bun server on port \(currentPort)")
-
-            while !Task.isCancelled {
-                autoreleasepool {
-                    let data = handle.availableData
-                    if !data.isEmpty, let output = String(data: data, encoding: .utf8) {
-                        let lines = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .components(separatedBy: .newlines)
-                        for line in lines where !line.isEmpty {
-                            // Log stderr as errors/warnings
-                            Task { @MainActor in
-                                self.logServerOutput(line, isError: true)
-                            }
-                        }
+            let source = DispatchSource.makeReadSource(fileDescriptor: handle.fileDescriptor)
+            
+            let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "BunServer")
+            logger.debug("Starting stderr monitoring for Bun server on port \(currentPort)")
+            
+            // Create a cancellation handler
+            let cancelSource = {
+                source.cancel()
+                try? handle.close()
+            }
+            
+            source.setEventHandler { [logHandler] in
+                let data = handle.availableData
+                if data.isEmpty {
+                    // EOF reached
+                    cancelSource()
+                    return
+                }
+                
+                if let output = String(data: data, encoding: .utf8) {
+                    let lines = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                        .components(separatedBy: .newlines)
+                    for line in lines where !line.isEmpty {
+                        // Log stderr as errors/warnings
+                        logHandler.log(line, isError: true)
                     }
                 }
             }
-
-            self.logger.debug("Stopped stderr monitoring for Bun server")
+            
+            source.setCancelHandler {
+                logger.debug("Stopped stderr monitoring for Bun server")
+            }
+            
+            source.activate()
+            
+            // Keep the task alive until cancelled
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            
+            cancelSource()
         }
     }
 
@@ -362,11 +491,17 @@ final class BunServer {
         await process.waitUntilExitAsync()
 
         let exitCode = process.terminationStatus
+        
+        // Check current state
+        let currentState = state
+        let wasRunning = currentState == .running
+        if wasRunning {
+            state = .crashed
+        }
 
-        if self.isRunning {
+        if wasRunning {
             // Unexpected termination
             self.logger.error("Bun server terminated unexpectedly with exit code: \(exitCode)")
-            self.isRunning = false
 
             // Clean up process reference
             self.process = nil
@@ -391,6 +526,7 @@ enum BunServerError: LocalizedError {
     case binaryNotFound
     case processFailedToStart
     case invalidPort
+    case invalidState
 
     var errorDescription: String? {
         switch self {
@@ -400,6 +536,8 @@ enum BunServerError: LocalizedError {
             "The server process failed to start"
         case .invalidPort:
             "Server port is not configured"
+        case .invalidState:
+            "Server is in an invalid state for this operation"
         }
     }
 }
@@ -462,6 +600,27 @@ extension Process {
             }
 
             return false
+        }
+    }
+}
+
+// MARK: - LogHandler
+
+/// A sendable log handler for use in detached tasks
+private final class LogHandler: Sendable {
+    private let serverOutput = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "ServerOutput")
+    
+    func log(_ line: String, isError: Bool) {
+        let lowercased = line.lowercased()
+        
+        if isError || lowercased.contains("error") || lowercased.contains("failed") || lowercased.contains("fatal") {
+            serverOutput.error("\(line, privacy: .public)")
+        } else if lowercased.contains("warn") || lowercased.contains("warning") {
+            serverOutput.warning("\(line, privacy: .public)")
+        } else if lowercased.contains("debug") || lowercased.contains("verbose") {
+            serverOutput.debug("\(line, privacy: .public)")
+        } else {
+            serverOutput.info("\(line, privacy: .public)")
         }
     }
 }
