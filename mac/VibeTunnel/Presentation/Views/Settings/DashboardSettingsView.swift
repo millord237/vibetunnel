@@ -600,7 +600,6 @@ private struct PortConfigurationView: View {
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "PortConfiguration")
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Server port:")
                 Spacer()
@@ -744,7 +743,6 @@ private struct PortConfigurationView: View {
                     .padding(.top, 4)
             }
         }
-    }
 
     private func checkPortAvailability(_ port: Int) async {
         isCheckingPort = true
