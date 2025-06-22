@@ -1,8 +1,9 @@
 # SwiftLint configuration for Swift 6 compatibility
-# Focuses on modern Swift best practices without conflicting self rules
+# Shared configuration for both macOS and iOS apps
 
 included:
-  - VibeTunnel
+  - ../mac/VibeTunnel
+  - ../ios/VibeTunnel
 
 excluded:
   - Carthage
@@ -10,8 +11,13 @@ excluded:
   - DerivedData
   - .build
   - .swiftpm
-  - VibeTunnelTests
-  - VibeTunnelUITests
+  - ../mac/VibeTunnelTests
+  - ../mac/VibeTunnelUITests
+  - ../ios/VibeTunnelTests
+  - ../mac/build
+  - ../ios/build
+  - Package.swift
+  - *.xcodeproj
 
 # Rule configuration
 opt_in_rules:
@@ -38,6 +44,7 @@ opt_in_rules:
   - force_unwrapping
   - identical_operands
   - implicit_return
+  - implicitly_unwrapped_optional
   - joined_default_parameter
   - last_where
   - legacy_multiple
@@ -56,6 +63,8 @@ opt_in_rules:
   - private_action
   - private_outlet
   - prohibited_super_call
+  - reduce_boolean
+  - reduce_into
   - redundant_nil_coalescing
   - redundant_type_annotation
   - sorted_first_last
@@ -120,8 +129,8 @@ custom_rules:
     message: "Use proper logging instead of print statements"
     severity: warning
     excluded: 
-      - "VibeTunnelTests/*"
-      - "VibeTunnelUITests/*"
+      - "*/Tests/*"
+      - "*/UITests/*"
 
 analyzer_rules:
   - unused_import
