@@ -112,5 +112,8 @@ lint_output.txt
 # Native build output
 native/
 
+# Custom Node.js builds
+.node-builds/
+
 # Bun lockfile (generated during native build)
 bun.lock
