@@ -359,9 +359,7 @@ struct NgrokServiceTests {
         let service = NgrokService.shared
 
         // Check if we have an auth token
-        guard service.hasAuthToken else {
-            throw TestFixtures.TestError.skip("Ngrok auth token not configured")
-        }
+        try #require(service.hasAuthToken, "Ngrok auth token not configured")
 
         // This would require actual ngrok installation
         // For now, just verify the service is ready
