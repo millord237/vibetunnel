@@ -29,180 +29,20 @@ struct TerminalView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Background
-                selectedTheme.background
-                    .ignoresSafeArea()
-
-                // Terminal content
-                VStack(spacing: 0) {
-                    if viewModel.isConnecting {
-                        loadingView
-                    } else if let error = viewModel.errorMessage {
-                        errorView(error)
-                    } else {
-                        terminalContent
-                    }
+            mainContent
+                .navigationTitle(session.displayName)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar(.visible, for: .bottomBar)
+                .toolbarBackground(.visible, for: .bottomBar)
+                .toolbarBackground(Theme.Colors.cardBackground, for: .bottomBar)
+                .toolbar {
+                    navigationToolbarItems
+                    bottomToolbarItems
+                    recordingIndicator
                 }
-            }
-            .navigationTitle(session.displayName)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.visible, for: .bottomBar)
-            .toolbarBackground(.visible, for: .bottomBar)
-            .toolbarBackground(Theme.Colors.cardBackground, for: .bottomBar)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Close") {
-                        dismiss()
-                    }
-                    .foregroundColor(Theme.Colors.primaryAccent)
-                }
-
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button(action: { viewModel.clearTerminal() }, label: {
-                            Label("Clear", systemImage: "clear")
-                        })
-
-                        Button(action: { showingFontSizeSheet = true }, label: {
-                            Label("Font Size", systemImage: "textformat.size")
-                        })
-
-                        Button(action: { showingTerminalWidthSheet = true }, label: {
-                            Label("Terminal Width", systemImage: "arrow.left.and.right")
-                        })
-
-                        Button(action: { viewModel.toggleFitToWidth() }, label: {
-                            Label(
-                                viewModel.fitToWidth ? "Fixed Width" : "Fit to Width",
-                                systemImage: viewModel
-                                    .fitToWidth ? "arrow.left.and.right.square" : "arrow.left.and.right.square.fill"
-                            )
-                        })
-
-                        Button(action: { showingTerminalThemeSheet = true }, label: {
-                            Label("Theme", systemImage: "paintbrush")
-                        })
-
-                        Button(action: { viewModel.copyBuffer() }, label: {
-                            Label("Copy All", systemImage: "doc.on.doc")
-                        })
-
-                        Divider()
-
-                        if viewModel.castRecorder.isRecording {
-                            Button(action: {
-                                viewModel.stopRecording()
-                                showingRecordingSheet = true
-                            }, label: {
-                                Label("Stop Recording", systemImage: "stop.circle.fill")
-                                    .foregroundColor(.red)
-                            })
-                        } else {
-                            Button(action: { viewModel.startRecording() }, label: {
-                                Label("Start Recording", systemImage: "record.circle")
-                            })
-                        }
-
-                        Button(action: { showingRecordingSheet = true }, label: {
-                            Label("Export Recording", systemImage: "square.and.arrow.up")
-                        })
-                        .disabled(viewModel.castRecorder.events.isEmpty)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundColor(Theme.Colors.primaryAccent)
-                    }
-                }
-            }
-            .sheet(isPresented: $showingFontSizeSheet) {
-                FontSizeSheet(fontSize: $fontSize)
-            }
-            .sheet(isPresented: $showingRecordingSheet) {
-                RecordingExportSheet(recorder: viewModel.castRecorder, sessionName: session.displayName)
-            }
-            .sheet(isPresented: $showingTerminalWidthSheet) {
-                TerminalWidthSheet(
-                    selectedWidth: $selectedTerminalWidth,
-                    isResizeBlockedByServer: viewModel.isResizeBlockedByServer
-                )
-                .onAppear {
-                    selectedTerminalWidth = viewModel.terminalCols
-                }
-            }
-            .sheet(isPresented: $showingTerminalThemeSheet) {
-                TerminalThemeSheet(selectedTheme: $selectedTheme)
-            }
-            .toolbar {
-                ToolbarItemGroup(placement: .bottomBar) {
-                    if viewModel.terminalCols > 0 && viewModel.terminalRows > 0 {
-                        HStack(spacing: Theme.Spacing.extraSmall) {
-                            Image(systemName: "rectangle.split.3x1")
-                                .font(.caption)
-                                .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
-                            Text("\(viewModel.terminalCols) × \(viewModel.terminalRows)")
-                                .font(Theme.Typography.terminalSystem(size: 12))
-                                .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
-                        }
-                    }
-
-                    Spacer()
-
-                    // Session status
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(session.isRunning ? Theme.Colors.successAccent : Theme.Colors.terminalForeground
-                                .opacity(0.3)
-                            )
-                            .frame(width: 6, height: 6)
-                        Text(session.isRunning ? "Running" : "Exited")
-                            .font(Theme.Typography.terminalSystem(size: 12))
-                            .foregroundColor(session.isRunning ? Theme.Colors.successAccent : Theme.Colors
-                                .terminalForeground.opacity(0.5)
-                            )
-                    }
-
-                    if let pid = session.pid {
-                        Spacer()
-
-                        Text("PID: \(pid)")
-                            .font(Theme.Typography.terminalSystem(size: 12))
-                            .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
-                            .onTapGesture {
-                                UIPasteboard.general.string = String(pid)
-                                HapticFeedback.notification(.success)
-                            }
-                    }
-                }
-
-                // Recording indicator
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if viewModel.castRecorder.isRecording {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 8, height: 8)
-                                .overlay(
-                                    Circle()
-                                        .fill(Color.red.opacity(0.3))
-                                        .frame(width: 16, height: 16)
-                                        .scaleEffect(viewModel.recordingPulse ? 1.5 : 1.0)
-                                        .animation(
-                                            .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
-                                            value: viewModel.recordingPulse
-                                        )
-                                )
-                            Text("REC")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.red)
-                        }
-                        .onAppear {
-                            viewModel.recordingPulse = true
-                        }
-                    }
-                }
-            }
         }
         .preferredColorScheme(.dark)
+        .focusable()
         .onAppear {
             viewModel.connect()
             isInputFocused = true
@@ -210,19 +50,42 @@ struct TerminalView: View {
         .onDisappear {
             viewModel.disconnect()
         }
+        .sheet(isPresented: $showingFontSizeSheet) {
+            FontSizeSheet(fontSize: $fontSize)
+        }
+        .sheet(isPresented: $showingRecordingSheet) {
+            RecordingExportSheet(recorder: viewModel.castRecorder, sessionName: session.displayName)
+        }
+        .sheet(isPresented: $showingTerminalWidthSheet) {
+            TerminalWidthSheet(
+                selectedWidth: $selectedTerminalWidth,
+                isResizeBlockedByServer: viewModel.isResizeBlockedByServer
+            )
+            .onAppear {
+                selectedTerminalWidth = viewModel.terminalCols
+            }
+        }
+        .sheet(isPresented: $showingTerminalThemeSheet) {
+            TerminalThemeSheet(selectedTheme: $selectedTheme)
+        }
+        .sheet(isPresented: $showingFileBrowser) {
+            FileBrowserView(
+                initialPath: session.workingDir,
+                mode: .browseFiles
+            ) { selectedPath in
+                showingFileBrowser = false
+            }
+        }
         .gesture(
             DragGesture()
                 .onEnded { value in
-                    // Detect swipe from left edge for back navigation
                     if value.startLocation.x < 20 && value.translation.width > 50 {
                         dismiss()
                         HapticFeedback.impact(.light)
                     }
                 }
         )
-        .onReceive(NotificationCenter.default
-            .publisher(for: UIResponder.keyboardWillShowNotification)
-        ) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
                 withAnimation(Theme.Animation.standard) {
                     keyboardHeight = keyboardFrame.height
@@ -236,33 +99,203 @@ struct TerminalView: View {
         }
         .onChange(of: selectedTerminalWidth) { _, newValue in
             if let width = newValue, width != viewModel.terminalCols {
-                // Calculate appropriate height based on aspect ratio
                 let aspectRatio = Double(viewModel.terminalRows) / Double(viewModel.terminalCols)
                 let newHeight = Int(Double(width) * aspectRatio)
                 viewModel.resize(cols: width, rows: newHeight)
             }
         }
         .onChange(of: viewModel.isAtBottom) { _, newValue in
-            // Update scroll button visibility
             withAnimation(Theme.Animation.smooth) {
                 showScrollToBottom = !newValue
             }
         }
-        .sheet(isPresented: $showingFileBrowser) {
-            FileBrowserView(
-                initialPath: session.workingDir,
-                mode: .browseFiles
-            ) { selectedPath in
-                // For browse mode, we just dismiss - could be extended to insert path
-                showingFileBrowser = false
-            }
-        }
-        .onKeyPress(.o, modifiers: .command) {
-            if session.isRunning {
+        .onKeyPress(keys: ["o"]) { press in
+            if press.modifiers.contains(.command) && session.isRunning {
                 showingFileBrowser = true
                 return .handled
             }
             return .ignored
+        }
+    }
+    
+    // MARK: - View Components
+    
+    private var mainContent: some View {
+        ZStack {
+            selectedTheme.background
+                .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                if viewModel.isConnecting {
+                    loadingView
+                } else if let error = viewModel.errorMessage {
+                    errorView(error)
+                } else {
+                    terminalContent
+                }
+            }
+        }
+    }
+    
+    private var navigationToolbarItems: some ToolbarContent {
+        Group {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Close") {
+                    dismiss()
+                }
+                .foregroundColor(Theme.Colors.primaryAccent)
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                menuButton
+            }
+        }
+    }
+    
+    private var bottomToolbarItems: some ToolbarContent {
+        ToolbarItemGroup(placement: .bottomBar) {
+            terminalSizeIndicator
+            Spacer()
+            sessionStatusIndicator
+            pidIndicator
+        }
+    }
+    
+    private var recordingIndicator: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            if viewModel.castRecorder.isRecording {
+                recordingView
+            }
+        }
+    }
+    
+    // MARK: - Toolbar Components
+    
+    private var menuButton: some View {
+        Menu {
+            terminalMenuItems
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .foregroundColor(Theme.Colors.primaryAccent)
+        }
+    }
+    
+    @ViewBuilder
+    private var terminalMenuItems: some View {
+        Button(action: { viewModel.clearTerminal() }, label: {
+            Label("Clear", systemImage: "clear")
+        })
+        
+        Button(action: { showingFontSizeSheet = true }, label: {
+            Label("Font Size", systemImage: "textformat.size")
+        })
+        
+        Button(action: { showingTerminalWidthSheet = true }, label: {
+            Label("Terminal Width", systemImage: "arrow.left.and.right")
+        })
+        
+        Button(action: { viewModel.toggleFitToWidth() }, label: {
+            Label(
+                viewModel.fitToWidth ? "Fixed Width" : "Fit to Width",
+                systemImage: viewModel.fitToWidth ? "arrow.left.and.right.square" : "arrow.left.and.right.square.fill"
+            )
+        })
+        
+        Button(action: { showingTerminalThemeSheet = true }, label: {
+            Label("Theme", systemImage: "paintbrush")
+        })
+        
+        Button(action: { viewModel.copyBuffer() }, label: {
+            Label("Copy All", systemImage: "doc.on.doc")
+        })
+        
+        Divider()
+        
+        recordingMenuItems
+    }
+    
+    @ViewBuilder
+    private var recordingMenuItems: some View {
+        if viewModel.castRecorder.isRecording {
+            Button(action: {
+                viewModel.stopRecording()
+                showingRecordingSheet = true
+            }, label: {
+                Label("Stop Recording", systemImage: "stop.circle.fill")
+                    .foregroundColor(.red)
+            })
+        } else {
+            Button(action: { viewModel.startRecording() }, label: {
+                Label("Start Recording", systemImage: "record.circle")
+            })
+        }
+        
+        Button(action: { showingRecordingSheet = true }, label: {
+            Label("Export Recording", systemImage: "square.and.arrow.up")
+        })
+        .disabled(viewModel.castRecorder.events.isEmpty)
+    }
+    
+    @ViewBuilder
+    private var terminalSizeIndicator: some View {
+        if viewModel.terminalCols > 0 && viewModel.terminalRows > 0 {
+            HStack(spacing: Theme.Spacing.extraSmall) {
+                Image(systemName: "rectangle.split.3x1")
+                    .font(.caption)
+                    .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
+                Text("\(viewModel.terminalCols) × \(viewModel.terminalRows)")
+                    .font(Theme.Typography.terminalSystem(size: 12))
+                    .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
+            }
+        }
+    }
+    
+    private var sessionStatusIndicator: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(session.isRunning ? Theme.Colors.successAccent : Theme.Colors.terminalForeground.opacity(0.3))
+                .frame(width: 6, height: 6)
+            Text(session.isRunning ? "Running" : "Exited")
+                .font(Theme.Typography.terminalSystem(size: 12))
+                .foregroundColor(session.isRunning ? Theme.Colors.successAccent : Theme.Colors.terminalForeground.opacity(0.5))
+        }
+    }
+    
+    @ViewBuilder
+    private var pidIndicator: some View {
+        if let pid = session.pid {
+            Spacer()
+            Text("PID: \(pid)")
+                .font(Theme.Typography.terminalSystem(size: 12))
+                .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
+                .onTapGesture {
+                    UIPasteboard.general.string = String(pid)
+                    HapticFeedback.notification(.success)
+                }
+        }
+    }
+    
+    private var recordingView: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(Color.red)
+                .frame(width: 8, height: 8)
+                .overlay(
+                    Circle()
+                        .fill(Color.red.opacity(0.3))
+                        .frame(width: 16, height: 16)
+                        .scaleEffect(viewModel.recordingPulse ? 1.5 : 1.0)
+                        .animation(
+                            .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
+                            value: viewModel.recordingPulse
+                        )
+                )
+            Text("REC")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.red)
+        }
+        .onAppear {
+            viewModel.recordingPulse = true
         }
     }
 
