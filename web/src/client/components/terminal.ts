@@ -1235,7 +1235,7 @@ export class Terminal extends LitElement {
           class="terminal-container w-full h-full overflow-hidden"
           tabindex="0"
           contenteditable="false"
-          style="view-transition-name: terminal-${this.sessionId}"
+          style="view-transition-name: session-${this.sessionId}"
           @paste=${this.handlePaste}
           @click=${this.handleClick}
         ></div>

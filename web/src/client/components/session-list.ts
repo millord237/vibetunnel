@@ -61,11 +61,34 @@ export class SessionList extends LitElement {
     );
   }
 
-  private handleSessionKilled(e: CustomEvent) {
-    const { sessionId } = e.detail;
+  private async handleSessionKilled(e: CustomEvent) {
+    const { sessionId, session } = e.detail;
     logger.debug(`session ${sessionId} killed, updating session list`);
 
-    // Immediately remove the session from the local state for instant UI feedback
+    // Check if this is a cleanup action (exited session) vs kill action (running session)
+    const isCleanup = session?.status === 'exited';
+
+    if (isCleanup) {
+      // Find the session card element for cleanup animation
+      const sessionCards = this.querySelectorAll('session-card');
+      let targetCard: HTMLElement | null = null;
+
+      sessionCards.forEach((card) => {
+        const sessionCard = card as HTMLElement & { session?: { id: string } };
+        if (sessionCard.session?.id === sessionId) {
+          targetCard = sessionCard;
+        }
+      });
+
+      // Apply black hole animation to the card
+      if (targetCard) {
+        (targetCard as HTMLElement).classList.add('black-hole-collapsing');
+        // Wait for animation to complete
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    }
+
+    // Remove the session from the local state
     this.sessions = this.sessions.filter((session) => session.id !== sessionId);
 
     // Then trigger a refresh to get the latest server state
@@ -96,6 +119,35 @@ export class SessionList extends LitElement {
       });
 
       if (response.ok) {
+        // Get the list of exited sessions before cleanup
+        const exitedSessions = this.sessions.filter((s) => s.status === 'exited');
+
+        // Apply black hole animation to all exited sessions
+        if (exitedSessions.length > 0) {
+          const sessionCards = this.querySelectorAll('session-card');
+          const exitedCards: HTMLElement[] = [];
+
+          sessionCards.forEach((card) => {
+            const sessionCard = card as HTMLElement & { session?: { id: string; status: string } };
+            if (sessionCard.session?.status === 'exited') {
+              exitedCards.push(sessionCard);
+            }
+          });
+
+          // Apply animation to all exited cards
+          exitedCards.forEach((card) => {
+            card.classList.add('black-hole-collapsing');
+          });
+
+          // Wait for animation to complete
+          if (exitedCards.length > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 300));
+          }
+
+          // Remove all exited sessions at once
+          this.sessions = this.sessions.filter((session) => session.status !== 'exited');
+        }
+
         this.dispatchEvent(new CustomEvent('refresh'));
       } else {
         this.dispatchEvent(

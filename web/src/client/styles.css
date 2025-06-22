@@ -722,8 +722,8 @@ body {
 /* View Transitions */
 @supports (view-transition-name: none) {
   ::view-transition {
-    /* Set the transition duration to 0.1s as requested */
-    --transition-duration: 100ms;
+    /* Set the transition duration to 0.2s */
+    --transition-duration: 200ms;
   }
 
   ::view-transition-group(*) {
@@ -849,5 +849,65 @@ body {
     to {
       opacity: 0;
     }
+  }
+
+  /* Black hole collapse animation for session removal */
+  @keyframes black-hole-collapse {
+    0% {
+      transform: scale(1) rotate(0deg);
+      opacity: 1;
+      filter: brightness(1);
+    }
+    50% {
+      transform: scale(0.3) rotate(180deg);
+      opacity: 0.8;
+      filter: brightness(0.6) hue-rotate(90deg);
+    }
+    100% {
+      transform: scale(0) rotate(360deg);
+      opacity: 0;
+      filter: brightness(0) hue-rotate(180deg);
+    }
+  }
+
+  /* Zoom animations for session navigation */
+  @keyframes zoom-in {
+    from {
+      transform: scale(0.7);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes zoom-out {
+    from {
+      transform: scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: scale(1.3);
+      opacity: 0;
+    }
+  }
+
+  /* Session navigation transitions */
+  ::view-transition-old(session-*) {
+    animation: zoom-out 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: center;
+  }
+
+  ::view-transition-new(session-*) {
+    animation: zoom-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: center;
+  }
+
+  /* Black hole collapse animation class */
+  .black-hole-collapsing {
+    animation: black-hole-collapse 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
+    transform-origin: center;
+    pointer-events: none;
   }
 }
