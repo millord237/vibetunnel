@@ -5,6 +5,9 @@ import { RemoteRegistry } from './remote-registry.js';
 import { HQClient } from './hq-client.js';
 import { isShuttingDown } from '../server.js';
 import { PtyManager } from '../pty/index.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('control-dir-watcher');
 
 interface ControlDirWatcherConfig {
   controlDir: string;
@@ -25,7 +28,7 @@ export class ControlDirWatcher {
   start(): void {
     // Create control directory if it doesn't exist
     if (!fs.existsSync(this.config.controlDir)) {
-      console.log(
+      logger.log(
         chalk.yellow(`Control directory ${this.config.controlDir} does not exist, creating it...`)
       );
       fs.mkdirSync(this.config.controlDir, { recursive: true });
@@ -41,7 +44,7 @@ export class ControlDirWatcher {
       }
     );
 
-    console.log(chalk.green(`Control directory watcher started for ${this.config.controlDir}`));
+    logger.log(chalk.green(`Control directory watcher started for ${this.config.controlDir}`));
   }
 
   private async handleFileChange(filename: string): Promise<void> {
@@ -57,14 +60,14 @@ export class ControlDirWatcher {
         const sessionData = JSON.parse(fs.readFileSync(sessionJsonPath, 'utf8'));
         const sessionId = sessionData.session_id || filename;
 
-        console.log(chalk.blue(`Detected new external session: ${sessionId}`));
+        logger.log(chalk.blue(`Detected new external session: ${sessionId}`));
 
         // Check if PtyManager already knows about this session
         if (this.config.ptyManager) {
           const existingSession = this.config.ptyManager.getSession(sessionId);
           if (!existingSession) {
             // This is a new external session, PtyManager needs to track it
-            console.log(chalk.green(`Attaching to external session: ${sessionId}`));
+            logger.log(chalk.green(`Attaching to external session: ${sessionId}`));
             // PtyManager will pick it up through its own session listing
             // since it reads from the control directory
           }
@@ -75,7 +78,7 @@ export class ControlDirWatcher {
           try {
             await this.notifyHQAboutSession(sessionId, 'created');
           } catch (error) {
-            console.error(chalk.red(`Failed to notify HQ about new session ${sessionId}:`), error);
+            logger.error(chalk.red(`Failed to notify HQ about new session ${sessionId}:`), error);
           }
         }
 
@@ -84,7 +87,7 @@ export class ControlDirWatcher {
       } else if (!fs.existsSync(sessionPath)) {
         // Session directory was removed
         const sessionId = filename;
-        console.log(chalk.yellow(`Detected removed external session: ${sessionId}`));
+        logger.log(chalk.yellow(`Detected removed external session: ${sessionId}`));
 
         // If we're a remote server registered with HQ, immediately notify HQ
         if (this.config.hqClient && !isShuttingDown()) {
@@ -93,7 +96,7 @@ export class ControlDirWatcher {
           } catch (error) {
             // During shutdown, this is expected
             if (!isShuttingDown()) {
-              console.error(
+              logger.error(
                 chalk.red(`Failed to notify HQ about deleted session ${sessionId}:`),
                 error
               );
@@ -107,7 +110,7 @@ export class ControlDirWatcher {
         }
       }
     } catch (error) {
-      console.error(chalk.red(`Error handling file change for ${filename}:`), error);
+      logger.error(chalk.red(`Error handling file change for ${filename}:`), error);
     }
   }
 
@@ -144,14 +147,14 @@ export class ControlDirWatcher {
       throw new Error(`HQ responded with ${response.status}`);
     }
 
-    console.log(chalk.green(`Notified HQ about ${action} session ${sessionId}`));
+    logger.log(chalk.green(`Notified HQ about ${action} session ${sessionId}`));
   }
 
   stop(): void {
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;
-      console.log(chalk.yellow('Control directory watcher stopped'));
+      logger.log(chalk.yellow('Control directory watcher stopped'));
     }
   }
 }

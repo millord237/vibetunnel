@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import chalk from 'chalk';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('auth');
 
 interface AuthConfig {
   basicAuthUsername: string | null;
@@ -20,7 +23,7 @@ export function createAuthMiddleware(config: AuthConfig) {
       return next();
     }
 
-    console.log(
+    logger.debug(
       `Auth check: ${req.method} ${req.path}, auth header: ${req.headers.authorization || 'none'}`
     );
 
@@ -37,10 +40,10 @@ export function createAuthMiddleware(config: AuthConfig) {
         return next();
       } else if (config.bearerToken) {
         // We have a bearer token configured but it doesn't match
-        console.log(`Bearer token mismatch: expected ${config.bearerToken}, got ${token}`);
+        logger.warn(`Bearer token mismatch: expected ${config.bearerToken}, got ${token}`);
       }
     } else {
-      console.log(`No bearer token in request, bearerToken configured: ${!!config.bearerToken}`);
+      logger.debug(`No bearer token in request, bearerToken configured: ${!!config.bearerToken}`);
     }
 
     // Check Basic auth
@@ -55,7 +58,7 @@ export function createAuthMiddleware(config: AuthConfig) {
     }
 
     // No valid auth provided
-    console.log(chalk.red(`Unauthorized request to ${req.method} ${req.path} from ${req.ip}`));
+    logger.warn(chalk.red(`Unauthorized request to ${req.method} ${req.path} from ${req.ip}`));
     res.setHeader('WWW-Authenticate', 'Basic realm="VibeTunnel"');
     res.status(401).json({ error: 'Authentication required' });
   };

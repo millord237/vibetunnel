@@ -6,10 +6,13 @@ import { StreamWatcher } from '../services/stream-watcher.js';
 import { RemoteRegistry } from '../services/remote-registry.js';
 import { ActivityMonitor } from '../services/activity-monitor.js';
 import { cellsToText } from '../../shared/terminal-text-formatter.js';
+import { createLogger } from '../utils/logger.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as net from 'net';
+
+const logger = createLogger('sessions');
 
 interface SessionRoutesConfig {
   ptyManager: PtyManager;
@@ -49,7 +52,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
       // Get local sessions
       const localSessions = ptyManager.listSessions();
-      console.log(`Found ${localSessions.length} local sessions`);
+      logger.log(`Found ${localSessions.length} local sessions`);
 
       // Add source info to local sessions
       const localSessionsWithSource = localSessions.map((session) => ({
@@ -62,7 +65,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       // If in HQ mode, aggregate sessions from all remotes
       if (isHQMode && remoteRegistry) {
         const remotes = remoteRegistry.getRemotes();
-        console.log(`HQ Mode: Checking ${remotes.length} remote servers for sessions`);
+        logger.log(`HQ Mode: Checking ${remotes.length} remote servers for sessions`);
 
         // Fetch sessions from each remote in parallel
         const remotePromises = remotes.map(async (remote) => {
@@ -76,7 +79,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
             if (response.ok) {
               const remoteSessions = await response.json();
-              console.log(`Got ${remoteSessions.length} sessions from remote ${remote.name}`);
+              logger.log(`Got ${remoteSessions.length} sessions from remote ${remote.name}`);
 
               // Track session IDs for this remote
               const sessionIds = remoteSessions.map((s: Session) => s.id);
@@ -91,28 +94,28 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
                 remoteUrl: remote.url,
               }));
             } else {
-              console.error(
+              logger.error(
                 `Failed to get sessions from remote ${remote.name}: HTTP ${response.status}`
               );
               return [];
             }
           } catch (error) {
-            console.error(`Failed to get sessions from remote ${remote.name}:`, error);
+            logger.error(`Failed to get sessions from remote ${remote.name}:`, error);
             return [];
           }
         });
 
         const remoteResults = await Promise.all(remotePromises);
         const remoteSessions = remoteResults.flat();
-        console.log(`Total remote sessions: ${remoteSessions.length}`);
+        logger.log(`Total remote sessions: ${remoteSessions.length}`);
 
         allSessions = [...allSessions, ...remoteSessions];
       }
 
-      console.log(`Returning ${allSessions.length} total sessions`);
+      logger.log(`Returning ${allSessions.length} total sessions`);
       res.json(allSessions);
     } catch (error) {
-      console.error('Error listing sessions:', error);
+      logger.error('Error listing sessions:', error);
       res.status(500).json({ error: 'Failed to list sessions' });
     }
   });
@@ -133,7 +136,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
           return res.status(404).json({ error: 'Remote server not found' });
         }
 
-        console.log(`Forwarding session creation to remote ${remote.name}`);
+        logger.log(`Forwarding session creation to remote ${remote.name}`);
 
         // Forward the request to the remote server
         const response = await fetch(`${remote.url}/api/sessions`, {
@@ -177,7 +180,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
           const sessionName = name || `session_${Date.now()}`;
 
           // Request Mac app to spawn terminal
-          console.log(`Requesting terminal spawn with command: ${JSON.stringify(command)}`);
+          logger.log(`Requesting terminal spawn with command: ${JSON.stringify(command)}`);
           const spawnResult = await requestTerminalSpawn({
             sessionId,
             sessionName,
@@ -187,7 +190,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
           if (!spawnResult.success) {
             if (spawnResult.error?.includes('ECONNREFUSED')) {
-              console.log(
+              logger.log(
                 'Terminal spawn requested but socket not available, falling back to normal spawn'
               );
             } else {
@@ -202,7 +205,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
             return;
           }
         } catch (error) {
-          console.error('Error spawning terminal:', error);
+          logger.error('Error spawning terminal:', error);
           res.status(500).json({
             error: 'Failed to spawn terminal',
             details: error instanceof Error ? error.message : 'Unknown error',
@@ -210,7 +213,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
           return;
         }
       } else if (spawn_terminal && !fs.existsSync(socketPath)) {
-        console.log(
+        logger.log(
           'Terminal spawn requested but socket not available, falling back to normal spawn'
         );
       }
@@ -220,7 +223,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
         name || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const cwd = resolvePath(workingDir, process.cwd());
 
-      console.log(`Creating session with PTY service: ${command.join(' ')} in ${cwd}`);
+      logger.log(`Creating session with PTY service: ${command.join(' ')} in ${cwd}`);
 
       const result = await ptyManager.createSession(command, {
         name: sessionName,
@@ -228,13 +231,13 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       });
 
       const { sessionId, sessionInfo } = result;
-      console.log(`Session created: ${sessionId} (PID: ${sessionInfo.pid})`);
+      logger.log(`Session created: ${sessionId} (PID: ${sessionInfo.pid})`);
 
       // Stream watcher is set up when clients connect to the stream endpoint
 
       res.json({ sessionId });
     } catch (error) {
-      console.error('Error creating session:', error);
+      logger.error('Error creating session:', error);
       if (error instanceof PtyError) {
         res.status(500).json({ error: 'Failed to create session', details: error.message });
       } else {
@@ -278,7 +281,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
               };
             }
           } catch (error) {
-            console.error(`Failed to get activity from remote ${remote.name}:`, error);
+            logger.error(`Failed to get activity from remote ${remote.name}:`, error);
           }
           return null;
         });
@@ -296,7 +299,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
       res.json(activityStatus);
     } catch (error) {
-      console.error('Error getting activity status:', error);
+      logger.error('Error getting activity status:', error);
       res.status(500).json({ error: 'Failed to get activity status' });
     }
   });
@@ -325,7 +328,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
             return res.json(await response.json());
           } catch (error) {
-            console.error(`Failed to get activity from remote ${remote.name}:`, error);
+            logger.error(`Failed to get activity from remote ${remote.name}:`, error);
             return res.status(503).json({ error: 'Failed to reach remote server' });
           }
         }
@@ -338,7 +341,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       }
       res.json(activityStatus);
     } catch (error) {
-      console.error(`Error getting activity status for session ${sessionId}:`, error);
+      logger.error(`Error getting activity status for session ${sessionId}:`, error);
       res.status(500).json({ error: 'Failed to get activity status' });
     }
   });
@@ -367,7 +370,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
             return res.json(await response.json());
           } catch (error) {
-            console.error(`Failed to get session info from remote ${remote.name}:`, error);
+            logger.error(`Failed to get session info from remote ${remote.name}:`, error);
             return res.status(503).json({ error: 'Failed to reach remote server' });
           }
         }
@@ -381,7 +384,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       }
       res.json(session);
     } catch (error) {
-      console.error('Error getting session info:', error);
+      logger.error('Error getting session info:', error);
       res.status(500).json({ error: 'Failed to get session info' });
     }
   });
@@ -411,11 +414,11 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
             // Remote killed the session, now update our registry
             remoteRegistry.removeSessionFromRemote(sessionId);
-            console.log(`Remote session ${sessionId} killed on ${remote.name}`);
+            logger.log(`Remote session ${sessionId} killed on ${remote.name}`);
 
             return res.json(await response.json());
           } catch (error) {
-            console.error(`Failed to kill session on remote ${remote.name}:`, error);
+            logger.error(`Failed to kill session on remote ${remote.name}:`, error);
             return res.status(503).json({ error: 'Failed to reach remote server' });
           }
         }
@@ -429,11 +432,11 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       }
 
       await ptyManager.killSession(sessionId, 'SIGTERM');
-      console.log(`Local session ${sessionId} killed`);
+      logger.log(`Local session ${sessionId} killed`);
 
       res.json({ success: true, message: 'Session killed' });
     } catch (error) {
-      console.error('Error killing session:', error);
+      logger.error('Error killing session:', error);
       if (error instanceof PtyError) {
         res.status(500).json({ error: 'Failed to kill session', details: error.message });
       } else {
@@ -467,11 +470,11 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
             // Remote cleaned up the session, now update our registry
             remoteRegistry.removeSessionFromRemote(sessionId);
-            console.log(`Remote session ${sessionId} cleaned up on ${remote.name}`);
+            logger.log(`Remote session ${sessionId} cleaned up on ${remote.name}`);
 
             return res.json(await response.json());
           } catch (error) {
-            console.error(`Failed to cleanup session on remote ${remote.name}:`, error);
+            logger.error(`Failed to cleanup session on remote ${remote.name}:`, error);
             return res.status(503).json({ error: 'Failed to reach remote server' });
           }
         }
@@ -479,11 +482,11 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
       // Local session handling - just cleanup, no registry updates needed
       ptyManager.cleanupSession(sessionId);
-      console.log(`Local session ${sessionId} cleaned up`);
+      logger.log(`Local session ${sessionId} cleaned up`);
 
       res.json({ success: true, message: 'Session cleaned up' });
     } catch (error) {
-      console.error('Error cleaning up session:', error);
+      logger.error('Error cleaning up session:', error);
       if (error instanceof PtyError) {
         res.status(500).json({ error: 'Failed to cleanup session', details: error.message });
       } else {
@@ -497,7 +500,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
     try {
       // Clean up local sessions
       const localCleanedSessions = ptyManager.cleanupExitedSessions();
-      console.log(`Cleaned up ${localCleanedSessions.length} local exited sessions`);
+      logger.log(`Cleaned up ${localCleanedSessions.length} local exited sessions`);
 
       // Remove cleaned local sessions from remote registry if in HQ mode
       if (isHQMode && remoteRegistry) {
@@ -541,7 +544,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
               throw new Error(`HTTP ${response.status}`);
             }
           } catch (error) {
-            console.error(`Failed to cleanup sessions on remote ${remote.name}:`, error);
+            logger.error(`Failed to cleanup sessions on remote ${remote.name}:`, error);
             remoteResults.push({
               remoteName: remote.name,
               cleaned: 0,
@@ -560,7 +563,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
         remoteResults,
       });
     } catch (error) {
-      console.error('Error cleaning up exited sessions:', error);
+      logger.error('Error cleaning up exited sessions:', error);
       if (error instanceof PtyError) {
         res
           .status(500)
@@ -604,7 +607,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
             res.setHeader('Content-Type', 'text/plain');
             return res.send(text);
           } catch (error) {
-            console.error(`Failed to get text from remote ${remote.name}:`, error);
+            logger.error(`Failed to get text from remote ${remote.name}:`, error);
             return res.status(503).json({ error: 'Failed to reach remote server' });
           }
         }
@@ -626,7 +629,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       res.setHeader('Content-Type', 'text/plain');
       res.send(plainText);
     } catch (error) {
-      console.error('Error getting plain text:', error);
+      logger.error('Error getting plain text:', error);
       res.status(500).json({ error: 'Failed to get terminal text' });
     }
   });
@@ -635,7 +638,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
   router.get('/sessions/:sessionId/buffer', async (req, res) => {
     const sessionId = req.params.sessionId;
 
-    console.log(`[BUFFER] Client requesting buffer for session ${sessionId}`);
+    logger.debug(`[BUFFER] Client requesting buffer for session ${sessionId}`);
 
     try {
       // If in HQ mode, check if this is a remote session
@@ -660,7 +663,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
             res.setHeader('Content-Type', 'application/octet-stream');
             return res.send(Buffer.from(buffer));
           } catch (error) {
-            console.error(`Failed to get buffer from remote ${remote.name}:`, error);
+            logger.error(`Failed to get buffer from remote ${remote.name}:`, error);
             return res.status(503).json({ error: 'Failed to reach remote server' });
           }
         }
@@ -669,7 +672,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       // Local session handling
       const session = ptyManager.getSession(sessionId);
       if (!session) {
-        console.error(`[BUFFER] Session ${sessionId} not found`);
+        logger.error(`[BUFFER] Session ${sessionId} not found`);
         return res.status(404).json({ error: 'Session not found' });
       }
 
@@ -679,7 +682,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       // Encode as binary buffer
       const buffer = terminalManager.encodeSnapshot(snapshot);
 
-      console.log(
+      logger.debug(
         `[BUFFER] Sending buffer for session ${sessionId}: ${buffer.length} bytes, ` +
           `dimensions: ${snapshot.cols}x${snapshot.rows}, cursor: (${snapshot.cursorX},${snapshot.cursorY})`
       );
@@ -688,7 +691,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       res.setHeader('Content-Type', 'application/octet-stream');
       res.send(buffer);
     } catch (error) {
-      console.error('[BUFFER] Error getting buffer:', error);
+      logger.error('[BUFFER] Error getting buffer:', error);
       res.status(500).json({ error: 'Failed to get terminal buffer' });
     }
   });
@@ -697,7 +700,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
   router.get('/sessions/:sessionId/stream', async (req, res) => {
     const sessionId = req.params.sessionId;
 
-    console.log(
+    logger.log(
       `[STREAM] New SSE client connected to session ${sessionId} from ${req.get('User-Agent')?.substring(0, 50) || 'unknown'}`
     );
 
@@ -746,7 +749,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
                 res.write(chunk);
               }
             } catch (error) {
-              console.error(`Stream proxy error for remote ${remote.name}:`, error);
+              logger.error(`Stream proxy error for remote ${remote.name}:`, error);
             }
           };
 
@@ -754,13 +757,13 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
           // Clean up on disconnect
           req.on('close', () => {
-            console.log(`[STREAM] SSE client disconnected from remote session ${sessionId}`);
+            logger.log(`[STREAM] SSE client disconnected from remote session ${sessionId}`);
             controller.abort();
           });
 
           return;
         } catch (error) {
-          console.error(`Failed to stream from remote ${remote.name}:`, error);
+          logger.error(`Failed to stream from remote ${remote.name}:`, error);
           return res.status(503).json({ error: 'Failed to reach remote server' });
         }
       }
@@ -813,7 +816,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
     // Clean up on disconnect
     req.on('close', () => {
-      console.log(`[STREAM] SSE client disconnected from session ${sessionId}`);
+      logger.log(`[STREAM] SSE client disconnected from session ${sessionId}`);
       streamWatcher.removeClient(sessionId, res);
       clearInterval(heartbeat);
     });
@@ -860,7 +863,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
             return res.json(await response.json());
           } catch (error) {
-            console.error(`Failed to send input to remote ${remote.name}:`, error);
+            logger.error(`Failed to send input to remote ${remote.name}:`, error);
             return res.status(503).json({ error: 'Failed to reach remote server' });
           }
         }
@@ -869,22 +872,22 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       // Local session handling
       const session = ptyManager.getSession(sessionId);
       if (!session) {
-        console.error(`Session ${sessionId} not found for input`);
+        logger.error(`Session ${sessionId} not found for input`);
         return res.status(404).json({ error: 'Session not found' });
       }
 
       if (session.status !== 'running') {
-        console.error(`Session ${sessionId} is not running (status: ${session.status})`);
+        logger.error(`Session ${sessionId} is not running (status: ${session.status})`);
         return res.status(400).json({ error: 'Session is not running' });
       }
 
       const inputData = text !== undefined ? { text } : { key };
-      console.log(`Sending input to session ${sessionId}: ${JSON.stringify(inputData)}`);
+      logger.debug(`Sending input to session ${sessionId}: ${JSON.stringify(inputData)}`);
 
       ptyManager.sendInput(sessionId, inputData);
       res.json({ success: true });
     } catch (error) {
-      console.error('Error sending input:', error);
+      logger.error('Error sending input:', error);
       if (error instanceof PtyError) {
         res.status(500).json({ error: 'Failed to send input', details: error.message });
       } else {
@@ -906,7 +909,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       return res.status(400).json({ error: 'Cols and rows must be between 1 and 1000' });
     }
 
-    console.log(`Resizing session ${sessionId} to ${cols}x${rows}`);
+    logger.log(`Resizing session ${sessionId} to ${cols}x${rows}`);
 
     try {
       // If in HQ mode, check if this is a remote session
@@ -931,7 +934,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
             return res.json(await response.json());
           } catch (error) {
-            console.error(`Failed to resize session on remote ${remote.name}:`, error);
+            logger.error(`Failed to resize session on remote ${remote.name}:`, error);
             return res.status(503).json({ error: 'Failed to reach remote server' });
           }
         }
@@ -940,22 +943,22 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       // Local session handling
       const session = ptyManager.getSession(sessionId);
       if (!session) {
-        console.error(`Session ${sessionId} not found for resize`);
+        logger.error(`Session ${sessionId} not found for resize`);
         return res.status(404).json({ error: 'Session not found' });
       }
 
       if (session.status !== 'running') {
-        console.error(`Session ${sessionId} is not running (status: ${session.status})`);
+        logger.error(`Session ${sessionId} is not running (status: ${session.status})`);
         return res.status(400).json({ error: 'Session is not running' });
       }
 
       // Resize the session
       ptyManager.resizeSession(sessionId, cols, rows);
-      console.log(`Successfully resized session ${sessionId} to ${cols}x${rows}`);
+      logger.log(`Successfully resized session ${sessionId} to ${cols}x${rows}`);
 
       res.json({ success: true, cols, rows });
     } catch (error) {
-      console.error('Error resizing session via PTY service:', error);
+      logger.error('Error resizing session via PTY service:', error);
       if (error instanceof PtyError) {
         res.status(500).json({ error: 'Failed to resize session', details: error.message });
       } else {
@@ -1016,24 +1019,24 @@ async function requestTerminalSpawn(params: {
 
   return new Promise((resolve) => {
     const client = net.createConnection(socketPath, () => {
-      console.log(`Connected to terminal spawn service for session ${params.sessionId}`);
+      logger.log(`Connected to terminal spawn service for session ${params.sessionId}`);
       client.write(JSON.stringify(spawnRequest));
     });
 
     client.on('data', (data) => {
       try {
         const response = JSON.parse(data.toString());
-        console.log(`Terminal spawn response:`, response);
+        logger.log(`Terminal spawn response:`, response);
         resolve({ success: response.success, error: response.error });
       } catch (error) {
-        console.error('Failed to parse terminal spawn response:', error);
+        logger.error('Failed to parse terminal spawn response:', error);
         resolve({ success: false, error: 'Invalid response from terminal spawn service' });
       }
       client.end();
     });
 
     client.on('error', (error) => {
-      console.error('Failed to connect to terminal spawn service:', error);
+      logger.error('Failed to connect to terminal spawn service:', error);
       resolve({
         success: false,
         error: `Connection failed: ${error.message}`,

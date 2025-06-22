@@ -1,4 +1,7 @@
 import { isShuttingDown } from '../server.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('remote-registry');
 
 export interface RemoteServer {
   id: string;
@@ -40,7 +43,7 @@ export class RemoteRegistry {
 
     this.remotes.set(remote.id, registeredRemote);
     this.remotesByName.set(remote.name, registeredRemote);
-    console.log(`Remote registered: ${remote.name} (${remote.id}) from ${remote.url}`);
+    logger.log(`Remote registered: ${remote.name} (${remote.id}) from ${remote.url}`);
 
     // Immediately check health of new remote
     this.checkRemoteHealth(registeredRemote);
@@ -51,7 +54,7 @@ export class RemoteRegistry {
   unregister(remoteId: string): boolean {
     const remote = this.remotes.get(remoteId);
     if (remote) {
-      console.log(`Remote unregistered: ${remote.name} (${remoteId})`);
+      logger.log(`Remote unregistered: ${remote.name} (${remoteId}`);
 
       // Clean up session mappings
       for (const sessionId of remote.sessionIds) {
@@ -148,7 +151,7 @@ export class RemoteRegistry {
     } catch (error) {
       // During shutdown, don't log errors or unregister remotes
       if (!isShuttingDown()) {
-        console.log(`Remote failed health check: ${remote.name} (${remote.id}) - ${error}`);
+        logger.warn(`Remote failed health check: ${remote.name} (${remote.id}) - ${error}`);
         // Remove the remote if it fails health check
         this.unregister(remote.id);
       }
@@ -168,7 +171,7 @@ export class RemoteRegistry {
       );
 
       Promise.all(healthChecks).catch((err) => {
-        console.error('Error in health checks:', err);
+        logger.error('Error in health checks:', err);
       });
     }, this.HEALTH_CHECK_INTERVAL);
   }

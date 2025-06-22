@@ -58,7 +58,7 @@ export function closeLogger(): void {
 function formatMessage(
   level: string,
   module: string,
-  args: any[]
+  args: unknown[]
 ): { console: string; file: string } {
   const timestamp = new Date().toISOString();
 
@@ -127,7 +127,7 @@ export function setDebugMode(enabled: boolean): void {
 /**
  * Log from a specific module (used by client-side API)
  */
-export function logFromModule(level: string, module: string, args: any[]): void {
+export function logFromModule(level: string, module: string, args: unknown[]): void {
   if (level === 'DEBUG' && !debugMode) return;
 
   const { console: consoleMsg, file: fileMsg } = formatMessage(level, module, args);
@@ -154,22 +154,22 @@ export function logFromModule(level: string, module: string, args: any[]): void 
  */
 export function createLogger(moduleName: string) {
   return {
-    log: (...args: any[]) => {
+    log: (...args: unknown[]) => {
       const { console: consoleMsg, file: fileMsg } = formatMessage('LOG', moduleName, args);
       console.log(consoleMsg);
       writeToFile(fileMsg);
     },
-    warn: (...args: any[]) => {
+    warn: (...args: unknown[]) => {
       const { console: consoleMsg, file: fileMsg } = formatMessage('WARN', moduleName, args);
       console.warn(consoleMsg);
       writeToFile(fileMsg);
     },
-    error: (...args: any[]) => {
+    error: (...args: unknown[]) => {
       const { console: consoleMsg, file: fileMsg } = formatMessage('ERROR', moduleName, args);
       console.error(consoleMsg);
       writeToFile(fileMsg);
     },
-    debug: (...args: any[]) => {
+    debug: (...args: unknown[]) => {
       if (debugMode) {
         const { console: consoleMsg, file: fileMsg } = formatMessage('DEBUG', moduleName, args);
         console.log(consoleMsg);

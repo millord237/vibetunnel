@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { RemoteRegistry } from '../services/remote-registry.js';
 import chalk from 'chalk';
 import { isShuttingDown } from '../server.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('remotes');
 
 interface RemoteRoutesConfig {
   remoteRegistry: RemoteRegistry | null;
@@ -41,13 +44,13 @@ export function createRemoteRoutes(config: RemoteRoutesConfig): Router {
 
     try {
       const remote = remoteRegistry.register({ id, name, url, token });
-      console.log(chalk.green(`Remote registered: ${name} (${id}) from ${url}`));
+      logger.log(chalk.green(`Remote registered: ${name} (${id}) from ${url}`));
       res.json({ success: true, remote });
     } catch (error) {
       if (error instanceof Error && error.message.includes('already registered')) {
         return res.status(409).json({ error: error.message });
       }
-      console.error(chalk.red('Failed to register remote:'), error);
+      logger.error(chalk.red('Failed to register remote:'), error);
       res.status(500).json({ error: 'Failed to register remote' });
     }
   });
@@ -62,7 +65,7 @@ export function createRemoteRoutes(config: RemoteRoutesConfig): Router {
     const success = remoteRegistry.unregister(remoteId);
 
     if (success) {
-      console.log(chalk.yellow(`Remote unregistered: ${remoteId}`));
+      logger.log(chalk.yellow(`Remote unregistered: ${remoteId}`));
       res.json({ success: true });
     } else {
       res.status(404).json({ error: 'Remote not found' });
@@ -105,7 +108,7 @@ export function createRemoteRoutes(config: RemoteRoutesConfig): Router {
         const sessionIds = sessions.map((s) => s.id);
         remoteRegistry.updateRemoteSessions(remote.id, sessionIds);
 
-        console.log(
+        logger.log(
           chalk.green(
             `Updated sessions for remote ${remote.name}: ${sessionIds.length} sessions (${action} ${sessionId})`
           )
@@ -117,13 +120,11 @@ export function createRemoteRoutes(config: RemoteRoutesConfig): Router {
     } catch (error) {
       // During shutdown, connection failures are expected
       if (isShuttingDown()) {
-        console.log(
-          chalk.yellow(`Remote ${remote.name} refresh failed during shutdown (expected)`)
-        );
+        logger.log(chalk.yellow(`Remote ${remote.name} refresh failed during shutdown (expected)`));
         return res.status(503).json({ error: 'Server is shutting down' });
       }
 
-      console.error(chalk.red(`Failed to refresh sessions for remote ${remote.name}:`), error);
+      logger.error(chalk.red(`Failed to refresh sessions for remote ${remote.name}:`), error);
       res.status(500).json({ error: 'Failed to refresh sessions' });
     }
   });

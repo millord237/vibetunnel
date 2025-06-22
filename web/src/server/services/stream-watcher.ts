@@ -1,5 +1,8 @@
 import * as fs from 'fs';
 import { Response } from 'express';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('stream-watcher');
 
 interface StreamClient {
   response: Response;
@@ -65,8 +68,8 @@ export class StreamWatcher {
 
     // Add client to set
     watcherInfo.clients.add(client);
-    console.log(
-      `[STREAM] Added client to session ${sessionId}, total clients: ${watcherInfo.clients.size}`
+    logger.debug(
+      `Added client to session ${sessionId}, total clients: ${watcherInfo.clients.size}`
     );
   }
 
@@ -88,13 +91,13 @@ export class StreamWatcher {
 
     if (clientToRemove) {
       watcherInfo.clients.delete(clientToRemove);
-      console.log(
-        `[STREAM] Removed client from session ${sessionId}, remaining clients: ${watcherInfo.clients.size}`
+      logger.debug(
+        `Removed client from session ${sessionId}, remaining clients: ${watcherInfo.clients.size}`
       );
 
       // If no more clients, stop watching
       if (watcherInfo.clients.size === 0) {
-        console.log(`[STREAM] No more clients for session ${sessionId}, stopping watcher`);
+        logger.debug(`No more clients for session ${sessionId}, stopping watcher`);
         if (watcherInfo.watcher) {
           watcherInfo.watcher.close();
         }
@@ -164,16 +167,16 @@ export class StreamWatcher {
 
         // If exit event found, close connection
         if (exitEventFound) {
-          console.log(`[STREAM] Session already has exit event, closing connection`);
+          logger.debug(`Session already has exit event, closing connection`);
           client.response.end();
         }
       });
 
       stream.on('error', (error) => {
-        console.error(`[STREAM] Error streaming existing content:`, error);
+        logger.error(`Error streaming existing content:`, error);
       });
     } catch (error) {
-      console.error(`[STREAM] Error creating read stream:`, error);
+      logger.error(`Error creating read stream:`, error);
     }
   }
 
@@ -181,7 +184,7 @@ export class StreamWatcher {
    * Start watching a file for changes
    */
   private startWatching(sessionId: string, streamPath: string, watcherInfo: WatcherInfo): void {
-    console.log(`[STREAM] Using file watcher for session ${sessionId}`);
+    logger.debug(`Using file watcher for session ${sessionId}`);
 
     // Use standard fs.watch with stat checking
     watcherInfo.watcher = fs.watch(streamPath, { persistent: true }, (eventType) => {
@@ -221,13 +224,13 @@ export class StreamWatcher {
             }
           }
         } catch (error) {
-          console.error(`[STREAM] Error reading file changes:`, error);
+          logger.error(`Error reading file changes:`, error);
         }
       }
     });
 
     watcherInfo.watcher.on('error', (error) => {
-      console.error(`[STREAM] File watcher error for session ${sessionId}:`, error);
+      logger.error(`File watcher error for session ${sessionId}:`, error);
     });
   }
 
@@ -244,7 +247,7 @@ export class StreamWatcher {
       }
       if (Array.isArray(parsed) && parsed.length >= 3) {
         if (parsed[0] === 'exit') {
-          console.log(`[STREAM] Exit event detected: ${JSON.stringify(parsed)}`);
+          logger.debug(`Exit event detected: ${JSON.stringify(parsed)}`);
           eventData = `data: ${JSON.stringify(parsed)}\n\n`;
 
           // Send exit event to all clients and close connections
@@ -253,7 +256,7 @@ export class StreamWatcher {
               client.response.write(eventData);
               client.response.end();
             } catch (error) {
-              console.error(`[STREAM] Error writing to client:`, error);
+              logger.error(`Error writing to client:`, error);
             }
           }
           return;
@@ -269,7 +272,7 @@ export class StreamWatcher {
               // @ts-expect-error - flush exists but not in types
               if (client.response.flush) client.response.flush();
             } catch (error) {
-              console.error(`[STREAM] Error writing to client:`, error);
+              logger.error(`Error writing to client:`, error);
               // Client might be disconnected
             }
           }
@@ -288,7 +291,7 @@ export class StreamWatcher {
           // @ts-expect-error - flush exists but not in types
           if (client.response.flush) client.response.flush();
         } catch (error) {
-          console.error(`[STREAM] Error writing to client:`, error);
+          logger.error(`Error writing to client:`, error);
         }
       }
       return;

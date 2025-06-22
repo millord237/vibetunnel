@@ -19,6 +19,9 @@ import { BufferAggregator } from './services/buffer-aggregator.js';
 import { ActivityMonitor } from './services/activity-monitor.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getVersionInfo, printVersionBanner } from './version.js';
+import { createLogger, initLogger, closeLogger, setDebugMode } from './utils/logger.js';
+
+const logger = createLogger('server');
 
 // Global shutdown state management
 let shuttingDown = false;
@@ -43,6 +46,7 @@ interface Config {
   allowInsecureHQ: boolean;
   showHelp: boolean;
   showVersion: boolean;
+  debug: boolean;
 }
 
 // Show help message
@@ -58,6 +62,7 @@ Options:
   --port <number>       Server port (default: 4020 or PORT env var)
   --username <string>   Basic auth username (or VIBETUNNEL_USERNAME env var)
   --password <string>   Basic auth password (or VIBETUNNEL_PASSWORD env var)
+  --debug               Enable debug logging
 
 HQ Mode Options:
   --hq                  Run as HQ (headquarters) server
@@ -105,6 +110,7 @@ function parseArgs(): Config {
     allowInsecureHQ: false,
     showHelp: false,
     showVersion: false,
+    debug: false,
   };
 
   // Check for help flag first
@@ -146,10 +152,12 @@ function parseArgs(): Config {
       i++; // Skip the name value in next iteration
     } else if (args[i] === '--allow-insecure-hq') {
       config.allowInsecureHQ = true;
+    } else if (args[i] === '--debug') {
+      config.debug = true;
     } else if (args[i].startsWith('--')) {
       // Unknown argument
-      console.error(chalk.red(`ERROR: Unknown argument: ${args[i]}`));
-      console.error('Use --help to see available options');
+      logger.error(chalk.red(`ERROR: Unknown argument: ${args[i]}`));
+      logger.error('Use --help to see available options');
       process.exit(1);
     }
   }
@@ -172,10 +180,10 @@ function validateConfig(config: ReturnType<typeof parseArgs>) {
     (config.basicAuthUsername && !config.basicAuthPassword) ||
     (!config.basicAuthUsername && config.basicAuthPassword)
   ) {
-    console.error(
+    logger.error(
       chalk.red('ERROR: Both username and password must be provided for authentication')
     );
-    console.error(
+    logger.error(
       'Use --username and --password, or set both VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD'
     );
     process.exit(1);
@@ -183,22 +191,22 @@ function validateConfig(config: ReturnType<typeof parseArgs>) {
 
   // Validate HQ registration configuration
   if (config.hqUrl && (!config.hqUsername || !config.hqPassword)) {
-    console.error(chalk.red('ERROR: HQ username and password required when --hq-url is specified'));
-    console.error('Use --hq-username and --hq-password with --hq-url');
+    logger.error(chalk.red('ERROR: HQ username and password required when --hq-url is specified'));
+    logger.error('Use --hq-username and --hq-password with --hq-url');
     process.exit(1);
   }
 
   // Validate remote name is provided when registering with HQ
   if (config.hqUrl && !config.remoteName) {
-    console.error(chalk.red('ERROR: Remote name required when --hq-url is specified'));
-    console.error('Use --name to specify a unique name for this remote server');
+    logger.error(chalk.red('ERROR: Remote name required when --hq-url is specified'));
+    logger.error('Use --name to specify a unique name for this remote server');
     process.exit(1);
   }
 
   // Validate HQ URL is HTTPS unless explicitly allowed
   if (config.hqUrl && !config.hqUrl.startsWith('https://') && !config.allowInsecureHQ) {
-    console.error(chalk.red('ERROR: HQ URL must use HTTPS protocol'));
-    console.error('Use --allow-insecure-hq to allow HTTP for testing');
+    logger.error(chalk.red('ERROR: HQ URL must use HTTPS protocol'));
+    logger.error('Use --allow-insecure-hq to allow HTTP for testing');
     process.exit(1);
   }
 
@@ -207,7 +215,7 @@ function validateConfig(config: ReturnType<typeof parseArgs>) {
     (config.hqUrl || config.hqUsername || config.hqPassword) &&
     (!config.hqUrl || !config.hqUsername || !config.hqPassword)
   ) {
-    console.error(
+    logger.error(
       chalk.red('ERROR: All HQ parameters required: --hq-url, --hq-username, --hq-password')
     );
     process.exit(1);
@@ -215,15 +223,15 @@ function validateConfig(config: ReturnType<typeof parseArgs>) {
 
   // Can't be both HQ mode and register with HQ
   if (config.isHQMode && config.hqUrl) {
-    console.error(chalk.red('ERROR: Cannot use --hq and --hq-url together'));
-    console.error('Use --hq to run as HQ server, or --hq-url to register with an HQ');
+    logger.error(chalk.red('ERROR: Cannot use --hq and --hq-url together'));
+    logger.error('Use --hq to run as HQ server, or --hq-url to register with an HQ');
     process.exit(1);
   }
 
   // If not HQ mode and no HQ URL, warn about authentication
   if (!config.basicAuthUsername && !config.basicAuthPassword && !config.isHQMode && !config.hqUrl) {
-    console.log(chalk.red('WARNING: No authentication configured!'));
-    console.log(
+    logger.warn(chalk.red('WARNING: No authentication configured!'));
+    logger.warn(
       chalk.yellow(
         'Set VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD or use --username and --password flags.'
       )
@@ -253,7 +261,7 @@ let appCreated = false;
 export function createApp(): AppInstance {
   // Prevent multiple app instances
   if (appCreated) {
-    console.error(chalk.red('ERROR: App already created, preventing duplicate instance'));
+    logger.error(chalk.red('ERROR: App already created, preventing duplicate instance'));
     throw new Error('Duplicate app creation detected');
   }
   appCreated = true;
@@ -281,7 +289,7 @@ export function createApp(): AppInstance {
 
   validateConfig(config);
 
-  console.log('Creating Express app and HTTP server...');
+  logger.log('Creating Express app and HTTP server...');
   const app = express();
   const server = createServer(app);
   const wss = new WebSocketServer({ server });
@@ -296,7 +304,7 @@ export function createApp(): AppInstance {
   // Ensure control directory exists
   if (!fs.existsSync(CONTROL_DIR)) {
     fs.mkdirSync(CONTROL_DIR, { recursive: true });
-    console.log(chalk.green(`Created control directory: ${CONTROL_DIR}`));
+    logger.log(chalk.green(`Created control directory: ${CONTROL_DIR}`));
   }
 
   // Initialize PTY manager
@@ -320,7 +328,7 @@ export function createApp(): AppInstance {
 
   if (config.isHQMode) {
     remoteRegistry = new RemoteRegistry();
-    console.log(chalk.green('Running in HQ mode'));
+    logger.log(chalk.green('Running in HQ mode'));
   } else if (config.hqUrl && config.hqUsername && config.hqPassword && config.remoteName) {
     // Generate bearer token for this remote server
     remoteBearerToken = uuidv4();
@@ -391,7 +399,7 @@ export function createApp(): AppInstance {
     if (bufferAggregator) {
       bufferAggregator.handleClientConnection(ws);
     } else {
-      console.error(chalk.red('[WS] BufferAggregator not initialized'));
+      logger.error(chalk.red('[WS] BufferAggregator not initialized'));
       ws.close();
     }
   });
@@ -418,7 +426,7 @@ export function createApp(): AppInstance {
   const startServer = () => {
     const requestedPort = config.port !== null ? config.port : Number(process.env.PORT) || 4020;
 
-    console.log(`Attempting to start server on port ${requestedPort}`);
+    logger.log(`Attempting to start server on port ${requestedPort}`);
 
     // Remove all existing error listeners first to prevent duplicates
     server.removeAllListeners('error');
@@ -426,15 +434,15 @@ export function createApp(): AppInstance {
     // Add error handler for port already in use
     server.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
-        console.error(chalk.red(`Error: Port ${requestedPort} is already in use`));
-        console.error(
+        logger.error(chalk.red(`Error: Port ${requestedPort} is already in use`));
+        logger.error(
           chalk.yellow(
             'Please use a different port with --port <number> or stop the existing server'
           )
         );
         process.exit(9); // Exit with code 9 to indicate port conflict
       } else {
-        console.error(chalk.red('Server error:'), error);
+        logger.error(chalk.red('Server error:'), error);
         process.exit(1);
       }
     });
@@ -443,15 +451,15 @@ export function createApp(): AppInstance {
       const address = server.address();
       const actualPort =
         typeof address === 'string' ? requestedPort : address?.port || requestedPort;
-      console.log(chalk.green(`VibeTunnel Server running on http://localhost:${actualPort}`));
+      logger.log(chalk.green(`VibeTunnel Server running on http://localhost:${actualPort}`));
 
       if (config.basicAuthUsername && config.basicAuthPassword) {
-        console.log(chalk.green('Basic authentication: ENABLED'));
-        console.log(`Username: ${config.basicAuthUsername}`);
-        console.log(`Password: ${'*'.repeat(config.basicAuthPassword.length)}`);
+        logger.log(chalk.green('Basic authentication: ENABLED'));
+        logger.log(`Username: ${config.basicAuthUsername}`);
+        logger.log(`Password: ${'*'.repeat(config.basicAuthPassword.length)}`);
       } else {
-        console.log(chalk.red('⚠️  WARNING: Server running without authentication!'));
-        console.log(
+        logger.warn(chalk.red('⚠️  WARNING: Server running without authentication!'));
+        logger.warn(
           chalk.yellow(
             'Anyone can access this server. Use --username and --password or set VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD.'
           )
@@ -469,8 +477,8 @@ export function createApp(): AppInstance {
           remoteUrl,
           remoteBearerToken || ''
         );
-        console.log(chalk.green('Remote mode: Will accept Bearer token for HQ access'));
-        console.log(`Token: ${hqClient.getToken()}`);
+        logger.log(chalk.green('Remote mode: Will accept Bearer token for HQ access'));
+        logger.log(`Token: ${hqClient.getToken()}`);
       }
 
       // Send message to parent process if running as child (for testing)
@@ -482,7 +490,7 @@ export function createApp(): AppInstance {
       // Register with HQ if configured
       if (hqClient) {
         hqClient.register().catch((err) => {
-          console.error('Failed to register with HQ:', err);
+          logger.error('Failed to register with HQ:', err);
         });
       }
 
@@ -523,15 +531,18 @@ let serverStarted = false;
 
 // Export a function to start the server
 export function startVibeTunnelServer() {
+  // Initialize logger first (we'll set debug mode after parsing args)
+  initLogger(false);
+
   // Prevent multiple server instances
   if (serverStarted) {
-    console.error(chalk.red('ERROR: Server already started, preventing duplicate instance'));
-    console.error('This should not happen - duplicate server startup detected');
+    logger.error(chalk.red('ERROR: Server already started, preventing duplicate instance'));
+    logger.error('This should not happen - duplicate server startup detected');
     process.exit(1);
   }
   serverStarted = true;
 
-  console.log('Creating app instance...');
+  logger.log('Creating app instance...');
   // Create and configure the app
   const appInstance = createApp();
   const {
@@ -542,9 +553,16 @@ export function startVibeTunnelServer() {
     hqClient,
     controlDirWatcher,
     activityMonitor,
+    config,
   } = appInstance;
 
-  console.log('Starting server...');
+  // Update debug mode based on config
+  if (config.debug) {
+    setDebugMode(true);
+    logger.log('Debug logging enabled');
+  }
+
+  logger.log('Starting server...');
   startServer();
 
   // Cleanup old terminals every 5 minutes
@@ -560,13 +578,13 @@ export function startVibeTunnelServer() {
 
   const shutdown = async () => {
     if (localShuttingDown) {
-      console.log(chalk.red('Force exit...'));
+      logger.warn(chalk.red('Force exit...'));
       process.exit(1);
     }
 
     localShuttingDown = true;
     setShuttingDown(true);
-    console.log(chalk.yellow('\nShutting down...'));
+    logger.log(chalk.yellow('\nShutting down...'));
 
     try {
       // Stop activity monitor
@@ -586,17 +604,20 @@ export function startVibeTunnelServer() {
       }
 
       server.close(() => {
-        console.log(chalk.green('Server closed successfully'));
+        logger.log(chalk.green('Server closed successfully'));
+        closeLogger();
         process.exit(0);
       });
 
       // Force exit after 5 seconds if graceful shutdown fails
       setTimeout(() => {
-        console.log(chalk.red('Graceful shutdown timeout, forcing exit...'));
+        logger.warn(chalk.red('Graceful shutdown timeout, forcing exit...'));
+        closeLogger();
         process.exit(1);
       }, 5000);
     } catch (error) {
-      console.error(chalk.red('Error during shutdown:'), error);
+      logger.error(chalk.red('Error during shutdown:'), error);
+      closeLogger();
       process.exit(1);
     }
   };

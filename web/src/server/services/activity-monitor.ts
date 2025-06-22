@@ -1,6 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { SessionActivity } from '../../shared/types.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('activity-monitor');
 
 interface SessionActivityState {
   sessionId: string;
@@ -25,7 +28,7 @@ export class ActivityMonitor {
    * Start monitoring all sessions for activity
    */
   start() {
-    console.log('[ActivityMonitor] Starting activity monitoring');
+    logger.log('Starting activity monitoring');
 
     // Initial scan of existing sessions
     this.scanSessions();
@@ -41,7 +44,7 @@ export class ActivityMonitor {
    * Stop monitoring
    */
   stop() {
-    console.log('[ActivityMonitor] Stopping activity monitoring');
+    logger.log('Stopping activity monitoring');
 
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
@@ -94,7 +97,7 @@ export class ActivityMonitor {
         }
       }
     } catch (error) {
-      console.error('[ActivityMonitor] Error scanning sessions:', error);
+      logger.error('Error scanning sessions:', error);
     }
   }
 
@@ -121,9 +124,9 @@ export class ActivityMonitor {
       });
 
       this.watchers.set(sessionId, watcher);
-      console.log(`[ActivityMonitor] Started monitoring session ${sessionId}`);
+      logger.debug(`Started monitoring session ${sessionId}`);
     } catch (error) {
-      console.error(`[ActivityMonitor] Error starting monitor for session ${sessionId}:`, error);
+      logger.error(`Error starting monitor for session ${sessionId}:`, error);
     }
   }
 
@@ -138,7 +141,7 @@ export class ActivityMonitor {
     }
 
     this.activities.delete(sessionId);
-    console.log(`[ActivityMonitor] Stopped monitoring session ${sessionId}`);
+    logger.debug(`Stopped monitoring session ${sessionId}`);
   }
 
   /**
@@ -161,10 +164,7 @@ export class ActivityMonitor {
         this.writeActivityStatus(sessionId, true);
       }
     } catch (error) {
-      console.error(
-        `[ActivityMonitor] Error handling file change for session ${sessionId}:`,
-        error
-      );
+      logger.error(`Error handling file change for session ${sessionId}:`, error);
     }
   }
 
@@ -207,10 +207,7 @@ export class ActivityMonitor {
 
       fs.writeFileSync(activityPath, JSON.stringify(activityData, null, 2));
     } catch (error) {
-      console.error(
-        `[ActivityMonitor] Error writing activity status for session ${sessionId}:`,
-        error
-      );
+      logger.error(`Error writing activity status for session ${sessionId}:`, error);
     }
   }
 
@@ -276,7 +273,7 @@ export class ActivityMonitor {
         }
       }
     } catch (error) {
-      console.error('[ActivityMonitor] Error reading activity status:', error);
+      logger.error('Error reading activity status:', error);
     }
 
     return status;

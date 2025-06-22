@@ -2,6 +2,9 @@ import { WebSocket } from 'ws';
 import chalk from 'chalk';
 import { RemoteRegistry } from './remote-registry.js';
 import { TerminalManager } from './terminal-manager.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('buffer-aggregator');
 
 interface BufferAggregatorConfig {
   terminalManager: TerminalManager;
@@ -29,7 +32,7 @@ export class BufferAggregator {
    * Handle a new client WebSocket connection
    */
   async handleClientConnection(ws: WebSocket): Promise<void> {
-    console.log(chalk.blue('[BufferAggregator] New client connected'));
+    logger.log(chalk.blue('New client connected'));
 
     // Initialize subscription map for this client
     this.clientSubscriptions.set(ws, new Map());
@@ -43,7 +46,7 @@ export class BufferAggregator {
         const data = JSON.parse(message.toString());
         await this.handleClientMessage(ws, data);
       } catch (error) {
-        console.error('[BufferAggregator] Error handling client message:', error);
+        logger.error('Error handling client message:', error);
         ws.send(
           JSON.stringify({
             type: 'error',
@@ -59,7 +62,7 @@ export class BufferAggregator {
     });
 
     ws.on('error', (error) => {
-      console.error(chalk.red('[BufferAggregator] Client WebSocket error:'), error);
+      logger.error(chalk.red('Client WebSocket error:'), error);
     });
   }
 
@@ -100,14 +103,14 @@ export class BufferAggregator {
       }
 
       clientWs.send(JSON.stringify({ type: 'subscribed', sessionId }));
-      console.log(`[BufferAggregator] Client subscribed to session ${sessionId}`);
+      logger.debug(`Client subscribed to session ${sessionId}`);
     } else if (data.type === 'unsubscribe' && data.sessionId) {
       const sessionId = data.sessionId;
       const unsubscribe = subscriptions.get(sessionId);
       if (unsubscribe) {
         unsubscribe();
         subscriptions.delete(sessionId);
-        console.log(`[BufferAggregator] Client unsubscribed from session ${sessionId}`);
+        logger.debug(`Client unsubscribed from session ${sessionId}`);
       }
 
       // Also unsubscribe from remote if applicable
@@ -161,7 +164,7 @@ export class BufferAggregator {
               clientWs.send(fullBuffer);
             }
           } catch (error) {
-            console.error('[BufferAggregator] Error encoding buffer update:', error);
+            logger.error('Error encoding buffer update:', error);
           }
         }
       );
@@ -192,7 +195,7 @@ export class BufferAggregator {
         clientWs.send(fullBuffer);
       }
     } catch (error) {
-      console.error(`[BufferAggregator] Error subscribing to local session ${sessionId}:`, error);
+      logger.error(`Error subscribing to local session ${sessionId}:`, error);
       clientWs.send(JSON.stringify({ type: 'error', message: 'Failed to subscribe to session' }));
     }
   }
@@ -284,24 +287,18 @@ export class BufferAggregator {
 
       // Handle disconnection
       ws.on('close', () => {
-        console.log(chalk.yellow(`[BufferAggregator] Disconnected from remote ${remote.name}`));
+        logger.log(chalk.yellow(`Disconnected from remote ${remote.name}`));
         this.remoteConnections.delete(remoteId);
       });
 
       ws.on('error', (error) => {
-        console.error(
-          chalk.red(`[BufferAggregator] Remote ${remote.name} WebSocket error:`),
-          error
-        );
+        logger.error(chalk.red(`Remote ${remote.name} WebSocket error:`), error);
       });
 
-      console.log(chalk.green(`[BufferAggregator] Connected to remote ${remote.name}`));
+      logger.log(chalk.green(`Connected to remote ${remote.name}`));
       return true;
     } catch (error) {
-      console.error(
-        chalk.red(`[BufferAggregator] Failed to connect to remote ${remoteId}:`),
-        error
-      );
+      logger.error(chalk.red(`Failed to connect to remote ${remoteId}:`), error);
       return false;
     }
   }
@@ -318,9 +315,9 @@ export class BufferAggregator {
       // JSON message
       try {
         const message = JSON.parse(data.toString());
-        console.log(`[BufferAggregator] Remote ${remoteId} message:`, message.type);
+        logger.debug(`Remote ${remoteId} message:`, message.type);
       } catch (error) {
-        console.error(`[BufferAggregator] Failed to parse remote message:`, error);
+        logger.error(`Failed to parse remote message:`, error);
       }
     }
   }
@@ -358,7 +355,7 @@ export class BufferAggregator {
       subscriptions.clear();
     }
     this.clientSubscriptions.delete(ws);
-    console.log(chalk.yellow('[BufferAggregator] Client disconnected'));
+    logger.log(chalk.yellow('Client disconnected'));
   }
 
   /**

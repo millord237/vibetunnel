@@ -1,6 +1,9 @@
 import { Terminal as XtermTerminal } from '@xterm/headless';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('terminal-manager');
 
 interface SessionTerminal {
   terminal: XtermTerminal;
@@ -81,7 +84,7 @@ export class TerminalManager {
 
     // Check if the file exists
     if (!fs.existsSync(streamPath)) {
-      console.warn(`Stream file does not exist for session ${sessionId}: ${streamPath}`);
+      logger.warn(`Stream file does not exist for session ${sessionId}: ${streamPath}`);
       return;
     }
 
@@ -128,14 +131,14 @@ export class TerminalManager {
               }
             }
           } catch (error) {
-            console.error(`Error reading stream file for session ${sessionId}:`, error);
+            logger.error(`Error reading stream file for session ${sessionId}:`, error);
           }
         }
       });
 
-      console.log(`Watching stream file for session ${sessionId}`);
+      logger.log(`Watching stream file for session ${sessionId}`);
     } catch (error) {
-      console.error(`Failed to watch stream file for session ${sessionId}:`, error);
+      logger.error(`Failed to watch stream file for session ${sessionId}:`, error);
       throw error;
     }
   }
@@ -160,7 +163,7 @@ export class TerminalManager {
 
         if (timestamp === 'exit') {
           // Session exited
-          console.log(`Session ${sessionId} exited with code ${data[1]}`);
+          logger.log(`Session ${sessionId} exited with code ${data[1]}`);
           if (sessionTerminal.watcher) {
             sessionTerminal.watcher.close();
           }
@@ -184,7 +187,7 @@ export class TerminalManager {
         // Ignore 'i' (input) events
       }
     } catch (error) {
-      console.error(`Failed to parse stream line for session ${sessionId}:`, error);
+      logger.error(`Failed to parse stream line for session ${sessionId}:`, error);
     }
   }
 
@@ -582,7 +585,7 @@ export class TerminalManager {
     }
 
     for (const sessionId of toRemove) {
-      console.log(`Cleaning up stale terminal for session ${sessionId}`);
+      logger.log(`Cleaning up stale terminal for session ${sessionId}`);
       this.closeTerminal(sessionId);
     }
   }
@@ -660,11 +663,11 @@ export class TerminalManager {
         try {
           listener(sessionId, snapshot);
         } catch (error) {
-          console.error(`Error notifying buffer change listener for ${sessionId}:`, error);
+          logger.error(`Error notifying buffer change listener for ${sessionId}:`, error);
         }
       });
     } catch (error) {
-      console.error(`Error getting buffer snapshot for notification ${sessionId}:`, error);
+      logger.error(`Error getting buffer snapshot for notification ${sessionId}:`, error);
     }
   }
 }

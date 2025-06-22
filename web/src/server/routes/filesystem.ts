@@ -5,6 +5,9 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import mime from 'mime-types';
 import { createReadStream, statSync } from 'fs';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('filesystem');
 
 const execAsync = promisify(exec);
 
@@ -167,7 +170,7 @@ export function createFilesystemRoutes(): Router {
         files: filteredFiles,
       });
     } catch (error) {
-      console.error('Browse error:', error);
+      logger.error('Browse error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -232,7 +235,7 @@ export function createFilesystemRoutes(): Router {
         });
       }
     } catch (error) {
-      console.error('Preview error:', error);
+      logger.error('Preview error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -265,7 +268,7 @@ export function createFilesystemRoutes(): Router {
       const stream = createReadStream(fullPath);
       stream.pipe(res);
     } catch (error) {
-      console.error('Raw file error:', error);
+      logger.error('Raw file error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -292,7 +295,7 @@ export function createFilesystemRoutes(): Router {
         language: getLanguageFromPath(fullPath),
       });
     } catch (error) {
-      console.error('Content error:', error);
+      logger.error('Content error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -324,7 +327,7 @@ export function createFilesystemRoutes(): Router {
         hasDiff: diff.length > 0,
       });
     } catch (error) {
-      console.error('Diff error:', error);
+      logger.error('Diff error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -358,7 +361,7 @@ export function createFilesystemRoutes(): Router {
         path: path.relative(process.cwd(), fullPath),
       });
     } catch (error) {
-      console.error('Mkdir error:', error);
+      logger.error('Mkdir error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });

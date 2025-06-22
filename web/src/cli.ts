@@ -3,6 +3,11 @@
 import { startVibeTunnelForward } from './server/fwd.js';
 import { startVibeTunnelServer } from './server/server.js';
 import { VERSION } from './server/version.js';
+import { createLogger, initLogger, closeLogger } from './server/utils/logger.js';
+
+// Initialize logger before anything else
+initLogger(process.argv.includes('--debug'));
+const logger = createLogger('cli');
 
 // Source maps are only included if built with --sourcemap flag
 
@@ -21,16 +26,18 @@ globalWithVibetunnel.__vibetunnelStarted = true;
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
-  console.error('Stack trace:', error.stack);
+  logger.error('Uncaught exception:', error);
+  logger.error('Stack trace:', error.stack);
+  closeLogger();
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled rejection at:', promise, 'reason:', reason);
   if (reason instanceof Error) {
-    console.error('Stack trace:', reason.stack);
+    logger.error('Stack trace:', reason.stack);
   }
+  closeLogger();
   process.exit(1);
 });
 
@@ -41,11 +48,12 @@ if (!module.parent && (require.main === module || require.main === undefined)) {
     process.exit(0);
   } else if (process.argv[2] === 'fwd') {
     startVibeTunnelForward(process.argv.slice(3)).catch((error) => {
-      console.error('Fatal error:', error);
+      logger.error('Fatal error:', error);
+      closeLogger();
       process.exit(1);
     });
   } else {
-    console.log('Starting VibeTunnel server...');
+    logger.log('Starting VibeTunnel server...');
     startVibeTunnelServer();
   }
 }

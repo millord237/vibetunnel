@@ -5,6 +5,9 @@
  */
 
 import { spawnSync } from 'child_process';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('process-utils');
 
 export class ProcessUtils {
   /**
@@ -25,7 +28,7 @@ export class ProcessUtils {
         return ProcessUtils.isProcessRunningUnix(pid);
       }
     } catch (error) {
-      console.warn(`Error checking if process ${pid} is running:`, error);
+      logger.warn(`Error checking if process ${pid} is running:`, error);
       return false;
     }
   }
@@ -49,7 +52,7 @@ export class ProcessUtils {
 
       return false;
     } catch (error) {
-      console.warn(`Windows process check failed for PID ${pid}:`, error);
+      logger.warn(`Windows process check failed for PID ${pid}:`, error);
       return false;
     }
   }
@@ -114,7 +117,7 @@ export class ProcessUtils {
         return true;
       }
     } catch (error) {
-      console.warn(`Error killing process ${pid}:`, error);
+      logger.warn(`Error killing process ${pid}:`, error);
       return false;
     }
   }

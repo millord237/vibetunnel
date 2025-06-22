@@ -12,6 +12,9 @@ import { PtyError } from './types.js';
 import { ProcessUtils } from './process-utils.js';
 import { Session, SessionInfo } from '../../shared/types.js';
 import { spawnSync } from 'child_process';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('session-manager');
 
 export class SessionManager {
   private controlPath: string;
@@ -115,7 +118,7 @@ export class SessionManager {
       const content = fs.readFileSync(sessionJsonPath, 'utf8');
       return JSON.parse(content) as SessionInfo;
     } catch (error) {
-      console.warn(`Failed to load session info from ${sessionJsonPath}:`, error);
+      logger.warn(`Failed to load session info from ${sessionJsonPath}:`, error);
       return null;
     }
   }
@@ -329,7 +332,7 @@ export class SessionManager {
 
       return updatedSessions;
     } catch (error) {
-      console.warn('Failed to update zombie sessions:', error);
+      logger.warn('Failed to update zombie sessions:', error);
       return [];
     }
   }

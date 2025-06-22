@@ -1,6 +1,10 @@
 // Version information for VibeTunnel Server
 // This file is updated during the build process
 
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('version');
+
 export const VERSION = '1.0.0-beta.3';
 // BUILD_DATE will be replaced by build script, fallback to current time in dev
 export const BUILD_DATE = process.env.BUILD_DATE || new Date().toISOString();
@@ -27,8 +31,8 @@ export function getVersionInfo() {
 }
 
 export function printVersionBanner() {
-  console.log(`VibeTunnel Server v${VERSION}`);
-  console.log(`Built: ${BUILD_DATE}`);
-  console.log(`Platform: ${PLATFORM}/${ARCH} Node ${NODE_VERSION}`);
-  console.log(`PID: ${process.pid}`);
+  logger.log(`VibeTunnel Server v${VERSION}`);
+  logger.log(`Built: ${BUILD_DATE}`);
+  logger.log(`Platform: ${PLATFORM}/${ARCH} Node ${NODE_VERSION}`);
+  logger.log(`PID: ${process.pid}`);
 }

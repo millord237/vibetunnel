@@ -1,4 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('hq-client');
 
 export class HQClient {
   private readonly hqUrl: string;
@@ -47,12 +50,12 @@ export class HQClient {
         throw new Error(`Registration failed: ${errorBody.error || response.statusText}`);
       }
 
-      console.log(`Successfully registered with HQ at ${this.hqUrl}`);
-      console.log(`Remote ID: ${this.remoteId}`);
-      console.log(`Remote name: ${this.remoteName}`);
-      console.log(`Token: ${this.token}`);
+      logger.log(`Successfully registered with HQ at ${this.hqUrl}`);
+      logger.log(`Remote ID: ${this.remoteId}`);
+      logger.log(`Remote name: ${this.remoteName}`);
+      logger.debug(`Token: ${this.token}`);
     } catch (error) {
-      console.error('Failed to register with HQ:', error);
+      logger.error('Failed to register with HQ:', error);
       throw error; // Let the caller handle retries if needed
     }
   }

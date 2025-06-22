@@ -28,6 +28,9 @@ import {
   SpecialKey,
 } from '../../shared/types.js';
 import { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('pty-manager');
 
 export class PtyManager {
   private sessions = new Map<string, PtySession>();
@@ -99,7 +102,7 @@ export class PtyManager {
       return;
     }
 
-    console.log(`Terminal resized to ${newCols}x${newRows}, updating active sessions`);
+    logger.log(`Terminal resized to ${newCols}x${newRows}, updating active sessions`);
 
     // Update stored size
     this.lastTerminalSize = { cols: newCols, rows: newRows };
@@ -131,12 +134,12 @@ export class PtyManager {
               timestamp: currentTime,
             });
 
-            console.log(`Resized session ${sessionId} to ${newCols}x${newRows} (terminal resize)`);
+            logger.debug(`Resized session ${sessionId} to ${newCols}x${newRows} (terminal resize)`);
           } catch (error) {
-            console.error(`Failed to resize session ${sessionId}:`, error);
+            logger.error(`Failed to resize session ${sessionId}:`, error);
           }
         } else {
-          console.log(
+          logger.debug(
             `Skipping terminal resize for session ${sessionId} - browser resize takes precedence`
           );
         }
@@ -223,7 +226,7 @@ export class PtyManager {
           errorMessage = `Working directory does not exist: '${workingDir}'`;
         }
 
-        console.error(`PTY spawn error for command '${command.join(' ')}':`, spawnError);
+        logger.error(`PTY spawn error for command '${command.join(' ')}':`, spawnError);
         throw new PtyError(errorMessage, 'SPAWN_FAILED');
       }
 
@@ -268,10 +271,7 @@ export class PtyManager {
       try {
         this.sessionManager.cleanupSession(sessionId);
       } catch (cleanupError) {
-        console.warn(
-          `Failed to cleanup session ${sessionId} after creation failure:`,
-          cleanupError
-        );
+        logger.warn(`Failed to cleanup session ${sessionId} after creation failure:`, cleanupError);
       }
 
       throw new PtyError(
@@ -311,7 +311,7 @@ export class PtyManager {
           process.stdout.write(data);
         }
       } catch (error) {
-        console.error(`Error writing PTY data for session ${session.id}:`, error);
+        logger.error(`Error writing PTY data for session ${session.id}:`, error);
       }
     });
 
@@ -321,7 +321,9 @@ export class PtyManager {
         // Write exit event to asciinema
         if (asciinemaWriter?.isOpen()) {
           asciinemaWriter.writeRawJson(['exit', exitCode || 0, session.id]);
-          asciinemaWriter.close().catch(console.error);
+          asciinemaWriter
+            .close()
+            .catch((error) => logger.error('Failed to close asciinema writer:', error));
         }
 
         // Update session status
@@ -343,7 +345,7 @@ export class PtyManager {
           onExit(exitCode || 0, signal);
         }
       } catch (_error) {
-        console.error(`Error handling exit for session ${session.id}:`, _error);
+        logger.error(`Error handling exit for session ${session.id}:`, _error);
       }
     });
 
@@ -392,7 +394,7 @@ export class PtyManager {
       // Store server reference for cleanup
       session.inputSocketServer = inputServer;
     } catch (error) {
-      console.warn(`Failed to create input socket for session ${session.id}:`, error);
+      logger.warn(`Failed to create input socket for session ${session.id}:`, error);
     }
 
     // Socket-only approach - no FIFO monitoring
@@ -432,7 +434,7 @@ export class PtyManager {
                   const message = JSON.parse(line);
                   this.handleControlMessage(session, message);
                 } catch (_e) {
-                  console.warn('Invalid control message:', line);
+                  logger.warn('Invalid control message:', line);
                 }
               }
             }
@@ -460,7 +462,7 @@ export class PtyManager {
       // Read any existing data
       readNewControlData();
     } catch (error) {
-      console.warn('Failed to set up control pipe:', error);
+      logger.warn('Failed to set up control pipe:', error);
     }
   }
 
@@ -479,7 +481,7 @@ export class PtyManager {
           session.asciinemaWriter?.writeResize(message.cols, message.rows);
         }
       } catch (error) {
-        console.warn('Failed to resize session:', error);
+        logger.warn('Failed to resize session:', error);
       }
     } else if (message.cmd === 'kill') {
       const signal =
@@ -491,7 +493,7 @@ export class PtyManager {
           session.ptyProcess.kill(signal as string);
         }
       } catch (error) {
-        console.warn('Failed to kill session:', error);
+        logger.warn('Failed to kill session:', error);
       }
     }
   }
@@ -590,7 +592,7 @@ export class PtyManager {
       fs.appendFileSync(sessionPaths.controlPipePath, messageStr);
       return true;
     } catch (error) {
-      console.warn(`Failed to send control message to session ${sessionId}:`, error);
+      logger.warn(`Failed to send control message to session ${sessionId}:`, error);
     }
     return false;
   }
@@ -639,7 +641,7 @@ export class PtyManager {
           timestamp: currentTime,
         });
 
-        console.log(`Resized session ${sessionId} to ${cols}x${rows} (browser resize)`);
+        logger.debug(`Resized session ${sessionId} to ${cols}x${rows} (browser resize)`);
       } else {
         // For external sessions, try to send resize via control pipe
         const resizeMessage: ResizeControlMessage = {
@@ -707,7 +709,7 @@ export class PtyManager {
         }
 
         if (diskSession.pid && ProcessUtils.isProcessRunning(diskSession.pid)) {
-          console.log(
+          logger.log(
             `Killing external session ${sessionId} (PID: ${diskSession.pid}) with ${signal}...`
           );
 
@@ -729,7 +731,7 @@ export class PtyManager {
             await new Promise((resolve) => setTimeout(resolve, checkInterval));
 
             if (!ProcessUtils.isProcessRunning(diskSession.pid)) {
-              console.log(
+              logger.log(
                 `External session ${sessionId} terminated gracefully after ${(i + 1) * checkInterval}ms`
               );
               return;
@@ -737,7 +739,7 @@ export class PtyManager {
           }
 
           // Process didn't terminate gracefully, force kill
-          console.log(
+          logger.log(
             `External session ${sessionId} didn't terminate gracefully, sending SIGKILL...`
           );
           process.kill(diskSession.pid, 'SIGKILL');
@@ -763,7 +765,7 @@ export class PtyManager {
     }
 
     const pid = session.ptyProcess.pid;
-    console.log(`Terminating session ${sessionId} (PID: ${pid}) with SIGTERM...`);
+    logger.log(`Terminating session ${sessionId} (PID: ${pid}) with SIGTERM...`);
 
     try {
       // Send SIGTERM first
@@ -781,7 +783,7 @@ export class PtyManager {
         // Check if process is still alive
         if (!ProcessUtils.isProcessRunning(pid)) {
           // Process no longer exists - it terminated gracefully
-          console.log(
+          logger.log(
             `Session ${sessionId} terminated gracefully after ${(i + 1) * checkInterval}ms`
           );
           this.sessions.delete(sessionId);
@@ -789,23 +791,23 @@ export class PtyManager {
         }
 
         // Process still exists, continue waiting
-        console.log(`Session ${sessionId} still alive after ${(i + 1) * checkInterval}ms...`);
+        logger.debug(`Session ${sessionId} still alive after ${(i + 1) * checkInterval}ms...`);
       }
 
       // Process didn't terminate gracefully within 3 seconds, force kill
-      console.log(`Session ${sessionId} didn't terminate gracefully, sending SIGKILL...`);
+      logger.log(`Session ${sessionId} didn't terminate gracefully, sending SIGKILL...`);
       try {
         session.ptyProcess.kill('SIGKILL');
         // Wait a bit more for SIGKILL to take effect
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (_killError) {
         // Process might have died between our check and SIGKILL
-        console.log(`SIGKILL failed for session ${sessionId}, process likely already dead`);
+        logger.debug(`SIGKILL failed for session ${sessionId}, process likely already dead`);
       }
 
       // Remove from sessions regardless
       this.sessions.delete(sessionId);
-      console.log(`Session ${sessionId} forcefully terminated with SIGKILL`);
+      logger.log(`Session ${sessionId} forcefully terminated with SIGKILL`);
     } catch (error) {
       // Remove from sessions even if kill failed
       this.sessions.delete(sessionId);
@@ -867,7 +869,7 @@ export class PtyManager {
     // Kill active session if exists (fire-and-forget for cleanup)
     if (this.sessions.has(sessionId)) {
       this.killSession(sessionId).catch((error) => {
-        console.error(`Error killing session ${sessionId} during cleanup:`, error);
+        logger.error(`Error killing session ${sessionId} during cleanup:`, error);
       });
     }
 
@@ -938,7 +940,7 @@ export class PtyManager {
         // Clean up all session resources
         this.cleanupSessionResources(session);
       } catch (error) {
-        console.error(`Error cleaning up session ${sessionId}:`, error);
+        logger.error(`Error cleaning up session ${sessionId}:`, error);
       }
     }
 
@@ -959,7 +961,7 @@ export class PtyManager {
       try {
         removeListener();
       } catch (error) {
-        console.error('Error removing resize event listener:', error);
+        logger.error('Error removing resize event listener:', error);
       }
     }
     this.resizeEventListeners.length = 0;
@@ -983,7 +985,7 @@ export class PtyManager {
       try {
         session.ptyProcess?.write(data);
       } catch (error) {
-        console.error('Failed to send input:', error);
+        logger.error('Failed to send input:', error);
       }
     });
   }
