@@ -153,21 +153,19 @@ jobs:
     - name: Resolve Dependencies
       run: |
         echo "Resolving Swift package dependencies..."
-        # First resolve at project level
-        cd mac && xcodebuild -resolvePackageDependencies || echo "Project-level resolution completed"
-        cd ..
-        echo "Dependencies resolved at project level"
+        # List available workspaces and schemes
+        echo "Available workspaces:"
+        find . -name "*.xcworkspace" -type d | grep -v node_modules | grep -v ".build"
+        echo "Schemes in workspace:"
+        xcodebuild -workspace VibeTunnel.xcworkspace -list || echo "Failed to list workspace schemes"
+        # Resolve dependencies
+        xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace || echo "Dependency resolution completed"
         
     - name: Build Debug (Native Architecture)
       timeout-minutes: 30
       run: |
-        cd mac
-        echo "Current directory: $(pwd)"
-        echo "Available schemes:"
-        xcodebuild -list -project VibeTunnel-Mac.xcodeproj || echo "Failed to list schemes"
-        echo "Building..."
         set -o pipefail && xcodebuild build \
-          -project VibeTunnel-Mac.xcodeproj \
+          -workspace VibeTunnel.xcworkspace \
           -scheme VibeTunnel-Mac \
           -configuration Debug \
           -destination "platform=macOS" \
@@ -184,8 +182,8 @@ jobs:
       timeout-minutes: 30
       run: |
         set -o pipefail && \
-        cd mac && xcodebuild build \
-          -project VibeTunnel-Mac.xcodeproj \
+        xcodebuild build \
+          -workspace VibeTunnel.xcworkspace \
           -scheme VibeTunnel-Mac \
           -configuration Release \
           -destination "platform=macOS" \
@@ -203,8 +201,8 @@ jobs:
       run: |
         # Use xcodebuild test for workspace testing
         set -o pipefail && \
-        cd mac && xcodebuild test \
-          -project VibeTunnel-Mac.xcodeproj \
+        xcodebuild test \
+          -workspace VibeTunnel.xcworkspace \
           -scheme VibeTunnel-Mac \
           -configuration Debug \
           -destination "platform=macOS" \

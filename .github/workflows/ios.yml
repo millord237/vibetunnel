@@ -130,25 +130,17 @@ jobs:
     - name: Resolve Dependencies
       run: |
         echo "Resolving iOS package dependencies..."
-        # First resolve at project level
-        cd ios && xcodebuild -resolvePackageDependencies || echo "Project-level resolution completed"
-        cd ..
-        echo "Dependencies resolved at project level"
+        xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace || echo "Dependency resolution completed"
         
     - name: Show build settings
       run: |
-        cd ios
-        echo "Current directory: $(pwd)"
-        echo "Available schemes:"
-        xcodebuild -list -project VibeTunnel-iOS.xcodeproj || echo "Failed to list schemes"
-        echo "Showing build settings..."
-        xcodebuild -showBuildSettings -project VibeTunnel-iOS.xcodeproj -scheme VibeTunnel-iOS -destination "platform=iOS,name=Any iOS Device"
+        xcodebuild -showBuildSettings -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS -destination "platform=iOS,name=Any iOS Device"
         
     - name: Build iOS app
       run: |
         set -o pipefail
-        cd ios && xcodebuild build \
-          -project VibeTunnel-iOS.xcodeproj \
+        xcodebuild build \
+          -workspace VibeTunnel.xcworkspace \
           -scheme VibeTunnel-iOS \
           -destination "platform=iOS,name=Any iOS Device" \
           -configuration Release \
@@ -200,10 +192,7 @@ jobs:
     - name: Resolve Test Dependencies
       run: |
         echo "Resolving dependencies for tests..."
-        # First resolve at project level
-        cd ios && xcodebuild -resolvePackageDependencies || echo "Project-level resolution completed"
-        cd ..
-        echo "Dependencies resolved at project level"
+        xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace || echo "Dependency resolution completed"
         
     - name: Run iOS tests
       run: |

@@ -93,8 +93,8 @@ fi
 if command -v xcbeautify &> /dev/null; then
     echo "🔨 Building ARM64-only binary with xcbeautify..."
     xcodebuild \
-        -workspace VibeTunnel.xcworkspace \
-        -scheme VibeTunnel \
+        -project VibeTunnel-Mac.xcodeproj \
+        -scheme VibeTunnel-Mac \
         -configuration "$CONFIGURATION" \
         -derivedDataPath "$BUILD_DIR" \
         -destination "platform=macOS,arch=arm64" \
@@ -105,8 +105,8 @@ if command -v xcbeautify &> /dev/null; then
 else
     echo "🔨 Building ARM64-only binary (install xcbeautify for cleaner output)..."
     xcodebuild \
-        -workspace VibeTunnel.xcworkspace \
-        -scheme VibeTunnel \
+        -project VibeTunnel-Mac.xcodeproj \
+        -scheme VibeTunnel-Mac \
         -configuration "$CONFIGURATION" \
         -derivedDataPath "$BUILD_DIR" \
         -destination "platform=macOS,arch=arm64" \
