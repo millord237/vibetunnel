@@ -2,7 +2,7 @@
  * File Browser Component
  *
  * Modal file browser for navigating the filesystem and selecting files/directories.
- * Supports Git status display, file preview with Monaco editor, and diff viewing.
+ * Supports Git status display, file preview with CodeMirror editor, and diff viewing.
  *
  * @fires insert-path - When inserting a file path into terminal (detail: { path: string, type: 'file' | 'directory' })
  * @fires open-in-editor - When opening a file in external editor (detail: { path: string })
@@ -11,8 +11,19 @@
  */
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { createRef, ref } from 'lit/directives/ref.js';
 import type { Session } from './session-list.js';
 import { createLogger } from '../utils/logger.js';
+import { EditorView, keymap, scrollPastEnd } from '@codemirror/view';
+import { EditorState, Extension } from '@codemirror/state';
+import { defaultKeymap } from '@codemirror/commands';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { javascript } from '@codemirror/lang-javascript';
+import { html as htmlLang } from '@codemirror/lang-html';
+import { css } from '@codemirror/lang-css';
+import { json } from '@codemirror/lang-json';
+import { markdown } from '@codemirror/lang-markdown';
+import { python } from '@codemirror/lang-python';
 
 const logger = createLogger('file-browser');
 
@@ -82,12 +93,9 @@ export class FileBrowser extends LitElement {
   @state() private previewLoading = false;
   @state() private showDiff = false;
 
-  private monacoEditor: {
-    setValue: (value: string) => void;
-    getModel: () => unknown;
-    dispose: () => void;
-  } | null = null;
-  private monacoContainer: HTMLElement | null = null;
+  private editorView: EditorView | null = null;
+  private editorContainerRef = createRef<HTMLDivElement>();
+  private lastEditorContainer: HTMLDivElement | null = null;
 
   async connectedCallback() {
     super.connectedCallback();
@@ -108,8 +116,28 @@ export class FileBrowser extends LitElement {
       }
     }
 
-    if (this.preview?.type === 'text' && this.monacoContainer && !this.monacoEditor) {
-      this.initMonacoEditor();
+    if (this.preview?.type === 'text' && this.editorContainerRef.value) {
+      // Check if container has changed (DOM was re-rendered) or editor doesn't exist
+      const containerChanged = this.lastEditorContainer !== this.editorContainerRef.value;
+
+      if (!this.editorView || containerChanged) {
+        // Dispose old editor if it exists
+        if (this.editorView) {
+          this.editorView.destroy();
+          this.editorView = null;
+        }
+
+        this.lastEditorContainer = this.editorContainerRef.value;
+        await this.initCodeMirrorEditor();
+      } else if (this.editorView) {
+        // Update content if CodeMirror editor already exists and container is the same
+        this.updateEditorContent();
+      }
+    } else if (this.editorView && this.preview?.type !== 'text') {
+      // Clean up CodeMirror editor if we're not showing text
+      this.editorView.destroy();
+      this.editorView = null;
+      this.lastEditorContainer = null;
     }
   }
 
@@ -159,10 +187,7 @@ export class FileBrowser extends LitElement {
       const response = await fetch(`/api/fs/preview?path=${encodeURIComponent(file.path)}`);
       if (response.ok) {
         this.preview = await response.json();
-        if (this.preview?.type === 'text') {
-          // Update Monaco editor if it exists
-          this.updateMonacoContent();
-        }
+        this.requestUpdate(); // Trigger re-render to initialize Monaco if needed
       } else {
         logger.error(`preview failed: ${response.status}`, new Error(await response.text()));
       }
@@ -191,28 +216,135 @@ export class FileBrowser extends LitElement {
     }
   }
 
-  private initMonacoEditor() {
-    if (!window.monaco || !this.monacoContainer) return;
-
-    this.monacoEditor = window.monaco.editor.create(this.monacoContainer, {
-      value: this.preview?.content || '',
-      language: this.preview?.language || 'plaintext',
-      theme: 'vs-dark',
-      readOnly: true,
-      automaticLayout: true,
-      minimap: { enabled: false },
-      scrollBeyondLastLine: false,
-    });
+  private getLanguageExtension(language: string): Extension | null {
+    switch (language) {
+      case 'javascript':
+      case 'typescript':
+        return javascript({ typescript: language === 'typescript' });
+      case 'html':
+        return htmlLang();
+      case 'css':
+        return css();
+      case 'json':
+        return json();
+      case 'markdown':
+        return markdown();
+      case 'python':
+        return python();
+      default:
+        return null;
+    }
   }
 
-  private updateMonacoContent() {
-    if (!this.monacoEditor || !this.preview) return;
+  private async initCodeMirrorEditor() {
+    if (!this.editorContainerRef.value) {
+      return;
+    }
 
-    this.monacoEditor.setValue(this.preview.content || '');
-    window.monaco.editor.setModelLanguage(
-      this.monacoEditor.getModel(),
-      this.preview.language || 'plaintext'
-    );
+    try {
+      const extensions: Extension[] = [
+        EditorView.theme({
+          '&': {
+            fontSize: '14px',
+            height: '100%',
+          },
+          '.cm-focused': {
+            outline: 'none',
+          },
+          '.cm-editor': {
+            height: '100%',
+          },
+          '.cm-scroller': {
+            fontFamily:
+              'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+            overflow: 'auto',
+          },
+        }),
+        EditorView.domEventHandlers({
+          wheel: (event, view) => {
+            const delta = event.deltaY;
+            if (delta !== 0) {
+              view.scrollDOM.scrollTop += delta;
+              event.preventDefault();
+              return true;
+            }
+            return false;
+          },
+        }),
+        keymap.of(defaultKeymap),
+        EditorState.readOnly.of(true),
+        oneDark,
+        scrollPastEnd(),
+      ];
+
+      const languageExt = this.getLanguageExtension(this.preview?.language || '');
+      if (languageExt) {
+        extensions.push(languageExt);
+      }
+
+      const state = EditorState.create({
+        doc: this.preview?.content || '',
+        extensions,
+      });
+
+      this.editorView = new EditorView({
+        state,
+        parent: this.editorContainerRef.value,
+      });
+    } catch (error) {
+      console.error('[FileBrowser] Failed to load CodeMirror editor:', error);
+    }
+  }
+
+  private updateEditorContent() {
+    if (!this.editorView || !this.preview) return;
+
+    const extensions: Extension[] = [
+      EditorView.theme({
+        '&': {
+          fontSize: '14px',
+          height: '100%',
+        },
+        '.cm-focused': {
+          outline: 'none',
+        },
+        '.cm-editor': {
+          height: '100%',
+        },
+        '.cm-scroller': {
+          fontFamily:
+            'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+          overflow: 'auto',
+        },
+      }),
+      EditorView.domEventHandlers({
+        wheel: (event, view) => {
+          const delta = event.deltaY;
+          if (delta !== 0) {
+            view.scrollDOM.scrollTop += delta;
+            event.preventDefault();
+            return true;
+          }
+          return false;
+        },
+      }),
+      keymap.of(defaultKeymap),
+      EditorState.readOnly.of(true),
+      oneDark,
+      scrollPastEnd(),
+    ];
+
+    const languageExt = this.getLanguageExtension(this.preview.language || '');
+    if (languageExt) {
+      extensions.push(languageExt);
+    }
+
+    const newState = EditorState.create({
+      doc: this.preview.content || '',
+      extensions,
+    });
+
+    this.editorView.setState(newState);
   }
 
   private handleFileClick(file: FileInfo) {
@@ -565,11 +697,8 @@ export class FileBrowser extends LitElement {
       case 'text':
         return html`
           <div
-            class="monaco-container h-full"
-            @connected=${(e: Event) => {
-              this.monacoContainer = e.target as HTMLElement;
-              this.initMonacoEditor();
-            }}
+            ${ref(this.editorContainerRef)}
+            class="editor-container h-full w-full relative overflow-hidden"
           ></div>
         `;
 
@@ -839,9 +968,9 @@ export class FileBrowser extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener('keydown', this.handleKeyDown);
-    if (this.monacoEditor) {
-      this.monacoEditor.dispose();
-      this.monacoEditor = null;
+    if (this.editorView) {
+      this.editorView.destroy();
+      this.editorView = null;
     }
   }
 
