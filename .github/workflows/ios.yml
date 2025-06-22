@@ -112,6 +112,7 @@ jobs:
     name: Build iOS App
     runs-on: macos-15
     needs: lint
+    timeout-minutes: 30
     
     steps:
     - name: Checkout code
@@ -121,6 +122,10 @@ jobs:
       uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: '16.3'
+        
+    - name: Install build tools
+      run: |
+        gem install xcpretty
 
     - name: Show build settings
       run: |
@@ -131,14 +136,15 @@ jobs:
       run: |
         cd ios
         echo "Resolving iOS package dependencies..."
-        xcodebuild -resolvePackageDependencies -project VibeTunnel.xcodeproj -quiet || {
+        xcodebuild -resolvePackageDependencies -project VibeTunnel.xcodeproj -scheme VibeTunnel || {
           echo "Failed to resolve dependencies. Retrying with verbose output..."
-          xcodebuild -resolvePackageDependencies -project VibeTunnel.xcodeproj
+          xcodebuild -resolvePackageDependencies -project VibeTunnel.xcodeproj -scheme VibeTunnel -verbose
         }
         
     - name: Build iOS app
       run: |
         cd ios
+        set -o pipefail
         xcodebuild build \
           -project VibeTunnel.xcodeproj \
           -scheme VibeTunnel \
@@ -147,7 +153,13 @@ jobs:
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           ONLY_ACTIVE_ARCH=NO \
-          -derivedDataPath build/DerivedData
+          -derivedDataPath build/DerivedData \
+          COMPILER_INDEX_STORE_ENABLE=NO \
+          2>&1 | tee build.log | xcpretty || {
+            echo "Build failed. Last 100 lines of output:"
+            tail -100 build.log
+            exit 1
+          }
 
     - name: List build products
       if: always()
@@ -168,6 +180,7 @@ jobs:
     name: Test iOS App
     runs-on: macos-15
     needs: lint
+    timeout-minutes: 30
     
     steps:
     - name: Checkout code
@@ -177,23 +190,44 @@ jobs:
       uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: '16.3'
+        
+    - name: Install test tools
+      run: |
+        gem install xcpretty
 
+    - name: Resolve Test Dependencies
+      run: |
+        cd ios
+        echo "Resolving dependencies for tests..."
+        xcodebuild -resolvePackageDependencies -project VibeTunnel.xcodeproj -scheme VibeTunnel
+        
     - name: Run iOS tests
       run: |
         cd ios
         echo "Running iOS tests on simulator..."
+        # First, list available simulators
+        xcrun simctl list devices available | grep iPhone | head -5
+        
+        # Run tests with a more flexible destination
         xcodebuild test \
           -project VibeTunnel.xcodeproj \
           -scheme VibeTunnel \
-          -destination "platform=iOS Simulator,OS=18.0,name=iPhone 16 Pro" \
+          -destination "platform=iOS Simulator,name=iPhone 16 Pro" \
           -configuration Debug \
           -derivedDataPath build/DerivedData \
-          -quiet || {
-            echo "Test failed, retrying with verbose output..."
-            xcodebuild test \
-              -project VibeTunnel.xcodeproj \
-              -scheme VibeTunnel \
-              -destination "platform=iOS Simulator,OS=18.0,name=iPhone 16 Pro" \
-              -configuration Debug \
-              -derivedDataPath build/DerivedData
+          -resultBundlePath TestResults.xcresult || {
+            echo "Test failed. Checking for test results..."
+            if [ -d "TestResults.xcresult" ]; then
+              echo "Extracting test results..."
+              xcrun xcresulttool get --path TestResults.xcresult --format json | jq '.issues.testFailureSummaries[]' || true
+            fi
+            exit 1
           }
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: ios-test-results
+        path: ios/TestResults.xcresult
+        retention-days: 7

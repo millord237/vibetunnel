@@ -22,22 +22,6 @@ let package = Package(
             dependencies: [
                 .product(name: "SwiftTerm", package: "SwiftTerm")
             ]
-        ),
-        .testTarget(
-            name: "VibeTunnelTests",
-            dependencies: [],
-            path: "VibeTunnelTests",
-            sources: [
-                "StandaloneTests.swift",
-                "Utilities/TestTags.swift",
-                "APIErrorTests.swift",
-                "WebSocketReconnectionTests.swift",
-                "AuthenticationTests.swift",
-                "FileSystemTests.swift",
-                "TerminalParsingTests.swift",
-                "EdgeCaseTests.swift",
-                "PerformanceTests.swift"
-            ]
         )
     ]
 )
