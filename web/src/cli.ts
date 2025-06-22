@@ -9,12 +9,9 @@ import { VERSION } from './server/version.js';
 // Prevent double execution in SEA context where require.main might be undefined
 // Use a global flag to ensure we only run once
 if ((global as any).__vibetunnelStarted) {
-  console.log('VibeTunnel already started, skipping duplicate execution');
-  console.log('Global flag was already set, exiting to prevent duplicate server');
   process.exit(0);
 }
 (global as any).__vibetunnelStarted = true;
-console.log('Setting global flag to prevent duplicate execution');
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
@@ -33,11 +30,6 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Only execute if this is the main module (or in SEA where require.main is undefined)
 if (!module.parent && (require.main === module || require.main === undefined)) {
-  console.log('Main module check passed, proceeding with server startup');
-  console.log('module.parent:', module.parent);
-  console.log('require.main === module:', require.main === module);
-  console.log('require.main:', require.main);
-
   if (process.argv[2] === 'version') {
     console.log(`VibeTunnel Server v${VERSION}`);
     process.exit(0);
@@ -50,6 +42,4 @@ if (!module.parent && (require.main === module || require.main === undefined)) {
     console.log('Starting VibeTunnel server...');
     startVibeTunnelServer();
   }
-} else {
-  console.log('Not main module, skipping server startup');
 }
