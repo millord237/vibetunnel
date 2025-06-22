@@ -1189,7 +1189,10 @@ export class SessionView extends LitElement {
 
         <!-- Terminal Container -->
         <div
-          class="flex-1 bg-dark-bg overflow-hidden min-h-0 relative"
+          class="flex-1 bg-dark-bg overflow-hidden min-h-0 relative ${this.session?.status ===
+          'exited'
+            ? 'session-exited'
+            : ''}"
           id="terminal-container"
           style="max-width: 100vw; height: 100%;"
         >
