@@ -362,6 +362,12 @@ export class SessionView extends LitElement {
   private async handleKeyboardInput(e: KeyboardEvent) {
     if (!this.session) return;
 
+    // Handle Escape key specially for exited sessions
+    if (e.key === 'Escape' && this.session.status === 'exited') {
+      this.handleBack();
+      return;
+    }
+
     // Don't send input to exited sessions
     if (this.session.status === 'exited') {
       logger.log('ignoring keyboard input - session has exited');
