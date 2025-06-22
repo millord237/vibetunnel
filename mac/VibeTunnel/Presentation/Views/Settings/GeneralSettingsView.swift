@@ -130,14 +130,20 @@ private struct PermissionsSection: View {
     @State private var permissionManager = SystemPermissionManager.shared
     @State private var permissionUpdateTrigger = 0
 
+    // IMPORTANT: These computed properties ensure the UI always shows current permission state.
+    // The permissionUpdateTrigger dependency forces SwiftUI to re-evaluate these properties
+    // when permissions change. Without this, the UI would not update when permissions are
+    // granted in System Settings while this view is visible.
+    //
+    // We use computed properties instead of @State to avoid UI flashing - the initial
+    // permission check in .task happens before the first render, ensuring correct state
+    // from the start.
     private var hasAppleScriptPermission: Bool {
-        // This will cause a re-read whenever permissionUpdateTrigger changes
         _ = permissionUpdateTrigger
         return permissionManager.hasPermission(.appleScript)
     }
 
     private var hasAccessibilityPermission: Bool {
-        // This will cause a re-read whenever permissionUpdateTrigger changes
         _ = permissionUpdateTrigger
         return permissionManager.hasPermission(.accessibility)
     }
@@ -232,13 +238,19 @@ private struct PermissionsSection: View {
                 .multilineTextAlignment(.center)
             }
         }
-        .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
-            // Force a re-render to check permissions
-            permissionUpdateTrigger += 1
-        }
         .task {
-            // Check all permissions
+            // Check permissions before first render to avoid UI flashing
             await permissionManager.checkAllPermissions()
+            
+            // Register for continuous monitoring
+            permissionManager.registerForMonitoring()
+        }
+        .onDisappear {
+            permissionManager.unregisterFromMonitoring()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .permissionsUpdated)) { _ in
+            // Increment trigger to force computed property re-evaluation
+            permissionUpdateTrigger += 1
         }
     }
 }

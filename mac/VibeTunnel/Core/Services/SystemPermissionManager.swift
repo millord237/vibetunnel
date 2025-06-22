@@ -5,6 +5,10 @@ import Foundation
 import Observation
 import OSLog
 
+extension Notification.Name {
+    static let permissionsUpdated = Notification.Name("sh.vibetunnel.permissionsUpdated")
+}
+
 /// Types of system permissions that VibeTunnel requires
 enum SystemPermission {
     case appleScript
@@ -63,8 +67,14 @@ final class SystemPermissionManager {
         category: "SystemPermissions"
     )
 
+    /// Timer for monitoring permission changes
+    private var monitorTimer: Timer?
+
+    /// Count of views that have registered for monitoring
+    private var monitorRegistrationCount = 0
+
     private init() {
-        // No automatic monitoring - UI components will check when visible
+        // No automatic monitoring - UI components will register when visible
     }
 
     // MARK: - Public API
@@ -127,13 +137,67 @@ final class SystemPermissionManager {
         }
     }
 
+    // MARK: - Permission Monitoring
+
+    /// Register for permission monitoring (call when a view appears)
+    func registerForMonitoring() {
+        monitorRegistrationCount += 1
+        logger.debug("Registered for monitoring, count: \(self.monitorRegistrationCount)")
+
+        if monitorRegistrationCount == 1 {
+            // First registration, start monitoring
+            startMonitoring()
+        }
+    }
+
+    /// Unregister from permission monitoring (call when a view disappears)
+    func unregisterFromMonitoring() {
+        monitorRegistrationCount = max(0, monitorRegistrationCount - 1)
+        logger.debug("Unregistered from monitoring, count: \(self.monitorRegistrationCount)")
+
+        if monitorRegistrationCount == 0 {
+            // No more registrations, stop monitoring
+            stopMonitoring()
+        }
+    }
+
+    private func startMonitoring() {
+        logger.info("Starting permission monitoring")
+
+        // Initial check
+        Task {
+            await checkAllPermissions()
+        }
+
+        // Start timer for periodic checks
+        monitorTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.checkAllPermissions()
+            }
+        }
+    }
+
+    private func stopMonitoring() {
+        logger.info("Stopping permission monitoring")
+        monitorTimer?.invalidate()
+        monitorTimer = nil
+    }
+
     // MARK: - Permission Checking
 
     func checkAllPermissions() async {
+        let oldPermissions = permissions
+        
         // Check each permission type
         permissions[.appleScript] = await checkAppleScriptPermission()
         permissions[.screenRecording] = checkScreenRecordingPermission()
         permissions[.accessibility] = checkAccessibilityPermission()
+        
+        // Post notification if any permissions changed
+        if oldPermissions != permissions {
+            NotificationCenter.default.post(name: .permissionsUpdated, object: nil)
+        }
     }
 
     // MARK: - AppleScript Permission
