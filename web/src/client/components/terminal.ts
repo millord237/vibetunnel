@@ -49,6 +49,7 @@ export class Terminal extends LitElement {
     this._viewportY = value;
   }
   @state() private actualRows = 24; // Rows that fit in viewport
+  @state() private cursorVisible = true; // Track cursor visibility state
 
   private container: HTMLElement | null = null;
   private resizeTimeout: NodeJS.Timeout | null = null;
@@ -689,7 +690,11 @@ export class Terminal extends LitElement {
 
       // Check if cursor is on this line (relative to viewport)
       const isCursorLine = row === cursorY;
-      const lineContent = this.renderLine(line, cell, isCursorLine ? cursorX : -1);
+      const lineContent = this.renderLine(
+        line,
+        cell,
+        isCursorLine && this.cursorVisible ? cursorX : -1
+      );
 
       html += `<div class="terminal-line"${style}>${lineContent || ''}</div>`;
     }
@@ -869,6 +874,14 @@ export class Terminal extends LitElement {
    */
   public write(data: string, followCursor: boolean = true) {
     if (!this.terminal) return;
+
+    // Check for cursor visibility sequences
+    if (data.includes('\x1b[?25l')) {
+      this.cursorVisible = false;
+    }
+    if (data.includes('\x1b[?25h')) {
+      this.cursorVisible = true;
+    }
 
     this.queueRenderOperation(async () => {
       if (!this.terminal) return;
