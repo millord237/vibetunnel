@@ -36,6 +36,10 @@ export class PtyManager {
   private inputSocketClients = new Map<string, net.Socket>(); // Cache socket connections
   private lastTerminalSize: { cols: number; rows: number } | null = null;
   private resizeEventListeners: Array<() => void> = [];
+  private sessionResizeSources = new Map<
+    string,
+    { cols: number; rows: number; source: 'browser' | 'terminal'; timestamp: number }
+  >();
 
   constructor(controlPath?: string) {
     this.sessionManager = new SessionManager(controlPath);
@@ -100,20 +104,41 @@ export class PtyManager {
     // Update stored size
     this.lastTerminalSize = { cols: newCols, rows: newRows };
 
-    // Forward resize to all active sessions
-    // Note: We only resize sessions that don't have custom sizes set
+    // Forward resize to all active sessions using "last resize wins" logic
+    const currentTime = Date.now();
     for (const [sessionId, session] of this.sessions) {
       if (session.ptyProcess && session.sessionInfo.status === 'running') {
-        try {
-          // Resize the PTY process
-          session.ptyProcess.resize(newCols, newRows);
+        // Check if we should apply this resize based on "last resize wins" logic
+        const lastResize = this.sessionResizeSources.get(sessionId);
+        const shouldResize =
+          !lastResize ||
+          lastResize.source === 'terminal' ||
+          currentTime - lastResize.timestamp > 1000; // 1 second grace period for browser resizes
 
-          // Record the resize event in the asciinema file
-          session.asciinemaWriter?.writeResize(newCols, newRows);
+        if (shouldResize) {
+          try {
+            // Resize the PTY process
+            session.ptyProcess.resize(newCols, newRows);
 
-          console.log(`Resized session ${sessionId} to ${newCols}x${newRows}`);
-        } catch (error) {
-          console.error(`Failed to resize session ${sessionId}:`, error);
+            // Record the resize event in the asciinema file
+            session.asciinemaWriter?.writeResize(newCols, newRows);
+
+            // Track this resize
+            this.sessionResizeSources.set(sessionId, {
+              cols: newCols,
+              rows: newRows,
+              source: 'terminal',
+              timestamp: currentTime,
+            });
+
+            console.log(`Resized session ${sessionId} to ${newCols}x${newRows} (terminal resize)`);
+          } catch (error) {
+            console.error(`Failed to resize session ${sessionId}:`, error);
+          }
+        } else {
+          console.log(
+            `Skipping terminal resize for session ${sessionId} - browser resize takes precedence`
+          );
         }
       }
     }
@@ -593,12 +618,23 @@ export class PtyManager {
    */
   resizeSession(sessionId: string, cols: number, rows: number): void {
     const memorySession = this.sessions.get(sessionId);
+    const currentTime = Date.now();
 
     try {
       // If we have an in-memory session with active PTY, resize it
       if (memorySession?.ptyProcess) {
         memorySession.ptyProcess.resize(cols, rows);
         memorySession.asciinemaWriter?.writeResize(cols, rows);
+
+        // Track this browser-initiated resize
+        this.sessionResizeSources.set(sessionId, {
+          cols,
+          rows,
+          source: 'browser',
+          timestamp: currentTime,
+        });
+
+        console.log(`Resized session ${sessionId} to ${cols}x${rows} (browser resize)`);
       } else {
         // For external sessions, try to send resize via control pipe
         const resizeMessage: ResizeControlMessage = {
@@ -607,6 +643,14 @@ export class PtyManager {
           rows,
         };
         this.sendControlMessage(sessionId, resizeMessage);
+
+        // Track this resize for external sessions too
+        this.sessionResizeSources.set(sessionId, {
+          cols,
+          rows,
+          source: 'browser',
+          timestamp: currentTime,
+        });
       }
     } catch (error) {
       throw new PtyError(
@@ -943,6 +987,9 @@ export class PtyManager {
    * Clean up all resources associated with a session
    */
   private cleanupSessionResources(session: PtySession): void {
+    // Clean up resize tracking
+    this.sessionResizeSources.delete(session.id);
+
     // Clean up input socket server
     if (session.inputSocketServer) {
       // Close the server and wait for it to close
