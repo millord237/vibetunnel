@@ -130,9 +130,21 @@ For development setup and contribution guidelines, see [CONTRIBUTING.md](docs/CO
 - [Architecture](docs/architecture.md) - System design overview
 - [Build System](docs/build-system.md) - Build process details
 
-## Mac Permissions
+## macOS Permissions
 
-macOS is finicky when it comes to permissions. 
+macOS is finicky when it comes to permissions. The system will only remember the first path from where an app requests permissions. If subsequently the app starts somewhere else, it will silently fail. Fix: Delete the entry and restart settings, restart app and next time the permission is requested, there should be an entry in Settings again.
+
+If that fails, use the terminal to reset:
+
+```
+# This removes Accessibility permission for a specific bundle ID:
+sudo tccutil reset Accessibility sh.vibetunnel.vibetunnel
+
+sudo tccutil reset ScreenCapture sh.vibetunnel.vibetunnel
+
+# This removes all Automation permissions system-wide (cannot target specific apps):
+sudo tccutil reset AppleEvents
+```
 
 ## Credits
 
