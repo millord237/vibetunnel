@@ -18,7 +18,7 @@ struct DebugSettingsView: View {
     }
 
     private var serverPort: Int {
-        Int(serverManager.port) ?? 4_020
+        Int(serverManager.port) ?? 4020
     }
 
     var body: some View {
