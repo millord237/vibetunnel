@@ -163,6 +163,25 @@ enum Terminal: String, CaseIterable {
             """
         }
 
+        // Special handling for Warp terminal
+        if self == .warp {
+            return """
+            tell application "\(processName)"
+                activate
+                tell application "System Events"
+                    -- Create new window
+                    keystroke "n" using {command down}
+                    delay 0.5
+                    -- Paste command from clipboard
+                    keystroke "v" using {command down}
+                    delay 0.3
+                    -- Try numeric keypad Enter with small delay
+                    key code 76
+                end tell
+            end tell
+            """
+        }
+        
         // For other terminals, Cmd+N typically creates a new window
         return """
         tell application "\(processName)"

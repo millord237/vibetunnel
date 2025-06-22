@@ -74,14 +74,33 @@ struct AdvancedSettingsView: View {
                             Text(error)
                                 .font(.caption)
                                 .foregroundColor(.red)
-                        } else if cliInstaller.isInstalled {
-                            Text("The 'vt' command line tool is installed at /usr/local/bin/vt")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         } else {
-                            Text("Install the 'vt' command line tool to /usr/local/bin for terminal access.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            HStack(alignment: .center, spacing: 8) {
+                                if cliInstaller.isInstalled {
+                                    Text("The 'vt' command line tool is installed at /usr/local/bin/vt")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("Install the 'vt' command line tool to /usr/local/bin for terminal access.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    showingVtConflictAlert = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Text("Use a different name")
+                                            .font(.caption)
+                                        Image(systemName: "arrow.up.forward")
+                                            .font(.system(size: 10))
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(.accentColor)
+                            }
                         }
                     }
                 } header: {
@@ -159,17 +178,14 @@ struct AdvancedSettingsView: View {
     
     private var vtConflictMessage: String {
         """
-        If 'vt' is already in use on your system, you can copy the VibeTunnel command script with a different name.
+        You can install the VT bash script with a different name. For example:
 
-        Copy command:
-        cp "\(vtScriptPath)" /usr/local/bin/vtunnel && chmod +x /usr/local/bin/vtunnel
-
-        This will create 'vtunnel' as an alternative command name.
+        cp "\(vtScriptPath)" /usr/local/bin/vterm && chmod +x /usr/local/bin/vterm
         """
     }
     
     private func copyCommandToClipboard() {
-        let command = "cp \"\(vtScriptPath)\" /usr/local/bin/vtunnel && chmod +x /usr/local/bin/vtunnel"
+        let command = "cp \"\(vtScriptPath)\" /usr/local/bin/vterm && chmod +x /usr/local/bin/vterm"
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(command, forType: .string)
@@ -185,6 +201,8 @@ private struct TerminalPreferenceSection: View {
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var errorTitle = "Terminal Launch Failed"
+    @State private var showingVtConflictAlert = false
+    @State private var vtConflictMessage = ""
 
     var body: some View {
         Section {
@@ -315,5 +333,11 @@ private struct TerminalPreferenceSection: View {
         } message: {
             Text(errorMessage)
         }
+    }
+    
+    private func copyCommandToClipboard() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(vtConflictMessage, forType: .string)
     }
 }
