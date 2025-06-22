@@ -263,7 +263,9 @@ export class PtyManager {
         client.on('data', (data) => {
           const text = data.toString('utf8');
           if (session.ptyProcess) {
+            // Write input first for fastest response
             session.ptyProcess.write(text);
+            // Then record it (non-blocking)
             session.asciinemaWriter?.writeInput(text);
           }
         });
@@ -413,7 +415,8 @@ export class PtyManager {
             sessionId
           );
         }
-        // Try Unix domain socket first for lowest latency
+
+        // For forwarded sessions, we need to use socket communication
         const socketPath = path.join(sessionPaths.controlDir, 'input.sock');
 
         // Check if we have a cached socket connection
@@ -424,6 +427,8 @@ export class PtyManager {
           try {
             socketClient = net.createConnection(socketPath);
             socketClient.setNoDelay(true);
+            // Keep socket alive for better performance
+            socketClient.setKeepAlive(true, 0);
             this.inputSocketClients.set(sessionId, socketClient);
 
             socketClient.on('error', () => {
@@ -439,6 +444,7 @@ export class PtyManager {
         }
 
         if (socketClient && !socketClient.destroyed) {
+          // Write and flush immediately
           socketClient.write(dataToSend);
         } else {
           throw new PtyError(

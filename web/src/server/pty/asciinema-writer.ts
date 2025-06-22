@@ -14,6 +14,7 @@ export class AsciinemaWriter {
   private startTime: Date;
   private utf8Buffer: Buffer = Buffer.alloc(0);
   private headerWritten = false;
+  private fd: number | null = null;
 
   constructor(
     private filePath: string,
@@ -27,10 +28,16 @@ export class AsciinemaWriter {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    // Create write stream
+    // Create write stream with no buffering for real-time performance
     this.writeStream = fs.createWriteStream(filePath, {
       flags: 'w',
       encoding: 'utf8',
+      highWaterMark: 0, // Disable internal buffering
+    });
+
+    // Get file descriptor for fsync
+    this.writeStream.on('open', (fd) => {
+      this.fd = fd;
     });
 
     this.writeHeader();
@@ -151,6 +158,16 @@ export class AsciinemaWriter {
     const eventArray = [event.time, event.type, event.data];
     const eventJson = JSON.stringify(eventArray);
     this.writeStream.write(eventJson + '\n');
+
+    // Force immediate disk write to trigger file watchers
+    // This is critical for real-time performance with forwarded sessions
+    if (this.fd !== null) {
+      try {
+        fs.fsyncSync(this.fd);
+      } catch (_e) {
+        // Ignore sync errors
+      }
+    }
   }
 
   /**

@@ -192,7 +192,8 @@ export class StreamWatcher {
    * Start watching a file for changes
    */
   private startWatching(sessionId: string, streamPath: string, watcherInfo: WatcherInfo): void {
-    watcherInfo.watcher = fs.watch(streamPath, (eventType) => {
+    // Use options for more responsive watching
+    watcherInfo.watcher = fs.watch(streamPath, { persistent: true }, (eventType) => {
       if (eventType === 'change') {
         try {
           const stats = fs.statSync(streamPath);
@@ -214,6 +215,7 @@ export class StreamWatcher {
             const lines = watcherInfo.lineBuffer.split('\n');
             watcherInfo.lineBuffer = lines.pop() || '';
 
+            console.log(`[STREAM] New data: ${newData}`);
             for (const line of lines) {
               if (line.trim()) {
                 this.broadcastLine(sessionId, line, watcherInfo);
@@ -264,6 +266,8 @@ export class StreamWatcher {
 
             try {
               client.response.write(clientData);
+              // @ts-expect-error - flush exists but not in types
+              if (client.response.flush) client.response.flush();
             } catch (error) {
               console.error(`[STREAM] Error writing to client:`, error);
               // Client might be disconnected
@@ -281,6 +285,8 @@ export class StreamWatcher {
 
         try {
           client.response.write(clientData);
+          // @ts-expect-error - flush exists but not in types
+          if (client.response.flush) client.response.flush();
         } catch (error) {
           console.error(`[STREAM] Error writing to client:`, error);
         }

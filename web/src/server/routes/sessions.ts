@@ -790,10 +790,16 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Cache-Control',
       'X-Accel-Buffering': 'no', // Disable Nginx buffering
+      'Content-Encoding': 'identity', // Prevent compression
     });
+
+    // Force headers to be sent immediately
+    res.flushHeaders();
 
     // Send initial connection event
     res.write(':ok\n\n');
+    // @ts-expect-error - flush exists but not in types
+    if (res.flush) res.flush();
 
     // Add client to stream watcher
     streamWatcher.addClient(sessionId, streamPath, res);
@@ -801,6 +807,8 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
     // Send heartbeat every 30 seconds to keep connection alive
     const heartbeat = setInterval(() => {
       res.write(':heartbeat\n\n');
+      // @ts-expect-error - flush exists but not in types
+      if (res.flush) res.flush();
     }, 30000);
 
     // Clean up on disconnect
