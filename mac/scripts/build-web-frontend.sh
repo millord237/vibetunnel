@@ -29,8 +29,8 @@ APP_RESOURCES="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
 if [ -f "${HASH_FILE}" ]; then
     CURRENT_HASH=$(cat "${HASH_FILE}")
 else
-    echo "error: Hash file not found. Run 'Calculate Web Hash' build phase first."
-    exit 1
+    echo "warning: Hash file not found. Forcing full rebuild..."
+    CURRENT_HASH="force-rebuild-$(date +%s)"
 fi
 
 # Check if we need to rebuild
