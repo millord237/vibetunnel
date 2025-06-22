@@ -1082,7 +1082,7 @@ async function requestTerminalSpawn(params: {
       resolve({ success: false, error: 'Terminal spawn request timed out' });
     });
 
-    client.setTimeout(5000); // 5 second timeout
+    client.setTimeout(10000); // 10 second timeout
     logger.debug(`requesting terminal spawn from Mac app for session ${params.sessionId}`);
   });
 }
