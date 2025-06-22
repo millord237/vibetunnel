@@ -134,6 +134,10 @@ jobs:
     - name: Resolve Dependencies
       run: |
         echo "Resolving iOS package dependencies..."
+        # First resolve at project level
+        cd ios && xcodebuild -resolvePackageDependencies || echo "Project-level resolution completed"
+        cd ..
+        # Then try workspace level
         xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS || {
           echo "Failed to resolve dependencies. Retrying with verbose output..."
           xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS -verbose
@@ -195,6 +199,10 @@ jobs:
     - name: Resolve Test Dependencies
       run: |
         echo "Resolving dependencies for tests..."
+        # First resolve at project level
+        cd ios && xcodebuild -resolvePackageDependencies || echo "Project-level resolution completed"
+        cd ..
+        # Then resolve at workspace level
         xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS
         
     - name: Run iOS tests

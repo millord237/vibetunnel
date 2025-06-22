@@ -150,71 +150,67 @@ private struct PermissionsSection: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 16) {
-                // Automation permission
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Terminal Automation")
-                            .font(.body)
-                        Text("Required to launch and control terminal applications.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    if hasAppleScriptPermission {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Granted")
-                                .foregroundColor(.secondary)
-                        }
+            // Automation permission
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Terminal Automation")
+                        .font(.body)
+                    Text("Required to launch and control terminal applications.")
                         .font(.caption)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 2)
-                        .frame(height: 22) // Match small button height
-                    } else {
-                        Button("Grant Permission") {
-                            permissionManager.requestPermission(.appleScript)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
+                        .foregroundStyle(.secondary)
                 }
 
-                Divider()
+                Spacer()
 
-                // Accessibility permission
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Accessibility")
-                            .font(.body)
-                        Text("Required to enter terminal startup commands.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                if hasAppleScriptPermission {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("Granted")
+                            .foregroundColor(.secondary)
                     }
+                    .font(.caption)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 2)
+                    .frame(height: 22) // Match small button height
+                } else {
+                    Button("Grant Permission") {
+                        permissionManager.requestPermission(.appleScript)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
 
-                    Spacer()
-
-                    if hasAccessibilityPermission {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Granted")
-                                .foregroundColor(.secondary)
-                        }
+            // Accessibility permission
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Accessibility")
+                        .font(.body)
+                    Text("Required to enter terminal startup commands.")
                         .font(.caption)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 2)
-                        .frame(height: 22) // Match small button height
-                    } else {
-                        Button("Grant Permission") {
-                            permissionManager.requestPermission(.accessibility)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if hasAccessibilityPermission {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("Granted")
+                            .foregroundColor(.secondary)
                     }
+                    .font(.caption)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 2)
+                    .frame(height: 22) // Match small button height
+                } else {
+                    Button("Grant Permission") {
+                        permissionManager.requestPermission(.accessibility)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
             }
         } header: {
