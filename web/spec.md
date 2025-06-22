@@ -78,6 +78,10 @@ web/
 
 #### Sessions (`sessions.ts`)
 - `GET /api/sessions` (40-120): List with HQ aggregation
+  - Returns array of `SessionEntryWithId` objects with additional fields:
+    - All fields from `SessionEntryWithId` (see types.ts)
+    - `source`: 'local' | 'remote'
+    - For remote sessions: `remoteId`, `remoteName`, `remoteUrl`
 - `POST /api/sessions` (123-199): Create local/remote
 - `DELETE /api/sessions/:id` (270-323): Kill session
 - `GET /api/sessions/:id/stream` (517-627): SSE streaming of asciinema cast files
@@ -89,6 +93,15 @@ web/
   - Style format: `[style fg="color" bg="color" bold italic ...]text[/style]`
   - Colors: indexed (0-255) as `"15"`, RGB as `"255,128,0"`
   - Attributes: bold, dim, italic, underline, inverse, invisible, strikethrough
+- `GET /api/sessions/activity` (255-311): Activity status for all sessions
+  - Returns: `{ [sessionId]: ActivityStatus }` where ActivityStatus includes:
+    - `isActive`: boolean - Currently generating output
+    - `timestamp`: string - Last update time
+    - `session`: SessionInfo object (see types.ts)
+  - In HQ mode: aggregates activity from all remote servers
+- `GET /api/sessions/:id/activity` (314-370): Activity status for specific session
+  - Returns: `ActivityStatus` object (same format as above)
+  - In HQ mode: forwards to appropriate remote server
 
 #### Remotes (`remotes.ts`) - HQ Mode Only
 - `GET /api/remotes` (15-27): List registered servers
@@ -143,6 +156,40 @@ Cells: Variable-length with type byte
 - Remote session proxy (200-232)
 - Binary message format (136-164)
 
+### Activity Monitoring (`services/activity-monitor.ts`)
+
+#### Overview
+Monitors all terminal sessions for activity by watching `stream-out` file changes.
+- Works for ALL sessions regardless of creation method (server or fwd.ts)
+- No performance impact on terminal output
+- File-based persistence for cross-process access
+
+#### Implementation
+- `start()` (26-37): Begins monitoring with 100ms check interval
+- `scanSessions()` (61-98): Discovers and monitors session directories
+- `handleFileChange()` (146-168): Detects output by file size increase
+- `updateActivityStates()` (173-182): Marks inactive after 500ms timeout
+- `writeActivityStatus()` (187-198): Persists to `activity.json` per session
+
+#### Activity Status Format
+```json
+{
+  "isActive": boolean,
+  "timestamp": "ISO 8601 date string",
+  "session": {                                   // SessionInfo object from session.json
+    "cmdline": ["command", "args"],
+    "name": "session name",
+    "cwd": "/working/directory",
+    "pid": 12345,
+    "status": "starting" | "running" | "exited",
+    "exit_code": 0,
+    "started_at": "ISO 8601 date string",
+    "term": "xterm-256color",
+    "spawn_type": "pty"
+  }
+}
+```
+
 ### HQ Mode Components
 
 #### Remote Registry (`services/remote-registry.ts`)
@@ -168,7 +215,7 @@ Cells: Variable-length with type byte
   - URL-based routing `?session=<id>`
   - Global keyboard handlers
   - Error/success message handling (74-90)
-  - **Events fired**: 
+  - **Events fired**:
     - `toggle-nav` - Toggle navigation
     - `navigate-to-list` - Navigate to session list
     - `error` - Display error message
@@ -303,14 +350,12 @@ CLI tool that spawns PTY sessions integrated with VibeTunnel infrastructure.
 
 ### Key Features
 - Interactive terminal forwarding (295-312)
-- Monitor-only mode (`--monitor-only`)
 - Control pipe handling (140-287)
 - Session persistence (439-446)
 
 ### Usage
 ```bash
 npx tsx src/fwd.ts <command> [args...]
-npx tsx src/fwd.ts --monitor-only <command>
 ```
 
 ### Integration Points
@@ -331,6 +376,7 @@ npx tsx src/fwd.ts --monitor-only <command>
 - `src/server/services/terminal-manager.ts`: Terminal state & binary protocol
 - `src/server/services/buffer-aggregator.ts`: WebSocket buffer distribution
 - `src/server/services/stream-watcher.ts`: SSE file streaming
+- `src/server/services/activity-monitor.ts`: Session activity detection
 - `src/server/fwd.ts`: CLI forwarding tool
 
 ### Client Core
@@ -348,10 +394,18 @@ npx tsx src/fwd.ts --monitor-only <command>
 - CLI: `--port`, `--username`, `--password`, `--hq`, `--hq-url`, `--name`
 
 ### Protocols
-- REST API: Session CRUD, terminal I/O
+- REST API: Session CRUD, terminal I/O, activity status
 - SSE: Real-time streaming of asciinema cast files from disk
 - WebSocket: Binary buffer updates (current terminal viewport)
 - Control pipes: External session control
+
+### Session Data Storage
+Each session has a directory in `~/.vibetunnel/control/[sessionId]/` containing:
+- `session.json`: Session metadata
+- `stream-out`: Asciinema cast file with terminal output
+- `stdin`: Input pipe for sending keystrokes
+- `control`: Control pipe for resize/kill commands
+- `activity.json`: Activity status (written by ActivityMonitor)
 
 ## Development Notes
 

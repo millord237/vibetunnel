@@ -1,0 +1,337 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import type { SessionActivity } from '../../shared/types.js';
+
+interface SessionActivityState {
+  sessionId: string;
+  isActive: boolean;
+  lastActivityTime: number;
+  lastFileSize: number;
+}
+
+export class ActivityMonitor {
+  private controlPath: string;
+  private activities: Map<string, SessionActivityState> = new Map();
+  private watchers: Map<string, fs.FSWatcher> = new Map();
+  private checkInterval: NodeJS.Timeout | null = null;
+  private readonly ACTIVITY_TIMEOUT = 500; // 500ms of no activity = inactive
+  private readonly CHECK_INTERVAL = 100; // Check every 100ms
+
+  constructor(controlPath: string) {
+    this.controlPath = controlPath;
+  }
+
+  /**
+   * Start monitoring all sessions for activity
+   */
+  start() {
+    console.log('[ActivityMonitor] Starting activity monitoring');
+
+    // Initial scan of existing sessions
+    this.scanSessions();
+
+    // Set up periodic scanning for new sessions
+    this.checkInterval = setInterval(() => {
+      this.scanSessions();
+      this.updateActivityStates();
+    }, this.CHECK_INTERVAL);
+  }
+
+  /**
+   * Stop monitoring
+   */
+  stop() {
+    console.log('[ActivityMonitor] Stopping activity monitoring');
+
+    if (this.checkInterval) {
+      clearInterval(this.checkInterval);
+      this.checkInterval = null;
+    }
+
+    // Close all watchers
+    for (const [sessionId, watcher] of this.watchers) {
+      watcher.close();
+      this.watchers.delete(sessionId);
+    }
+
+    this.activities.clear();
+  }
+
+  /**
+   * Scan for sessions and start monitoring new ones
+   */
+  private scanSessions() {
+    try {
+      if (!fs.existsSync(this.controlPath)) {
+        return;
+      }
+
+      const entries = fs.readdirSync(this.controlPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const sessionId = entry.name;
+
+          // Skip if already monitoring
+          if (this.activities.has(sessionId)) {
+            continue;
+          }
+
+          const streamOutPath = path.join(this.controlPath, sessionId, 'stdout');
+
+          // Check if stdout exists
+          if (fs.existsSync(streamOutPath)) {
+            this.startMonitoringSession(sessionId, streamOutPath);
+          }
+        }
+      }
+
+      // Clean up sessions that no longer exist
+      for (const [sessionId, _] of this.activities) {
+        const sessionDir = path.join(this.controlPath, sessionId);
+        if (!fs.existsSync(sessionDir)) {
+          this.stopMonitoringSession(sessionId);
+        }
+      }
+    } catch (error) {
+      console.error('[ActivityMonitor] Error scanning sessions:', error);
+    }
+  }
+
+  /**
+   * Start monitoring a specific session
+   */
+  private startMonitoringSession(sessionId: string, streamOutPath: string) {
+    try {
+      const stats = fs.statSync(streamOutPath);
+
+      // Initialize activity tracking
+      this.activities.set(sessionId, {
+        sessionId,
+        isActive: false,
+        lastActivityTime: Date.now(),
+        lastFileSize: stats.size,
+      });
+
+      // Watch for file changes
+      const watcher = fs.watch(streamOutPath, (eventType) => {
+        if (eventType === 'change') {
+          this.handleFileChange(sessionId, streamOutPath);
+        }
+      });
+
+      this.watchers.set(sessionId, watcher);
+      console.log(`[ActivityMonitor] Started monitoring session ${sessionId}`);
+    } catch (error) {
+      console.error(`[ActivityMonitor] Error starting monitor for session ${sessionId}:`, error);
+    }
+  }
+
+  /**
+   * Stop monitoring a specific session
+   */
+  private stopMonitoringSession(sessionId: string) {
+    const watcher = this.watchers.get(sessionId);
+    if (watcher) {
+      watcher.close();
+      this.watchers.delete(sessionId);
+    }
+
+    this.activities.delete(sessionId);
+    console.log(`[ActivityMonitor] Stopped monitoring session ${sessionId}`);
+  }
+
+  /**
+   * Handle file change event
+   */
+  private handleFileChange(sessionId: string, streamOutPath: string) {
+    try {
+      const activity = this.activities.get(sessionId);
+      if (!activity) return;
+
+      const stats = fs.statSync(streamOutPath);
+
+      // Check if file size increased (new output)
+      if (stats.size > activity.lastFileSize) {
+        activity.isActive = true;
+        activity.lastActivityTime = Date.now();
+        activity.lastFileSize = stats.size;
+
+        // Write activity status immediately
+        this.writeActivityStatus(sessionId, true);
+      }
+    } catch (error) {
+      console.error(
+        `[ActivityMonitor] Error handling file change for session ${sessionId}:`,
+        error
+      );
+    }
+  }
+
+  /**
+   * Update activity states based on timeout
+   */
+  private updateActivityStates() {
+    const now = Date.now();
+
+    for (const [sessionId, activity] of this.activities) {
+      if (activity.isActive && now - activity.lastActivityTime > this.ACTIVITY_TIMEOUT) {
+        activity.isActive = false;
+        this.writeActivityStatus(sessionId, false);
+      }
+    }
+  }
+
+  /**
+   * Write activity status to disk
+   */
+  private writeActivityStatus(sessionId: string, isActive: boolean) {
+    try {
+      const activityPath = path.join(this.controlPath, sessionId, 'activity.json');
+      const sessionJsonPath = path.join(this.controlPath, sessionId, 'session.json');
+
+      const activityData: SessionActivity = {
+        isActive,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Try to read full session data
+      if (fs.existsSync(sessionJsonPath)) {
+        try {
+          const sessionData = JSON.parse(fs.readFileSync(sessionJsonPath, 'utf8'));
+          activityData.session = sessionData;
+        } catch (_error) {
+          // If we can't read session.json, just proceed without session data
+        }
+      }
+
+      fs.writeFileSync(activityPath, JSON.stringify(activityData, null, 2));
+    } catch (error) {
+      console.error(
+        `[ActivityMonitor] Error writing activity status for session ${sessionId}:`,
+        error
+      );
+    }
+  }
+
+  /**
+   * Get activity status for all sessions
+   */
+  getActivityStatus(): Record<string, SessionActivity> {
+    const status: Record<string, SessionActivity> = {};
+
+    // Read from disk to get the most up-to-date status
+    try {
+      if (!fs.existsSync(this.controlPath)) {
+        return status;
+      }
+
+      const entries = fs.readdirSync(this.controlPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const sessionId = entry.name;
+          const activityPath = path.join(this.controlPath, sessionId, 'activity.json');
+          const sessionJsonPath = path.join(this.controlPath, sessionId, 'session.json');
+
+          if (fs.existsSync(activityPath)) {
+            try {
+              const data = JSON.parse(fs.readFileSync(activityPath, 'utf8'));
+              status[sessionId] = data;
+            } catch (_error) {
+              // If we can't read the file, create one from current state
+              const activity = this.activities.get(sessionId);
+              if (activity) {
+                const activityStatus: SessionActivity = {
+                  isActive: activity.isActive,
+                  timestamp: new Date().toISOString(),
+                };
+
+                // Try to read full session data
+                if (fs.existsSync(sessionJsonPath)) {
+                  try {
+                    const sessionData = JSON.parse(fs.readFileSync(sessionJsonPath, 'utf8'));
+                    activityStatus.session = sessionData;
+                  } catch (_error) {
+                    // Ignore session.json read errors
+                  }
+                }
+
+                status[sessionId] = activityStatus;
+              }
+            }
+          } else if (fs.existsSync(sessionJsonPath)) {
+            // No activity file yet, but session exists - create default activity
+            try {
+              const sessionData = JSON.parse(fs.readFileSync(sessionJsonPath, 'utf8'));
+              status[sessionId] = {
+                isActive: false,
+                timestamp: new Date().toISOString(),
+                session: sessionData,
+              };
+            } catch (_error) {
+              // Ignore errors
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[ActivityMonitor] Error reading activity status:', error);
+    }
+
+    return status;
+  }
+
+  /**
+   * Get activity status for a specific session
+   */
+  getSessionActivityStatus(sessionId: string): SessionActivity | null {
+    const sessionJsonPath = path.join(this.controlPath, sessionId, 'session.json');
+
+    // Try to read from disk first
+    try {
+      const activityPath = path.join(this.controlPath, sessionId, 'activity.json');
+      if (fs.existsSync(activityPath)) {
+        const data = JSON.parse(fs.readFileSync(activityPath, 'utf8'));
+        return data;
+      }
+    } catch (_error) {
+      // Fall back to creating from current state
+      const activity = this.activities.get(sessionId);
+      if (activity) {
+        const activityStatus: SessionActivity = {
+          isActive: activity.isActive,
+          timestamp: new Date().toISOString(),
+        };
+
+        // Try to read full session data
+        if (fs.existsSync(sessionJsonPath)) {
+          try {
+            const sessionData = JSON.parse(fs.readFileSync(sessionJsonPath, 'utf8'));
+            activityStatus.session = sessionData;
+          } catch (_error) {
+            // Ignore session.json read errors
+          }
+        }
+
+        return activityStatus;
+      }
+    }
+
+    // If no activity data but session exists, create default
+    if (fs.existsSync(sessionJsonPath)) {
+      try {
+        const sessionData = JSON.parse(fs.readFileSync(sessionJsonPath, 'utf8'));
+        return {
+          isActive: false,
+          timestamp: new Date().toISOString(),
+          session: sessionData,
+        };
+      } catch (_error) {
+        // Ignore errors
+      }
+    }
+
+    return null;
+  }
+}

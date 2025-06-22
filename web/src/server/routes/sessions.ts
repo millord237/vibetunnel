@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { PtyManager, PtyError } from '../pty/index.js';
+import type { Session, SessionActivity } from '../../shared/types.js';
 import { TerminalManager } from '../services/terminal-manager.js';
 import { StreamWatcher } from '../services/stream-watcher.js';
 import { RemoteRegistry } from '../services/remote-registry.js';
+import { ActivityMonitor } from '../services/activity-monitor.js';
 import { cellsToText } from '../../shared/terminal-text-formatter.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -15,6 +17,7 @@ interface SessionRoutesConfig {
   streamWatcher: StreamWatcher;
   remoteRegistry: RemoteRegistry | null;
   isHQMode: boolean;
+  activityMonitor: ActivityMonitor;
 }
 
 // Helper function to resolve path (handles ~)
@@ -36,7 +39,8 @@ function resolvePath(inputPath: string, defaultPath: string): string {
 
 export function createSessionRoutes(config: SessionRoutesConfig): Router {
   const router = Router();
-  const { ptyManager, terminalManager, streamWatcher, remoteRegistry, isHQMode } = config;
+  const { ptyManager, terminalManager, streamWatcher, remoteRegistry, isHQMode, activityMonitor } =
+    config;
 
   // List all sessions (aggregate local + remote in HQ mode)
   router.get('/sessions', async (req, res) => {
@@ -50,15 +54,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       // Add source info to local sessions
       const localSessionsWithSource = localSessions.map((session) => ({
         ...session,
-        id: session.session_id,
-        command: Array.isArray(session.cmdline) ? session.cmdline.join(' ') : session.cmdline || '',
-        workingDir: session.cwd,
-        name: session.name,
-        status: session.status,
-        exitCode: session.exit_code,
-        startedAt: session.started_at,
-        pid: session.pid,
-        source: 'local',
+        source: 'local' as const,
       }));
 
       allSessions = [...localSessionsWithSource];
@@ -83,11 +79,11 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
               console.log(`Got ${remoteSessions.length} sessions from remote ${remote.name}`);
 
               // Track session IDs for this remote
-              const sessionIds = remoteSessions.map((s: { id: string }) => s.id);
+              const sessionIds = remoteSessions.map((s: Session) => s.id);
               remoteRegistry.updateRemoteSessions(remote.id, sessionIds);
 
               // Add remote info to each session
-              return remoteSessions.map((session: { id: string; [key: string]: unknown }) => ({
+              return remoteSessions.map((session: Session) => ({
                 ...session,
                 source: 'remote',
                 remoteId: remote.id,
@@ -227,9 +223,8 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       console.log(`Creating session with PTY service: ${command.join(' ')} in ${cwd}`);
 
       const result = await ptyManager.createSession(command, {
-        sessionName,
+        name: sessionName,
         workingDir: cwd,
-        term: 'xterm-256color',
       });
 
       const { sessionId, sessionInfo } = result;
@@ -245,6 +240,106 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       } else {
         res.status(500).json({ error: 'Failed to create session' });
       }
+    }
+  });
+
+  // Get activity status for all sessions
+  router.get('/sessions/activity', async (req, res) => {
+    try {
+      const activityStatus: Record<string, SessionActivity> = {};
+
+      // Get local sessions activity
+      const localActivity = activityMonitor.getActivityStatus();
+      Object.assign(activityStatus, localActivity);
+
+      // If in HQ mode, get activity from remote servers
+      if (isHQMode && remoteRegistry) {
+        const remotes = remoteRegistry.getRemotes();
+
+        // Fetch activity from each remote in parallel
+        const remotePromises = remotes.map(async (remote) => {
+          try {
+            const response = await fetch(`${remote.url}/api/sessions/activity`, {
+              headers: {
+                Authorization: `Bearer ${remote.token}`,
+              },
+              signal: AbortSignal.timeout(5000),
+            });
+
+            if (response.ok) {
+              const remoteActivity = await response.json();
+              return {
+                remote: {
+                  id: remote.id,
+                  name: remote.name,
+                  url: remote.url,
+                },
+                activity: remoteActivity,
+              };
+            }
+          } catch (error) {
+            console.error(`Failed to get activity from remote ${remote.name}:`, error);
+          }
+          return null;
+        });
+
+        const remoteResults = await Promise.all(remotePromises);
+
+        // Merge remote activity data
+        for (const result of remoteResults) {
+          if (result && result.activity) {
+            // Merge remote activity data
+            Object.assign(activityStatus, result.activity);
+          }
+        }
+      }
+
+      res.json(activityStatus);
+    } catch (error) {
+      console.error('Error getting activity status:', error);
+      res.status(500).json({ error: 'Failed to get activity status' });
+    }
+  });
+
+  // Get activity status for a specific session
+  router.get('/sessions/:sessionId/activity', async (req, res) => {
+    const sessionId = req.params.sessionId;
+
+    try {
+      // If in HQ mode, check if this is a remote session
+      if (isHQMode && remoteRegistry) {
+        const remote = remoteRegistry.getRemoteBySessionId(sessionId);
+        if (remote) {
+          // Forward to remote server
+          try {
+            const response = await fetch(`${remote.url}/api/sessions/${sessionId}/activity`, {
+              headers: {
+                Authorization: `Bearer ${remote.token}`,
+              },
+              signal: AbortSignal.timeout(5000),
+            });
+
+            if (!response.ok) {
+              return res.status(response.status).json(await response.json());
+            }
+
+            return res.json(await response.json());
+          } catch (error) {
+            console.error(`Failed to get activity from remote ${remote.name}:`, error);
+            return res.status(503).json({ error: 'Failed to reach remote server' });
+          }
+        }
+      }
+
+      // Local session handling
+      const activityStatus = activityMonitor.getSessionActivityStatus(sessionId);
+      if (!activityStatus) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      res.json(activityStatus);
+    } catch (error) {
+      console.error(`Error getting activity status for session ${sessionId}:`, error);
+      res.status(500).json({ error: 'Failed to get activity status' });
     }
   });
 
@@ -279,37 +374,12 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       }
 
       // Local session handling
-      const sessionInfo = ptyManager.getSession(sessionId);
+      const session = ptyManager.getSession(sessionId);
 
-      if (!sessionInfo) {
+      if (!session) {
         return res.status(404).json({ error: 'Session not found' });
       }
-
-      // Get the last modified time of the stream file
-      let lastModified = sessionInfo.started_at || new Date().toISOString();
-      try {
-        if (fs.existsSync(sessionInfo['stream-out'])) {
-          const stats = fs.statSync(sessionInfo['stream-out']);
-          lastModified = stats.mtime.toISOString();
-        }
-      } catch {
-        // Use started_at as fallback
-      }
-
-      res.json({
-        id: sessionInfo.session_id,
-        command: Array.isArray(sessionInfo.cmdline)
-          ? sessionInfo.cmdline.join(' ')
-          : sessionInfo.cmdline || '',
-        workingDir: sessionInfo.cwd,
-        name: sessionInfo.name,
-        status: sessionInfo.status,
-        exitCode: sessionInfo.exit_code,
-        startedAt: sessionInfo.started_at,
-        lastModified: lastModified,
-        pid: sessionInfo.pid,
-        waiting: sessionInfo.waiting,
-      });
+      res.json(session);
     } catch (error) {
       console.error('Error getting session info:', error);
       res.status(500).json({ error: 'Failed to get session info' });
@@ -702,8 +772,13 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    const streamPath = session['stream-out'];
-    if (!streamPath) {
+    const sessionPaths = ptyManager.getSessionPaths(sessionId);
+    if (!sessionPaths) {
+      return res.status(404).json({ error: 'Session paths not found' });
+    }
+
+    const streamPath = sessionPaths.stdoutPath;
+    if (!streamPath || !fs.existsSync(streamPath)) {
       return res.status(404).json({ error: 'Session stream not found' });
     }
 

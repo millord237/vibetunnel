@@ -75,7 +75,7 @@ export class TerminalManager {
     const sessionTerminal = this.terminals.get(sessionId);
     if (!sessionTerminal) return;
 
-    const streamPath = path.join(this.controlDir, sessionId, 'stream-out');
+    const streamPath = path.join(this.controlDir, sessionId, 'stdout');
     let lastOffset = 0;
     let lineBuffer = '';
 

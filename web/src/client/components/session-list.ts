@@ -19,23 +19,12 @@
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
+import type { Session } from '../../shared/types.js';
 import './session-create-form.js';
 import './session-card.js';
 
-export interface Session {
-  id: string;
-  command: string;
-  workingDir: string;
-  name?: string;
-  status: 'running' | 'exited';
-  exitCode?: number;
-  startedAt: string;
-  lastModified: string;
-  pid?: number;
-  waiting?: boolean;
-  width?: number;
-  height?: number;
-}
+// Re-export Session type for backward compatibility
+export type { Session };
 
 @customElement('session-list')
 export class SessionList extends LitElement {

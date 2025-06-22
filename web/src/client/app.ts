@@ -2,6 +2,9 @@ import { LitElement, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { keyed } from 'lit/directives/keyed.js';
 
+// Import shared types
+import type { Session } from '../shared/types.js';
+
 // Import components
 import './components/app-header.js';
 import './components/session-create-form.js';
@@ -10,7 +13,6 @@ import './components/session-view.js';
 import './components/session-card.js';
 import './components/file-browser.js';
 
-import type { Session } from './components/session-list.js';
 import type { SessionCard } from './components/session-card.js';
 
 @customElement('vibetunnel-app')

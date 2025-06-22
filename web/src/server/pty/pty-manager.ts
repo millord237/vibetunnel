@@ -11,12 +11,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { onExit } from 'signal-exit';
 import {
-  SessionInfo,
-  SessionOptions,
   PtySession,
   SessionCreationResult,
-  SessionInput,
-  SpecialKey,
   PtyError,
   ResizeControlMessage,
   KillControlMessage,
@@ -24,6 +20,14 @@ import {
 import { AsciinemaWriter } from './asciinema-writer.js';
 import { SessionManager } from './session-manager.js';
 import { ProcessUtils } from './process-utils.js';
+import {
+  Session,
+  SessionCreateOptions,
+  SessionInfo,
+  SessionInput,
+  SpecialKey,
+} from '../../shared/types.js';
+import { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
 
 export class PtyManager {
   private sessions = new Map<string, PtySession>();
@@ -71,15 +75,15 @@ export class PtyManager {
    */
   async createSession(
     command: string[],
-    options: SessionOptions = {}
+    options: SessionCreateOptions
   ): Promise<SessionCreationResult> {
     const sessionId = options.sessionId || uuidv4();
     console.log(
       `[PTY] Creating session - provided ID: ${options.sessionId}, using ID: ${sessionId}`
     );
-    const sessionName = options.sessionName || path.basename(command[0]);
+    const sessionName = options.name || path.basename(command[0]);
     const workingDir = options.workingDir || process.cwd();
-    const term = options.term || this.defaultTerm;
+    const term = this.defaultTerm;
     const cols = options.cols || 80;
     const rows = options.rows || 24;
 
@@ -89,21 +93,20 @@ export class PtyManager {
 
       // Create initial session info
       const sessionInfo: SessionInfo = {
-        cmdline: command,
+        id: sessionId,
+        command: command,
         name: sessionName,
-        cwd: workingDir,
+        workingDir: workingDir,
         status: 'starting',
-        started_at: new Date().toISOString(),
-        term,
-        spawn_type: 'pty',
+        startedAt: new Date().toISOString(),
       };
 
       // Save initial session info
-      this.sessionManager.saveSessionInfo(paths.sessionJsonPath, sessionInfo);
+      this.sessionManager.saveSessionInfo(sessionId, sessionInfo);
 
       // Create asciinema writer
       const asciinemaWriter = AsciinemaWriter.create(
-        paths.streamOutPath,
+        paths.stdoutPath,
         cols,
         rows,
         command.join(' '),
@@ -160,9 +163,9 @@ export class PtyManager {
         ptyProcess,
         asciinemaWriter,
         controlDir: paths.controlDir,
-        streamOutPath: paths.streamOutPath,
+        stdoutPath: paths.stdoutPath,
         stdinPath: paths.stdinPath,
-        notificationPath: paths.notificationPath,
+        controlPipePath: paths.controlPipePath,
         sessionJsonPath: paths.sessionJsonPath,
         startTime: new Date(),
       };
@@ -172,7 +175,7 @@ export class PtyManager {
       // Update session info with PID and running status
       sessionInfo.pid = ptyProcess.pid;
       sessionInfo.status = 'running';
-      this.sessionManager.saveSessionInfo(paths.sessionJsonPath, sessionInfo);
+      this.sessionManager.saveSessionInfo(sessionId, sessionInfo);
 
       // Setup PTY event handlers
       this.setupPtyHandlers(session);
@@ -199,11 +202,16 @@ export class PtyManager {
     }
   }
 
+  public getPtyForSession(sessionId: string): IPty | null {
+    const session = this.sessions.get(sessionId);
+    return session?.ptyProcess || null;
+  }
+
   /**
    * Setup event handlers for a PTY process
    */
   private setupPtyHandlers(session: PtySession): void {
-    const { ptyProcess, asciinemaWriter, sessionJsonPath } = session;
+    const { ptyProcess, asciinemaWriter } = session;
 
     // Handle PTY data output
     ptyProcess?.onData((data: string) => {
@@ -228,7 +236,7 @@ export class PtyManager {
 
         // Update session status
         this.sessionManager.updateSessionStatus(
-          sessionJsonPath,
+          session.id,
           'exited',
           undefined,
           exitCode || (signal ? 128 + (typeof signal === 'number' ? signal : 1) : 1)
@@ -246,12 +254,12 @@ export class PtyManager {
   }
 
   /**
-   * Monitor stdin file for input data using fs.watchFile for better performance
+   * Monitor stdin file for input data
    */
   private monitorStdinFile(session: PtySession): void {
     let lastSize = 0;
 
-    const handleStdinChange = (curr: fs.Stats, _prev: fs.Stats) => {
+    fs.watchFile(session.stdinPath, { interval: 50 }, (curr, _prev) => {
       try {
         if (curr.size > lastSize) {
           // Read new data
@@ -271,14 +279,11 @@ export class PtyManager {
       } catch (_error) {
         // File might not exist or be readable, ignore
       }
-    };
-
-    // Use fs.watchFile for immediate notification instead of polling
-    fs.watchFile(session.stdinPath, { interval: 50 }, handleStdinChange);
+    });
 
     // Clean up file watcher when session ends
     session.ptyProcess?.onExit(() => {
-      fs.unwatchFile(session.stdinPath, handleStdinChange);
+      fs.unwatchFile(session.stdinPath);
     });
   }
 
@@ -286,18 +291,8 @@ export class PtyManager {
    * Send text input to a session
    */
   sendInput(sessionId: string, input: SessionInput): void {
-    // First try to get session from memory (for sessions we created)
-    const memorySession = this.sessions.get(sessionId);
-
-    // If not in memory, check if session exists on filesystem
-    const diskSession = this.sessionManager.getSession(sessionId);
-    if (!diskSession) {
-      throw new PtyError(`Session ${sessionId} not found`, 'SESSION_NOT_FOUND', sessionId);
-    }
-
     try {
       let dataToSend = '';
-
       if (input.text !== undefined) {
         dataToSend = input.text;
       } else if (input.key !== undefined) {
@@ -307,21 +302,20 @@ export class PtyManager {
       }
 
       // If we have an in-memory session with active PTY, use it
+      const memorySession = this.sessions.get(sessionId);
       if (memorySession?.ptyProcess) {
         memorySession.ptyProcess.write(dataToSend);
         memorySession.asciinemaWriter?.writeInput(dataToSend);
       } else {
-        // Otherwise, append to the session's stdin pipe for better performance
-        const stdinPath = diskSession.stdin;
-        if (stdinPath && fs.existsSync(stdinPath)) {
-          fs.appendFileSync(stdinPath, dataToSend);
-        } else {
+        const sessionPaths = this.sessionManager.getSessionPaths(sessionId);
+        if (!sessionPaths) {
           throw new PtyError(
-            `Session ${sessionId} stdin pipe not found at ${stdinPath}`,
-            'STDIN_NOT_FOUND',
+            `Session ${sessionId} paths not found`,
+            'SESSION_PATHS_NOT_FOUND',
             sessionId
           );
         }
+        fs.appendFileSync(sessionPaths.stdinPath, dataToSend);
       }
     } catch (error) {
       throw new PtyError(
@@ -339,27 +333,15 @@ export class PtyManager {
     sessionId: string,
     message: ResizeControlMessage | KillControlMessage
   ): boolean {
-    const diskSession = this.sessionManager.getSession(sessionId);
-    if (!diskSession) {
-      return false;
-    }
-
-    const controlPipe = diskSession.control;
-
-    // External sessions should already have control pipe created by fwd.ts
-    if (!controlPipe) {
-      console.warn(
-        `No control pipe found for session ${sessionId} - external session should create its own control pipe`
-      );
+    const sessionPaths = this.sessionManager.getSessionPaths(sessionId);
+    if (!sessionPaths) {
       return false;
     }
 
     try {
-      if (fs.existsSync(controlPipe)) {
-        const messageStr = JSON.stringify(message) + '\n';
-        fs.writeFileSync(controlPipe, messageStr);
-        return true;
-      }
+      const messageStr = JSON.stringify(message) + '\n';
+      fs.writeFileSync(sessionPaths.controlPipePath, messageStr);
+      return true;
     } catch (error) {
       console.warn(`Failed to send control message to session ${sessionId}:`, error);
     }
@@ -393,14 +375,7 @@ export class PtyManager {
    * Resize a session terminal
    */
   resizeSession(sessionId: string, cols: number, rows: number): void {
-    // First try to get session from memory (for sessions we created)
     const memorySession = this.sessions.get(sessionId);
-
-    // If not in memory, check if session exists on filesystem
-    const diskSession = this.sessionManager.getSession(sessionId);
-    if (!diskSession) {
-      throw new PtyError(`Session ${sessionId} not found`, 'SESSION_NOT_FOUND', sessionId);
-    }
 
     try {
       // If we have an in-memory session with active PTY, resize it
@@ -414,29 +389,7 @@ export class PtyManager {
           cols,
           rows,
         };
-
-        const sent = this.sendControlMessage(sessionId, resizeMessage);
-        if (sent) {
-          console.log(`Sent resize command to external session ${sessionId}: ${cols}x${rows}`);
-        } else {
-          // Fallback: send SIGWINCH to notify the process of terminal size change
-          if (diskSession.pid && ProcessUtils.isProcessRunning(diskSession.pid)) {
-            try {
-              process.kill(diskSession.pid, 'SIGWINCH');
-              console.log(
-                `Control pipe not available for session ${sessionId}, sent SIGWINCH to PID ${diskSession.pid}`
-              );
-            } catch (_error) {
-              console.log(
-                `Cannot resize external session ${sessionId} - no control pipe and SIGWINCH failed`
-              );
-            }
-          } else {
-            console.log(
-              `Cannot resize external session ${sessionId} - no control pipe available and process not running`
-            );
-          }
-        }
+        this.sendControlMessage(sessionId, resizeMessage);
       }
     } catch (error) {
       throw new PtyError(
@@ -452,14 +405,7 @@ export class PtyManager {
    * Returns a promise that resolves when the process is actually terminated
    */
   async killSession(sessionId: string, signal: string | number = 'SIGTERM'): Promise<void> {
-    // First try to get session from memory (for sessions we created)
     const memorySession = this.sessions.get(sessionId);
-
-    // If not in memory, check if session exists on filesystem
-    const diskSession = this.sessionManager.getSession(sessionId);
-    if (!diskSession) {
-      throw new PtyError(`Session ${sessionId} not found`, 'SESSION_NOT_FOUND', sessionId);
-    }
 
     try {
       // If we have an in-memory session with active PTY, kill it directly
@@ -490,6 +436,11 @@ export class PtyManager {
         }
 
         // Check if process is still running, if so, use direct PID kill
+        const diskSession = this.sessionManager.loadSessionInfo(sessionId);
+        if (!diskSession) {
+          throw new PtyError(`Session ${sessionId} not found`, 'SESSION_NOT_FOUND', sessionId);
+        }
+
         if (diskSession.pid && ProcessUtils.isProcessRunning(diskSession.pid)) {
           console.log(
             `Killing external session ${sessionId} (PID: ${diskSession.pid}) with ${signal}...`
@@ -615,8 +566,26 @@ export class PtyManager {
   /**
    * Get a specific session
    */
-  getSession(sessionId: string) {
-    return this.sessionManager.getSession(sessionId);
+  getSession(sessionId: string): Session | null {
+    const paths = this.sessionManager.getSessionPaths(sessionId, true);
+    if (!paths) {
+      return null;
+    }
+    const session = this.sessionManager.loadSessionInfo(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    if (fs.existsSync(paths.stdoutPath)) {
+      const lastModified = fs.statSync(paths.stdoutPath).mtime.toISOString();
+      return { ...session, lastModified };
+    }
+
+    return { ...session, lastModified: session.startedAt };
+  }
+
+  getSessionPaths(sessionId: string) {
+    return this.sessionManager.getSessionPaths(sessionId);
   }
 
   /**

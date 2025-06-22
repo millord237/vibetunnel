@@ -16,6 +16,7 @@ import { createRemoteRoutes } from './routes/remotes.js';
 import { createFilesystemRoutes } from './routes/filesystem.js';
 import { ControlDirWatcher } from './services/control-dir-watcher.js';
 import { BufferAggregator } from './services/buffer-aggregator.js';
+import { ActivityMonitor } from './services/activity-monitor.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getVersionInfo, printVersionBanner } from './version.js';
 
@@ -243,6 +244,7 @@ interface AppInstance {
   hqClient: HQClient | null;
   controlDirWatcher: ControlDirWatcher | null;
   bufferAggregator: BufferAggregator | null;
+  activityMonitor: ActivityMonitor;
 }
 
 export function createApp(): AppInstance {
@@ -294,6 +296,9 @@ export function createApp(): AppInstance {
 
   // Initialize stream watcher for file-based streaming
   const streamWatcher = new StreamWatcher();
+
+  // Initialize activity monitor
+  const activityMonitor = new ActivityMonitor(CONTROL_DIR);
 
   // Initialize HQ components
   let remoteRegistry: RemoteRegistry | null = null;
@@ -355,6 +360,7 @@ export function createApp(): AppInstance {
       streamWatcher,
       remoteRegistry,
       isHQMode: config.isHQMode,
+      activityMonitor,
     })
   );
 
@@ -456,6 +462,9 @@ export function createApp(): AppInstance {
         ptyManager,
       });
       controlDirWatcher.start();
+
+      // Start activity monitor
+      activityMonitor.start();
     });
   };
 
@@ -472,6 +481,7 @@ export function createApp(): AppInstance {
     hqClient,
     controlDirWatcher,
     bufferAggregator,
+    activityMonitor,
   };
 }
 
@@ -479,8 +489,15 @@ export function createApp(): AppInstance {
 export function startVibeTunnelServer() {
   // Create and configure the app
   const appInstance = createApp();
-  const { startServer, server, terminalManager, remoteRegistry, hqClient, controlDirWatcher } =
-    appInstance;
+  const {
+    startServer,
+    server,
+    terminalManager,
+    remoteRegistry,
+    hqClient,
+    controlDirWatcher,
+    activityMonitor,
+  } = appInstance;
 
   startServer();
 
@@ -506,6 +523,9 @@ export function startVibeTunnelServer() {
     console.log(chalk.yellow('\nShutting down...'));
 
     try {
+      // Stop activity monitor
+      activityMonitor.stop();
+
       // Stop control directory watcher
       if (controlDirWatcher) {
         controlDirWatcher.stop();

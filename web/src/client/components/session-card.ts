@@ -12,23 +12,9 @@
  */
 import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import type { Session } from '../../shared/types.js';
 import './vibe-terminal-buffer.js';
 import './copy-icon.js';
-
-export interface Session {
-  id: string;
-  command: string;
-  workingDir: string;
-  name?: string;
-  status: 'running' | 'exited';
-  exitCode?: number;
-  startedAt: string;
-  lastModified: string;
-  pid?: number;
-  waiting?: boolean;
-  width?: number;
-  height?: number;
-}
 
 @customElement('session-card')
 export class SessionCard extends LitElement {
@@ -329,21 +315,21 @@ export class SessionCard extends LitElement {
   }
 
   private getStatusText(): string {
-    if (this.session.waiting) {
+    if (this.session.active === false) {
       return 'waiting';
     }
     return this.session.status;
   }
 
   private getStatusColor(): string {
-    if (this.session.waiting) {
+    if (this.session.active === false) {
       return 'text-dark-text-muted';
     }
     return this.session.status === 'running' ? 'text-status-success' : 'text-status-warning';
   }
 
   private getStatusDotColor(): string {
-    if (this.session.waiting) {
+    if (this.session.active === false) {
       return 'bg-dark-text-muted';
     }
     return this.session.status === 'running' ? 'bg-status-success' : 'bg-status-warning';

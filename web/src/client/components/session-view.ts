@@ -988,7 +988,7 @@ export class SessionView extends LitElement {
 
   private getStatusText(): string {
     if (!this.session) return '';
-    if ('waiting' in this.session && this.session.waiting) {
+    if ('active' in this.session && this.session.active === false) {
       return 'waiting';
     }
     return this.session.status;
@@ -996,7 +996,7 @@ export class SessionView extends LitElement {
 
   private getStatusColor(): string {
     if (!this.session) return 'text-dark-text-muted';
-    if ('waiting' in this.session && this.session.waiting) {
+    if ('active' in this.session && this.session.active === false) {
       return 'text-dark-text-muted';
     }
     return this.session.status === 'running' ? 'text-status-success' : 'text-status-warning';
@@ -1004,7 +1004,7 @@ export class SessionView extends LitElement {
 
   private getStatusDotColor(): string {
     if (!this.session) return 'bg-dark-text-muted';
-    if ('waiting' in this.session && this.session.waiting) {
+    if ('active' in this.session && this.session.active === false) {
       return 'bg-dark-text-muted';
     }
     return this.session.status === 'running' ? 'bg-status-success' : 'bg-status-warning';

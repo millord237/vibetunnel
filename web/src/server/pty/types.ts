@@ -4,55 +4,9 @@
  * These types match the tty-fwd format to ensure compatibility
  */
 
-export interface SessionInfo {
-  cmdline: string[];
-  name: string;
-  cwd: string;
-  pid?: number;
-  status: 'starting' | 'running' | 'exited';
-  exit_code?: number;
-  started_at?: string;
-  term: string;
-  spawn_type: string;
-}
-
-export interface SessionListEntry {
-  // Flatten session info
-  cmdline: string[];
-  name: string;
-  cwd: string;
-  pid?: number;
-  status: 'starting' | 'running' | 'exited';
-  exit_code?: number;
-  started_at?: string;
-  term: string;
-  spawn_type: string;
-
-  // Additional metadata
-  'stream-out': string;
-  stdin: string;
-  'notification-stream': string;
-  waiting: boolean;
-}
-
-export interface SessionEntryWithId {
-  session_id: string;
-  // Flatten the entry for compatibility
-  cmdline: string[];
-  name: string;
-  cwd: string;
-  pid?: number;
-  status: 'starting' | 'running' | 'exited';
-  exit_code?: number;
-  started_at?: string;
-  term: string;
-  spawn_type: string;
-  'stream-out': string;
-  stdin: string;
-  'notification-stream': string;
-  control?: string;
-  waiting: boolean;
-}
+import type { SessionInfo } from '../../shared/types.js';
+import type { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
+import type { AsciinemaWriter } from './asciinema-writer.js';
 
 export interface AsciinemaHeader {
   version: number;
@@ -72,8 +26,6 @@ export interface AsciinemaTheme {
   palette?: string;
 }
 
-export type AsciinemaEventType = 'o' | 'i' | 'r' | 'm'; // output, input, resize, marker
-
 export interface ControlMessage {
   cmd: string;
   [key: string]: unknown;
@@ -90,60 +42,22 @@ export interface KillControlMessage extends ControlMessage {
   signal?: string | number;
 }
 
-export interface AsciinemaEvent {
+export type AsciinemaEvent = {
   time: number;
-  type: AsciinemaEventType;
+  type: 'o' | 'i' | 'r' | 'm';
   data: string;
-}
-
-export interface NotificationEvent {
-  timestamp: string;
-  event: string;
-  data: unknown;
-}
-
-export interface SessionOptions {
-  sessionName?: string;
-  workingDir?: string;
-  term?: string;
-  cols?: number;
-  rows?: number;
-  sessionId?: string;
-}
-
-export interface PtyConfig {
-  implementation: 'node-pty' | 'tty-fwd' | 'auto';
-  controlPath: string;
-  fallbackToTtyFwd: boolean;
-  ttyFwdPath?: string;
-}
-
-export interface StreamEvent {
-  type: 'header' | 'terminal' | 'exit' | 'error' | 'end';
-  data?: unknown;
-}
-
-// Special keys that can be sent to sessions
-export type SpecialKey =
-  | 'arrow_up'
-  | 'arrow_down'
-  | 'arrow_left'
-  | 'arrow_right'
-  | 'escape'
-  | 'enter'
-  | 'ctrl_enter'
-  | 'shift_enter';
+};
 
 // Internal session state for PtyManager
 export interface PtySession {
   id: string;
   sessionInfo: SessionInfo;
-  ptyProcess?: import('@homebridge/node-pty-prebuilt-multiarch').IPty;
-  asciinemaWriter?: import('./asciinema-writer.js').AsciinemaWriter;
+  ptyProcess?: IPty;
+  asciinemaWriter?: AsciinemaWriter;
   controlDir: string;
-  streamOutPath: string;
+  stdoutPath: string;
   stdinPath: string;
-  notificationPath: string;
+  controlPipePath: string;
   sessionJsonPath: string;
   startTime: Date;
 }
@@ -163,10 +77,4 @@ export class PtyError extends Error {
 export interface SessionCreationResult {
   sessionId: string;
   sessionInfo: SessionInfo;
-}
-
-// Utility type for session input
-export interface SessionInput {
-  text?: string;
-  key?: SpecialKey;
 }

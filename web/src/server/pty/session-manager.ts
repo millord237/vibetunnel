@@ -8,8 +8,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { SessionInfo, SessionEntryWithId, PtyError } from './types.js';
+import { PtyError } from './types.js';
 import { ProcessUtils } from './process-utils.js';
+import { Session, SessionInfo } from '../../shared/types.js';
+import { spawnSync } from 'child_process';
 
 export class SessionManager {
   private controlPath: string;
@@ -33,9 +35,9 @@ export class SessionManager {
    */
   createSessionDirectory(sessionId: string): {
     controlDir: string;
-    streamOutPath: string;
+    stdoutPath: string;
     stdinPath: string;
-    notificationPath: string;
+    controlPipePath: string;
     sessionJsonPath: string;
   } {
     const controlDir = path.join(this.controlPath, sessionId);
@@ -45,21 +47,14 @@ export class SessionManager {
       fs.mkdirSync(controlDir, { recursive: true });
     }
 
-    const streamOutPath = path.join(controlDir, 'stream-out');
-    const stdinPath = path.join(controlDir, 'stdin');
-    const notificationPath = path.join(controlDir, 'notification-stream');
-    const sessionJsonPath = path.join(controlDir, 'session.json');
+    const paths = this.getSessionPaths(sessionId, true);
+    if (!paths) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
 
     // Create FIFO pipe for stdin (or regular file on systems without mkfifo)
-    this.createStdinPipe(stdinPath);
-
-    return {
-      controlDir,
-      streamOutPath,
-      stdinPath,
-      notificationPath,
-      sessionJsonPath,
-    };
+    this.createStdinPipe(paths.stdinPath);
+    return paths;
   }
 
   /**
@@ -69,7 +64,6 @@ export class SessionManager {
     try {
       // Try to create FIFO pipe (Unix-like systems)
       if (process.platform !== 'win32') {
-        const { spawnSync } = require('child_process');
         const result = spawnSync('mkfifo', [stdinPath], { stdio: 'ignore' });
         if (result.status === 0) {
           return; // Successfully created FIFO
@@ -91,11 +85,12 @@ export class SessionManager {
   /**
    * Save session info to JSON file
    */
-  saveSessionInfo(sessionJsonPath: string, sessionInfo: SessionInfo): void {
+  saveSessionInfo(sessionId: string, sessionInfo: SessionInfo): void {
     try {
       const sessionInfoStr = JSON.stringify(sessionInfo, null, 2);
 
       // Write to temporary file first, then move to final location (atomic write)
+      const sessionJsonPath = path.join(this.controlPath, sessionId, 'session.json');
       const tempPath = sessionJsonPath + '.tmp';
       fs.writeFileSync(tempPath, sessionInfoStr, 'utf8');
       fs.renameSync(tempPath, sessionJsonPath);
@@ -110,7 +105,8 @@ export class SessionManager {
   /**
    * Load session info from JSON file
    */
-  loadSessionInfo(sessionJsonPath: string): SessionInfo | null {
+  loadSessionInfo(sessionId: string): SessionInfo | null {
+    const sessionJsonPath = path.join(this.controlPath, sessionId, 'session.json');
     try {
       if (!fs.existsSync(sessionJsonPath)) {
         return null;
@@ -127,13 +123,8 @@ export class SessionManager {
   /**
    * Update session status
    */
-  updateSessionStatus(
-    sessionJsonPath: string,
-    status: string,
-    pid?: number,
-    exitCode?: number
-  ): void {
-    const sessionInfo = this.loadSessionInfo(sessionJsonPath);
+  updateSessionStatus(sessionId: string, status: string, pid?: number, exitCode?: number): void {
+    const sessionInfo = this.loadSessionInfo(sessionId);
     if (!sessionInfo) {
       throw new PtyError('Session info not found', 'SESSION_NOT_FOUND');
     }
@@ -143,66 +134,57 @@ export class SessionManager {
     }
     sessionInfo.status = status as 'starting' | 'running' | 'exited';
     if (exitCode !== undefined) {
-      sessionInfo.exit_code = exitCode;
+      sessionInfo.exitCode = exitCode;
     }
 
-    this.saveSessionInfo(sessionJsonPath, sessionInfo);
+    this.saveSessionInfo(sessionId, sessionInfo);
   }
 
   /**
    * List all sessions
    */
-  listSessions(): SessionEntryWithId[] {
+  listSessions(): Session[] {
     try {
       if (!fs.existsSync(this.controlPath)) {
         return [];
       }
 
-      const sessions: SessionEntryWithId[] = [];
+      const sessions: Session[] = [];
       const entries = fs.readdirSync(this.controlPath, { withFileTypes: true });
 
       for (const entry of entries) {
         if (entry.isDirectory()) {
           const sessionId = entry.name;
           const sessionDir = path.join(this.controlPath, sessionId);
-          const sessionJsonPath = path.join(sessionDir, 'session.json');
+          const stdoutPath = path.join(sessionDir, 'stdout');
 
-          const sessionInfo = this.loadSessionInfo(sessionJsonPath);
+          const sessionInfo = this.loadSessionInfo(sessionId);
           if (sessionInfo) {
-            // Determine waiting state for running processes
-            let waiting = false;
+            // Determine active state for running processes
             if (sessionInfo.status === 'running' && sessionInfo.pid) {
-              const processStatus = this.getProcessStatus(sessionInfo.pid);
-              waiting = processStatus.isWaiting;
-
               // Update status if process is no longer alive
-              if (!processStatus.isAlive) {
+              if (!ProcessUtils.isProcessRunning(sessionInfo.pid)) {
                 sessionInfo.status = 'exited';
-                if (sessionInfo.exit_code === undefined) {
-                  sessionInfo.exit_code = 1; // Default exit code for dead processes
+                if (sessionInfo.exitCode === undefined) {
+                  sessionInfo.exitCode = 1; // Default exit code for dead processes
                 }
-                this.saveSessionInfo(sessionJsonPath, sessionInfo);
+                this.saveSessionInfo(sessionId, sessionInfo);
               }
             }
-
-            const sessionEntry: SessionEntryWithId = {
-              session_id: sessionId,
-              ...sessionInfo,
-              'stream-out': path.join(sessionDir, 'stream-out'),
-              stdin: path.join(sessionDir, 'stdin'),
-              'notification-stream': path.join(sessionDir, 'notification-stream'),
-              waiting,
-            };
-
-            sessions.push(sessionEntry);
+            if (fs.existsSync(stdoutPath)) {
+              const lastModified = fs.statSync(stdoutPath).mtime.toISOString();
+              sessions.push({ ...sessionInfo, lastModified });
+            } else {
+              sessions.push({ ...sessionInfo, lastModified: sessionInfo.startedAt });
+            }
           }
         }
       }
 
-      // Sort by started_at timestamp (newest first)
+      // Sort by startedAt timestamp (newest first)
       sessions.sort((a, b) => {
-        const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
-        const bTime = b.started_at ? new Date(b.started_at).getTime() : 0;
+        const aTime = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+        const bTime = b.startedAt ? new Date(b.startedAt).getTime() : 0;
         return bTime - aTime;
       });
 
@@ -213,14 +195,6 @@ export class SessionManager {
         'LIST_SESSIONS_FAILED'
       );
     }
-  }
-
-  /**
-   * Get a specific session by ID
-   */
-  getSession(sessionId: string): SessionEntryWithId | null {
-    const sessions = this.listSessions();
-    return sessions.find((s) => s.session_id === sessionId) || null;
   }
 
   /**
@@ -263,8 +237,8 @@ export class SessionManager {
 
       for (const session of sessions) {
         if (session.status === 'exited') {
-          this.cleanupSession(session.session_id);
-          cleanedSessions.push(session.session_id);
+          this.cleanupSession(session.id);
+          cleanedSessions.push(session.id);
         }
       }
 
@@ -280,24 +254,27 @@ export class SessionManager {
   /**
    * Get session paths for a given session ID
    */
-  getSessionPaths(sessionId: string): {
+  getSessionPaths(
+    sessionId: string,
+    checkExists: boolean = false
+  ): {
     controlDir: string;
-    streamOutPath: string;
+    stdoutPath: string;
     stdinPath: string;
-    notificationPath: string;
+    controlPipePath: string;
     sessionJsonPath: string;
   } | null {
     const sessionDir = path.join(this.controlPath, sessionId);
 
-    if (!fs.existsSync(sessionDir)) {
+    if (checkExists && !fs.existsSync(sessionDir)) {
       return null;
     }
 
     return {
       controlDir: sessionDir,
-      streamOutPath: path.join(sessionDir, 'stream-out'),
+      stdoutPath: path.join(sessionDir, 'stdout'),
       stdinPath: path.join(sessionDir, 'stdin'),
-      notificationPath: path.join(sessionDir, 'notification-stream'),
+      controlPipePath: path.join(sessionDir, 'control'),
       sessionJsonPath: path.join(sessionDir, 'session.json'),
     };
   }
@@ -325,68 +302,6 @@ export class SessionManager {
   }
 
   /**
-   * Check if a process is still running
-   * Uses cross-platform process detection for reliability
-   */
-  isProcessRunning(pid: number): boolean {
-    return ProcessUtils.isProcessRunning(pid);
-  }
-
-  /**
-   * Get detailed process status like tty-fwd does
-   */
-  getProcessStatus(pid: number): { isAlive: boolean; isWaiting: boolean } {
-    try {
-      // First check if process exists using cross-platform method
-      if (!ProcessUtils.isProcessRunning(pid)) {
-        return { isAlive: false, isWaiting: false };
-      }
-
-      // Use ps command to get process state like tty-fwd does (Unix only)
-      if (process.platform === 'win32') {
-        // On Windows, we can't easily get process state, so assume running
-        return { isAlive: true, isWaiting: false };
-      }
-
-      const { spawnSync } = require('child_process');
-      const result = spawnSync('ps', ['-p', pid.toString(), '-o', 'stat='], {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
-
-      if (result.status === 0 && result.stdout) {
-        const stat = result.stdout.trim();
-
-        // Check if it's a zombie process (status starts with 'Z')
-        const isZombie = stat.startsWith('Z');
-        const isAlive = !isZombie;
-
-        // Determine if waiting vs running based on process state
-        // Common Unix process states:
-        // R = Running or runnable (on run queue)
-        // S = Interruptible sleep (waiting for an event)
-        // D = Uninterruptible sleep (usually IO)
-        // T = Stopped (on a signal or being traced)
-        // Z = Zombie (terminated but not reaped)
-
-        // For terminal sessions, only consider these as truly "waiting":
-        // D = Uninterruptible sleep (usually blocked on I/O)
-        // T = Stopped/traced (paused by signal)
-        // Note: 'S' state is normal for interactive shells waiting for input
-        const isWaiting = stat.includes('D') || stat.includes('T');
-
-        return { isAlive, isWaiting };
-      }
-
-      // If ps command failed, process probably doesn't exist
-      return { isAlive: false, isWaiting: false };
-    } catch (_error) {
-      // Process doesn't exist or no permission
-      return { isAlive: false, isWaiting: false };
-    }
-  }
-
-  /**
    * Update sessions that have zombie processes
    */
   updateZombieSessions(): string[] {
@@ -397,12 +312,12 @@ export class SessionManager {
 
       for (const session of sessions) {
         if (session.status === 'running' && session.pid) {
-          if (!this.isProcessRunning(session.pid)) {
+          if (!ProcessUtils.isProcessRunning(session.pid)) {
             // Process is dead, update status
-            const paths = this.getSessionPaths(session.session_id);
+            const paths = this.getSessionPaths(session.id);
             if (paths) {
               this.updateSessionStatus(paths.sessionJsonPath, 'exited', undefined, 1);
-              updatedSessions.push(session.session_id);
+              updatedSessions.push(session.id);
             }
           }
         }
