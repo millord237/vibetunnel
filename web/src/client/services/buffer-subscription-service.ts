@@ -150,6 +150,11 @@ export class BufferSubscriptionService {
           logger.log(`connected to server, version: ${message.version}`);
           break;
 
+        case 'subscribed':
+          // Server confirmed subscription to session
+          logger.debug(`subscribed to session: ${message.sessionId}`);
+          break;
+
         case 'ping':
           this.sendMessage({ type: 'pong' });
           break;
