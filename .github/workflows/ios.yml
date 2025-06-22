@@ -137,12 +137,13 @@ jobs:
         
     - name: Show build settings
       run: |
-        cd ios && xcodebuild -showBuildSettings -scheme VibeTunnel-iOS -destination "platform=iOS,name=Any iOS Device"
+        cd ios && xcodebuild -showBuildSettings -project VibeTunnel-iOS.xcodeproj -scheme VibeTunnel-iOS -destination "platform=iOS,name=Any iOS Device"
         
     - name: Build iOS app
       run: |
         set -o pipefail
         cd ios && xcodebuild build \
+          -project VibeTunnel-iOS.xcodeproj \
           -scheme VibeTunnel-iOS \
           -destination "platform=iOS,name=Any iOS Device" \
           -configuration Release \

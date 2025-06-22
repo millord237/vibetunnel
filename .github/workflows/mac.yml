@@ -163,6 +163,7 @@ jobs:
       run: |
         set -o pipefail && \
         cd mac && xcodebuild build \
+          -project VibeTunnel-Mac.xcodeproj \
           -scheme VibeTunnel-Mac \
           -configuration Debug \
           -destination "platform=macOS" \
@@ -180,6 +181,7 @@ jobs:
       run: |
         set -o pipefail && \
         cd mac && xcodebuild build \
+          -project VibeTunnel-Mac.xcodeproj \
           -scheme VibeTunnel-Mac \
           -configuration Release \
           -destination "platform=macOS" \
@@ -198,6 +200,7 @@ jobs:
         # Use xcodebuild test for workspace testing
         set -o pipefail && \
         cd mac && xcodebuild test \
+          -project VibeTunnel-Mac.xcodeproj \
           -scheme VibeTunnel-Mac \
           -configuration Debug \
           -destination "platform=macOS" \
