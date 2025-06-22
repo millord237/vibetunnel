@@ -178,19 +178,22 @@ jobs:
       with:
         xcode-version: '16.3'
 
-    - name: Run Swift tests
+    - name: Run iOS tests
       run: |
         cd ios
-        echo "Running standalone Swift tests..."
-        swift test --parallel
-        
-    - name: Build iOS app (no test targets in Xcode project)
-      run: |
-        cd ios
-        echo "Note: Tests are run separately using Swift Testing framework"
-        xcodebuild build \
+        echo "Running iOS tests on simulator..."
+        xcodebuild test \
           -project VibeTunnel.xcodeproj \
           -scheme VibeTunnel \
-          -destination "platform=iOS Simulator,OS=18.0,name=iPhone 15" \
+          -destination "platform=iOS Simulator,OS=18.0,name=iPhone 16 Pro" \
           -configuration Debug \
-          -derivedDataPath build/DerivedData
+          -derivedDataPath build/DerivedData \
+          -quiet || {
+            echo "Test failed, retrying with verbose output..."
+            xcodebuild test \
+              -project VibeTunnel.xcodeproj \
+              -scheme VibeTunnel \
+              -destination "platform=iOS Simulator,OS=18.0,name=iPhone 16 Pro" \
+              -configuration Debug \
+              -derivedDataPath build/DerivedData
+          }
