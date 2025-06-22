@@ -148,6 +148,31 @@ struct AdvancedSettingsView: View {
             }
         )
     }
+    
+    private var vtScriptPath: String {
+        if let path = Bundle.main.path(forResource: "vt", ofType: nil) {
+            return path
+        }
+        return "/Applications/VibeTunnel.app/Contents/Resources/vt"
+    }
+    
+    private var vtConflictMessage: String {
+        """
+        If 'vt' is already in use on your system, you can copy the VibeTunnel command script with a different name.
+
+        Copy command:
+        cp "\(vtScriptPath)" /usr/local/bin/vtunnel && chmod +x /usr/local/bin/vtunnel
+
+        This will create 'vtunnel' as an alternative command name.
+        """
+    }
+    
+    private func copyCommandToClipboard() {
+        let command = "cp \"\(vtScriptPath)\" /usr/local/bin/vtunnel && chmod +x /usr/local/bin/vtunnel"
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(command, forType: .string)
+    }
 }
 
 // MARK: - Terminal Preference Section
@@ -267,6 +292,14 @@ private struct TerminalPreferenceSection: View {
             .font(.caption)
             .frame(maxWidth: .infinity)
             .multilineTextAlignment(.center)
+        }
+        .alert("Using a Different Command Name", isPresented: $showingVtConflictAlert) {
+            Button("OK") {}
+            Button("Copy to Clipboard") {
+                copyCommandToClipboard()
+            }
+        } message: {
+            Text(vtConflictMessage)
         }
         .alert(errorTitle, isPresented: $showingError) {
             Button("OK") {}
