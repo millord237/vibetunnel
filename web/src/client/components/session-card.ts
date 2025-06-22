@@ -85,10 +85,15 @@ export class SessionCard extends LitElement {
     await this.kill();
   }
 
-  // Public method to kill the session with animation
+  // Public method to kill the session with animation (or clean up exited session)
   public async kill(): Promise<boolean> {
-    // Don't kill if already killing or session is not running
-    if (this.killing || this.session.status !== 'running') {
+    // Don't kill if already killing
+    if (this.killing) {
+      return false;
+    }
+
+    // Only allow killing/cleanup for running or exited sessions
+    if (this.session.status !== 'running' && this.session.status !== 'exited') {
       return false;
     }
 
@@ -223,13 +228,18 @@ export class SessionCard extends LitElement {
               ${this.session.name || this.session.command}
             </div>
           </div>
-          ${this.session.status === 'running'
+          ${this.session.status === 'running' || this.session.status === 'exited'
             ? html`
                 <button
-                  class="btn-ghost text-status-error disabled:opacity-50 flex-shrink-0 p-1 rounded-full hover:bg-status-error hover:bg-opacity-20 transition-all"
+                  class="btn-ghost ${this.session.status === 'running'
+                    ? 'text-status-error'
+                    : 'text-status-warning'} disabled:opacity-50 flex-shrink-0 p-1 rounded-full hover:bg-opacity-20 transition-all ${this
+                    .session.status === 'running'
+                    ? 'hover:bg-status-error'
+                    : 'hover:bg-status-warning'}"
                   @click=${this.handleKillClick}
                   ?disabled=${this.killing}
-                  title="Kill session"
+                  title="${this.session.status === 'running' ? 'Kill session' : 'Clean up session'}"
                 >
                   ${this.killing
                     ? html`<span class="block w-5 h-5 flex items-center justify-center"
