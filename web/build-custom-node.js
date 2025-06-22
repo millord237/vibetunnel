@@ -3,23 +3,12 @@
 /**
  * Build a custom Node.js binary with reduced size by excluding features we don't need.
  * 
- * This creates a Node.js build without:
- * - International support (ICU) - saves ~28MB
- * - npm/npx - saves ~5MB
- * - corepack
- * - dtrace/etw instrumentation
+ * See custom-node.md for detailed documentation, usage, and troubleshooting.
  * 
- * The resulting binary is typically 50-60MB instead of 110+MB.
- * 
- * Usage:
- * ```bash
- * node build-custom-node.js               # Build for current Node.js version
- * node build-custom-node.js --latest      # Build latest Node.js version
- * node build-custom-node.js --version=24.2.0  # Build specific version
- * ```
- * 
- * The custom Node.js will be built in:
- * .node-builds/node-vXX-minimal/out/Release/node
+ * Quick usage:
+ *   node build-custom-node.js               # Current version
+ *   node build-custom-node.js --latest      # Latest version
+ *   node build-custom-node.js --version=24.1.0  # Specific version
  */
 
 const { execSync } = require('child_process');
