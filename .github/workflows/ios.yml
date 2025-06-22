@@ -137,7 +137,12 @@ jobs:
         
     - name: Show build settings
       run: |
-        cd ios && xcodebuild -showBuildSettings -project VibeTunnel-iOS.xcodeproj -scheme VibeTunnel-iOS -destination "platform=iOS,name=Any iOS Device"
+        cd ios
+        echo "Current directory: $(pwd)"
+        echo "Available schemes:"
+        xcodebuild -list -project VibeTunnel-iOS.xcodeproj || echo "Failed to list schemes"
+        echo "Showing build settings..."
+        xcodebuild -showBuildSettings -project VibeTunnel-iOS.xcodeproj -scheme VibeTunnel-iOS -destination "platform=iOS,name=Any iOS Device"
         
     - name: Build iOS app
       run: |

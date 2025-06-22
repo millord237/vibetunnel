@@ -161,8 +161,12 @@ jobs:
     - name: Build Debug (Native Architecture)
       timeout-minutes: 30
       run: |
-        set -o pipefail && \
-        cd mac && xcodebuild build \
+        cd mac
+        echo "Current directory: $(pwd)"
+        echo "Available schemes:"
+        xcodebuild -list -project VibeTunnel-Mac.xcodeproj || echo "Failed to list schemes"
+        echo "Building..."
+        set -o pipefail && xcodebuild build \
           -project VibeTunnel-Mac.xcodeproj \
           -scheme VibeTunnel-Mac \
           -configuration Debug \
