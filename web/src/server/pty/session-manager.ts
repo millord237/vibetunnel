@@ -316,7 +316,7 @@ export class SessionManager {
             // Process is dead, update status
             const paths = this.getSessionPaths(session.id);
             if (paths) {
-              this.updateSessionStatus(paths.sessionJsonPath, 'exited', undefined, 1);
+              this.updateSessionStatus(session.id, 'exited', undefined, 1);
               updatedSessions.push(session.id);
             }
           }
