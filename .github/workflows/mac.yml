@@ -150,6 +150,14 @@ jobs:
         echo "xcbeautify: $(which xcbeautify || echo 'not found')"
         echo "go: $(which go || echo 'not found')"
         
+    - name: Debug workspace
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Workspace contents:"
+        ls -la VibeTunnel.xcworkspace/
+        echo "Available schemes:"
+        xcodebuild -workspace VibeTunnel.xcworkspace -list || echo "Failed to list schemes"
+        
     - name: Resolve Dependencies
       run: |
         echo "Resolving Swift package dependencies..."

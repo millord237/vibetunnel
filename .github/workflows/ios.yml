@@ -127,6 +127,14 @@ jobs:
       run: |
         gem install xcpretty
 
+    - name: Debug workspace
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Workspace contents:"
+        ls -la VibeTunnel.xcworkspace/
+        echo "Available schemes:"
+        xcodebuild -workspace VibeTunnel.xcworkspace -list || echo "Failed to list schemes"
+
     - name: Show build settings
       run: |
         xcodebuild -showBuildSettings -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-iOS -destination generic/platform=iOS
