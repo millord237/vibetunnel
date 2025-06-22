@@ -98,9 +98,21 @@ git clone https://github.com/amantus-ai/vibetunnel.git
 cd vibetunnel
 
 # Set up code signing (required for macOS/iOS development)
-# Copy the template and add your Apple Developer Team ID
-cp apple/Local.xcconfig.template apple/Local.xcconfig
-# Edit apple/Local.xcconfig and set DEVELOPMENT_TEAM = YOUR_TEAM_ID
+# Create Local.xcconfig files with your Apple Developer Team ID
+# Note: These files must be in the same directory as Shared.xcconfig
+cat > mac/VibeTunnel/Local.xcconfig << EOF
+// Local Development Configuration
+// DO NOT commit this file to version control
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_STYLE = Automatic
+EOF
+
+cat > ios/VibeTunnel/Local.xcconfig << EOF
+// Local Development Configuration  
+// DO NOT commit this file to version control
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_STYLE = Automatic
+EOF
 
 # Build the web server
 cd web
