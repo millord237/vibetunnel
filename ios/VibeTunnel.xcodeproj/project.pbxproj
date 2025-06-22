@@ -52,7 +52,6 @@
 		651BDD47248F3D9D55994B3E /* VibeTunnelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeTunnelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		778FE49DC79E8514CD11A94F /* MockWebSocketTask.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MockWebSocketTask.swift; path = VibeTunnelTests/Mocks/MockWebSocketTask.swift; sourceTree = "<group>"; };
 		7C27ECCFC47CD72452A9FD3E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		93A0E229E7C701C7D6AD921B /* VibeTunnelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeTunnelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A118F0B3208513EEF0373B69 /* TerminalParsingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TerminalParsingTests.swift; path = VibeTunnelTests/TerminalParsingTests.swift; sourceTree = "<group>"; };
 		AB3C38909F88E2D50282BC51 /* WebSocketReconnectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WebSocketReconnectionTests.swift; path = VibeTunnelTests/WebSocketReconnectionTests.swift; sourceTree = "<group>"; };
 		B38BEE7FE833B6FDC3A56BCE /* TestFixtures.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TestFixtures.swift; path = VibeTunnelTests/Utilities/TestFixtures.swift; sourceTree = "<group>"; };
@@ -148,7 +147,6 @@
 			isa = PBXGroup;
 			children = (
 				216D52E392D8F0CDC6358BB8 /* VibeTunnel.app */,
-				93A0E229E7C701C7D6AD921B /* VibeTunnelTests.xctest */,
 				651BDD47248F3D9D55994B3E /* VibeTunnelTests.xctest */,
 			);
 			name = Products;
@@ -405,6 +403,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vibetunnel.VibeTunnelTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				VALIDATE_PRODUCT = YES;
@@ -494,6 +493,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vibetunnel.VibeTunnelTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 			};
