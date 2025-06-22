@@ -206,72 +206,67 @@ export class StreamWatcher {
    * Start watching a file for changes
    */
   private startWatching(sessionId: string, streamPath: string, watcherInfo: WatcherInfo): void {
-    // First, set up direct notification listener for lowest latency
-    let hasDirectNotifications = false;
+    // Check if we should use direct notifications or file watching
+    const hasListeners = streamNotifier.hasListeners(sessionId);
 
-    watcherInfo.notificationListener = (update) => {
-      if (update.sessionId === sessionId) {
-        hasDirectNotifications = true;
-        // Process the notification data directly
-        const lines = update.data.split('\n').filter((line) => line.trim());
-        for (const line of lines) {
-          this.broadcastLine(sessionId, line, watcherInfo);
+    if (hasListeners) {
+      console.log(`[STREAM] Using direct notifications for session ${sessionId}`);
+
+      // Set up direct notification listener for lowest latency
+      watcherInfo.notificationListener = (update) => {
+        if (update.sessionId === sessionId) {
+          // Process the notification data directly
+          const lines = update.data.split('\n').filter((line) => line.trim());
+          for (const line of lines) {
+            this.broadcastLine(sessionId, line, watcherInfo);
+          }
         }
-      }
-    };
-    streamNotifier.on('stream-update', watcherInfo.notificationListener);
+      };
+      streamNotifier.on('stream-update', watcherInfo.notificationListener);
+    } else {
+      console.log(`[STREAM] Using file watcher for session ${sessionId} (cross-process)`);
 
-    // Only use file watcher if we're not getting direct notifications
-    // Give it a moment to see if we get direct notifications
-    setTimeout(() => {
-      if (!hasDirectNotifications) {
-        console.log(
-          `[STREAM] No direct notifications for session ${sessionId}, using file watcher`
-        );
-        // Use optimized file watcher as fallback (for cross-process scenarios)
-        watcherInfo.watcher = new OptimizedFileWatcher(streamPath, { persistent: true });
+      // Use optimized file watcher for cross-process scenarios
+      watcherInfo.watcher = new OptimizedFileWatcher(streamPath, { persistent: true });
 
-        watcherInfo.watcher.on('change', (stats) => {
-          try {
-            if (stats.size > watcherInfo.lastOffset) {
-              // Read only new data
-              const fd = fs.openSync(streamPath, 'r');
-              const buffer = Buffer.alloc(stats.size - watcherInfo.lastOffset);
-              fs.readSync(fd, buffer, 0, buffer.length, watcherInfo.lastOffset);
-              fs.closeSync(fd);
+      watcherInfo.watcher.on('change', (stats) => {
+        try {
+          if (stats.size > watcherInfo.lastOffset) {
+            // Read only new data
+            const fd = fs.openSync(streamPath, 'r');
+            const buffer = Buffer.alloc(stats.size - watcherInfo.lastOffset);
+            fs.readSync(fd, buffer, 0, buffer.length, watcherInfo.lastOffset);
+            fs.closeSync(fd);
 
-              // Update offset
-              watcherInfo.lastOffset = stats.size;
+            // Update offset
+            watcherInfo.lastOffset = stats.size;
 
-              // Process new data
-              const newData = buffer.toString('utf8');
-              watcherInfo.lineBuffer += newData;
+            // Process new data
+            const newData = buffer.toString('utf8');
+            watcherInfo.lineBuffer += newData;
 
-              // Process complete lines
-              const lines = watcherInfo.lineBuffer.split('\n');
-              watcherInfo.lineBuffer = lines.pop() || '';
+            // Process complete lines
+            const lines = watcherInfo.lineBuffer.split('\n');
+            watcherInfo.lineBuffer = lines.pop() || '';
 
-              for (const line of lines) {
-                if (line.trim()) {
-                  this.broadcastLine(sessionId, line, watcherInfo);
-                }
+            for (const line of lines) {
+              if (line.trim()) {
+                this.broadcastLine(sessionId, line, watcherInfo);
               }
             }
-          } catch (error) {
-            console.error(`[STREAM] Error reading file changes:`, error);
           }
-        });
+        } catch (error) {
+          console.error(`[STREAM] Error reading file changes:`, error);
+        }
+      });
 
-        watcherInfo.watcher.on('error', (error) => {
-          console.error(`[STREAM] File watcher error for session ${sessionId}:`, error);
-        });
+      watcherInfo.watcher.on('error', (error) => {
+        console.error(`[STREAM] File watcher error for session ${sessionId}:`, error);
+      });
 
-        // Start the watcher
-        watcherInfo.watcher.start();
-      }
-    }, 100); // Wait 100ms to see if we get direct notifications
-
-    console.log(`[STREAM] Started watching for session ${sessionId}`);
+      // Start the watcher
+      watcherInfo.watcher.start();
+    }
   }
 
   /**
