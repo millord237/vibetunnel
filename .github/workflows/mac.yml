@@ -153,9 +153,9 @@ jobs:
     - name: Resolve Dependencies
       run: |
         echo "Resolving Swift package dependencies..."
-        xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel -quiet || {
+        xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-Mac -quiet || {
           echo "Failed to resolve dependencies. Retrying with verbose output..."
-          xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel
+          xcodebuild -resolvePackageDependencies -workspace VibeTunnel.xcworkspace -scheme VibeTunnel-Mac
         }
         
     - name: Build Debug (Native Architecture)
@@ -164,7 +164,7 @@ jobs:
         set -o pipefail && \
         xcodebuild build \
           -workspace VibeTunnel.xcworkspace \
-          -scheme VibeTunnel \
+          -scheme VibeTunnel-Mac \
           -configuration Debug \
           -destination "platform=macOS" \
           CODE_SIGN_IDENTITY="" \
@@ -182,7 +182,7 @@ jobs:
         set -o pipefail && \
         xcodebuild build \
           -workspace VibeTunnel.xcworkspace \
-          -scheme VibeTunnel \
+          -scheme VibeTunnel-Mac \
           -configuration Release \
           -destination "platform=macOS" \
           CODE_SIGN_IDENTITY="" \
@@ -201,7 +201,7 @@ jobs:
         set -o pipefail && \
         xcodebuild test \
           -workspace VibeTunnel.xcworkspace \
-          -scheme VibeTunnel \
+          -scheme VibeTunnel-Mac \
           -configuration Debug \
           -destination "platform=macOS" \
           | xcbeautify || {
