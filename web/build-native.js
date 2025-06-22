@@ -117,9 +117,35 @@ if (nodeVersion < 20) {
 }
 
 function patchNodePty() {
+  console.log('Preparing node-pty for SEA build...');
+  
+  // Always reinstall to ensure clean state
   console.log('Reinstalling node-pty to ensure clean state...');
   execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
   execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit', { stdio: 'inherit' });
+  
+  // If using custom Node.js, check if we need to rebuild
+  if (customNodePath) {
+    console.log('Custom Node.js detected - checking native module compatibility...');
+    
+    // Get versions
+    const customVersion = execSync(`"${customNodePath}" --version`, { encoding: 'utf8' }).trim();
+    const systemVersion = process.version;
+    
+    console.log(`Custom Node.js: ${customVersion}`);
+    console.log(`System Node.js: ${systemVersion}`);
+    
+    // Extract major versions
+    const customMajor = parseInt(customVersion.substring(1).split('.')[0]);
+    const systemMajor = parseInt(systemVersion.substring(1).split('.')[0]);
+    
+    if (customMajor !== systemMajor) {
+      console.warn(`WARNING: Major version mismatch (${customMajor} vs ${systemMajor})`);
+      console.warn('Native modules may not be compatible. Consider rebuilding.');
+    } else {
+      console.log('Major versions match - native modules should be compatible.');
+    }
+  }
   
   console.log('Patching node-pty for SEA build...');
 
@@ -388,19 +414,30 @@ async function main() {
     console.log('Copying native modules...');
     const nativeModulesDir = 'node_modules/@homebridge/node-pty-prebuilt-multiarch/build/Release';
     
+    // Check if native modules exist
+    if (!fs.existsSync(nativeModulesDir)) {
+      console.error(`Error: Native modules directory not found at ${nativeModulesDir}`);
+      console.error('This usually means the native module build failed.');
+      process.exit(1);
+    }
+    
     // Copy pty.node
-    fs.copyFileSync(
-      path.join(nativeModulesDir, 'pty.node'),
-      'native/pty.node'
-    );
+    const ptyNodePath = path.join(nativeModulesDir, 'pty.node');
+    if (!fs.existsSync(ptyNodePath)) {
+      console.error('Error: pty.node not found. Native module build may have failed.');
+      process.exit(1);
+    }
+    fs.copyFileSync(ptyNodePath, 'native/pty.node');
     console.log('  - Copied pty.node');
     
     // Copy spawn-helper (Unix only)
     if (process.platform !== 'win32') {
-      fs.copyFileSync(
-        path.join(nativeModulesDir, 'spawn-helper'),
-        'native/spawn-helper'
-      );
+      const spawnHelperPath = path.join(nativeModulesDir, 'spawn-helper');
+      if (!fs.existsSync(spawnHelperPath)) {
+        console.error('Error: spawn-helper not found. Native module build may have failed.');
+        process.exit(1);
+      }
+      fs.copyFileSync(spawnHelperPath, 'native/spawn-helper');
       fs.chmodSync('native/spawn-helper', 0o755);
       console.log('  - Copied spawn-helper');
     }

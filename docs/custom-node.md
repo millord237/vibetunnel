@@ -113,3 +113,10 @@ Custom Node.js builds are stored in `web/.node-builds/` and are excluded from gi
 
 ### Code signature warnings
 The warning "changes being made to the file will invalidate the code signature" is expected and handled automatically. The build process re-signs the executable after all modifications.
+
+## Known Limitations
+
+- The custom Node.js build process takes 10-20 minutes on first run
+- Cross-compilation is not supported - you must build on the target platform
+- The custom build excludes some features that may be needed by certain npm packages
+- Native module compatibility issues may occur when mixing Node.js versions
