@@ -5,7 +5,6 @@
  * Supports Git status display, file preview with CodeMirror editor, and diff viewing.
  *
  * @fires insert-path - When inserting a file path into terminal (detail: { path: string, type: 'file' | 'directory' })
- * @fires open-in-editor - When opening a file in external editor (detail: { path: string })
  * @fires directory-selected - When a directory is selected in 'select' mode (detail: string)
  * @fires browser-cancel - When the browser is cancelled or closed
  */
@@ -396,29 +395,6 @@ export class FileBrowser extends LitElement {
 
     // Close the file browser
     this.dispatchEvent(new CustomEvent('browser-cancel'));
-  }
-
-  private openInEditor() {
-    if (!this.selectedFile || this.selectedFile.type !== 'file') return;
-
-    // Dispatch event to open file in editor
-    this.dispatchEvent(
-      new CustomEvent('open-in-editor', {
-        detail: {
-          path: this.selectedFile.path,
-          onSuccess: () => {
-            // Close the file browser only on success
-            this.dispatchEvent(new CustomEvent('browser-cancel'));
-          },
-          onError: (message: string) => {
-            // Show error message to user
-            this.showErrorMessage(message);
-          },
-        },
-        bubbles: true,
-        composed: true,
-      })
-    );
   }
 
   private showErrorMessage(message: string) {
@@ -943,26 +919,23 @@ export class FileBrowser extends LitElement {
                           ? html`
                               <button
                                 class="btn-secondary text-xs px-3 py-1"
-                                @click=${this.openInEditor}
-                                title="Open in default editor"
-                              >
-                                Open in Editor
-                              </button>
-                              <button
-                                class="btn-secondary text-xs px-3 py-1"
                                 @click=${() =>
                                   this.selectedFile && this.copyToClipboard(this.selectedFile.path)}
                                 title="Copy path to clipboard (⌘C)"
                               >
                                 Copy Path
                               </button>
-                              <button
-                                class="btn-primary text-xs px-3 py-1"
-                                @click=${this.insertPathIntoTerminal}
-                                title="Insert path into terminal (Enter)"
-                              >
-                                Insert Path
-                              </button>
+                              ${this.mode === 'browse'
+                                ? html`
+                                    <button
+                                      class="btn-primary text-xs px-3 py-1"
+                                      @click=${this.insertPathIntoTerminal}
+                                      title="Insert path into terminal (Enter)"
+                                    >
+                                      Insert Path
+                                    </button>
+                                  `
+                                : ''}
                             `
                           : ''}
                         ${this.selectedFile.gitStatus && this.selectedFile.gitStatus !== 'unchanged'

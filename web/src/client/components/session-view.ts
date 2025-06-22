@@ -928,42 +928,6 @@ export class SessionView extends LitElement {
     logger.log(`inserted ${type} path into terminal: ${escapedPath}`);
   }
 
-  private async handleOpenInEditor(event: CustomEvent) {
-    const { path, onSuccess, onError } = event.detail;
-
-    if (!path) {
-      onError?.('No file path provided');
-      return;
-    }
-
-    if (!this.session) {
-      onError?.('No active terminal session. Please create a new session first.');
-      return;
-    }
-
-    try {
-      // Escape the path for shell use
-      const escapedPath = path.includes(' ') ? `"${path}"` : path;
-
-      // Try common editors in order of preference
-      // We'll use 'which' to check if they exist, then open with the first one found
-      const command = `(which code && code ${escapedPath}) || (which vim && vim ${escapedPath}) || (which nano && nano ${escapedPath}) || echo "No editor found. Install VS Code, vim, or nano."`;
-
-      // Send the command to the terminal
-      await this.sendInputText(command + '\n');
-
-      logger.log(`opening file in editor: ${escapedPath}`);
-
-      // Call success callback to close the file browser
-      onSuccess?.();
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to send command to terminal';
-      logger.error('Error opening file in editor:', error);
-      onError?.(errorMessage);
-    }
-  }
-
   private async sendInputText(text: string) {
     if (!this.session) return;
 
@@ -1521,7 +1485,6 @@ export class SessionView extends LitElement {
           .session=${this.session}
           @browser-cancel=${this.handleCloseFileBrowser}
           @insert-path=${this.handleInsertPath}
-          @open-in-editor=${this.handleOpenInEditor}
         ></file-browser>
       </div>
     `;

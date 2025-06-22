@@ -103,9 +103,20 @@ export function createFilesystemRoutes(): Router {
   // Browse directory endpoint
   router.get('/fs/browse', async (req: Request, res: Response) => {
     try {
-      const requestedPath = (req.query.path as string) || '.';
+      let requestedPath = (req.query.path as string) || '.';
       const showHidden = req.query.showHidden === 'true';
       const gitFilter = req.query.gitFilter as string; // 'all' | 'changed' | 'none'
+
+      // Handle tilde expansion for home directory
+      if (requestedPath === '~' || requestedPath.startsWith('~/')) {
+        const homeDir = process.env.HOME || process.env.USERPROFILE;
+        if (!homeDir) {
+          logger.error('unable to determine home directory');
+          return res.status(500).json({ error: 'Unable to determine home directory' });
+        }
+        requestedPath =
+          requestedPath === '~' ? homeDir : path.join(homeDir, requestedPath.slice(2));
+      }
 
       logger.debug(
         `browsing directory: ${requestedPath}, showHidden: ${showHidden}, gitFilter: ${gitFilter}`
@@ -117,7 +128,7 @@ export function createFilesystemRoutes(): Router {
         return res.status(403).json({ error: 'Access denied' });
       }
 
-      const fullPath = path.resolve(process.cwd(), requestedPath);
+      const fullPath = path.resolve(requestedPath);
 
       // Check if path exists and is a directory
       const stats = await fs.stat(fullPath);
