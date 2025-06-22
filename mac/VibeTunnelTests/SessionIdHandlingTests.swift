@@ -128,9 +128,13 @@ struct SessionIdHandlingTests {
             let started_at: String
             let stdin: String
             let streamOut: String
-            
+
             enum CodingKeys: String, CodingKey {
-                case cmdline, cwd, name, pid, status
+                case cmdline
+                case cwd
+                case name
+                case pid
+                case status
                 case started_at = "started_at"
                 case stdin
                 case streamOut = "stream-out"

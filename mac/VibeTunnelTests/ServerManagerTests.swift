@@ -7,14 +7,14 @@ import Testing
 @Suite("Server Manager Tests")
 @MainActor
 final class ServerManagerTests {
-    // We'll use the shared ServerManager instance since it's a singleton
+    /// We'll use the shared ServerManager instance since it's a singleton
     let manager = ServerManager.shared
-    
+
     init() async {
         // Ensure clean state before each test
         await manager.stop()
     }
-    
+
     deinit {
         // Clean up is handled in init() of next test since we can't use async in deinit
     }
@@ -34,7 +34,7 @@ final class ServerManagerTests {
         if let error = manager.lastError as? BunServerError {
             #expect(error == .binaryNotFound)
         }
-        
+
         // Server should not be running without the binary
         #expect(!manager.isRunning)
         #expect(manager.bunServer == nil)
@@ -51,7 +51,7 @@ final class ServerManagerTests {
     func startingAlreadyRunningServer() async throws {
         // In test environment, we can't actually start the server
         // So we'll test the logic of preventing duplicate starts
-        
+
         // First attempt to start
         await manager.start()
         try await Task.sleep(for: .milliseconds(100))
@@ -64,7 +64,7 @@ final class ServerManagerTests {
 
         // Should still have the same state (either nil or same instance)
         #expect(manager.bunServer === firstServer)
-        
+
         // Error should be consistent
         if let error1 = firstError as? BunServerError,
            let error2 = manager.lastError as? BunServerError {
@@ -77,7 +77,6 @@ final class ServerManagerTests {
 
     @Test("Port configuration")
     func portConfiguration() async throws {
-
         // Store original port
         let originalPort = manager.port
 
@@ -99,7 +98,6 @@ final class ServerManagerTests {
         DashboardAccessMode.network
     ])
     func bindAddressConfiguration(mode: DashboardAccessMode) async throws {
-
         // Store original mode
         let originalMode = UserDefaults.standard.string(forKey: "dashboardAccessMode") ?? ""
 
@@ -174,11 +172,11 @@ final class ServerManagerTests {
 
         // Verify port configuration is maintained
         #expect(manager.port == testPort)
-        
+
         // In test environment without binary, both instances should be nil
         #expect(manager.bunServer == nil)
         #expect(serverBeforeRestart == nil)
-        
+
         // Error should be consistent (binary not found)
         if let error = manager.lastError as? BunServerError {
             #expect(error == .binaryNotFound)
@@ -228,7 +226,7 @@ final class ServerManagerTests {
         // In test environment, server won't actually start
         #expect(!manager.isRunning)
         #expect(manager.bunServer == nil)
-        
+
         // Verify error is set appropriately
         if let error = manager.lastError as? BunServerError {
             #expect(error == .binaryNotFound)
