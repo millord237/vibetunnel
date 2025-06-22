@@ -17,12 +17,12 @@ public final class SparkleUpdaterManager: NSObject, SPUUpdaterDelegate {
     fileprivate var updaterController: SPUStandardUpdaterController?
     private(set) var userDriverDelegate: SparkleUserDriverDelegate?
     private let logger = os.Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "VibeTunnel",
+        subsystem: "sh.vibetunnel.vibetunnel",
         category: "SparkleUpdater"
     )
 
     private nonisolated static let staticLogger = os.Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "VibeTunnel",
+        subsystem: "sh.vibetunnel.vibetunnel",
         category: "SparkleUpdater"
     )
 

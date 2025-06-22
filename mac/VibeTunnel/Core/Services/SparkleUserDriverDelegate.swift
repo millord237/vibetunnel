@@ -9,7 +9,7 @@ import UserNotifications
 @MainActor
 final class SparkleUserDriverDelegate: NSObject, @preconcurrency SPUStandardUserDriverDelegate {
     private let logger = os.Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "VibeTunnel",
+        subsystem: "sh.vibetunnel.vibetunnel",
         category: "SparkleUserDriver"
     )
 

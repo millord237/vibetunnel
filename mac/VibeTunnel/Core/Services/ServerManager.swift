@@ -201,10 +201,10 @@ class ServerManager {
         defer { isRestarting = false }
 
         await stop()
-        
+
         // Add a brief delay to ensure the port is released by the OS
         try? await Task.sleep(for: .milliseconds(500))
-        
+
         await start()
     }
 

@@ -59,7 +59,7 @@ final class SystemPermissionManager {
     ]
 
     private let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "VibeTunnel",
+        subsystem: "sh.vibetunnel.vibetunnel",
         category: "SystemPermissions"
     )
 

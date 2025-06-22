@@ -16,7 +16,7 @@ final class DockIconManager: NSObject {
     }
 
     private var windowsObservation: NSKeyValueObservation?
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VibeTunnel", category: "DockIconManager")
+    private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "DockIconManager")
 
     override private init() {
         super.init()

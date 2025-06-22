@@ -65,15 +65,14 @@ final class BunServer {
         // Verify binary exists and is executable
         var isDirectory: ObjCBool = false
         let fileExists = FileManager.default.fileExists(atPath: binaryPath, isDirectory: &isDirectory)
-        logger.info("vibetunnel binary exists: \(fileExists), is directory: \(isDirectory.boolValue)")
-
         if fileExists && !isDirectory.boolValue {
             let attributes = try FileManager.default.attributesOfItem(atPath: binaryPath)
-            if let permissions = attributes[.posixPermissions] as? NSNumber {
-                logger.info("vibetunnel binary permissions: \(String(permissions.intValue, radix: 8))")
-            }
-            if let fileSize = attributes[.size] as? NSNumber {
-                logger.info("vibetunnel binary size: \(fileSize.intValue) bytes")
+            if let permissions = attributes[.posixPermissions] as? NSNumber,
+               let fileSize = attributes[.size] as? NSNumber {
+                logger
+                    .info(
+                        "vibetunnel binary size: \(fileSize.intValue) bytes, permissions: \(String(permissions.intValue, radix: 8))"
+                    )
             }
         } else if !fileExists {
             logger.error("vibetunnel binary NOT FOUND at: \(binaryPath)")
@@ -99,9 +98,6 @@ final class BunServer {
             logger.error("Web directory not found at expected location: \(staticPath)")
         }
 
-        // Build command to run vibetunnel through login shell
-        // Note: The current server implementation doesn't support bind address configuration
-
         // Build the vibetunnel command with all arguments
         var vibetunnelArgs = "--port \(port)"
 
@@ -119,13 +115,7 @@ final class BunServer {
         }
 
         // Create wrapper to run vibetunnel
-        let vibetunnelCommand = """
-        # Run vibetunnel directly
-        exec "\(binaryPath)" \(vibetunnelArgs)
-        """
-
-        // Note: cleanup-startup is not supported by the current server implementation
-
+        let vibetunnelCommand = "exec \(binaryPath) \(vibetunnelArgs)"
         process.arguments = ["-l", "-c", vibetunnelCommand]
 
         logger.info("Executing command: /bin/zsh -l -c \"\(vibetunnelCommand)\"")
