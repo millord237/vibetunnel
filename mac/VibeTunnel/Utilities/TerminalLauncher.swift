@@ -164,6 +164,8 @@ enum Terminal: String, CaseIterable {
         }
 
         // Special handling for Warp terminal
+        // Warp doesn't recognize standard key codes for Enter (36 or 76)
+        // and requires ASCII character 13 (carriage return) to execute commands
         if self == .warp {
             return """
             tell application "\(processName)"
@@ -171,12 +173,12 @@ enum Terminal: String, CaseIterable {
                 tell application "System Events"
                     -- Create new window
                     keystroke "n" using {command down}
-                    delay 0.5
+                    delay 1.0
                     -- Paste command from clipboard
                     keystroke "v" using {command down}
-                    delay 0.3
-                    -- Try numeric keypad Enter with small delay
-                    key code 76
+                    delay 0.5
+                    -- Warp requires ASCII character 13 instead of key code 36
+                    keystroke (ASCII character 13)
                 end tell
             end tell
             """
