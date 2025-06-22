@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import Darwin
 
 /// Information about a process that's using a port
 struct ProcessDetails {
@@ -67,10 +68,64 @@ final class PortConflictResolver {
 
     private init() {}
 
-    /// Check if a port is available
+    /// Check if a port is available by attempting to bind to it
     func isPortAvailable(_ port: Int) async -> Bool {
-        let result = await detectConflict(on: port)
-        return result == nil
+        // First check if any process is using it
+        if let _ = await detectConflict(on: port) {
+            return false
+        }
+        
+        // Then try to actually bind to the port
+        return await canBindToPort(port)
+    }
+    
+    /// Attempt to bind to a port to verify it's truly available
+    func canBindToPort(_ port: Int) async -> Bool {
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let sock = socket(AF_INET, SOCK_STREAM, 0)
+                guard sock >= 0 else {
+                    self.logger.debug("Failed to create socket for port check")
+                    continuation.resume(returning: false)
+                    return
+                }
+                defer { close(sock) }
+                
+                // Enable SO_REUSEADDR to handle TIME_WAIT state
+                var reuseAddr = 1
+                if setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, socklen_t(MemoryLayout.size(ofValue: reuseAddr))) < 0 {
+                    self.logger.debug("Failed to set SO_REUSEADDR: \(errno)")
+                }
+                
+                // Set SO_REUSEPORT for better compatibility
+                var reusePort = 1
+                if setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reusePort, socklen_t(MemoryLayout.size(ofValue: reusePort))) < 0 {
+                    self.logger.debug("Failed to set SO_REUSEPORT: \(errno)")
+                }
+                
+                // Try to bind
+                var addr = sockaddr_in()
+                addr.sin_family = sa_family_t(AF_INET)
+                addr.sin_port = in_port_t(port).bigEndian
+                addr.sin_addr.s_addr = INADDR_ANY
+                addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+                
+                let result = withUnsafePointer(to: &addr) { ptr in
+                    ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+                        bind(sock, sockPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    }
+                }
+                
+                if result == 0 {
+                    self.logger.debug("Port \(port) is available (bind succeeded)")
+                    continuation.resume(returning: true)
+                } else {
+                    let error = errno
+                    self.logger.debug("Port \(port) is not available (bind failed with errno \(error))")
+                    continuation.resume(returning: false)
+                }
+            }
+        }
     }
 
     /// Detect what process is using a port
@@ -85,21 +140,30 @@ final class PortConflictResolver {
             process.standardOutput = pipe
             process.standardError = Pipe()
 
-            try process.run()
-            process.waitUntilExit()
+            // Run the process on a background queue to avoid blocking main thread
+            let (exitCode, output) = try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
 
-            guard process.terminationStatus == 0 else {
+                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                        let output = String(data: data, encoding: .utf8) ?? ""
+
+                        continuation.resume(returning: (process.terminationStatus, output))
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+
+            guard exitCode == 0, !output.isEmpty else {
                 // Port is free
                 return nil
             }
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8), !output.isEmpty else {
-                return nil
-            }
-
             // Parse lsof output
-            if let processInfo = parseLsofOutput(output) {
+            if let processInfo = await parseLsofOutput(output) {
                 // Get root process
                 let rootProcess = await findRootProcess(for: processInfo)
 
@@ -135,15 +199,43 @@ final class PortConflictResolver {
             killProcess.executableURL = URL(fileURLWithPath: "/bin/kill")
             killProcess.arguments = ["-9", "\(pid)"]
 
-            try killProcess.run()
-            killProcess.waitUntilExit()
+            let exitCode = try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try killProcess.run()
+                        killProcess.waitUntilExit()
+                        continuation.resume(returning: killProcess.terminationStatus)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
 
-            if killProcess.terminationStatus != 0 {
+            if exitCode != 0 {
                 throw PortConflictError.failedToKillProcess(pid: pid)
             }
 
-            // Wait a moment for port to be released
-            try await Task.sleep(for: .milliseconds(500))
+            // Wait with exponential backoff for port to be released
+            var retries = 0
+            let maxRetries = 5
+            
+            while retries < maxRetries {
+                try await Task.sleep(for: .milliseconds(500 * UInt64(pow(2.0, Double(retries)))))
+                
+                if await canBindToPort(conflict.port) {
+                    logger.info("Port \(conflict.port) successfully released after \(retries + 1) retries")
+                    break
+                }
+                
+                retries += 1
+                if retries < maxRetries {
+                    logger.debug("Port \(conflict.port) still not available, retry \(retries + 1)/\(maxRetries)")
+                }
+            }
+            
+            if retries == maxRetries {
+                throw PortConflictError.portStillInUse(port: conflict.port)
+            }
 
         case .suggestAlternativePort, .reportExternalApp:
             // These require user action
@@ -160,17 +252,45 @@ final class PortConflictResolver {
         killProcess.executableURL = URL(fileURLWithPath: "/bin/kill")
         killProcess.arguments = ["-9", "\(conflict.process.pid)"]
 
-        try killProcess.run()
-        killProcess.waitUntilExit()
+        let exitCode = try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try killProcess.run()
+                    killProcess.waitUntilExit()
+                    continuation.resume(returning: killProcess.terminationStatus)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
 
-        if killProcess.terminationStatus != 0 {
+        if exitCode != 0 {
             // Try with sudo if regular kill fails
             logger.warning("Regular kill failed, attempting with elevated privileges")
             throw PortConflictError.failedToKillProcess(pid: conflict.process.pid)
         }
 
-        // Wait a moment for port to be released
-        try await Task.sleep(for: .milliseconds(500))
+        // Wait with exponential backoff for port to be released
+        var retries = 0
+        let maxRetries = 5
+        
+        while retries < maxRetries {
+            try await Task.sleep(for: .milliseconds(500 * UInt64(pow(2.0, Double(retries)))))
+            
+            if await canBindToPort(conflict.port) {
+                logger.info("Port \(conflict.port) successfully released after \(retries + 1) retries")
+                break
+            }
+            
+            retries += 1
+            if retries < maxRetries {
+                logger.debug("Port \(conflict.port) still not available, retry \(retries + 1)/\(maxRetries)")
+            }
+        }
+        
+        if retries == maxRetries {
+            throw PortConflictError.portStillInUse(port: conflict.port)
+        }
     }
 
     /// Find available ports near a given port
@@ -192,7 +312,7 @@ final class PortConflictResolver {
 
     // MARK: - Private Methods
 
-    private func parseLsofOutput(_ output: String) -> ProcessDetails? {
+    private func parseLsofOutput(_ output: String) async -> ProcessDetails? {
         var pid: Int?
         var name: String?
         var ppid: Int?
@@ -214,8 +334,8 @@ final class PortConflictResolver {
         }
 
         // Get additional process info
-        let path = getProcessPath(pid: pid)
-        let bundleId = getProcessBundleIdentifier(pid: pid)
+        let path = await getProcessPath(pid: pid)
+        let bundleId = await getProcessBundleIdentifier(pid: pid)
 
         return ProcessDetails(
             pid: pid,
@@ -226,7 +346,7 @@ final class PortConflictResolver {
         )
     }
 
-    private func getProcessPath(pid: Int) -> String? {
+    private func getProcessPath(pid: Int) async -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
         process.arguments = ["-p", "\(pid)", "-o", "comm="]
@@ -236,13 +356,22 @@ final class PortConflictResolver {
         process.standardError = Pipe()
 
         do {
-            try process.run()
-            process.waitUntilExit()
+            let output = try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8) {
-                return output.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                        let output = String(data: data, encoding: .utf8) ?? ""
+                        continuation.resume(returning: output)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
             }
+
+            return output.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             logger.debug("Failed to get process path: \(error)")
         }
@@ -250,7 +379,7 @@ final class PortConflictResolver {
         return nil
     }
 
-    private func getProcessBundleIdentifier(pid: Int) -> String? {
+    private func getProcessBundleIdentifier(pid: Int) async -> String? {
         // Try to get bundle identifier using lsappinfo
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/lsappinfo")
@@ -261,18 +390,27 @@ final class PortConflictResolver {
         process.standardError = Pipe()
 
         do {
-            try process.run()
-            process.waitUntilExit()
+            let output = try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8) {
-                // Parse bundleid from output
-                if let range = output.range(of: "\"", options: .backwards) {
-                    let beforeQuote = output[..<range.lowerBound]
-                    if let startRange = beforeQuote.range(of: "\"", options: .backwards) {
-                        let bundleId = output[startRange.upperBound..<range.lowerBound]
-                        return String(bundleId)
+                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                        let output = String(data: data, encoding: .utf8) ?? ""
+                        continuation.resume(returning: output)
+                    } catch {
+                        continuation.resume(throwing: error)
                     }
+                }
+            }
+
+            // Parse bundleid from output
+            if let range = output.range(of: "\"", options: .backwards) {
+                let beforeQuote = output[..<range.lowerBound]
+                if let startRange = beforeQuote.range(of: "\"", options: .backwards) {
+                    let bundleId = output[startRange.upperBound..<range.lowerBound]
+                    return String(bundleId)
                 }
             }
         } catch {
@@ -315,30 +453,39 @@ final class PortConflictResolver {
         process.standardError = Pipe()
 
         do {
-            try process.run()
-            process.waitUntilExit()
+            let output = try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8) {
-                let components = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .components(separatedBy: .whitespaces)
-                    .filter { !$0.isEmpty }
-
-                if components.count >= 3 {
-                    let pid = Int(components[0]) ?? 0
-                    let ppid = Int(components[1]) ?? 0
-                    let name = components[2...].joined(separator: " ")
-                    let path = getProcessPath(pid: pid)
-                    let bundleId = getProcessBundleIdentifier(pid: pid)
-
-                    return ProcessDetails(
-                        pid: pid,
-                        name: name,
-                        path: path,
-                        parentPid: ppid > 0 ? ppid : nil,
-                        bundleIdentifier: bundleId
-                    )
+                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                        let output = String(data: data, encoding: .utf8) ?? ""
+                        continuation.resume(returning: output)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
+            }
+
+            let components = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                .components(separatedBy: .whitespaces)
+                .filter { !$0.isEmpty }
+
+            if components.count >= 3 {
+                let pid = Int(components[0]) ?? 0
+                let ppid = Int(components[1]) ?? 0
+                let name = components[2...].joined(separator: " ")
+                let path = await getProcessPath(pid: pid)
+                let bundleId = await getProcessBundleIdentifier(pid: pid)
+
+                return ProcessDetails(
+                    pid: pid,
+                    name: name,
+                    path: path,
+                    parentPid: ppid > 0 ? ppid : nil,
+                    bundleIdentifier: bundleId
+                )
             }
         } catch {
             logger.debug("Failed to get process info: \(error)")
@@ -382,6 +529,7 @@ final class PortConflictResolver {
 enum PortConflictError: LocalizedError {
     case failedToKillProcess(pid: Int)
     case requiresUserAction
+    case portStillInUse(port: Int)
 
     var errorDescription: String? {
         switch self {
@@ -389,6 +537,8 @@ enum PortConflictError: LocalizedError {
             "Failed to terminate process with PID \(pid)"
         case .requiresUserAction:
             "This conflict requires user action to resolve"
+        case .portStillInUse(let port):
+            "Port \(port) is still in use after multiple attempts to free it"
         }
     }
 }
