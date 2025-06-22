@@ -1,61 +1,90 @@
 #!/bin/bash
 
-# Run iOS tests for VibeTunnel
-# This script handles the fact that tests are written for Swift Testing
-# but the app uses an Xcode project
+# Run iOS tests for VibeTunnel using xcodebuild
+# This script properly runs tests on iOS simulator using Swift Testing framework
 
 set -e
 
-echo "Setting up test environment..."
+echo "Running iOS tests on simulator..."
 
-# Create a temporary test project that includes our app code
-TEMP_DIR=$(mktemp -d)
-echo "Working in: $TEMP_DIR"
+# Find an available iOS simulator
+# First, list available devices for debugging
+echo "Available simulators:"
+xcrun simctl list devices available | grep -E "iPhone" || true
 
-# Copy Package.swift to temp directory
-cp Package.swift "$TEMP_DIR/"
+# Try to find iOS 18 simulator first, then fall back to any available iPhone
+SIMULATOR_ID=$(xcrun simctl list devices available | grep -E "iPhone.*iOS 18" | head -1 | awk -F'[()]' '{print $2}')
 
-# Create symbolic links to source code
-ln -s "$(pwd)/VibeTunnel" "$TEMP_DIR/Sources"
-ln -s "$(pwd)/VibeTunnelTests" "$TEMP_DIR/Tests"
+if [ -z "$SIMULATOR_ID" ]; then
+    echo "No iOS 18 simulator found, looking for any iPhone simulator..."
+    SIMULATOR_ID=$(xcrun simctl list devices available | grep -E "iPhone" | head -1 | awk -F'[()]' '{print $2}')
+fi
 
-# Update Package.swift to include app source as a target
-cat > "$TEMP_DIR/Package.swift" << 'EOF'
-// swift-tools-version:6.0
-import PackageDescription
+if [ -z "$SIMULATOR_ID" ]; then
+    echo "Error: No iPhone simulator found. Creating one..."
+    # Get the latest iOS runtime
+    RUNTIME=$(xcrun simctl list runtimes | grep "iOS" | tail -1 | awk '{print $NF}')
+    echo "Using runtime: $RUNTIME"
+    SIMULATOR_ID=$(xcrun simctl create "Test iPhone" "iPhone 15" "$RUNTIME" || xcrun simctl create "Test iPhone" "com.apple.CoreSimulator.SimDeviceType.iPhone-15" "$RUNTIME")
+fi
 
-let package = Package(
-    name: "VibeTunnelTestRunner",
-    platforms: [
-        .iOS(.v18),
-        .macOS(.v14)
-    ],
-    dependencies: [
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0")
-    ],
-    targets: [
-        .target(
-            name: "VibeTunnel",
-            dependencies: [
-                .product(name: "SwiftTerm", package: "SwiftTerm")
-            ],
-            path: "Sources"
-        ),
-        .testTarget(
-            name: "VibeTunnelTests",
-            dependencies: ["VibeTunnel"],
-            path: "Tests"
-        )
-    ]
-)
-EOF
+echo "Using simulator: $SIMULATOR_ID"
 
-echo "Running tests..."
-cd "$TEMP_DIR"
-swift test
+# Boot the simulator if needed
+xcrun simctl boot "$SIMULATOR_ID" 2>/dev/null || true
 
-# Clean up
-cd - > /dev/null
-rm -rf "$TEMP_DIR"
+# Clean up any existing test results
+rm -rf TestResults.xcresult
 
-echo "Tests completed!"
+# Run tests using xcodebuild with proper destination
+set -o pipefail
+
+# Check if xcpretty is available
+if command -v xcpretty &> /dev/null; then
+    echo "Running tests with xcpretty formatter..."
+    xcodebuild test \
+        -project VibeTunnel.xcodeproj \
+        -scheme VibeTunnel \
+        -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+        -resultBundlePath TestResults.xcresult \
+        2>&1 | xcpretty || {
+            EXIT_CODE=$?
+            echo "Tests failed with exit code: $EXIT_CODE"
+            
+            # Try to extract test failures
+            if [ -d "TestResults.xcresult" ]; then
+                xcrun xcresulttool get --format human-readable --path TestResults.xcresult 2>/dev/null || true
+            fi
+            
+            # Shutdown simulator
+            xcrun simctl shutdown "$SIMULATOR_ID" 2>/dev/null || true
+            
+            exit $EXIT_CODE
+        }
+else
+    echo "Running tests without xcpretty..."
+    xcodebuild test \
+        -project VibeTunnel.xcodeproj \
+        -scheme VibeTunnel \
+        -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+        -resultBundlePath TestResults.xcresult \
+        || {
+            EXIT_CODE=$?
+            echo "Tests failed with exit code: $EXIT_CODE"
+            
+            # Try to extract test failures
+            if [ -d "TestResults.xcresult" ]; then
+                xcrun xcresulttool get --format human-readable --path TestResults.xcresult 2>/dev/null || true
+            fi
+            
+            # Shutdown simulator
+            xcrun simctl shutdown "$SIMULATOR_ID" 2>/dev/null || true
+            
+            exit $EXIT_CODE
+        }
+fi
+
+# Shutdown simulator
+xcrun simctl shutdown "$SIMULATOR_ID" 2>/dev/null || true
+
+echo "Tests completed successfully!"

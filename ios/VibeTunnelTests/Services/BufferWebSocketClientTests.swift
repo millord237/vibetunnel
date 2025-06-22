@@ -11,12 +11,10 @@ struct BufferWebSocketClientTests {
         let client = BufferWebSocketClient()
         saveTestServerConfig()
 
-        let mockSession = MockWebSocketURLSession()
-        let mockTask = MockWebSocketTask()
-        mockSession.mockTask = mockTask
-
         // Note: This test would require modifying BufferWebSocketClient to accept a custom URLSession
         // For now, we'll test the connection logic conceptually
+        // let mockSession = MockWebSocketSession()
+        // let mockTask = mockSession.webSocketTask(with: URL(string: "ws://localhost:8888")!)
 
         // Act
         client.connect()
