@@ -1222,6 +1222,7 @@ export class SessionView extends LitElement {
           <!-- Terminal Component -->
           <vibe-terminal
             .sessionId=${this.session?.id || ''}
+            .sessionStatus=${this.session?.status || 'running'}
             .cols=${80}
             .rows=${24}
             .fontSize=${this.terminalFontSize}
@@ -1230,6 +1231,21 @@ export class SessionView extends LitElement {
             class="w-full h-full"
           ></vibe-terminal>
         </div>
+
+        <!-- Floating Session Exited Banner (outside terminal container to avoid filter effects) -->
+        ${this.session?.status === 'exited'
+          ? html`
+              <div
+                class="absolute inset-0 flex items-center justify-center pointer-events-none z-50"
+              >
+                <div
+                  class="bg-dark-bg-secondary border border-dark-border ${this.getStatusColor()} font-medium text-sm tracking-wide px-4 py-2 rounded-lg shadow-lg"
+                >
+                  SESSION EXITED
+                </div>
+              </div>
+            `
+          : ''}
 
         <!-- Mobile Input Controls -->
         ${this.isMobile && !this.showMobileInput
