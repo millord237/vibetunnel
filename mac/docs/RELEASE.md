@@ -347,6 +347,8 @@ Edit `VibeTunnel/version.xcconfig`:
 - Update MARKETING_VERSION
 - Update CURRENT_PROJECT_VERSION (build number)
 
+**Note**: The Xcode project file is named `VibeTunnel-Mac.xcodeproj`
+
 ### 2. Clean and Build Universal Binary
 ```bash
 rm -rf build DerivedData
