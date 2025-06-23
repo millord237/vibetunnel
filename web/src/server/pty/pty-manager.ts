@@ -71,9 +71,15 @@ export class PtyManager {
       logger.debug(`Resolved executable '${executable}' to '${resolvedPath}'`);
       return resolvedPath;
     } catch (_error) {
-      // If 'which' fails, return the original executable
+      // If 'which' fails, log a warning and return the original executable
       // This allows the spawn to fail with a proper error message
-      logger.debug(`Failed to resolve executable '${executable}' with which, using as-is`);
+      logger.warn(
+        chalk.yellow(
+          `⚠️  Failed to resolve executable '${executable}' to absolute path. ` +
+            `The command may not exist in PATH or 'which' failed. ` +
+            `Proceeding with original value, but PTY spawn may fail.`
+        )
+      );
       return executable;
     }
   }
@@ -204,8 +210,12 @@ export class PtyManager {
 
       // Log the final absolute command
       logger.log(chalk.blue(`Creating PTY session with command: ${resolvedCommand.join(' ')}`));
-      logger.debug(`Original command: ${command.join(' ')}`);
-      logger.debug(`Resolved executable: ${resolvedExecutable}`);
+
+      // Log resolution details if the path changed
+      if (resolvedExecutable !== command[0]) {
+        logger.log(chalk.gray(`Resolved '${command[0]}' → '${resolvedExecutable}'`));
+      }
+
       logger.debug(`Working directory: ${workingDir}`);
 
       // Create initial session info with resolved command
