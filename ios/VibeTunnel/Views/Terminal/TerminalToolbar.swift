@@ -28,7 +28,7 @@ struct TerminalToolbar: View {
 
             HStack(spacing: Theme.Spacing.extraSmall) {
                 // Tab key
-                ToolbarButton(label: "TAB", systemImage: "arrow.right.to.line.compact") {
+                ToolbarButton(label: "⇥") {
                     HapticFeedback.impact(.light)
                     onSpecialKey(.tab)
                 }
@@ -133,7 +133,7 @@ struct TerminalToolbar: View {
                             onSpecialKey(.ctrlZ)
                         }
 
-                        ToolbarButton(label: "ENTER") {
+                        ToolbarButton(label: "⏎") {
                             HapticFeedback.impact(.light)
                             onSpecialKey(.enter)
                         }
@@ -198,6 +198,7 @@ struct ToolbarButton: View {
     let height: CGFloat?
     let isActive: Bool
     let action: () -> Void
+    @State private var isPressed = false
 
     init(
         label: String? = nil,
@@ -227,23 +228,37 @@ struct ToolbarButton: View {
                         .font(.system(size: 16))
                 }
             }
-            .foregroundColor(isActive ? Theme.Colors.primaryAccent : Theme.Colors.terminalForeground)
+            .foregroundColor(isActive || isPressed ? Theme.Colors.primaryAccent : Theme.Colors.terminalForeground)
             .frame(width: width, height: height ?? 44)
             .frame(maxWidth: width == nil ? .infinity : nil)
             .background(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                    .fill(isActive ? Theme.Colors.primaryAccent.opacity(0.2) : Theme.Colors.cardBorder.opacity(0.3))
+                    .fill(
+                        isActive ? Theme.Colors.primaryAccent.opacity(0.2) :
+                        isPressed ? Theme.Colors.primaryAccent.opacity(0.1) :
+                        Theme.Colors.cardBorder.opacity(0.3)
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
                     .stroke(
-                        isActive ? Theme.Colors.primaryAccent : Theme.Colors.cardBorder,
-                        lineWidth: 1
+                        isActive || isPressed ? Theme.Colors.primaryAccent : Theme.Colors.cardBorder,
+                        lineWidth: isActive || isPressed ? 2 : 1
                     )
+            )
+            .shadow(
+                color: isActive || isPressed ? Theme.Colors.primaryAccent.opacity(0.2) : .clear,
+                radius: isActive || isPressed ? 4 : 0
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .scaleEffect(isActive ? 0.95 : 1.0)
+        .scaleEffect(isPressed ? 0.95 : 1.0)
         .animation(Theme.Animation.quick, value: isActive)
+        .animation(Theme.Animation.quick, value: isPressed)
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity) { pressing in
+            isPressed = pressing
+        } perform: {
+            // Action handled by button
+        }
     }
 }

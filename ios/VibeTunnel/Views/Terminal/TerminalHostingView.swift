@@ -117,13 +117,10 @@ struct TerminalHostingView: UIViewRepresentable {
     }
 
     private func updateFont(_ terminal: SwiftTerm.TerminalView, size: CGFloat) {
-        let font: UIFont = if let customFont = UIFont(name: Theme.Typography.terminalFont, size: size) {
-            customFont
-        } else if let fallbackFont = UIFont(name: Theme.Typography.terminalFontFallback, size: size) {
-            fallbackFont
-        } else {
-            UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
-        }
+        // Use system monospaced font which has better compatibility with SwiftTerm
+        // The custom SF Mono font seems to have rendering issues
+        let font = UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        
         // SwiftTerm uses the font property directly
         terminal.font = font
     }

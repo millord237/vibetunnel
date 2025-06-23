@@ -16,7 +16,7 @@ enum Theme {
         static let terminalSelection = Color(hex: "273747")
 
         // Accent colors
-        static let primaryAccent = Color(hex: "39BAE6")
+        static let primaryAccent = Color(hex: "00FF88") // Green accent matching web
         static let secondaryAccent = Color(hex: "59C2FF")
         static let successAccent = Color(hex: "AAD94C")
         static let warningAccent = Color(hex: "FFB454")
@@ -186,6 +186,14 @@ extension View {
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                     .stroke(Theme.Colors.primaryAccent, lineWidth: 1)
             )
+    }
+    
+    /// Interactive button style with press and hover animations
+    func interactiveButton(isPressed: Bool = false, isHovered: Bool = false) -> some View {
+        self
+            .scaleEffect(isPressed ? 0.95 : 1.0)
+            .animation(Theme.Animation.quick, value: isPressed)
+            .animation(Theme.Animation.quick, value: isHovered)
     }
 }
 

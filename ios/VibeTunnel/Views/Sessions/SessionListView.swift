@@ -29,11 +29,11 @@ struct SessionListView: View {
 
         return sessions.filter { session in
             // Search in session name
-            if let name = session.name, name.localizedCaseInsensitiveContains(searchText) {
+            if session.name.localizedCaseInsensitiveContains(searchText) {
                 return true
             }
             // Search in command
-            if session.command.localizedCaseInsensitiveContains(searchText) {
+            if session.command.joined(separator: " ").localizedCaseInsensitiveContains(searchText) {
                 return true
             }
             // Search in working directory
@@ -279,6 +279,12 @@ struct SessionListView: View {
                     }
                 )
                 .padding(.horizontal)
+                .padding(.vertical, Theme.Spacing.small)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                        .fill(Theme.Colors.terminalForeground.opacity(0.03))
+                )
+                .padding(.horizontal)
 
                 // Sessions grid
                 LazyVGrid(columns: [
@@ -493,54 +499,58 @@ struct SessionHeaderView: View {
     private var exitedCount: Int { sessions.count(where: { !$0.isRunning }) }
 
     var body: some View {
-        HStack {
-            SessionCountView(runningCount: runningCount, exitedCount: exitedCount)
-
-            Spacer()
-
-            if exitedCount > 0 {
-                ExitedSessionToggle(showExitedSessions: $showExitedSessions)
+        VStack(spacing: Theme.Spacing.medium) {
+            // Session counts
+            HStack(spacing: Theme.Spacing.extraLarge) {
+                SessionCountBadge(
+                    label: "Running",
+                    count: runningCount,
+                    color: Theme.Colors.successAccent
+                )
+                
+                SessionCountBadge(
+                    label: "Exited",
+                    count: exitedCount,
+                    color: Theme.Colors.errorAccent
+                )
+                
+                Spacer()
             }
-
-            if sessions.contains(where: \.isRunning) {
-                KillAllButton(onKillAll: onKillAll)
+            
+            // Action buttons
+            HStack(spacing: Theme.Spacing.medium) {
+                if exitedCount > 0 {
+                    ExitedSessionToggle(showExitedSessions: $showExitedSessions)
+                }
+                
+                Spacer()
+                
+                if sessions.contains(where: \.isRunning) {
+                    KillAllButton(onKillAll: onKillAll)
+                }
             }
         }
+        .padding(.vertical, Theme.Spacing.small)
     }
 }
 
-struct SessionCountView: View {
-    let runningCount: Int
-    let exitedCount: Int
-
+struct SessionCountBadge: View {
+    let label: String
+    let count: Int
+    let color: Color
+    
     var body: some View {
-        HStack(spacing: Theme.Spacing.medium) {
-            if runningCount > 0 {
-                HStack(spacing: 4) {
-                    Text("Running:")
-                        .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
-                    Text("\(runningCount)")
-                        .foregroundColor(Theme.Colors.successAccent)
-                        .fontWeight(.semibold)
-                }
-            }
-
-            if exitedCount > 0 {
-                HStack(spacing: 4) {
-                    Text("Exited:")
-                        .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
-                    Text("\(exitedCount)")
-                        .foregroundColor(Theme.Colors.errorAccent)
-                        .fontWeight(.semibold)
-                }
-            }
-
-            if runningCount == 0 && exitedCount == 0 {
-                Text("No Sessions")
-                    .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
-            }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(Theme.Typography.terminalSystem(size: 12))
+                .foregroundColor(Theme.Colors.terminalForeground.opacity(0.6))
+                .textCase(.uppercase)
+            
+            Text("\(count)")
+                .font(Theme.Typography.terminalSystem(size: 28))
+                .fontWeight(.bold)
+                .foregroundColor(color)
         }
-        .font(Theme.Typography.terminalSystem(size: 16))
     }
 }
 
@@ -554,18 +564,22 @@ struct ExitedSessionToggle: View {
                 showExitedSessions.toggle()
             }
         }, label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: showExitedSessions ? "eye.slash" : "eye")
-                    .font(.caption)
+                    .font(.system(size: 14))
                 Text(showExitedSessions ? "Hide Exited" : "Show Exited")
-                    .font(Theme.Typography.terminalSystem(size: 12))
+                    .font(Theme.Typography.terminalSystem(size: 14))
             }
-            .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
-            .padding(.horizontal, Theme.Spacing.small)
-            .padding(.vertical, 4)
+            .foregroundColor(Theme.Colors.terminalForeground.opacity(0.8))
+            .padding(.horizontal, Theme.Spacing.medium)
+            .padding(.vertical, Theme.Spacing.small)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                    .fill(Theme.Colors.terminalForeground.opacity(0.1))
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .fill(Theme.Colors.terminalForeground.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            .stroke(Theme.Colors.terminalForeground.opacity(0.15), lineWidth: 1)
+                    )
             )
         })
         .buttonStyle(PlainButtonStyle())
@@ -580,21 +594,19 @@ struct KillAllButton: View {
             HapticFeedback.impact(.medium)
             onKillAll()
         }, label: {
-            HStack(spacing: Theme.Spacing.small) {
-                Image(systemName: "stop.circle")
+            HStack(spacing: 6) {
+                Image(systemName: "stop.circle.fill")
+                    .font(.system(size: 14))
                 Text("Kill All")
+                    .fontWeight(.medium)
             }
             .font(Theme.Typography.terminalSystem(size: 14))
-            .foregroundColor(Theme.Colors.errorAccent)
+            .foregroundColor(.white)
             .padding(.horizontal, Theme.Spacing.medium)
             .padding(.vertical, Theme.Spacing.small)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                    .fill(Theme.Colors.errorAccent.opacity(0.1))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                    .stroke(Theme.Colors.errorAccent.opacity(0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .fill(Theme.Colors.errorAccent)
             )
         })
         .buttonStyle(PlainButtonStyle())

@@ -382,7 +382,13 @@ class BufferWebSocketClient: NSObject {
                             break
                         }
                     } else {
-                        print("[BufferWebSocket] Failed to decode cell \(i) in row \(totalRows)")
+                        print("[BufferWebSocket] Failed to decode cell \(i) in row \(totalRows) at offset \(offset)")
+                        // Log the type byte for debugging
+                        if offset < data.count {
+                            let typeByte = data[offset]
+                            print("[BufferWebSocket] Type byte: 0x\(String(format: "%02X", typeByte))")
+                            print("[BufferWebSocket] Bits: hasExt=\((typeByte & 0x80) != 0), isUni=\((typeByte & 0x40) != 0), hasFg=\((typeByte & 0x20) != 0), hasBg=\((typeByte & 0x10) != 0), charType=\(typeByte & 0x03)")
+                        }
                         break
                     }
                 }
@@ -393,7 +399,21 @@ class BufferWebSocketClient: NSObject {
                 print(
                     "[BufferWebSocket] Unknown row marker: 0x\(String(format: "%02X", marker)) at offset \(offset - 1)"
                 )
-                // Try to continue parsing
+                // Log surrounding bytes for debugging
+                let context = 10
+                let start = max(0, offset - 1 - context)
+                let end = min(data.count, offset - 1 + context)
+                var contextBytes = ""
+                for i in start..<end {
+                    if i == offset - 1 {
+                        contextBytes += "[\(String(format: "%02X", data[i]))] "
+                    } else {
+                        contextBytes += "\(String(format: "%02X", data[i])) "
+                    }
+                }
+                print("[BufferWebSocket] Context bytes: \(contextBytes)")
+                // Skip this byte and try to continue parsing
+                break
             }
         }
 
@@ -436,12 +456,17 @@ class BufferWebSocketClient: NSObject {
         let hasBg = (typeByte & 0x10) != 0
         let isRgbFg = (typeByte & 0x08) != 0
         let isRgbBg = (typeByte & 0x04) != 0
+        let charType = typeByte & 0x03
 
         // Read character
         var char: String
         var width: Int = 1
 
-        if isUnicode {
+        if charType == 0x00 {
+            // Simple space
+            char = " "
+        } else if isUnicode {
+            // Unicode character
             // Read character length first
             guard currentOffset < data.count else {
                 print("[BufferWebSocket] Unicode char decode failed: missing length byte")

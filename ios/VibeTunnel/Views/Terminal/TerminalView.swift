@@ -194,6 +194,7 @@ struct TerminalView: View {
             }
             
             ToolbarItemGroup(placement: .navigationBarTrailing) {
+                fileBrowserButton
                 widthSelectorButton
                 menuButton
             }
@@ -219,6 +220,17 @@ struct TerminalView: View {
     }
     
     // MARK: - Toolbar Components
+    
+    private var fileBrowserButton: some View {
+        Button(action: { 
+            HapticFeedback.impact(.light)
+            showingFileBrowser = true 
+        }) {
+            Image(systemName: "folder")
+                .font(.system(size: 16))
+                .foregroundColor(Theme.Colors.primaryAccent)
+        }
+    }
     
     private var widthSelectorButton: some View {
         Button(action: { showingWidthSelector = true }) {
@@ -312,7 +324,7 @@ struct TerminalView: View {
         })
         
         Button(action: { viewModel.copyBuffer() }, label: {
-            Label("Copy All", systemImage: "doc.on.doc")
+            Label("Copy All", systemImage: "square.on.square")
         })
         
         Button(action: { exportTerminalBuffer() }, label: {
@@ -535,12 +547,6 @@ struct TerminalView: View {
                 action: {
                     viewModel.scrollToBottom()
                     showScrollToBottom = false
-                }
-            )
-            .fileBrowserFABOverlay(
-                isVisible: !keyboardHeight.isZero && session.isRunning,
-                action: {
-                    showingFileBrowser = true
                 }
             )
 

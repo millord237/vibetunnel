@@ -118,9 +118,18 @@ class APIClient: APIClientProtocol {
 
         try validateResponse(response)
 
+        // Debug logging
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("[APIClient] getSessions response: \(jsonString)")
+        }
+
         do {
             return try decoder.decode([Session].self, from: data)
         } catch {
+            print("[APIClient] Decoding error: \(error)")
+            if let decodingError = error as? DecodingError {
+                print("[APIClient] Decoding error details: \(decodingError)")
+            }
             throw APIError.decodingError(error)
         }
     }
@@ -247,9 +256,9 @@ class APIClient: APIClientProtocol {
             throw APIError.noServerConfigured
         }
 
-        let url = baseURL.appendingPathComponent("api/sessions")
+        let url = baseURL.appendingPathComponent("api/cleanup-exited")
         var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
+        request.httpMethod = "POST"
         addAuthenticationIfNeeded(&request)
 
         let (data, response) = try await session.data(for: request)
