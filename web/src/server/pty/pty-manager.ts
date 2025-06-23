@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as net from 'net';
+import { execSync } from 'child_process';
 import {
   PtySession,
   SessionCreationResult,
@@ -48,6 +49,33 @@ export class PtyManager {
   constructor(controlPath?: string) {
     this.sessionManager = new SessionManager(controlPath);
     this.setupTerminalResizeDetection();
+  }
+
+  /**
+   * Resolve executable path to absolute path using 'which' command
+   */
+  private resolveExecutablePath(executable: string): string {
+    // If already an absolute path, return as is
+    if (path.isAbsolute(executable)) {
+      return executable;
+    }
+
+    // If it's a relative path with directory separators, resolve it
+    if (executable.includes('/') || executable.includes('\\')) {
+      return path.resolve(executable);
+    }
+
+    // Otherwise, use 'which' to find the executable in PATH
+    try {
+      const resolvedPath = execSync(`which ${executable}`, { encoding: 'utf-8' }).trim();
+      logger.debug(`Resolved executable '${executable}' to '${resolvedPath}'`);
+      return resolvedPath;
+    } catch (_error) {
+      // If 'which' fails, return the original executable
+      // This allows the spawn to fail with a proper error message
+      logger.debug(`Failed to resolve executable '${executable}' with which, using as-is`);
+      return executable;
+    }
   }
 
   /**
@@ -170,10 +198,20 @@ export class PtyManager {
       // Create session directory structure
       const paths = this.sessionManager.createSessionDirectory(sessionId);
 
-      // Create initial session info
+      // Resolve the executable path early so we can store it
+      const resolvedExecutable = this.resolveExecutablePath(command[0]);
+      const resolvedCommand = [resolvedExecutable, ...command.slice(1)];
+
+      // Log the final absolute command
+      logger.log(chalk.blue(`Creating PTY session with command: ${resolvedCommand.join(' ')}`));
+      logger.debug(`Original command: ${command.join(' ')}`);
+      logger.debug(`Resolved executable: ${resolvedExecutable}`);
+      logger.debug(`Working directory: ${workingDir}`);
+
+      // Create initial session info with resolved command
       const sessionInfo: SessionInfo = {
         id: sessionId,
-        command: command,
+        command: resolvedCommand,
         name: sessionName,
         workingDir: workingDir,
         status: 'starting',
@@ -188,7 +226,7 @@ export class PtyManager {
         paths.stdoutPath,
         cols,
         rows,
-        command.join(' '),
+        resolvedCommand.join(' '),
         sessionName,
         this.createEnvVars(term)
       );
@@ -200,10 +238,10 @@ export class PtyManager {
         const ptyEnv = {
           ...process.env,
           TERM: term,
-          SHELL: command[0], // Set SHELL to the command being run (like Linux does)
+          SHELL: resolvedExecutable, // Set SHELL to the resolved command path
         };
 
-        ptyProcess = pty.spawn(command[0], command.slice(1), {
+        ptyProcess = pty.spawn(resolvedExecutable, resolvedCommand.slice(1), {
           name: term,
           cols,
           rows,
@@ -219,16 +257,16 @@ export class PtyManager {
             ? (spawnError as NodeJS.ErrnoException).code
             : undefined;
         if (errorCode === 'ENOENT' || errorMessage.includes('ENOENT')) {
-          errorMessage = `Command not found: '${command[0]}'. Please ensure the command exists and is in your PATH.`;
+          errorMessage = `Command not found: '${resolvedExecutable}' (originally: '${command[0]}'). Please ensure the command exists and is in your PATH.`;
         } else if (errorCode === 'EACCES' || errorMessage.includes('EACCES')) {
-          errorMessage = `Permission denied: '${command[0]}'. The command exists but is not executable.`;
+          errorMessage = `Permission denied: '${resolvedExecutable}'. The command exists but is not executable.`;
         } else if (errorCode === 'ENXIO' || errorMessage.includes('ENXIO')) {
-          errorMessage = `Failed to allocate terminal for '${command[0]}'. This may occur if the command doesn't exist or the system cannot create a pseudo-terminal.`;
+          errorMessage = `Failed to allocate terminal for '${resolvedExecutable}'. This may occur if the command doesn't exist or the system cannot create a pseudo-terminal.`;
         } else if (errorMessage.includes('cwd') || errorMessage.includes('working directory')) {
           errorMessage = `Working directory does not exist: '${workingDir}'`;
         }
 
-        logger.error(`Failed to spawn PTY for command '${command.join(' ')}':`, spawnError);
+        logger.error(`Failed to spawn PTY for command '${resolvedCommand.join(' ')}':`, spawnError);
         throw new PtyError(errorMessage, 'SPAWN_FAILED');
       }
 
@@ -254,6 +292,7 @@ export class PtyManager {
       this.sessionManager.saveSessionInfo(sessionId, sessionInfo);
 
       logger.log(chalk.green(`Session ${sessionId} created successfully (PID: ${ptyProcess.pid})`));
+      logger.log(chalk.gray(`Running: ${resolvedCommand.join(' ')} in ${workingDir}`));
 
       // Setup PTY event handlers
       this.setupPtyHandlers(session, options.forwardToStdout || false, options.onExit);
