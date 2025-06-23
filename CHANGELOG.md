@@ -2,22 +2,34 @@
 
 ## [1.0.0-beta.3] - 2025-06-23
 
-### 🎨 Improvements
-- Added experimental Tauri-based cross-platform desktop app
-- Enhanced iOS companion app development
-- Updated PWA icon and favicon for better web experience
-- Improved terminal bounce animation effects
-- Removed server mode setting - Go is now the only supported server backend
+### 🎨 Web Frontend Improvements
+- **Enhanced Terminal Grid Layout** - Switched to CSS Grid for better responsive terminal layouts
+- **Phosphor Decay Effect** - Added retro CRT-style phosphor decay visual effect for closed terminals
+- **Font Size Controls** - Added terminal font size adjustment in the settings dropdown
+- **Improved Terminal Animations** - Refined bounce animations for a more subtle, professional feel
+- **Updated PWA Icon** - Fresh new icon for Progressive Web App installations
+- **Better Session Management** - Improved terminal width spanning and layout optimization
+
+### 🚀 Server Enhancements  
+- **Go-Only Backend** - Removed Rust server option, Go is now the sole server implementation for better stability
+- **Improved Buffer Handling** - Fixed buffer aggregator message handling for smoother terminal updates
+- **Shell Alias Support** - Better support for shell aliases and improved debug logging
+- **Unix Socket Support** - Enhanced Unix socket server implementation for faster local communication
+
+### 🖥️ Mac App Updates
+- **Warp Terminal Support** - Special handling for Warp terminal with custom enter key behavior
+- **Dock Menu Integration** - New dock menu with quick actions when right-clicking the app icon
+- **Improved vt Script** - More resilient vt command-line tool with better error handling
+- **Build System Fixes** - Fixed build issues on macOS Sequoia and improved hash file handling
+- **Server Lifecycle** - Ensured vibetunnel server properly terminates when Mac app is killed
+- **Custom Node.js Support** - Re-enabled custom Node.js installation for better compatibility
 
 ### 🐛 Bug Fixes
-- Fixed compilation warnings and unused imports
-- Removed recording feature from Tauri implementation to focus on core functionality
-
-### 🛠️ Technical Updates
-- Added Rust formatter and linter configuration
-- Major refactoring of Tauri app with enhanced features and managers
-- Improved Unix socket server implementation
-- Better light/dark mode support in welcome screens
+- Fixed derived data path filtering to avoid indexing unnecessary files
+- Fixed port formatting in server configuration
+- Improved server change detection for smoother transitions
+- Fixed window hiding behavior from dock
+- Resolved compilation warnings and removed unused imports
 
 ## [1.0.0-beta.2] - 2025-06-19
 
