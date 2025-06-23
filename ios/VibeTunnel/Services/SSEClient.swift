@@ -31,6 +31,7 @@ final class SSEClient: NSObject, @unchecked Sendable {
         self.session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
     }
     
+    @MainActor
     func start() {
         var request = URLRequest(url: url)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")

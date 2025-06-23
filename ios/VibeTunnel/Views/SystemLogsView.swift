@@ -80,7 +80,7 @@ struct SystemLogsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.Colors.background
+                Theme.Colors.terminalBackground
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
@@ -96,10 +96,20 @@ struct SystemLogsView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: Theme.Colors.primaryAccent))
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if let error = error {
-                        ErrorView(message: error) {
-                            Task {
-                                await loadLogs()
+                        VStack {
+                            Text("Error loading logs")
+                                .font(.headline)
+                                .foregroundColor(Theme.Colors.errorAccent)
+                            Text(error)
+                                .font(.subheadline)
+                                .foregroundColor(Theme.Colors.terminalForeground)
+                                .multilineTextAlignment(.center)
+                            Button("Retry") {
+                                Task {
+                                    await loadLogs()
+                                }
                             }
+                            .terminalButton()
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
