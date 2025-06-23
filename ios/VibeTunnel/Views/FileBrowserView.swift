@@ -17,6 +17,8 @@ struct FileBrowserView: View {
     @State private var showingDeleteAlert = false
     @StateObject private var quickLookManager = QuickLookManager.shared
     @State private var showingQuickLook = false
+    @State private var showingFilePreview = false
+    @State private var previewPath: String?
 
     let onSelect: (String) -> Void
     let initialPath: String
@@ -162,11 +164,9 @@ struct FileBrowserView: View {
                                     if entry.isDir {
                                         viewModel.navigate(to: entry.path)
                                     } else if mode == .browseFiles {
-                                        // Preview file with Quick Look
-                                        selectedFile = entry
-                                        Task {
-                                            await viewModel.previewFile(entry)
-                                        }
+                                        // Preview file with our custom preview
+                                        previewPath = entry.path
+                                        showingFilePreview = true
                                     }
                                 }
                                 .transition(.opacity)
@@ -363,6 +363,11 @@ struct FileBrowserView: View {
             .fullScreenCover(isPresented: $quickLookManager.isPresenting) {
                 QuickLookWrapper(quickLookManager: quickLookManager)
                     .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showingFilePreview) {
+                if let path = previewPath {
+                    FilePreviewView(path: path)
+                }
             }
             .overlay {
                 if quickLookManager.isDownloading {

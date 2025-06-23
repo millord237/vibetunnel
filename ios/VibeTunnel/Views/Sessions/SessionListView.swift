@@ -1,5 +1,6 @@
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Main view displaying the list of terminal sessions.
 ///
@@ -16,6 +17,8 @@ struct SessionListView: View {
     @State private var showingFileBrowser = false
     @State private var showingSettings = false
     @State private var searchText = ""
+    @State private var showingCastImporter = false
+    @State private var importedCastFile: CastFileItem?
 
     var filteredSessions: [Session] {
         let sessions = viewModel.sessions.filter { showExitedSessions || $0.isRunning }
@@ -94,14 +97,25 @@ struct SessionListView: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: Theme.Spacing.medium) {
-                        Button(action: {
-                            HapticFeedback.impact(.light)
-                            showingSettings = true
-                        }, label: {
-                            Image(systemName: "gearshape.fill")
+                        Menu {
+                            Button(action: {
+                                HapticFeedback.impact(.light)
+                                showingSettings = true
+                            }) {
+                                Label("Settings", systemImage: "gearshape")
+                            }
+                            
+                            Button(action: {
+                                HapticFeedback.impact(.light)
+                                showingCastImporter = true
+                            }) {
+                                Label("Import Recording", systemImage: "square.and.arrow.down")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
                                 .font(.title3)
                                 .foregroundColor(Theme.Colors.primaryAccent)
-                        })
+                        }
 
                         Button(action: {
                             HapticFeedback.impact(.light)
@@ -144,6 +158,23 @@ struct SessionListView: View {
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
+            }
+            .fileImporter(
+                isPresented: $showingCastImporter,
+                allowedContentTypes: [.json, .data],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        importedCastFile = CastFileItem(url: url)
+                    }
+                case .failure(let error):
+                    print("Failed to import cast file: \(error)")
+                }
+            }
+            .sheet(item: $importedCastFile) { item in
+                CastPlayerView(castFileURL: item.url)
             }
             .refreshable {
                 await viewModel.loadSessions()
@@ -601,4 +632,10 @@ struct CleanupAllButton: View {
             removal: .scale.combined(with: .opacity)
         ))
     }
+}
+
+/// Wrapper for cast file URL to make it Identifiable
+struct CastFileItem: Identifiable {
+    let id = UUID()
+    let url: URL
 }

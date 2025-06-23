@@ -247,15 +247,15 @@ class APIClient: APIClientProtocol {
             throw APIError.noServerConfigured
         }
 
-        let url = baseURL.appendingPathComponent("api/cleanup-exited")
+        let url = baseURL.appendingPathComponent("api/sessions")
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        request.httpMethod = "DELETE"
         addAuthenticationIfNeeded(&request)
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
 
-        // Handle empty response (204 No Content) from Go server
+        // Handle empty response (204 No Content)
         if data.isEmpty {
             return []
         }
@@ -589,4 +589,135 @@ class APIClient: APIClientProtocol {
 
         return try decoder.decode(FileInfo.self, from: data)
     }
+    
+    func previewFile(path: String) async throws -> FilePreview {
+        guard let baseURL else {
+            throw APIError.noServerConfigured
+        }
+        
+        guard var components = URLComponents(
+            url: baseURL.appendingPathComponent("api/fs/preview"),
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw APIError.invalidURL
+        }
+        components.queryItems = [URLQueryItem(name: "path", value: path)]
+        
+        guard let url = components.url else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        addAuthenticationIfNeeded(&request)
+        
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        
+        return try decoder.decode(FilePreview.self, from: data)
+    }
+    
+    func getGitDiff(path: String) async throws -> FileDiff {
+        guard let baseURL else {
+            throw APIError.noServerConfigured
+        }
+        
+        guard var components = URLComponents(
+            url: baseURL.appendingPathComponent("api/fs/diff"),
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw APIError.invalidURL
+        }
+        components.queryItems = [URLQueryItem(name: "path", value: path)]
+        
+        guard let url = components.url else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        addAuthenticationIfNeeded(&request)
+        
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        
+        return try decoder.decode(FileDiff.self, from: data)
+    }
+    
+    // MARK: - System Logs
+    
+    func getLogsRaw() async throws -> String {
+        guard let baseURL else {
+            throw APIError.noServerConfigured
+        }
+        
+        let url = baseURL.appendingPathComponent("api/logs/raw")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        addAuthenticationIfNeeded(&request)
+        
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        
+        guard let logContent = String(data: data, encoding: .utf8) else {
+            throw APIError.invalidResponse
+        }
+        
+        return logContent
+    }
+    
+    func getLogsInfo() async throws -> LogsInfo {
+        guard let baseURL else {
+            throw APIError.noServerConfigured
+        }
+        
+        let url = baseURL.appendingPathComponent("api/logs/info")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        addAuthenticationIfNeeded(&request)
+        
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        
+        return try decoder.decode(LogsInfo.self, from: data)
+    }
+    
+    func clearLogs() async throws {
+        guard let baseURL else {
+            throw APIError.noServerConfigured
+        }
+        
+        let url = baseURL.appendingPathComponent("api/logs/clear")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        addAuthenticationIfNeeded(&request)
+        
+        let (_, response) = try await session.data(for: request)
+        try validateResponse(response)
+    }
+}
+
+// MARK: - File Preview Types
+struct FilePreview: Codable {
+    let type: FilePreviewType
+    let content: String?
+    let language: String?
+    let size: Int64?
+    let mimeType: String?
+}
+
+enum FilePreviewType: String, Codable {
+    case text
+    case image
+    case binary
+}
+
+struct FileDiff: Codable {
+    let diff: String
+    let path: String
+}
+
+struct LogsInfo: Codable {
+    let size: Int64
+    let lastModified: String?
 }

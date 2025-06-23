@@ -128,14 +128,14 @@ struct SessionCreateData: Codable {
     ///   - command: Command to execute (default: "zsh").
     ///   - workingDir: Working directory for the session.
     ///   - name: Optional custom name.
-    ///   - spawnTerminal: Whether to spawn a terminal (default: false).
+    ///   - spawnTerminal: Whether to spawn a terminal (default: true).
     ///   - cols: Terminal width in columns (default: 120).
     ///   - rows: Terminal height in rows (default: 30).
     init(
         command: String = "zsh",
         workingDir: String,
         name: String? = nil,
-        spawnTerminal: Bool = false,
+        spawnTerminal: Bool = true,
         cols: Int = 120,
         rows: Int = 30
     ) {

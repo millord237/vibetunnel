@@ -20,6 +20,8 @@ struct TerminalView: View {
     @State private var keyboardHeight: CGFloat = 0
     @State private var showScrollToBottom = false
     @State private var showingFileBrowser = false
+    @State private var selectedRenderer = TerminalRenderer.selected
+    @State private var showingDebugMenu = false
     @FocusState private var isInputFocused: Bool
 
     init(session: Session) {
@@ -212,6 +214,10 @@ struct TerminalView: View {
         Divider()
         
         recordingMenuItems
+        
+        Divider()
+        
+        debugMenuItems
     }
     
     @ViewBuilder
@@ -234,6 +240,28 @@ struct TerminalView: View {
             Label("Export Recording", systemImage: "square.and.arrow.up")
         })
         .disabled(viewModel.castRecorder.events.isEmpty)
+    }
+    
+    @ViewBuilder
+    private var debugMenuItems: some View {
+        Menu {
+            ForEach(TerminalRenderer.allCases, id: \.self) { renderer in
+                Button(action: {
+                    selectedRenderer = renderer
+                    TerminalRenderer.selected = renderer
+                    viewModel.terminalViewId = UUID() // Force recreate terminal view
+                }) {
+                    HStack {
+                        Text(renderer.displayName)
+                        if renderer == selectedRenderer {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label("Terminal Renderer", systemImage: "gearshape.2")
+        }
     }
     
     @ViewBuilder
@@ -338,21 +366,41 @@ struct TerminalView: View {
 
     private var terminalContent: some View {
         VStack(spacing: 0) {
-            // Terminal hosting view
-            TerminalHostingView(
-                session: session,
-                fontSize: $fontSize,
-                theme: selectedTheme,
-                onInput: { text in
-                    viewModel.sendInput(text)
-                },
-                onResize: { cols, rows in
-                    viewModel.terminalCols = cols
-                    viewModel.terminalRows = rows
-                    viewModel.resize(cols: cols, rows: rows)
-                },
-                viewModel: viewModel
-            )
+            // Terminal view based on selected renderer
+            Group {
+                switch selectedRenderer {
+                case .swiftTerm:
+                    TerminalHostingView(
+                        session: session,
+                        fontSize: $fontSize,
+                        theme: selectedTheme,
+                        onInput: { text in
+                            viewModel.sendInput(text)
+                        },
+                        onResize: { cols, rows in
+                            viewModel.terminalCols = cols
+                            viewModel.terminalRows = rows
+                            viewModel.resize(cols: cols, rows: rows)
+                        },
+                        viewModel: viewModel
+                    )
+                case .xterm:
+                    XtermWebView(
+                        session: session,
+                        fontSize: $fontSize,
+                        theme: selectedTheme,
+                        onInput: { text in
+                            viewModel.sendInput(text)
+                        },
+                        onResize: { cols, rows in
+                            viewModel.terminalCols = cols
+                            viewModel.terminalRows = rows
+                            viewModel.resize(cols: cols, rows: rows)
+                        },
+                        viewModel: viewModel
+                    )
+                }
+            }
             .id(viewModel.terminalViewId)
             .background(selectedTheme.background)
             .focused($isInputFocused)
@@ -407,7 +455,7 @@ class TerminalViewModel {
 
     let session: Session
     let castRecorder: CastRecorder
-    private var bufferWebSocketClient: BufferWebSocketClient?
+    var bufferWebSocketClient: BufferWebSocketClient?
     private var connectionStatusTask: Task<Void, Never>?
     private var connectionErrorTask: Task<Void, Never>?
     weak var terminalCoordinator: TerminalHostingView.Coordinator?
