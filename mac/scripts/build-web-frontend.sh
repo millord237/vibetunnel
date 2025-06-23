@@ -219,6 +219,14 @@ else
     exit 1
 fi
 
+# Copy authenticate_pam.node if it exists
+if [ -f "${NATIVE_DIR}/authenticate_pam.node" ]; then
+    echo "Copying authenticate_pam.node..."
+    cp "${NATIVE_DIR}/authenticate_pam.node" "${APP_RESOURCES}/"
+else
+    echo "Warning: authenticate_pam.node not found. PAM authentication may not work."
+fi
+
 echo "✓ Native executable and modules copied successfully"
 
 # Sanity check: Verify all required binaries are present in the app bundle

@@ -1,4 +1,4 @@
-import * as pam from 'authenticate-pam';
+import { authenticate as pamAuthenticate } from './authenticate-pam-loader.js';
 import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 
@@ -165,7 +165,7 @@ export class AuthService {
    */
   private async verifyPAMCredentials(username: string, password: string): Promise<boolean> {
     return new Promise((resolve) => {
-      pam.authenticate(username, password, (err: Error | null) => {
+      pamAuthenticate(username, password, (err: Error | null) => {
         if (err) {
           console.error('PAM authentication failed:', err.message);
           resolve(false);
