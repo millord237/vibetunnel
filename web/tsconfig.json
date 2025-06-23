@@ -16,6 +16,7 @@
     "declaration": false,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
     "typeRoots": ["./node_modules/@types"]
   },
   "include": [
@@ -29,5 +30,9 @@
     "dist",
     "public",
     "src/client/**/*"
+  ],
+  "references": [
+    { "path": "./tsconfig.client.json" },
+    { "path": "./tsconfig.sw.json" }
   ]
 }

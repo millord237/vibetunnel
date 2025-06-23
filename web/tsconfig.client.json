@@ -16,7 +16,9 @@
     "inlineSources": true,
     "declaration": false,
     "experimentalDecorators": true,
-    "useDefineForClassFields": false
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "composite": true
   },
   "include": [
     "src/client/**/*"
