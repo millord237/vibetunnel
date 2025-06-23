@@ -2208,6 +2208,122 @@ pub async fn test_terminal(terminal: String, state: State<'_, AppState>) -> Resu
     Ok(())
 }
 
+// Welcome flow specific commands
+#[derive(Serialize)]
+pub struct VtInstallationStatus {
+    pub installed: bool,
+    pub path: Option<String>,
+}
+
+#[tauri::command]
+pub async fn check_vt_installation() -> Result<VtInstallationStatus, String> {
+    let installed = crate::cli_installer::check_cli_installed()
+        .unwrap_or(false);
+    
+    let path = if installed {
+        Some("/usr/local/bin/vt".to_string())
+    } else {
+        None
+    };
+    
+    Ok(VtInstallationStatus { installed, path })
+}
+
+#[tauri::command]
+pub async fn install_vt() -> Result<(), String> {
+    crate::cli_installer::install_cli()?;
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct PermissionsStatus {
+    pub automation: bool,
+    pub accessibility: bool,
+}
+
+#[tauri::command]
+pub async fn check_permissions(state: State<'_, AppState>) -> Result<PermissionsStatus, String> {
+    let permissions_manager = &state.permissions_manager;
+    
+    // Check terminal access permission (closest to automation)
+    let automation_status = permissions_manager
+        .check_permission_silent(crate::permissions::PermissionType::TerminalAccess)
+        .await;
+    
+    // Check accessibility permission
+    let accessibility_status = permissions_manager
+        .check_permission_silent(crate::permissions::PermissionType::Accessibility)
+        .await;
+    
+    Ok(PermissionsStatus {
+        automation: automation_status == crate::permissions::PermissionStatus::Granted,
+        accessibility: accessibility_status == crate::permissions::PermissionStatus::Granted,
+    })
+}
+
+#[tauri::command]
+pub async fn request_automation_permission(state: State<'_, AppState>) -> Result<(), String> {
+    let permissions_manager = &state.permissions_manager;
+    permissions_manager
+        .request_permission(crate::permissions::PermissionType::TerminalAccess)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn request_accessibility_permission(state: State<'_, AppState>) -> Result<(), String> {
+    let permissions_manager = &state.permissions_manager;
+    permissions_manager
+        .request_permission(crate::permissions::PermissionType::Accessibility)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn save_dashboard_password(password: String) -> Result<(), String> {
+    // Save password to keychain
+    crate::keychain::KeychainManager::set_dashboard_password(&password)
+        .map_err(|e| e.message)?;
+    
+    // Update settings to enable password
+    let mut settings = crate::settings::Settings::load().unwrap_or_default();
+    settings.dashboard.enable_password = true;
+    settings.save()?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_dashboard(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+    // Check if server is running
+    if !state.backend_manager.is_running().await {
+        // Start server if not running
+        start_server(state.clone(), app).await?;
+    }
+    
+    // Get server port from settings
+    let settings = crate::settings::Settings::load().unwrap_or_default();
+    let url = format!("http://127.0.0.1:{}", settings.dashboard.server_port);
+    
+    // Open URL in default browser
+    open::that(url).map_err(|e| format!("Failed to open dashboard: {}", e))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn finish_welcome(state: State<'_, AppState>) -> Result<(), String> {
+    // Mark welcome as completed
+    state.welcome_manager.skip_tutorial().await?;
+    
+    // Update settings to not show welcome on startup
+    let mut settings = crate::settings::Settings::load().unwrap_or_default();
+    settings.general.show_welcome_on_startup = Some(false);
+    settings.save()?;
+    
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

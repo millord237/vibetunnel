@@ -4,6 +4,8 @@ import { TauriBase } from './base/tauri-base';
 import { formStyles } from './shared/styles';
 import './settings-tab';
 import './settings-checkbox';
+import './settings-select';
+import './glowing-app-icon';
 
 interface SettingsData {
   general?: {
@@ -13,9 +15,18 @@ interface SettingsData {
     theme?: 'system' | 'light' | 'dark';
     default_terminal?: string;
   };
-  dashboard?: Record<string, unknown>;
+  dashboard?: {
+    password_enabled?: boolean;
+    password?: string;
+    access_mode?: 'localhost' | 'network';
+    port?: string;
+    ngrok_enabled?: boolean;
+    ngrok_token?: string;
+  };
   advanced?: {
     debug_mode?: boolean;
+    cleanup_on_startup?: boolean;
+    preferred_terminal?: string;
   };
 }
 
@@ -190,6 +201,172 @@ export class SettingsApp extends TauriBase {
       .settings-grid {
         grid-template-columns: 1fr;
       }
+    }
+
+    /* Form Elements */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 14px;
+      color: var(--text-primary);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .form-input:hover {
+      border-color: var(--border-secondary);
+      background: var(--bg-hover);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .form-input[type="number"] {
+      width: 120px;
+    }
+
+    .form-text {
+      display: block;
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    .password-section {
+      margin-top: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* About Tab Styles */
+    .about-content {
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .app-info-section {
+      margin-bottom: 32px;
+    }
+
+    .app-name {
+      font-size: 36px;
+      font-weight: 500;
+      margin: 24px 0 8px 0;
+      letter-spacing: -0.5px;
+    }
+
+    .app-version {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin: 0;
+    }
+
+    .description-section {
+      margin-bottom: 32px;
+    }
+
+    .description-section p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .links-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 48px;
+    }
+
+    .link-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      color: var(--accent);
+      text-decoration: none;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+      width: fit-content;
+      margin: 0 auto;
+    }
+
+    .link-item:hover {
+      background: var(--bg-hover);
+      text-decoration: underline;
+      transform: translateX(4px);
+    }
+
+    .link-item svg {
+      flex-shrink: 0;
+    }
+
+    .credits-section {
+      padding-top: 24px;
+      border-top: 1px solid var(--border-primary);
+    }
+
+    .credits-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin: 0 0 8px 0;
+    }
+
+    .credits-links {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .credit-link {
+      font-size: 12px;
+      color: var(--accent);
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .credit-link:hover {
+      text-decoration: underline;
+    }
+
+    .separator {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .copyright {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin: 0;
     }
 
     /* Theme Variables */
@@ -390,24 +567,18 @@ export class SettingsApp extends TauriBase {
           
           <div class="setting-card">
             <h3>Terminal</h3>
-            <div class="form-group">
-              <label for="terminal-select">Default Terminal</label>
-              <select 
-                id="terminal-select"
-                class="form-select"
-                @change=${(e: Event) => {
-                  const target = e.target as HTMLSelectElement;
-                  this.handleSettingChange(new CustomEvent('change', {
-                    detail: { settingKey: 'general.default_terminal', value: target.value }
-                  }) as SettingChangeEvent);
-                }}
-              >
-                <option value="terminal" ?selected=${!this.settings.general?.default_terminal || this.settings.general.default_terminal === 'terminal'}>Terminal.app</option>
-                <option value="iterm2" ?selected=${this.settings.general?.default_terminal === 'iterm2'}>iTerm2</option>
-                <option value="warp" ?selected=${this.settings.general?.default_terminal === 'warp'}>Warp</option>
-              </select>
-              <small class="form-text">Choose your preferred terminal application</small>
-            </div>
+            <settings-select
+              label="Default Terminal"
+              help="Choose your preferred terminal application"
+              settingKey="general.default_terminal"
+              .value=${this.settings.general?.default_terminal || 'terminal'}
+              .options=${[
+                { value: 'terminal', label: 'Terminal.app' },
+                { value: 'iterm2', label: 'iTerm2' },
+                { value: 'warp', label: 'Warp' }
+              ]}
+              @change=${this.handleSettingChange}
+            ></settings-select>
           </div>
           
           <div class="setting-card">
@@ -420,24 +591,116 @@ export class SettingsApp extends TauriBase {
               @change=${this.handleSettingChange}
             ></settings-checkbox>
             
+            <settings-select
+              label="Theme"
+              help="Choose your preferred color scheme"
+              settingKey="general.theme"
+              .value=${this.settings.general?.theme || 'system'}
+              .options=${[
+                { value: 'system', label: 'System' },
+                { value: 'light', label: 'Light' },
+                { value: 'dark', label: 'Dark' }
+              ]}
+              @change=${this.handleSettingChange}
+            ></settings-select>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderDashboardTab(): TemplateResult {
+    return html`
+      <div class="tab-content ${this.activeTab === 'dashboard' ? 'active' : ''}" id="dashboard">
+        <h2>Dashboard</h2>
+        
+        <div class="settings-grid">
+          <div class="setting-card">
+            <h3>Security</h3>
+            <settings-checkbox
+              .checked=${this.settings.dashboard?.password_enabled || false}
+              label="Password protect dashboard"
+              help="Require a password to access the dashboard from remote connections"
+              settingKey="dashboard.password_enabled"
+              @change=${this.handleSettingChange}
+            ></settings-checkbox>
+            
+            ${this.settings.dashboard?.password_enabled ? html`
+              <div class="password-section">
+                <input
+                  type="password"
+                  placeholder="Enter password"
+                  class="form-input"
+                  @input=${(e: Event) => {
+                    const input = e.target as HTMLInputElement;
+                    this.handleSettingChange(new CustomEvent('change', {
+                      detail: { settingKey: 'dashboard.password', value: input.value }
+                    }) as SettingChangeEvent);
+                  }}
+                />
+              </div>
+            ` : ''}
+          </div>
+          
+          <div class="setting-card">
+            <h3>Server Configuration</h3>
+            <settings-select
+              label="Allow dashboard access from"
+              help="Control where the dashboard can be accessed from"
+              settingKey="dashboard.access_mode"
+              .value=${this.settings.dashboard?.access_mode || 'localhost'}
+              .options=${[
+                { value: 'localhost', label: 'This Mac only' },
+                { value: 'network', label: 'Local network' }
+              ]}
+              @change=${this.handleSettingChange}
+            ></settings-select>
+            
             <div class="form-group">
-              <label for="theme-select">Theme</label>
-              <select 
-                id="theme-select"
-                class="form-select"
-                @change=${(e: Event) => {
-                  const target = e.target as HTMLSelectElement;
+              <label>Server port</label>
+              <input
+                type="number"
+                class="form-input"
+                .value=${this.settings.dashboard?.port || '4022'}
+                @input=${(e: Event) => {
+                  const input = e.target as HTMLInputElement;
                   this.handleSettingChange(new CustomEvent('change', {
-                    detail: { settingKey: 'general.theme', value: target.value }
+                    detail: { settingKey: 'dashboard.port', value: input.value }
                   }) as SettingChangeEvent);
                 }}
-              >
-                <option value="system" ?selected=${!this.settings.general?.theme || this.settings.general.theme === 'system'}>System</option>
-                <option value="light" ?selected=${this.settings.general?.theme === 'light'}>Light</option>
-                <option value="dark" ?selected=${this.settings.general?.theme === 'dark'}>Dark</option>
-              </select>
-              <small class="form-text">Choose your preferred color scheme</small>
+              />
+              <small class="form-text">The server will automatically restart when the port is changed</small>
             </div>
+          </div>
+          
+          <div class="setting-card">
+            <h3>ngrok Integration</h3>
+            <settings-checkbox
+              .checked=${this.settings.dashboard?.ngrok_enabled || false}
+              label="Enable ngrok tunnel"
+              help="Expose VibeTunnel to the internet using ngrok"
+              settingKey="dashboard.ngrok_enabled"
+              @change=${this.handleSettingChange}
+            ></settings-checkbox>
+            
+            ${this.settings.dashboard?.ngrok_enabled ? html`
+              <div class="form-group">
+                <label>Auth token</label>
+                <input
+                  type="password"
+                  placeholder="Enter ngrok auth token"
+                  class="form-input"
+                  .value=${this.settings.dashboard?.ngrok_token || ''}
+                  @input=${(e: Event) => {
+                    const input = e.target as HTMLInputElement;
+                    this.handleSettingChange(new CustomEvent('change', {
+                      detail: { settingKey: 'dashboard.ngrok_token', value: input.value }
+                    }) as SettingChangeEvent);
+                  }}
+                />
+                <small class="form-text">Get your free auth token at <a href="https://ngrok.com" target="_blank">ngrok.com</a></small>
+              </div>
+            ` : ''}
           </div>
         </div>
       </div>
@@ -451,6 +714,118 @@ export class SettingsApp extends TauriBase {
       <div class="tab-content ${this.activeTab === 'debug' ? 'active' : ''}" id="debug">
         <h2>Debug</h2>
         <p>Debug content here...</p>
+      </div>
+    `;
+  }
+
+  private _renderAdvancedTab(): TemplateResult {
+    return html`
+      <div class="tab-content ${this.activeTab === 'advanced' ? 'active' : ''}" id="advanced">
+        <h2>Advanced</h2>
+        
+        <div class="settings-grid">
+          <div class="setting-card">
+            <h3>Terminal</h3>
+            <settings-select
+              label="Preferred Terminal"
+              help="Select which application to use when creating new sessions"
+              settingKey="advanced.preferred_terminal"
+              .value=${this.settings.advanced?.preferred_terminal || 'terminal'}
+              .options=${[
+                { value: 'terminal', label: 'Terminal.app' },
+                { value: 'iterm2', label: 'iTerm2' },
+                { value: 'warp', label: 'Warp' }
+              ]}
+              @change=${this.handleSettingChange}
+            ></settings-select>
+          </div>
+          
+          <div class="setting-card">
+            <h3>Advanced Options</h3>
+            <settings-checkbox
+              .checked=${this.settings.advanced?.cleanup_on_startup !== false}
+              label="Clean up old sessions on startup"
+              help="Automatically remove terminated sessions when the app starts"
+              settingKey="advanced.cleanup_on_startup"
+              @change=${this.handleSettingChange}
+            ></settings-checkbox>
+            
+            <settings-checkbox
+              .checked=${this.settings.advanced?.debug_mode || false}
+              label="Debug mode"
+              help="Enable additional logging and debugging features"
+              settingKey="advanced.debug_mode"
+              @change=${this.handleSettingChange}
+            ></settings-checkbox>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderAboutTab(): TemplateResult {
+    return html`
+      <div class="tab-content ${this.activeTab === 'about' ? 'active' : ''}" id="about">
+        <div class="about-content">
+          <div class="app-info-section">
+            <glowing-app-icon
+              .size=${128}
+              .enableFloating=${true}
+              .enableInteraction=${true}
+              .glowIntensity=${0.3}
+              @icon-click=${() => window.open('https://vibetunnel.sh', '_blank')}
+            ></glowing-app-icon>
+            
+            <h1 class="app-name">VibeTunnel</h1>
+            <p class="app-version">Version ${this.systemInfo.version || '1.0.0'}</p>
+          </div>
+          
+          <div class="description-section">
+            <p>Turn any browser into your terminal & command your agents on the go.</p>
+          </div>
+          
+          <div class="links-section">
+            <a href="https://vibetunnel.sh" target="_blank" class="link-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill="currentColor"/>
+              </svg>
+              <span>Website</span>
+            </a>
+            
+            <a href="https://github.com/amantus-ai/vibetunnel" target="_blank" class="link-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" fill="currentColor"/>
+              </svg>
+              <span>View on GitHub</span>
+            </a>
+            
+            <a href="https://github.com/amantus-ai/vibetunnel/issues" target="_blank" class="link-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
+              </svg>
+              <span>Report an Issue</span>
+            </a>
+            
+            <a href="https://x.com/VibeTunnel" target="_blank" class="link-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="currentColor"/>
+              </svg>
+              <span>Follow @VibeTunnel</span>
+            </a>
+          </div>
+          
+          <div class="credits-section">
+            <p class="credits-label">Brought to you by</p>
+            <div class="credits-links">
+              <a href="https://mariozechner.at/" target="_blank" class="credit-link">@badlogic</a>
+              <span class="separator">•</span>
+              <a href="https://lucumr.pocoo.org/" target="_blank" class="credit-link">@mitsuhiko</a>
+              <span class="separator">•</span>
+              <a href="https://steipete.me" target="_blank" class="credit-link">@steipete</a>
+            </div>
+            <p class="copyright">© 2025 • MIT Licensed</p>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -487,20 +862,11 @@ export class SettingsApp extends TauriBase {
           ${this._renderDebugTab()}
           
           <!-- Other tabs will be added here -->
-          <div class="tab-content ${this.activeTab === 'dashboard' ? 'active' : ''}" id="dashboard">
-            <h2>Dashboard</h2>
-            <p>Dashboard settings coming soon...</p>
-          </div>
+          ${this._renderDashboardTab()}
           
-          <div class="tab-content ${this.activeTab === 'advanced' ? 'active' : ''}" id="advanced">
-            <h2>Advanced</h2>
-            <p>Advanced settings coming soon...</p>
-          </div>
+          ${this._renderAdvancedTab()}
           
-          <div class="tab-content ${this.activeTab === 'about' ? 'active' : ''}" id="about">
-            <h2>About</h2>
-            <p>VibeTunnel v${this.systemInfo.version || '1.0.0'}</p>
-          </div>
+          ${this._renderAboutTab()}
         </div>
       </div>
     `;

@@ -394,6 +394,14 @@ fn main() {
             // Welcome flow commands
             request_all_permissions,
             test_terminal,
+            check_vt_installation,
+            install_vt,
+            check_permissions,
+            request_automation_permission,
+            request_accessibility_permission,
+            save_dashboard_password,
+            open_dashboard,
+            finish_welcome,
         ])
         .setup(|app| {
             // Set app handle in managers
