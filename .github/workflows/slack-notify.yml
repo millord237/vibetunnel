@@ -105,7 +105,10 @@ jobs:
             }]
           };
           
-          core.setOutput('message', message);
+          // Write message to file to avoid shell escaping issues
+          const fs = require('fs');
+          fs.writeFileSync('/tmp/slack-message.json', JSON.stringify(message));
+          
           return message;
           
     - name: Send to Slack
@@ -113,8 +116,7 @@ jobs:
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       run: |
-        echo '${{ toJson(steps.slack-message.outputs.message) }}' | \
         curl -X POST \
           -H 'Content-type: application/json' \
-          --data @- \
+          --data-binary @/tmp/slack-message.json \
           "$SLACK_WEBHOOK_URL"
