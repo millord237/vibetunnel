@@ -151,7 +151,7 @@ export class SessionList extends LitElement {
       : this.sessions;
 
     return html`
-      <div class="font-mono text-sm p-4 bg-dark-bg">
+      <div class="font-mono text-sm p-4 bg-black">
         ${filteredSessions.length === 0
           ? html`
               <div class="text-dark-text-muted text-center py-8">

@@ -230,7 +230,7 @@ export class SessionCard extends LitElement {
       >
         <!-- Compact Header -->
         <div
-          class="flex justify-between items-center px-3 py-2 border-b border-dark-border bg-dark-bg-tertiary"
+          class="flex justify-between items-center px-3 py-2 border-b border-dark-border bg-dark-bg-secondary"
         >
           <div class="text-xs font-mono pr-2 flex-1 min-w-0 text-accent-green">
             <div class="truncate" title="${this.session.name || this.session.command.join(' ')}">
@@ -278,8 +278,7 @@ export class SessionCard extends LitElement {
 
         <!-- Terminal display (main content) -->
         <div
-          class="session-preview bg-dark-bg overflow-hidden flex-1 ${this.session.status ===
-          'exited'
+          class="session-preview bg-black overflow-hidden flex-1 ${this.session.status === 'exited'
             ? 'session-exited'
             : ''}"
         >
@@ -304,7 +303,7 @@ export class SessionCard extends LitElement {
 
         <!-- Compact Footer -->
         <div
-          class="px-3 py-2 text-dark-text-muted text-xs border-t border-dark-border bg-dark-bg-tertiary"
+          class="px-3 py-2 text-dark-text-muted text-xs border-t border-dark-border bg-dark-bg-secondary"
         >
           <div class="flex justify-between items-center min-w-0">
             <span class="${this.getStatusColor()} text-xs flex items-center gap-1 flex-shrink-0">

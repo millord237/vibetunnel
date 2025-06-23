@@ -5,7 +5,7 @@
 /* Global dark theme styles */
 @layer base {
   body {
-    @apply bg-dark-bg text-dark-text;
+    @apply bg-black text-dark-text;
   }
 
   /* Default focus styles */
@@ -71,7 +71,7 @@
 
   /* Card styles */
   .card {
-    @apply bg-dark-bg-secondary border border-dark-border rounded-lg p-6;
+    @apply bg-black border border-dark-border rounded-lg p-0;
     @apply transition-all duration-200 ease-in-out;
     @apply hover:border-accent-green-darker hover:shadow-glow-green-sm;
   }
@@ -121,7 +121,7 @@
 
   @media (max-width: 420px) {
     .session-flex-responsive {
-      padding: 0 0.25rem;
+      padding: 0;
       grid-template-columns: 1fr;
       grid-auto-rows: 300px;
     }
