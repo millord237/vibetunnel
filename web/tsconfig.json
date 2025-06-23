@@ -33,6 +33,5 @@
   ],
   "references": [
     { "path": "./tsconfig.client.json" },
-    { "path": "./tsconfig.sw.json" }
   ]
 }
