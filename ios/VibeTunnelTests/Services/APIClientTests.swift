@@ -228,6 +228,7 @@ struct APIClientTests {
     }
 
     @Test("Handles 401 unauthorized error")
+    @MainActor
     func handle401Error() async throws {
         // Arrange
         MockURLProtocol.requestHandler = { request in

@@ -39,8 +39,7 @@ struct TerminalView: View {
                 .navigationTitle(session.displayName)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(.visible, for: .bottomBar)
-                .toolbarBackground(.visible, for: .bottomBar)
-                .toolbarBackground(Theme.Colors.cardBackground, for: .bottomBar)
+                .toolbarBackground(.automatic, for: .bottomBar)
                 .toolbar {
                     navigationToolbarItems
                     bottomToolbarItems
@@ -205,9 +204,6 @@ struct TerminalView: View {
         ToolbarItemGroup(placement: .bottomBar) {
             terminalSizeIndicator
             Spacer()
-            connectionStatusIndicator
-            sessionStatusIndicator
-            pidIndicator
         }
     }
     
@@ -387,59 +383,12 @@ struct TerminalView: View {
     @ViewBuilder
     private var terminalSizeIndicator: some View {
         if viewModel.terminalCols > 0 && viewModel.terminalRows > 0 {
-            HStack(spacing: Theme.Spacing.extraSmall) {
-                Image(systemName: "rectangle.split.3x1")
-                    .font(.caption)
-                    .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
-                Text("\(viewModel.terminalCols) × \(viewModel.terminalRows)")
-                    .font(Theme.Typography.terminalSystem(size: 12))
-                    .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
-            }
-        }
-    }
-    
-    private var connectionStatusIndicator: some View {
-        HStack(spacing: 4) {
-            if viewModel.isConnecting {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle())
-                    .scaleEffect(0.5)
-                    .frame(width: 12, height: 12)
-            } else {
-                Image(systemName: viewModel.isConnected ? "wifi" : "wifi.slash")
-                    .font(.system(size: 10))
-                    .foregroundColor(viewModel.isConnected ? Theme.Colors.successAccent : Theme.Colors.errorAccent)
-            }
-            Text(viewModel.isConnecting ? "Connecting" : (viewModel.isConnected ? "Connected" : "Disconnected"))
-                .font(Theme.Typography.terminalSystem(size: 10))
-                .foregroundColor(viewModel.isConnected ? Theme.Colors.successAccent : Theme.Colors.errorAccent)
-        }
-    }
-    
-    private var sessionStatusIndicator: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(session.isRunning ? Theme.Colors.successAccent : Theme.Colors.terminalForeground.opacity(0.3))
-                .frame(width: 6, height: 6)
-            Text(session.isRunning ? "Running" : "Exited")
-                .font(Theme.Typography.terminalSystem(size: 12))
-                .foregroundColor(session.isRunning ? Theme.Colors.successAccent : Theme.Colors.terminalForeground.opacity(0.5))
-        }
-    }
-    
-    @ViewBuilder
-    private var pidIndicator: some View {
-        if let pid = session.pid {
-            Spacer()
-            Text("PID: \(pid)")
-                .font(Theme.Typography.terminalSystem(size: 12))
+            Text("\(viewModel.terminalCols)×\(viewModel.terminalRows)")
+                .font(Theme.Typography.terminalSystem(size: 11))
                 .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
-                .onTapGesture {
-                    UIPasteboard.general.string = String(pid)
-                    HapticFeedback.notification(.success)
-                }
         }
     }
+    
     
     private var recordingView: some View {
         HStack(spacing: 4) {

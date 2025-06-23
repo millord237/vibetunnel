@@ -29,7 +29,7 @@ struct SessionTests {
 
         // Assert
         #expect(session.id == "test-123")
-        #expect(session.command == "/bin/bash")
+        #expect(session.command == ["/bin/bash"])
         #expect(session.workingDir == "/Users/test")
         #expect(session.name == "Test Session")
         #expect(session.status == .running)
