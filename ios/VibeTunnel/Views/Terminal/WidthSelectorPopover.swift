@@ -33,7 +33,7 @@ struct WidthSelectorPopover: View {
                                 .font(.system(size: 16))
                                 .foregroundColor(Theme.Colors.primaryAccent)
                             Text("Custom Width...")
-                                .font(Theme.Typography.body)
+                                .font(.body)
                                 .foregroundColor(Theme.Colors.terminalForeground)
                             Spacer()
                         }
@@ -45,7 +45,7 @@ struct WidthSelectorPopover: View {
                 let customWidths = TerminalWidthManager.shared.customWidths
                 if !customWidths.isEmpty {
                     Section(header: Text("Recent Custom Widths")
-                        .font(Theme.Typography.caption)
+                        .font(.caption)
                         .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
                     ) {
                         ForEach(customWidths, id: \.self) { width in
@@ -111,13 +111,13 @@ private struct WidthPresetRow: View {
                         
                         if width.value > 0 {
                             Text("columns")
-                                .font(Theme.Typography.caption)
+                                .font(.caption)
                                 .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
                         }
                     }
                     
                     Text(width.description)
-                        .font(Theme.Typography.caption)
+                        .font(.caption)
                         .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
                 }
                 
@@ -146,7 +146,7 @@ private struct CustomWidthSheet: View {
         NavigationStack {
             VStack(spacing: Theme.Spacing.large) {
                 Text("Enter a custom terminal width between 20 and 500 columns")
-                    .font(Theme.Typography.body)
+                    .font(.body)
                     .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
@@ -164,7 +164,7 @@ private struct CustomWidthSheet: View {
                         .cornerRadius(Theme.CornerRadius.medium)
                     
                     Text("columns")
-                        .font(Theme.Typography.body)
+                        .font(.body)
                         .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
                 }
                 

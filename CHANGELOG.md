@@ -1,6 +1,8 @@
 # Changelog
 
 ## [1.0.0-beta.3] - 2025-06-23
+- Switched to CSS Grid for better responsive terminal layouts
+
 
 ### 🎨 Web Frontend Improvements
 - **Enhanced Terminal Grid Layout** - Switched to CSS Grid for better responsive terminal layouts
@@ -11,7 +13,6 @@
 - **Better Session Management** - Improved terminal width spanning and layout optimization
 
 ### 🚀 Server Enhancements  
-- **Go-Only Backend** - Removed Rust server option, Go is now the sole server implementation for better stability
 - **Improved Buffer Handling** - Fixed buffer aggregator message handling for smoother terminal updates
 - **Shell Alias Support** - Better support for shell aliases and improved debug logging
 - **Unix Socket Support** - Enhanced Unix socket server implementation for faster local communication
@@ -22,7 +23,6 @@
 - **Improved vt Script** - More resilient vt command-line tool with better error handling
 - **Build System Fixes** - Fixed build issues on macOS Sequoia and improved hash file handling
 - **Server Lifecycle** - Ensured vibetunnel server properly terminates when Mac app is killed
-- **Custom Node.js Support** - Re-enabled custom Node.js installation for better compatibility
 
 ### 🐛 Bug Fixes
 - Fixed derived data path filtering to avoid indexing unnecessary files
