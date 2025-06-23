@@ -22,7 +22,7 @@ enum Theme {
         static let terminalForeground = Color(light: Color(hex: "24292E"), dark: Color(hex: "B3B1AD"))
         
         // Accent colors (same for both modes)
-        static let primaryAccent = Color(hex: "00FF88") // Green accent matching web
+        static let primaryAccent = Color(light: Color(hex: "22C55E"), dark: Color(hex: "00FF88")) // Darker green for light mode
         static let secondaryAccent = Color(hex: "59C2FF")
         static let successAccent = Color(hex: "AAD94C")
         static let warningAccent = Color(hex: "FFB454")

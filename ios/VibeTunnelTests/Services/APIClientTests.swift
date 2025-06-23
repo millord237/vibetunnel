@@ -198,6 +198,7 @@ struct APIClientTests {
     // MARK: - Error Handling Tests
 
     @Test("Handles 404 error correctly")
+    @MainActor
     func handle404Error() async throws {
         // Arrange
         MockURLProtocol.requestHandler = { request in

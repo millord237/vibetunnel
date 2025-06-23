@@ -35,7 +35,7 @@ struct SessionCardView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 // Header with session ID/name and kill button
                 HStack {
-                    Text(session.name)
+                    Text(session.displayName)
                         .font(Theme.Typography.terminalSystem(size: 14))
                         .fontWeight(.medium)
                         .foregroundColor(Theme.Colors.primaryAccent)

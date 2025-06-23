@@ -29,7 +29,7 @@ struct SessionListView: View {
 
         return sessions.filter { session in
             // Search in session name
-            if session.name.localizedCaseInsensitiveContains(searchText) {
+            if let name = session.name, name.localizedCaseInsensitiveContains(searchText) {
                 return true
             }
             // Search in command
@@ -275,6 +275,11 @@ struct SessionListView: View {
                         Task {
                             await viewModel.killAllSessions()
                         }
+                    },
+                    onCleanupAll: {
+                        Task {
+                            await viewModel.cleanupAllExited()
+                        }
                     }
                 )
                 .padding(.horizontal)
@@ -290,13 +295,6 @@ struct SessionListView: View {
                     GridItem(.flexible(), spacing: Theme.Spacing.medium),
                     GridItem(.flexible(), spacing: Theme.Spacing.medium)
                 ], spacing: Theme.Spacing.medium) {
-                    if showExitedSessions && filteredSessions.contains(where: { !$0.isRunning }) {
-                        CleanupAllButton {
-                            Task {
-                                await viewModel.cleanupAllExited()
-                            }
-                        }
-                    }
 
                     ForEach(filteredSessions) { session in
                         SessionCardView(session: session) {
@@ -383,11 +381,11 @@ struct ErrorBanner: View {
     var body: some View {
         HStack {
             Image(systemName: isOffline ? "wifi.slash" : "exclamationmark.triangle")
-                .foregroundColor(.white)
+                .foregroundColor(Theme.Colors.terminalBackground)
 
             Text(message)
                 .font(Theme.Typography.terminalSystem(size: 14))
-                .foregroundColor(.white)
+                .foregroundColor(Theme.Colors.terminalBackground)
                 .lineLimit(2)
 
             Spacer()
@@ -493,6 +491,7 @@ struct SessionHeaderView: View {
     let sessions: [Session]
     @Binding var showExitedSessions: Bool
     let onKillAll: () -> Void
+    let onCleanupAll: () -> Void
 
     private var runningCount: Int { sessions.count(where: { $0.isRunning }) }
     private var exitedCount: Int { sessions.count(where: { !$0.isRunning }) }
@@ -523,6 +522,10 @@ struct SessionHeaderView: View {
                 }
                 
                 Spacer()
+                
+                if showExitedSessions && sessions.contains(where: { !$0.isRunning }) {
+                    CleanupAllHeaderButton(onCleanup: onCleanupAll)
+                }
                 
                 if sessions.contains(where: \.isRunning) {
                     KillAllButton(onKillAll: onKillAll)
@@ -600,7 +603,7 @@ struct KillAllButton: View {
                     .fontWeight(.medium)
             }
             .font(Theme.Typography.terminalSystem(size: 14))
-            .foregroundColor(.white)
+            .foregroundColor(Theme.Colors.terminalBackground)
             .padding(.horizontal, Theme.Spacing.medium)
             .padding(.vertical, Theme.Spacing.small)
             .background(
@@ -642,6 +645,36 @@ struct CleanupAllButton: View {
             insertion: .scale.combined(with: .opacity),
             removal: .scale.combined(with: .opacity)
         ))
+    }
+}
+
+struct CleanupAllHeaderButton: View {
+    let onCleanup: () -> Void
+
+    var body: some View {
+        Button(action: {
+            HapticFeedback.impact(.medium)
+            onCleanup()
+        }, label: {
+            HStack(spacing: 6) {
+                Image(systemName: "trash")
+                    .font(.system(size: 14))
+                Text("Clean Up All Exited")
+                    .font(Theme.Typography.terminalSystem(size: 14))
+            }
+            .foregroundColor(Theme.Colors.warningAccent)
+            .padding(.horizontal, Theme.Spacing.medium)
+            .padding(.vertical, Theme.Spacing.small)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .fill(Theme.Colors.warningAccent.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            .stroke(Theme.Colors.warningAccent.opacity(0.2), lineWidth: 1)
+                    )
+            )
+        })
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
