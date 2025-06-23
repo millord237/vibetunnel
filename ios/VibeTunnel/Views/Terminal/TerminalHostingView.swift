@@ -597,7 +597,8 @@ struct TerminalHostingView: UIViewRepresentable {
                 if let line = terminalInstance.getLine(row: row) {
                     var lineText = ""
                     for col in 0..<terminalInstance.cols {
-                        if let char = line.getChar(at: col) {
+                        if col < line.count {
+                            let char = line[col]
                             lineText += String(char.getCharacter())
                         }
                     }

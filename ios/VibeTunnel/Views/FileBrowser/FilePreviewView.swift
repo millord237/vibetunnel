@@ -14,17 +14,27 @@ struct FilePreviewView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.Colors.background
+                Theme.Colors.terminalBackground
                     .ignoresSafeArea()
                 
                 if isLoading {
                     ProgressView("Loading...")
                         .progressViewStyle(CircularProgressViewStyle(tint: Theme.Colors.primaryAccent))
                 } else if let error = error {
-                    ErrorView(message: error) {
-                        Task {
-                            await loadPreview()
+                    VStack {
+                        Text("Error loading file")
+                            .font(.headline)
+                            .foregroundColor(Theme.Colors.errorAccent)
+                        Text(error)
+                            .font(.subheadline)
+                            .foregroundColor(Theme.Colors.terminalForeground)
+                            .multilineTextAlignment(.center)
+                        Button("Retry") {
+                            Task {
+                                await loadPreview()
+                            }
                         }
+                        .terminalButton()
                     }
                 } else if let preview = preview {
                     previewContent(for: preview)
@@ -213,7 +223,7 @@ struct GitDiffView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.Colors.background
+                Theme.Colors.terminalBackground
                     .ignoresSafeArea()
                 
                 DiffWebView(content: diff.diff)

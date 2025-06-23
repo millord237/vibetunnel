@@ -295,7 +295,7 @@ struct XtermWebView: UIViewRepresentable {
             case .output(_, let data):
                 writeToTerminal(data)
                 
-            case .resize(_, let dimensions):
+            case .resize(_, _):
                 // Handle resize if needed
                 break
                 
@@ -343,9 +343,9 @@ struct XtermWebView: UIViewRepresentable {
             // Convert theme to xterm.js format
             let themeJS = """
             {
-                background: '\(theme.backgroundColor.hex)',
-                foreground: '\(theme.textColor.hex)',
-                cursor: '\(theme.cursorColor.hex)',
+                background: '\(theme.background.hex)',
+                foreground: '\(theme.foreground.hex)',
+                cursor: '\(theme.cursor.hex)',
                 selection: 'rgba(255, 255, 255, 0.3)'
             }
             """
@@ -365,7 +365,8 @@ struct XtermWebView: UIViewRepresentable {
 // MARK: - SSEClientDelegate
 @MainActor
 extension XtermWebView.Coordinator: SSEClientDelegate {
-    func sseClient(_ client: SSEClient, didReceiveEvent event: SSEClient.SSEEvent) {
+    nonisolated func sseClient(_ client: SSEClient, didReceiveEvent event: SSEClient.SSEEvent) {
+        Task { @MainActor in
         switch event {
         case .terminalOutput(_, let type, let data):
             if type == "o" { // output
@@ -375,6 +376,7 @@ extension XtermWebView.Coordinator: SSEClientDelegate {
             writeToTerminal("\r\n[Process exited with code \(exitCode)]\r\n")
         case .error(let error):
             print("[XtermWebView] SSE error: \(error)")
+        }
         }
     }
 }
