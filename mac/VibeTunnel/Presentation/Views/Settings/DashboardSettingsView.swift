@@ -9,18 +9,14 @@ struct DashboardSettingsView: View {
     private var serverPort = "4020"
     @AppStorage("ngrokEnabled")
     private var ngrokEnabled = false
-    @AppStorage("dashboardPasswordEnabled")
-    private var passwordEnabled = false
+    @AppStorage("authenticationMode")
+    private var authModeString = "os"
     @AppStorage("ngrokTokenPresent")
     private var ngrokTokenPresent = false
     @AppStorage("dashboardAccessMode")
     private var accessModeString = DashboardAccessMode.localhost.rawValue
 
-    @State private var password = ""
-    @State private var confirmPassword = ""
-    @State private var showPasswordFields = false
-    @State private var passwordError: String?
-    @State private var passwordSaved = false
+    @State private var authMode: SecuritySection.AuthenticationMode = .osAuth
 
     @Environment(SystemPermissionManager.self)
     private var permissionManager
@@ -41,7 +37,6 @@ struct DashboardSettingsView: View {
     @State private var maskedToken = ""
     @State private var localIPAddress: String?
 
-    private let dashboardKeychain = DashboardKeychain.shared
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "DashboardSettings")
 
     private var accessMode: DashboardAccessMode {
@@ -50,37 +45,12 @@ struct DashboardSettingsView: View {
 
     // MARK: - Helper Methods
 
-    /// Handles server-specific password updates (adding, changing, or removing passwords)
-    func updateServerForPasswordChange(action: PasswordAction, logger: Logger) async {
-        // Go server handles authentication internally
-        logger.info("Clearing auth cache to \(action.logMessage)")
-        await serverManager.clearAuthCache()
-    }
-
-    enum PasswordAction {
-        case apply
-        case remove
-
-        var logMessage: String {
-            switch self {
-            case .apply: "apply new password"
-            case .remove: "remove password protection"
-            }
-        }
-    }
-
     var body: some View {
         NavigationStack {
             Form {
                 SecuritySection(
-                    passwordEnabled: $passwordEnabled,
-                    password: $password,
-                    confirmPassword: $confirmPassword,
-                    showPasswordFields: $showPasswordFields,
-                    passwordError: $passwordError,
-                    passwordSaved: $passwordSaved,
-                    dashboardKeychain: dashboardKeychain,
-                    savePassword: savePassword,
+                    authMode: $authMode,
+                    enableSSHKeys: .constant(authMode == .sshKeys || authMode == .both),
                     logger: logger,
                     serverManager: serverManager
                 )
@@ -98,35 +68,32 @@ struct DashboardSettingsView: View {
                 NgrokIntegrationSection(
                     ngrokEnabled: $ngrokEnabled,
                     ngrokAuthToken: $ngrokAuthToken,
-                    ngrokTokenPresent: $ngrokTokenPresent,
                     isTokenRevealed: $isTokenRevealed,
                     maskedToken: $maskedToken,
-                    isStartingNgrok: isStartingNgrok,
-                    ngrokError: ngrokError,
-                    ngrokService: ngrokService,
+                    ngrokTokenPresent: $ngrokTokenPresent,
+                    ngrokStatus: $ngrokStatus,
+                    isStartingNgrok: $isStartingNgrok,
+                    ngrokError: $ngrokError,
+                    toggleTokenVisibility: toggleTokenVisibility,
                     checkAndStartNgrok: checkAndStartNgrok,
                     stopNgrok: stopNgrok,
-                    toggleTokenVisibility: toggleTokenVisibility
+                    ngrokService: ngrokService,
+                    logger: logger
                 )
             }
             .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-            .navigationTitle("Dashboard Settings")
+            .frame(minWidth: 600)
+            .navigationTitle("Dashboard")
+            .onAppear {
+                onAppearSetup()
+            }
         }
-        .onAppear {
-            onAppearSetup()
-        }
-        .onChange(of: accessMode) { _, _ in
-            updateLocalIPAddress()
-        }
-        .alert("ngrok Auth Token Required", isPresented: $showingAuthTokenAlert) {
+        .alert("ngrok Authentication Required", isPresented: $showingAuthTokenAlert) {
             Button("OK") {}
         } message: {
-            Text(
-                "Please enter your ngrok auth token before enabling the tunnel. You can get a free auth token at ngrok.com"
-            )
+            Text("Please enter your ngrok auth token to enable tunneling.")
         }
-        .alert("Keychain Access Error", isPresented: $showingKeychainAlert) {
+        .alert("Keychain Access Failed", isPresented: $showingKeychainAlert) {
             Button("OK") {}
         } message: {
             Text("Failed to save the auth token to the keychain. Please check your keychain permissions and try again.")
@@ -141,11 +108,9 @@ struct DashboardSettingsView: View {
     // MARK: - Private Methods
 
     private func onAppearSetup() {
-        // Check password status
-        if dashboardKeychain.hasPassword() {
-            passwordSaved = true
-            passwordEnabled = true
-        }
+        // Initialize authentication mode from stored value
+        let storedMode = UserDefaults.standard.string(forKey: "authenticationMode") ?? "os"
+        authMode = SecuritySection.AuthenticationMode(rawValue: storedMode) ?? .osAuth
 
         // Check if token exists without triggering keychain
         if ngrokService.hasAuthToken && !ngrokTokenPresent {
@@ -159,69 +124,6 @@ struct DashboardSettingsView: View {
 
         // Get local IP address
         updateLocalIPAddress()
-    }
-
-    private func savePassword() {
-        passwordError = nil
-
-        guard !password.isEmpty else {
-            passwordError = "Password cannot be empty"
-            return
-        }
-
-        guard password == confirmPassword else {
-            passwordError = "Passwords do not match"
-            return
-        }
-
-        guard password.count >= 4 else {
-            passwordError = "Password must be at least 4 characters"
-            return
-        }
-
-        if dashboardKeychain.setPassword(password) {
-            passwordSaved = true
-            showPasswordFields = false
-            password = ""
-            confirmPassword = ""
-
-            // Check if we need to switch to network mode
-            let needsNetworkModeSwitch = accessMode == .localhost
-
-            if needsNetworkModeSwitch {
-                // Switch to network mode first (this updates ServerManager.bindAddress)
-                accessModeString = DashboardAccessMode.network.rawValue
-            }
-
-            // Handle server-specific password update
-            Task {
-                if needsNetworkModeSwitch {
-                    // If switching to network mode, update bind address before restart
-                    serverManager.bindAddress = DashboardAccessMode.network.bindAddress
-
-                    // Always restart when switching to network mode (both server types need it)
-                    logger.info("Restarting server to apply new password and network mode")
-                    await serverManager.restart()
-
-                    // Wait for server to be ready
-                    try? await Task.sleep(for: .seconds(1))
-
-                    // Session monitoring will automatically detect the changes
-                } else {
-                    // Just password change, no network mode switch
-                    await updateServerForPasswordChange(action: .apply, logger: logger)
-
-                    // Restart server to apply new password
-                    logger.info("Restarting server to apply new password")
-                    await serverManager.restart()
-
-                    // Wait for server to be ready
-                    try? await Task.sleep(for: .seconds(1))
-                }
-            }
-        } else {
-            passwordError = "Failed to save password to keychain"
-        }
     }
 
     private func restartServerWithNewPort(_ port: Int) {
@@ -343,149 +245,112 @@ struct DashboardSettingsView: View {
 // MARK: - Security Section
 
 private struct SecuritySection: View {
-    @Binding var passwordEnabled: Bool
-    @Binding var password: String
-    @Binding var confirmPassword: String
-    @Binding var showPasswordFields: Bool
-    @Binding var passwordError: String?
-    @Binding var passwordSaved: Bool
-    let dashboardKeychain: DashboardKeychain
-    let savePassword: () -> Void
+    @Binding var authMode: AuthenticationMode
+    @Binding var enableSSHKeys: Bool
     let logger: Logger
     let serverManager: ServerManager
 
+    enum AuthenticationMode: String, CaseIterable {
+        case none = "none"
+        case osAuth = "os"
+        case sshKeys = "ssh"
+        case both = "both"
+
+        var displayName: String {
+            switch self {
+            case .none: "No Authentication"
+            case .osAuth: "macOS Authentication"
+            case .sshKeys: "SSH Keys Only"
+            case .both: "macOS + SSH Keys"
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .none: "Anyone can access the dashboard (not recommended)"
+            case .osAuth: "Use your macOS username and password"
+            case .sshKeys: "Use SSH keys from ~/.ssh/authorized_keys"
+            case .both: "Allow both authentication methods"
+            }
+        }
+    }
+
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle("Password protect dashboard", isOn: $passwordEnabled)
-                    .onChange(of: passwordEnabled) { _, newValue in
-                        if newValue && !dashboardKeychain.hasPassword() {
-                            showPasswordFields = true
-                        } else if !newValue {
-                            // Clear password when disabled
-                            _ = dashboardKeychain.deletePassword()
-                            showPasswordFields = false
-                            passwordSaved = false
+            VStack(alignment: .leading, spacing: 16) {
+                // Authentication mode picker
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Authentication Method")
+                        .font(.callout)
+                        .fontWeight(.medium)
 
-                            // Handle server-specific password removal
-                            Task {
-                                // Go server handles authentication internally
-                                logger.info("Clearing auth cache to remove password")
-                                await serverManager.clearAuthCache()
+                    Picker("", selection: $authMode) {
+                        ForEach(AuthenticationMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName)
+                                .tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: authMode) { _, newValue in
+                        // Save the authentication mode
+                        UserDefaults.standard.set(newValue.rawValue, forKey: "authenticationMode")
 
-                                // Restart server to remove password protection
-                                logger.info("Restarting server to remove password protection")
-                                await serverManager.restart()
-
-                                // Wait for server to be ready
-                                try? await Task.sleep(for: .seconds(1))
-                            }
+                        Task {
+                            logger.info("Authentication mode changed to: \(newValue.rawValue)")
+                            await serverManager.restart()
                         }
                     }
 
-                Text("Require a password to access the dashboard from remote connections.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if showPasswordFields || (passwordEnabled && !passwordSaved) {
-                    PasswordFieldsView(
-                        password: $password,
-                        confirmPassword: $confirmPassword,
-                        passwordError: $passwordError,
-                        showPasswordFields: $showPasswordFields,
-                        passwordEnabled: $passwordEnabled,
-                        savePassword: savePassword
-                    )
+                    Text(authMode.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
-                if passwordSaved {
-                    SavedPasswordView(
-                        showPasswordFields: $showPasswordFields,
-                        passwordSaved: $passwordSaved,
-                        password: $password,
-                        confirmPassword: $confirmPassword
-                    )
+                // Additional info based on selected mode
+                if authMode == .osAuth || authMode == .both {
+                    HStack {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.blue)
+                        Text("Uses your macOS username: \(NSUserName())")
+                            .font(.caption)
+                    }
+                }
+
+                if authMode == .sshKeys || authMode == .both {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "key.fill")
+                                .foregroundColor(.blue)
+                            Text("SSH keys from ~/.ssh/authorized_keys")
+                                .font(.caption)
+                        }
+
+                        Button("Open SSH Keys Folder") {
+                            let sshPath = NSHomeDirectory() + "/.ssh"
+                            if FileManager.default.fileExists(atPath: sshPath) {
+                                NSWorkspace.shared.open(URL(fileURLWithPath: sshPath))
+                            } else {
+                                // Create .ssh directory if it doesn't exist
+                                try? FileManager.default.createDirectory(
+                                    atPath: sshPath,
+                                    withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o700]
+                                )
+                                NSWorkspace.shared.open(URL(fileURLWithPath: sshPath))
+                            }
+                        }
+                        .buttonStyle(.link)
+                    }
                 }
             }
         } header: {
             Text("Security")
                 .font(.headline)
         } footer: {
-            Text("Localhost always accessible without password. Username is ignored in remote connections.")
+            Text("Localhost connections are always accessible without authentication.")
                 .font(.caption)
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
-        }
-    }
-}
-
-// MARK: - Password Fields View
-
-private struct PasswordFieldsView: View {
-    @Binding var password: String
-    @Binding var confirmPassword: String
-    @Binding var passwordError: String?
-    @Binding var showPasswordFields: Bool
-    @Binding var passwordEnabled: Bool
-    let savePassword: () -> Void
-
-    var body: some View {
-        VStack(spacing: 8) {
-            SecureField("Password", text: $password)
-                .textFieldStyle(.roundedBorder)
-            SecureField("Confirm Password", text: $confirmPassword)
-                .textFieldStyle(.roundedBorder)
-
-            if let error = passwordError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.red)
-            }
-
-            HStack {
-                Button("Cancel") {
-                    showPasswordFields = false
-                    passwordEnabled = false
-                    password = ""
-                    confirmPassword = ""
-                    passwordError = nil
-                }
-                .buttonStyle(.bordered)
-
-                Button("Save Password") {
-                    savePassword()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(password.isEmpty)
-            }
-        }
-        .padding(.top, 4)
-    }
-}
-
-// MARK: - Saved Password View
-
-private struct SavedPasswordView: View {
-    @Binding var showPasswordFields: Bool
-    @Binding var passwordSaved: Bool
-    @Binding var password: String
-    @Binding var confirmPassword: String
-
-    var body: some View {
-        HStack {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
-            Text("Password saved")
-                .font(.caption)
-            Spacer()
-            Button("Remove Password") {
-                showPasswordFields = true
-                passwordSaved = false
-                password = ""
-                confirmPassword = ""
-            }
-            .buttonStyle(.link)
-            .font(.caption)
         }
     }
 }
@@ -533,71 +398,33 @@ private struct AccessModeView: View {
     let restartServerWithNewBindAddress: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Allow accessing the dashboard from:")
-                Spacer()
-                Picker("", selection: Binding(
-                    get: { accessMode },
-                    set: { newMode in
-                        accessModeString = newMode.rawValue
-                        restartServerWithNewBindAddress()
-                    }
-                )) {
-                    ForEach(DashboardAccessMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
+        HStack {
+            Text("Access Mode")
+                .font(.callout)
+            Spacer()
+            Picker("", selection: $accessModeString) {
+                ForEach(DashboardAccessMode.allCases, id: \.rawValue) { mode in
+                    Text(mode.displayName)
+                        .tag(mode.rawValue)
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
             }
-            HStack(spacing: 8) {
-                Text(accessMode.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            .labelsHidden()
+            .onChange(of: accessModeString) { _, _ in
+                restartServerWithNewBindAddress()
+            }
+        }
 
-                // Show IP address when network access is enabled
-                if accessMode == .network {
-                    if let ipAddress = localIPAddress {
-                        Spacer()
-
-                        Button(
-                            action: {
-                                let urlString = "http://\(ipAddress):\(serverPort)"
-                                if let url = URL(string: urlString) {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            },
-                            label: {
-                                Text("http://\(ipAddress):\(serverPort)")
-                                    .font(.caption)
-                                    .foregroundStyle(.blue)
-                                    .underline()
-                            }
-                        )
-                        .buttonStyle(.plain)
-                        .pointingHandCursor()
-
-                        Button(
-                            action: {
-                                let urlString = "http://\(ipAddress):\(serverPort)"
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(urlString, forType: .string)
-                            },
-                            label: {
-                                Image(systemName: "doc.on.doc")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        )
-                        .buttonStyle(.plain)
-                        .help("Copy URL")
-                    } else {
-                        Spacer()
-                        Text("Unable to determine local IP address")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
+        if accessMode == .network {
+            HStack {
+                Image(systemName: "info.circle")
+                    .foregroundColor(.blue)
+                if let ip = localIPAddress {
+                    Text("Dashboard available at http://\(ip):\(serverPort)")
+                        .font(.caption)
+                } else {
+                    Text("Fetching local IP address...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -611,436 +438,311 @@ private struct PortConfigurationView: View {
     let restartServerWithNewPort: (Int) -> Void
     let serverManager: ServerManager
 
-    @State private var portNumber: Int = 4_020
-    @State private var portConflict: PortConflict?
-    @State private var isCheckingPort = false
-    @State private var alternativePorts: [Int] = []
-
-    private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "PortConfiguration")
+    @FocusState private var isPortFieldFocused: Bool
+    @State private var pendingPort: String = ""
+    @State private var portError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Server port:")
-                Spacer()
-                HStack(spacing: 4) {
-                    TextField("", text: $serverPort)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 80)
-                        .multilineTextAlignment(.center)
-                        .onChange(of: serverPort) { _, newValue in
-                            // Validate port number
-                            if let port = Int(newValue), port > 0, port < 65_536 {
-                                portNumber = port
-                                Task {
-                                    await checkPortAvailability(port)
-                                }
-                                restartServerWithNewPort(port)
-                            }
-                        }
-
-                    VStack(spacing: 0) {
-                        Button(
-                            action: {
-                                if portNumber < 65_535 {
-                                    portNumber += 1
-                                    serverPort = String(portNumber)
-                                    restartServerWithNewPort(portNumber)
-                                }
-                            },
-                            label: {
-                                Image(systemName: "chevron.up")
-                                    .font(.system(size: 10))
-                                    .frame(width: 16, height: 12)
-                            }
-                        )
-                        .buttonStyle(.plain)
-                        .help("Increase port number")
-
-                        Button(
-                            action: {
-                                if portNumber > 1 {
-                                    portNumber -= 1
-                                    serverPort = String(portNumber)
-                                    restartServerWithNewPort(portNumber)
-                                }
-                            },
-                            label: {
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 10))
-                                    .frame(width: 16, height: 12)
-                            }
-                        )
-                        .buttonStyle(.plain)
-                        .help("Decrease port number")
-                    }
+        HStack {
+            Text("Port")
+                .font(.callout)
+            Spacer()
+            TextField("Port", text: $pendingPort)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 80)
+                .focused($isPortFieldFocused)
+                .onSubmit {
+                    validateAndUpdatePort()
                 }
                 .onAppear {
-                    portNumber = Int(serverPort) ?? 4_020
+                    pendingPort = serverPort
                 }
-                .task {
-                    await checkPortAvailability(portNumber)
-                }
-            }
-
-            // Port conflict warning
-            if let conflict = portConflict {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                            .font(.caption)
-
-                        Text("Port \(conflict.port) is used by \(conflict.process.name)")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-
-                    HStack(spacing: 8) {
-                        if !conflict.alternativePorts.isEmpty {
-                            HStack(spacing: 4) {
-                                Text("Try port:")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                ForEach(conflict.alternativePorts.prefix(3), id: \.self) { port in
-                                    Button(String(port)) {
-                                        serverPort = String(port)
-                                        portNumber = port
-                                        restartServerWithNewPort(port)
-                                    }
-                                    .buttonStyle(.link)
-                                    .font(.caption)
-                                }
-
-                                Button("Choose...") {
-                                    showPortPicker()
-                                }
-                                .buttonStyle(.link)
-                                .font(.caption)
-                            }
-                        }
-
-                        Spacer()
-
-                        Button {
-                            Task {
-                                await forceQuitConflictingProcess(conflict)
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.caption)
-                                Text("Kill Process")
-                                    .font(.caption)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .tint(.red)
+                .onChange(of: pendingPort) { _, newValue in
+                    // Clear error when user types
+                    portError = nil
+                    // Limit to 5 digits
+                    if newValue.count > 5 {
+                        pendingPort = String(newValue.prefix(5))
                     }
                 }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.1))
-                .cornerRadius(6)
-            } else if !serverManager.isRunning && serverManager.lastError != nil {
-                // Show general server error if no specific port conflict
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundColor(.red)
-                        .font(.caption)
+        }
 
-                    Text("Server failed to start")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                }
-            } else {
-                Text("The server will automatically restart when the port is changed.")
+        if let error = portError {
+            HStack {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundColor(.red)
+                Text(error)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
+                    .foregroundColor(.red)
             }
         }
     }
 
-    private func checkPortAvailability(_ port: Int) async {
-        isCheckingPort = true
-        defer { isCheckingPort = false }
-
-        // Only check if it's not the port we're already successfully using
-        if serverManager.isRunning && Int(serverManager.port) == port {
-            portConflict = nil
+    private func validateAndUpdatePort() {
+        guard let port = Int(pendingPort) else {
+            portError = "Invalid port number"
+            pendingPort = serverPort
             return
         }
 
-        if let conflict = await PortConflictResolver.shared.detectConflict(on: port) {
-            // Only show warning for non-VibeTunnel processes
-            // VibeTunnel instances will be auto-killed by ServerManager
-            if case .reportExternalApp = conflict.suggestedAction {
-                portConflict = conflict
-                alternativePorts = conflict.alternativePorts
-            } else {
-                // It's our own process, will be handled automatically
-                portConflict = nil
-                alternativePorts = []
-            }
-        } else {
-            portConflict = nil
-            alternativePorts = []
+        guard port >= 1_024 && port <= 65_535 else {
+            portError = "Port must be between 1024 and 65535"
+            pendingPort = serverPort
+            return
         }
-    }
 
-    private func forceQuitConflictingProcess(_ conflict: PortConflict) async {
-        do {
-            // Try to use forceKillProcess which works for any process
-            try await PortConflictResolver.shared.forceKillProcess(conflict)
-            portConflict = nil
-            // Restart server after clearing conflict
-            restartServerWithNewPort(portNumber)
-        } catch {
-            // Handle error - maybe show alert
-            logger.error("Failed to force quit: \(error)")
-        }
-    }
-
-    private func showPortPicker() {
-        // TODO: Implement port picker dialog
-        // For now, just cycle through alternatives
-        if let firstAlt = alternativePorts.first {
-            serverPort = String(firstAlt)
-            portNumber = firstAlt
-            restartServerWithNewPort(firstAlt)
+        if String(port) != serverPort {
+            restartServerWithNewPort(port)
+            serverPort = String(port)
         }
     }
 }
 
-// MARK: - Ngrok Integration Section
+// MARK: - ngrok Integration Section
 
 private struct NgrokIntegrationSection: View {
     @Binding var ngrokEnabled: Bool
     @Binding var ngrokAuthToken: String
-    @Binding var ngrokTokenPresent: Bool
     @Binding var isTokenRevealed: Bool
     @Binding var maskedToken: String
-    let isStartingNgrok: Bool
-    let ngrokError: String?
-    let ngrokService: NgrokService
+    @Binding var ngrokTokenPresent: Bool
+    @Binding var ngrokStatus: NgrokTunnelStatus?
+    @Binding var isStartingNgrok: Bool
+    @Binding var ngrokError: String?
+    let toggleTokenVisibility: () -> Void
     let checkAndStartNgrok: () -> Void
     let stopNgrok: () -> Void
-    let toggleTokenVisibility: () -> Void
+    let ngrokService: NgrokService
+    let logger: Logger
 
     var body: some View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
-                // ngrok Enable Toggle
-                NgrokToggleView(
-                    ngrokEnabled: $ngrokEnabled,
-                    checkAndStartNgrok: checkAndStartNgrok,
-                    stopNgrok: stopNgrok
-                )
+                // ngrok toggle and status
+                HStack {
+                    Toggle("Enable ngrok tunnel", isOn: $ngrokEnabled)
+                        .disabled(isStartingNgrok)
+                        .onChange(of: ngrokEnabled) { _, newValue in
+                            if newValue {
+                                checkAndStartNgrok()
+                            } else {
+                                stopNgrok()
+                            }
+                        }
 
-                // Auth Token
-                NgrokAuthTokenView(
+                    if isStartingNgrok {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else if let status = ngrokStatus {
+                        switch status {
+                        case .connected(let url):
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Connected")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        case .disconnected:
+                            EmptyView()
+                        case .error:
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+
+                // Auth token field
+                AuthTokenField(
                     ngrokAuthToken: $ngrokAuthToken,
-                    ngrokTokenPresent: $ngrokTokenPresent,
                     isTokenRevealed: $isTokenRevealed,
                     maskedToken: $maskedToken,
+                    ngrokTokenPresent: $ngrokTokenPresent,
+                    toggleTokenVisibility: toggleTokenVisibility,
                     ngrokService: ngrokService,
-                    toggleTokenVisibility: toggleTokenVisibility
+                    logger: logger
                 )
 
-                // Status
-                if ngrokEnabled {
-                    NgrokStatusView(
-                        ngrokService: ngrokService,
-                        isStartingNgrok: isStartingNgrok
-                    )
+                // Public URL display
+                if let status = ngrokStatus, case .connected(let url) = status {
+                    PublicURLView(url: url)
                 }
 
                 // Error display
                 if let error = ngrokError {
-                    NgrokErrorView(error: error)
+                    ErrorView(error: error)
+                }
+
+                // Link to ngrok dashboard
+                HStack {
+                    Image(systemName: "link")
+                    Link("Create free ngrok account", destination: URL(string: "https://dashboard.ngrok.com/signup")!)
+                        .font(.caption)
                 }
             }
         } header: {
             Text("ngrok Integration")
                 .font(.headline)
         } footer: {
-            Text(
-                "Alternatively, we recommend [Tailscale](https://tailscale.com/) to create a virtual network to access your Mac."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .tint(.blue)
-            .frame(maxWidth: .infinity)
-            .multilineTextAlignment(.center)
-        }
-    }
-}
-
-// MARK: - Ngrok Toggle View
-
-private struct NgrokToggleView: View {
-    @Binding var ngrokEnabled: Bool
-    let checkAndStartNgrok: () -> Void
-    let stopNgrok: () -> Void
-
-    private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "NgrokToggle")
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Toggle("Enable ngrok tunnel", isOn: $ngrokEnabled)
-                .onChange(of: ngrokEnabled) { oldValue, newValue in
-                    logger.debug("ngrok toggle changed from \(oldValue) to \(newValue)")
-                    if newValue {
-                        // Add a small delay to ensure auth token is saved to keychain
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(100))
-                            await MainActor.run {
-                                checkAndStartNgrok()
-                            }
-                        }
-                    } else {
-                        stopNgrok()
-                    }
-                }
-            Text("Expose VibeTunnel to the internet using ngrok.")
+            Text("ngrok creates secure tunnels to your dashboard from anywhere.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
         }
     }
 }
 
-// MARK: - Ngrok Auth Token View
+// MARK: - Auth Token Field
 
-private struct NgrokAuthTokenView: View {
+private struct AuthTokenField: View {
     @Binding var ngrokAuthToken: String
-    @Binding var ngrokTokenPresent: Bool
     @Binding var isTokenRevealed: Bool
     @Binding var maskedToken: String
-    let ngrokService: NgrokService
+    @Binding var ngrokTokenPresent: Bool
     let toggleTokenVisibility: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Auth token:")
-                Spacer()
-                HStack(spacing: 4) {
-                    if isTokenRevealed {
-                        SecureField("", text: $ngrokAuthToken)
-                            .frame(width: 220)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: ngrokAuthToken) { _, newValue in
-                                ngrokService.authToken = newValue.isEmpty ? nil : newValue
-                                ngrokTokenPresent = !newValue.isEmpty
-                            }
-                    } else {
-                        TextField("", text: $maskedToken)
-                            .frame(width: 220)
-                            .textFieldStyle(.roundedBorder)
-                            .disabled(true)
-                            .onAppear {
-                                // Show masked placeholder if token exists
-                                if ngrokTokenPresent {
-                                    maskedToken = String(repeating: "•", count: 12)
-                                } else {
-                                    maskedToken = ""
-                                }
-                            }
-                    }
-                    Button(action: {
-                        toggleTokenVisibility()
-                    }, label: {
-                        Image(systemName: isTokenRevealed ? "eye.slash" : "eye")
-                    })
-                    .buttonStyle(.plain)
-                    .help(isTokenRevealed ? "Hide token" : "Reveal token")
-                }
-            }
-            HStack {
-                Text("Get your free auth token at")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("ngrok.com") {
-                    if let url = URL(string: "https://dashboard.ngrok.com/auth/your-authtoken") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                .buttonStyle(.link)
-                .font(.caption)
-            }
-        }
-    }
-}
-
-// MARK: - Ngrok Status View
-
-private struct NgrokStatusView: View {
     let ngrokService: NgrokService
-    let isStartingNgrok: Bool
+    let logger: Logger
+
+    @FocusState private var isTokenFieldFocused: Bool
+    @State private var tokenSaveError: String?
 
     var body: some View {
-        if let publicUrl = ngrokService.publicUrl {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("Tunnel active")
-                        .font(.caption)
-                    Spacer()
-                    Image(systemName: "doc.on.doc")
-                        .font(.caption)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if isTokenRevealed {
+                    TextField("Auth Token", text: $ngrokAuthToken)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($isTokenFieldFocused)
+                        .onSubmit {
+                            saveToken()
+                        }
+                } else {
+                    TextField("Auth Token", text: $maskedToken)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(true)
                         .foregroundColor(.secondary)
-                        .help("Copy URL")
-                        .onTapGesture {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(publicUrl, forType: .string)
-                        }
+                }
 
-                    Button("Open Browser") {
-                        if let url = URL(string: publicUrl) {
-                            NSWorkspace.shared.open(url)
-                        }
+                Button(action: toggleTokenVisibility) {
+                    Image(systemName: isTokenRevealed ? "eye.slash" : "eye")
+                }
+                .buttonStyle(.borderless)
+                .help(isTokenRevealed ? "Hide token" : "Show token")
+
+                if isTokenRevealed && (ngrokAuthToken != ngrokService.authToken || !ngrokTokenPresent) {
+                    Button("Save") {
+                        saveToken()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 }
-                Text(publicUrl)
-                    .font(.caption)
-                    .textSelection(.enabled)
-                    .foregroundStyle(.secondary)
             }
-        } else if isStartingNgrok {
-            HStack {
-                ProgressView()
-                    .scaleEffect(0.8)
-                Text("Starting ngrok tunnel...")
+
+            if let error = tokenSaveError {
+                Text(error)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.red)
             }
+        }
+    }
+
+    private func saveToken() {
+        guard !ngrokAuthToken.isEmpty else {
+            tokenSaveError = "Token cannot be empty"
+            return
+        }
+
+        if ngrokService.saveAuthToken(ngrokAuthToken) {
+            ngrokTokenPresent = true
+            tokenSaveError = nil
+            isTokenRevealed = false
+            maskedToken = String(repeating: "•", count: 12)
+            logger.info("ngrok auth token saved successfully")
+        } else {
+            tokenSaveError = "Failed to save token to keychain"
+            logger.error("Failed to save ngrok auth token to keychain")
         }
     }
 }
 
-// MARK: - Ngrok Error View
+// MARK: - Public URL View
 
-private struct NgrokErrorView: View {
+private struct PublicURLView: View {
+    let url: String
+
+    @State private var showCopiedFeedback = false
+
+    var body: some View {
+        HStack {
+            Text("Public URL:")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Text(url)
+                .font(.caption)
+                .textSelection(.enabled)
+
+            Button(action: {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(url, forType: .string)
+                withAnimation {
+                    showCopiedFeedback = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    withAnimation {
+                        showCopiedFeedback = false
+                    }
+                }
+            }) {
+                Image(systemName: showCopiedFeedback ? "checkmark" : "doc.on.doc")
+                    .foregroundColor(showCopiedFeedback ? .green : .accentColor)
+            }
+            .buttonStyle(.borderless)
+            .help("Copy URL")
+        }
+    }
+}
+
+// MARK: - Error View
+
+private struct ErrorView: View {
     let error: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.orange)
-                Text("Error")
-                    .font(.caption)
-            }
+        HStack {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundColor(.red)
             Text(error)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundColor(.red)
+                .lineLimit(2)
         }
+    }
+}
+
+// MARK: - Dashboard Access Mode
+
+enum DashboardAccessMode: String, CaseIterable {
+    case localhost = "localhost"
+    case network = "network"
+
+    var displayName: String {
+        switch self {
+        case .localhost: "Localhost Only"
+        case .network: "Network"
+        }
+    }
+
+    var bindAddress: String {
+        switch self {
+        case .localhost: "127.0.0.1"
+        case .network: "0.0.0.0"
+        }
+    }
+}
+
+// MARK: - Previews
+
+struct DashboardSettingsView_Previews: PreviewProvider {
+    static var previews: some View {
+        DashboardSettingsView()
+            .frame(width: 600, height: 800)
     }
 }

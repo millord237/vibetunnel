@@ -12,7 +12,7 @@ extension View {
         horizontal: CGFloat = 16,
         vertical: CGFloat = 14
     )
-    -> some View
+        -> some View
     {
         self
             .padding(.horizontal, horizontal)

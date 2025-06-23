@@ -383,7 +383,7 @@ final class TerminalLauncher {
         var runningTerminals: [Terminal] = []
 
         for terminal in Terminal.allCases
-        where runningApps.contains(where: { $0.bundleIdentifier == terminal.bundleIdentifier })
+            where runningApps.contains(where: { $0.bundleIdentifier == terminal.bundleIdentifier })
         {
             runningTerminals.append(terminal)
             logger.debug("Detected running terminal: \(terminal.rawValue)")
@@ -416,7 +416,7 @@ final class TerminalLauncher {
         _ config: TerminalLaunchConfig,
         sessionId: String? = nil
     )
-    throws -> TerminalLaunchResult
+        throws -> TerminalLaunchResult
     {
         logger.debug("Launch config - command: \(config.command)")
         logger.debug("Launch config - fullCommand: \(config.fullCommand)")
@@ -519,7 +519,7 @@ final class TerminalLauncher {
 
             if process.terminationStatus != 0 {
                 throw TerminalLauncherError
-                .processLaunchFailed("Process exited with status \(process.terminationStatus)")
+                    .processLaunchFailed("Process exited with status \(process.terminationStatus)")
             }
         } catch {
             logger.error("Failed to launch terminal: \(error.localizedDescription)")
@@ -676,7 +676,7 @@ final class TerminalLauncher {
         sessionId: String,
         vibetunnelPath: String? = nil
     )
-    throws
+        throws
     {
         // Expand tilde in working directory path
         let expandedWorkingDir = (workingDirectory as NSString).expandingTildeInPath
@@ -801,7 +801,7 @@ final class TerminalLauncher {
         workingDir: String,
         sessionId: String? = nil
     )
-    -> String
+        -> String
     {
         // Bun executable has fwd command built-in
         logger.info("Using Bun executable for session creation")

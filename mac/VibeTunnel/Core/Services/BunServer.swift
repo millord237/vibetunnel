@@ -133,18 +133,22 @@ final class BunServer {
         // Build the vibetunnel command with all arguments
         var vibetunnelArgs = "--port \(port) --bind \(bindAddress)"
 
-        // Add password flag if password protection is enabled
-        if UserDefaults.standard.bool(forKey: "dashboardPasswordEnabled") && DashboardKeychain.shared.hasPassword() {
-            logger.info("Password protection enabled, retrieving from keychain")
-            if let password = DashboardKeychain.shared.getPassword() {
-                // Escape the password for shell
-                let escapedPassword = password.replacingOccurrences(of: "\"", with: "\\\"")
-                    .replacingOccurrences(of: "$", with: "\\$")
-                    .replacingOccurrences(of: "`", with: "\\`")
-                    .replacingOccurrences(of: "\\", with: "\\\\")
-                // Use password-only mode for better UX - users can enter any username
-                vibetunnelArgs += " --password \"\(escapedPassword)\""
-            }
+        // Add authentication flags based on configuration
+        let authMode = UserDefaults.standard.string(forKey: "authenticationMode") ?? "os"
+        logger.info("Configuring authentication mode: \(authMode)")
+
+        switch authMode {
+        case "none":
+            vibetunnelArgs += " --no-auth"
+        case "ssh":
+            vibetunnelArgs += " --enable-ssh-keys --disallow-user-password"
+        case "both":
+            vibetunnelArgs += " --enable-ssh-keys"
+        case "os":
+            fallthrough
+        default:
+            // OS authentication is the default, no special flags needed
+            break
         }
 
         // Create wrapper to run vibetunnel with a parent death signal
@@ -480,7 +484,7 @@ final class BunServer {
         seconds: TimeInterval,
         operation: @escaping @Sendable () async -> T
     )
-    async -> T?
+        async -> T?
     {
         await withTaskGroup(of: T?.self) { group in
             group.addTask {

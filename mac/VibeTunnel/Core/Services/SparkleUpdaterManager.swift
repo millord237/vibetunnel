@@ -52,38 +52,38 @@ public final class SparkleUpdaterManager: NSObject, SPUUpdaterDelegate {
 
         // Initialize Sparkle with standard configuration
         #if DEBUG
-        // In debug mode, start the updater for testing
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: self,
-            userDriverDelegate: userDriverDelegate
-        )
+            // In debug mode, start the updater for testing
+            updaterController = SPUStandardUpdaterController(
+                startingUpdater: true,
+                updaterDelegate: self,
+                userDriverDelegate: userDriverDelegate
+            )
         #else
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: self,
-            userDriverDelegate: userDriverDelegate
-        )
+            updaterController = SPUStandardUpdaterController(
+                startingUpdater: true,
+                updaterDelegate: self,
+                userDriverDelegate: userDriverDelegate
+            )
         #endif
 
         // Configure automatic updates
         if let updater = updaterController?.updater {
             #if DEBUG
-            // Enable automatic checks in debug too
-            updater.automaticallyChecksForUpdates = true
-            updater.automaticallyDownloadsUpdates = false
-            logger.info("Sparkle updater initialized in DEBUG mode - automatic updates enabled for testing")
+                // Enable automatic checks in debug too
+                updater.automaticallyChecksForUpdates = true
+                updater.automaticallyDownloadsUpdates = false
+                logger.info("Sparkle updater initialized in DEBUG mode - automatic updates enabled for testing")
             #else
-            // Enable automatic checking for updates
-            updater.automaticallyChecksForUpdates = true
+                // Enable automatic checking for updates
+                updater.automaticallyChecksForUpdates = true
 
-            // Enable automatic downloading of updates
-            updater.automaticallyDownloadsUpdates = true
+                // Enable automatic downloading of updates
+                updater.automaticallyDownloadsUpdates = true
 
-            // Set update check interval to 24 hours
-            updater.updateCheckInterval = 86_400
+                // Set update check interval to 24 hours
+                updater.updateCheckInterval = 86_400
 
-            logger.info("Sparkle updater initialized successfully with automatic downloads enabled")
+                logger.info("Sparkle updater initialized successfully with automatic downloads enabled")
             #endif
 
             // Start the updater for both debug and release builds
