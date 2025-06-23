@@ -26,6 +26,7 @@ import {
   COMMON_TERMINAL_WIDTHS,
 } from '../utils/terminal-preferences.js';
 import { createLogger } from '../utils/logger.js';
+import { AuthClient } from '../services/auth-client.js';
 
 const logger = createLogger('session-view');
 
@@ -59,6 +60,7 @@ export class SessionView extends LitElement {
   @state() private terminalFontSize = 14;
 
   private preferencesManager = TerminalPreferencesManager.getInstance();
+  private authClient = new AuthClient();
   @state() private reconnectCount = 0;
   @state() private ctrlSequence: string[] = [];
 
@@ -322,7 +324,15 @@ export class SessionView extends LitElement {
       this.streamConnection = null;
     }
 
-    const streamUrl = `/api/sessions/${this.session.id}/stream`;
+    // Get auth client from the main app
+    const authClient = new AuthClient();
+    const user = authClient.getCurrentUser();
+
+    // Build stream URL with auth token as query parameter (EventSource doesn't support headers)
+    let streamUrl = `/api/sessions/${this.session.id}/stream`;
+    if (user?.token) {
+      streamUrl += `?token=${encodeURIComponent(user.token)}`;
+    }
 
     // Use CastConverter to connect terminal to stream with reconnection tracking
     const connection = CastConverter.connectToStream(this.terminal, streamUrl);
@@ -484,6 +494,7 @@ export class SessionView extends LitElement {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.authClient.getAuthHeader(),
         },
         body: JSON.stringify(body),
       });
@@ -586,7 +597,10 @@ export class SessionView extends LitElement {
 
           const response = await fetch(`/api/sessions/${this.session.id}/resize`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...this.authClient.getAuthHeader(),
+            },
             body: JSON.stringify({ cols: cols, rows: rows }),
           });
 
@@ -950,6 +964,7 @@ export class SessionView extends LitElement {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.authClient.getAuthHeader(),
         },
         body: JSON.stringify(body),
       });
