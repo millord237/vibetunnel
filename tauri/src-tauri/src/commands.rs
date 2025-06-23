@@ -1441,6 +1441,22 @@ pub async fn clear_debug_data(state: State<'_, AppState>) -> Result<(), String> 
 }
 
 #[tauri::command]
+pub async fn clear_debug_logs(state: State<'_, AppState>) -> Result<(), String> {
+    // For now, clear all debug data - could be enhanced to clear only logs
+    let debug_features_manager = &state.debug_features_manager;
+    debug_features_manager.clear_all_data().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn clear_network_requests(state: State<'_, AppState>) -> Result<(), String> {
+    // For now, clear all debug data - could be enhanced to clear only network requests
+    let debug_features_manager = &state.debug_features_manager;
+    debug_features_manager.clear_all_data().await;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn set_debug_mode(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
     let debug_features_manager = &state.debug_features_manager;
     debug_features_manager.set_debug_mode(enabled).await;

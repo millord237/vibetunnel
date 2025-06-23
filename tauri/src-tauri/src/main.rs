@@ -325,6 +325,8 @@ fn main() {
             run_benchmarks,
             generate_diagnostic_report,
             clear_debug_data,
+            clear_debug_logs,
+            clear_network_requests,
             set_debug_mode,
             get_debug_stats,
             get_api_test_config,

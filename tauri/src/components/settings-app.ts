@@ -1386,8 +1386,18 @@ export class SettingsApp extends TauriBase {
       // Load debug logs
       this.debugLogs = await this.safeInvoke('get_debug_logs', { limit: 100 }) || [];
       
-      // Load performance metrics
-      this.performanceMetrics = await this.safeInvoke('get_performance_metrics') || {};
+      // Load performance metrics - returns array
+      const metrics = await this.safeInvoke('get_performance_metrics', { limit: 10 }) || [];
+      
+      // Convert metrics array to object for display
+      this.performanceMetrics = {
+        avg_response_time_ms: this._getMetricValue(metrics, 'response_time'),
+        requests_per_second: this._getMetricValue(metrics, 'requests_per_second'),
+        cpu_usage_percent: this._getMetricValue(metrics, 'cpu_usage'),
+        memory_usage_mb: this._getMetricValue(metrics, 'memory_usage'),
+        active_sessions: this._getMetricValue(metrics, 'active_sessions'),
+        total_requests: this._getMetricValue(metrics, 'total_requests')
+      };
       
       // Load network requests
       this.networkRequests = await this.safeInvoke('get_network_requests', { limit: 50 }) || [];
@@ -1397,6 +1407,11 @@ export class SettingsApp extends TauriBase {
     } catch (error) {
       console.error('Failed to load debug data:', error);
     }
+  }
+  
+  private _getMetricValue(metrics: Array<any>, name: string): number {
+    const metric = metrics.find((m: any) => m.name === name);
+    return metric?.value || 0;
   }
 
   private _renderLogsTab(): TemplateResult {
@@ -1814,7 +1829,18 @@ export class SettingsApp extends TauriBase {
   }
 
   private async refreshPerformance(): Promise<void> {
-    this.performanceMetrics = await this.safeInvoke('get_performance_metrics') || {};
+    const metrics = await this.safeInvoke('get_performance_metrics', { limit: 10 }) || [];
+    
+    // Convert metrics array to object for display
+    this.performanceMetrics = {
+      avg_response_time_ms: this._getMetricValue(metrics, 'response_time'),
+      requests_per_second: this._getMetricValue(metrics, 'requests_per_second'),
+      cpu_usage_percent: this._getMetricValue(metrics, 'cpu_usage'),
+      memory_usage_mb: this._getMetricValue(metrics, 'memory_usage'),
+      active_sessions: this._getMetricValue(metrics, 'active_sessions'),
+      total_requests: this._getMetricValue(metrics, 'total_requests')
+    };
+    
     this.requestUpdate();
   }
 
