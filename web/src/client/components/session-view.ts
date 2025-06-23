@@ -240,10 +240,7 @@ export class SessionView extends LitElement {
     this.stopLoading();
 
     // Cleanup stream connection if it exists
-    if (this.streamConnection) {
-      this.streamConnection.disconnect();
-      this.streamConnection = null;
-    }
+    this.cleanupStreamConnection();
 
     // Terminal cleanup is handled by the component itself
     this.terminal = null;
@@ -257,8 +254,25 @@ export class SessionView extends LitElement {
     }
   }
 
+  private cleanupStreamConnection(): void {
+    if (this.streamConnection) {
+      logger.log('Cleaning up stream connection');
+      this.streamConnection.disconnect();
+      this.streamConnection = null;
+    }
+  }
+
   updated(changedProperties: Map<string, unknown>) {
     super.updated(changedProperties);
+
+    // If session changed, clean up old stream connection
+    if (changedProperties.has('session')) {
+      const oldSession = changedProperties.get('session') as Session | null;
+      if (oldSession && oldSession.id !== this.session?.id) {
+        logger.log('Session changed, cleaning up old stream connection');
+        this.cleanupStreamConnection();
+      }
+    }
 
     // Stop loading and create terminal when session becomes available
     if (changedProperties.has('session') && this.session && this.loading) {
@@ -319,10 +333,7 @@ export class SessionView extends LitElement {
     if (!this.terminal || !this.session) return;
 
     // Clean up existing connection
-    if (this.streamConnection) {
-      this.streamConnection.disconnect();
-      this.streamConnection = null;
-    }
+    this.cleanupStreamConnection();
 
     // Get auth client from the main app
     const authClient = new AuthClient();
@@ -365,8 +376,7 @@ export class SessionView extends LitElement {
           this.requestUpdate();
 
           // Disconnect the stream and load final snapshot
-          connection.disconnect();
-          this.streamConnection = null;
+          this.cleanupStreamConnection();
 
           // Load final snapshot
           requestAnimationFrame(() => {
@@ -536,10 +546,7 @@ export class SessionView extends LitElement {
       this.requestUpdate();
 
       // Switch to snapshot mode - disconnect stream and load final snapshot
-      if (this.streamConnection) {
-        this.streamConnection.disconnect();
-        this.streamConnection = null;
-      }
+      this.cleanupStreamConnection();
     }
   }
 

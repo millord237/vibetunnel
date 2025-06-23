@@ -29,6 +29,13 @@ import { AuthClient } from './services/auth-client.js';
 
 const logger = createLogger('app');
 
+// Interface for session view component's stream connection
+interface SessionViewElement extends HTMLElement {
+  streamConnection?: {
+    disconnect: () => void;
+  } | null;
+}
+
 @customElement('vibetunnel-app')
 export class VibeTunnelApp extends LitElement {
   // Disable shadow DOM to use Tailwind
@@ -279,8 +286,12 @@ export class VibeTunnelApp extends LitElement {
       const session = this.sessions.find((s) => s.id === sessionId);
 
       if (session) {
-        // Session found, switch to session view via URL
-        window.location.search = `?session=${session.id}`;
+        // Session found, navigate to it using the proper navigation method
+        await this.handleNavigateToSession(
+          new CustomEvent('navigate-to-session', {
+            detail: { sessionId: session.id },
+          })
+        );
         return;
       }
 
@@ -333,8 +344,22 @@ export class VibeTunnelApp extends LitElement {
     }
   }
 
+  private cleanupSessionViewStream(): void {
+    const sessionView = this.querySelector('session-view') as SessionViewElement;
+    if (sessionView && sessionView.streamConnection) {
+      logger.log('Cleaning up stream connection');
+      sessionView.streamConnection.disconnect();
+      sessionView.streamConnection = null;
+    }
+  }
+
   private async handleNavigateToSession(e: CustomEvent): Promise<void> {
     const { sessionId } = e.detail;
+
+    // Clean up any existing session view stream before switching
+    if (this.selectedSessionId !== sessionId) {
+      this.cleanupSessionViewStream();
+    }
 
     // Check if View Transitions API is supported
     if ('startViewTransition' in document && typeof document.startViewTransition === 'function') {
@@ -378,6 +403,9 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private handleNavigateToList(): void {
+    // Clean up the session view before navigating away
+    this.cleanupSessionViewStream();
+
     // Check if View Transitions API is supported
     if ('startViewTransition' in document && typeof document.startViewTransition === 'function') {
       // Use View Transitions API for smooth animation
