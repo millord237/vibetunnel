@@ -34,3 +34,4 @@ VibeTunnel/Local.xcconfig
 sparkle-private-ed-key.pem
 sparkle-private-key-KEEP-SECURE.txt
 *.pem
+private/
