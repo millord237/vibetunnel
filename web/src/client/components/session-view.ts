@@ -1070,7 +1070,7 @@ export class SessionView extends LitElement {
         }
       </style>
       <div
-        class="flex flex-col bg-dark-bg font-mono"
+        class="flex flex-col bg-black font-mono"
         style="height: 100vh; height: 100dvh; outline: none !important; box-shadow: none !important;"
       >
         <!-- Compact Header -->
@@ -1224,12 +1224,11 @@ export class SessionView extends LitElement {
 
         <!-- Terminal Container -->
         <div
-          class="flex-1 bg-dark-bg overflow-hidden min-h-0 relative ${this.session?.status ===
+          class="flex-1 bg-black overflow-hidden min-h-0 relative ${this.session?.status ===
           'exited'
             ? 'session-exited'
             : ''}"
           id="terminal-container"
-          style="max-width: 100vw; height: 100%;"
         >
           ${this.loading
             ? html`
@@ -1253,7 +1252,7 @@ export class SessionView extends LitElement {
             .fontSize=${this.terminalFontSize}
             .fitHorizontally=${false}
             .maxCols=${this.terminalMaxCols}
-            class="w-full h-full"
+            class="w-full h-full p-0 m-0"
           ></vibe-terminal>
         </div>
 
