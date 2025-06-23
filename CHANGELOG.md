@@ -5,24 +5,19 @@
 There's too much to list! 
 
 - Redesigned, responsive, animated frontend.
+- Improved terminal width spanning and layout optimization
 - File-Picker to see files on-the-go.
 - Creating new Terminals is now much more reliable.
 - Added terminal font size adjustment in the settings dropdown
 - Fresh new icon for Progressive Web App installations
 - Refined bounce animations for a more subtle, professional feel
-
-### 🎨 Web Frontend Improvements
-- **Enhanced Terminal Grid Layout** - Switched to CSS Grid for better responsive terminal layouts
-- **Phosphor Decay Effect** - Added retro CRT-style phosphor decay visual effect for closed terminals
-- **Font Size Controls** 
-- **Improved Terminal Animations** 
-- **Updated PWA Icon** 
-- **Better Session Management** - Improved terminal width spanning and layout optimization
-
+- Added retro CRT-style phosphor decay visual effect for closed terminals
+- Fixed buffer aggregator message handling for smoother terminal updates
+- Better support for shell aliases and improved debug logging
 ### 🚀 Server Enhancements  
-- **Improved Buffer Handling** - Fixed buffer aggregator message handling for smoother terminal updates
-- **Shell Alias Support** - Better support for shell aliases and improved debug logging
-- **Unix Socket Support** - Enhanced Unix socket server implementation for faster local communication
+- **Improved Buffer Handling** 
+- **Shell Alias Support** 
+- **Unix Socket Support**
 
 ### 🖥️ Mac App Updates
 - **Warp Terminal Support** - Special handling for Warp terminal with custom enter key behavior
