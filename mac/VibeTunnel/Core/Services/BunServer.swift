@@ -142,7 +142,8 @@ final class BunServer {
                     .replacingOccurrences(of: "$", with: "\\$")
                     .replacingOccurrences(of: "`", with: "\\`")
                     .replacingOccurrences(of: "\\", with: "\\\\")
-                vibetunnelArgs += " --username admin --password \"\(escapedPassword)\""
+                // Use password-only mode for better UX - users can enter any username
+                vibetunnelArgs += " --password \"\(escapedPassword)\""
             }
         }
 

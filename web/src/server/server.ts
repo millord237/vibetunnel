@@ -218,14 +218,9 @@ function parseArgs(): Config {
 // Validate configuration
 function validateConfig(config: ReturnType<typeof parseArgs>) {
   // Validate local auth configuration
-  if (
-    (config.basicAuthUsername && !config.basicAuthPassword) ||
-    (!config.basicAuthUsername && config.basicAuthPassword)
-  ) {
-    logger.error('Both username and password must be provided for authentication');
-    logger.error(
-      'Use --username and --password, or set both VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD'
-    );
+  if (config.basicAuthUsername && !config.basicAuthPassword) {
+    logger.error('Password must be provided when username is specified');
+    logger.error('Use --username and --password together');
     process.exit(1);
   }
 
@@ -267,10 +262,11 @@ function validateConfig(config: ReturnType<typeof parseArgs>) {
   }
 
   // If not HQ mode and no HQ URL, warn about authentication
-  if (!config.basicAuthUsername && !config.basicAuthPassword && !config.isHQMode && !config.hqUrl) {
+  if (!config.basicAuthPassword && !config.isHQMode && !config.hqUrl) {
     logger.warn('No authentication configured');
+    logger.warn('Set VIBETUNNEL_PASSWORD or use --password flag for password-only authentication');
     logger.warn(
-      'Set VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD or use --username and --password flags'
+      'Or use --username and --password flags together for username+password authentication'
     );
   }
 }
@@ -509,7 +505,7 @@ export async function createApp(): Promise<AppInstance> {
       createPushRoutes({
         vapidManager,
         pushNotificationService,
-        bellEventHandler,
+        bellEventHandler: bellEventHandler ?? undefined,
       })
     );
     logger.debug('Mounted push notification routes');
@@ -576,14 +572,20 @@ export async function createApp(): Promise<AppInstance> {
         chalk.green(`VibeTunnel Server running on http://${displayAddress}:${actualPort}`)
       );
 
-      if (config.basicAuthUsername && config.basicAuthPassword) {
-        logger.log(chalk.green('Basic authentication: ENABLED'));
-        logger.log(`Username: ${config.basicAuthUsername}`);
-        logger.log(`Password: ${'*'.repeat(config.basicAuthPassword.length)}`);
+      if (config.basicAuthPassword) {
+        if (config.basicAuthUsername) {
+          logger.log(chalk.green('Authentication: USERNAME + PASSWORD'));
+          logger.log(`Username: ${config.basicAuthUsername}`);
+          logger.log(`Password: ${'*'.repeat(config.basicAuthPassword.length)}`);
+        } else {
+          logger.log(chalk.green('Authentication: PASSWORD ONLY'));
+          logger.log(`Password: ${'*'.repeat(config.basicAuthPassword.length)}`);
+          logger.log(chalk.gray('(Any username will be accepted)'));
+        }
       } else {
         logger.warn('Server running without authentication');
         logger.warn(
-          'Anyone can access this server. Use --username and --password or set VIBETUNNEL_USERNAME and VIBETUNNEL_PASSWORD'
+          'Anyone can access this server. Use --password for password-only auth or --username and --password for full auth'
         );
       }
 
@@ -705,7 +707,7 @@ export async function startVibeTunnelServer() {
   if (appInstance.pushNotificationService) {
     _subscriptionCleanupInterval = setInterval(
       () => {
-        appInstance.pushNotificationService!.cleanupInactiveSubscriptions().catch((error) => {
+        appInstance.pushNotificationService?.cleanupInactiveSubscriptions().catch((error) => {
           logger.error('Failed to cleanup inactive subscriptions:', error);
         });
       },

@@ -52,10 +52,23 @@ export function createAuthMiddleware(config: AuthConfig) {
       const credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
       const [username, password] = credentials.split(':');
 
-      if (username === config.basicAuthUsername && password === config.basicAuthPassword) {
-        return next();
+      // If no username is configured, accept any username as long as password matches
+      // This allows for password-only authentication mode
+      if (!config.basicAuthUsername) {
+        // Password-only mode: ignore username, only check password
+        if (password === config.basicAuthPassword) {
+          logger.log(chalk.green(`authenticated via password-only mode from ${req.ip}`));
+          return next();
+        } else {
+          logger.warn(`failed password-only auth attempt from ${req.ip}`);
+        }
       } else {
-        logger.warn(`failed basic auth attempt from ${req.ip} for user: ${username}`);
+        // Username+password mode: check both
+        if (username === config.basicAuthUsername && password === config.basicAuthPassword) {
+          return next();
+        } else {
+          logger.warn(`failed basic auth attempt from ${req.ip} for user: ${username}`);
+        }
       }
     }
 
