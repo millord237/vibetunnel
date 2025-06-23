@@ -204,6 +204,15 @@ export class SessionCard extends LitElement {
   }
 
   render() {
+    // Debug logging to understand what's in the session
+    if (!this.session.name) {
+      logger.warn('Session missing name', {
+        sessionId: this.session.id,
+        name: this.session.name,
+        command: this.session.command,
+      });
+    }
+
     return html`
       <div
         class="card cursor-pointer overflow-hidden flex flex-col h-full ${this.killing
@@ -219,8 +228,8 @@ export class SessionCard extends LitElement {
           class="flex justify-between items-center px-3 py-2 border-b border-dark-border bg-dark-bg-tertiary"
         >
           <div class="text-xs font-mono pr-2 flex-1 min-w-0 text-accent-green">
-            <div class="truncate" title="${this.session.name || this.session.command}">
-              ${this.session.name || this.session.command}
+            <div class="truncate" title="${this.session.name || this.session.command.join(' ')}">
+              ${this.session.name || this.session.command.join(' ')}
             </div>
           </div>
           ${this.session.status === 'running' || this.session.status === 'exited'
