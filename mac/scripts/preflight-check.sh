@@ -139,12 +139,12 @@ echo ""
 # 3. Check build numbers
 echo "📌 Build Number Validation:"
 USED_BUILD_NUMBERS=""
-if [[ -f "$PROJECT_ROOT/appcast.xml" ]]; then
-    APPCAST_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/appcast.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
+if [[ -f "$PROJECT_ROOT/../appcast.xml" ]]; then
+    APPCAST_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/../appcast.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
     USED_BUILD_NUMBERS+="$APPCAST_BUILDS"
 fi
-if [[ -f "$PROJECT_ROOT/appcast-prerelease.xml" ]]; then
-    PRERELEASE_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/appcast-prerelease.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
+if [[ -f "$PROJECT_ROOT/../appcast-prerelease.xml" ]]; then
+    PRERELEASE_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/../appcast-prerelease.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
     USED_BUILD_NUMBERS+="$PRERELEASE_BUILDS"
 fi
 
@@ -181,7 +181,7 @@ echo ""
 
 # Check if Xcode project uses version.xcconfig
 echo "📌 Xcode Project Configuration:"
-XCODEPROJ="$PROJECT_ROOT/mac/VibeTunnel.xcodeproj/project.pbxproj"
+XCODEPROJ="$PROJECT_ROOT/VibeTunnel-Mac.xcodeproj/project.pbxproj"
 if [[ -f "$XCODEPROJ" ]]; then
     if grep -q "version.xcconfig" "$XCODEPROJ"; then
         check_pass "Xcode project references version.xcconfig"
@@ -304,8 +304,8 @@ echo ""
 # 7. Check appcast files
 echo "📌 Appcast Files:"
 
-if [[ -f "$PROJECT_ROOT/appcast.xml" ]]; then
-    if xmllint --noout "$PROJECT_ROOT/appcast.xml" 2>/dev/null; then
+if [[ -f "$PROJECT_ROOT/../appcast.xml" ]]; then
+    if xmllint --noout "$PROJECT_ROOT/../appcast.xml" 2>/dev/null; then
         check_pass "appcast.xml is valid XML"
     else
         check_fail "appcast.xml has XML errors"
@@ -314,8 +314,8 @@ else
     check_warn "appcast.xml not found (OK if no stable releases yet)"
 fi
 
-if [[ -f "$PROJECT_ROOT/appcast-prerelease.xml" ]]; then
-    if xmllint --noout "$PROJECT_ROOT/appcast-prerelease.xml" 2>/dev/null; then
+if [[ -f "$PROJECT_ROOT/../appcast-prerelease.xml" ]]; then
+    if xmllint --noout "$PROJECT_ROOT/../appcast-prerelease.xml" 2>/dev/null; then
         check_pass "appcast-prerelease.xml is valid XML"
     else
         check_fail "appcast-prerelease.xml has XML errors"

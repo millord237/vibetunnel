@@ -16,6 +16,8 @@ struct SessionCardView: View {
     @State private var isKilling = false
     @State private var opacity: Double = 1.0
     @State private var scale: CGFloat = 1.0
+    @State private var rotation: Double = 0
+    @State private var brightness: Double = 1.0
 
     private var displayWorkingDir: String {
         // Convert absolute paths back to ~ notation for display
@@ -33,7 +35,7 @@ struct SessionCardView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 // Header with session ID/name and kill button
                 HStack {
-                    Text(session.name ?? String(session.id.prefix(8)))
+                    Text(session.name)
                         .font(Theme.Typography.terminalSystem(size: 14))
                         .fontWeight(.medium)
                         .foregroundColor(Theme.Colors.primaryAccent)
@@ -49,13 +51,19 @@ struct SessionCardView: View {
                             animateCleanup()
                         }
                     }, label: {
-                        Image(systemName: session.isRunning ? "xmark.circle" : "trash.circle")
-                            .font(.system(size: 18))
-                            .foregroundColor(session.isRunning ? Theme.Colors.errorAccent : Theme.Colors
-                                .terminalForeground.opacity(0.6)
-                            )
+                        if isKilling {
+                            LoadingView(message: "", useUnicodeSpinner: true)
+                                .scaleEffect(0.7)
+                                .frame(width: 18, height: 18)
+                        } else {
+                            Image(systemName: session.isRunning ? "xmark.circle" : "trash.circle")
+                                .font(.system(size: 18))
+                                .foregroundColor(session.isRunning ? Theme.Colors.errorAccent : Theme.Colors
+                                    .terminalForeground.opacity(0.6)
+                                )
+                        }
                     })
-                    .buttonStyle(PlainButtonStyle())
+                    .buttonStyle(.plain)
                 }
 
                 // Terminal content area showing command and terminal output preview
@@ -103,7 +111,7 @@ struct SessionCardView: View {
                                             Text("$")
                                                 .font(Theme.Typography.terminalSystem(size: 12))
                                                 .foregroundColor(Theme.Colors.primaryAccent)
-                                            Text(session.command)
+                                            Text(session.command.joined(separator: " "))
                                                 .font(Theme.Typography.terminalSystem(size: 12))
                                                 .foregroundColor(Theme.Colors.terminalForeground)
                                         }
@@ -203,8 +211,10 @@ struct SessionCardView: View {
             )
             .scaleEffect(isPressed ? 0.98 : scale)
             .opacity(opacity)
+            .rotationEffect(.degrees(rotation))
+            .brightness(brightness)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
         .onLongPressGesture(
             minimumDuration: 0.1,
             maximumDistance: .infinity,
@@ -280,14 +290,21 @@ struct SessionCardView: View {
     }
 
     private func animateCleanup() {
-        // Shrink and fade animation for cleanup
-        withAnimation(.easeOut(duration: 0.3)) {
-            scale = 0.8
+        // Black hole collapse animation matching web
+        withAnimation(.easeInOut(duration: 0.3)) {
+            scale = 0
+            rotation = 360
+            brightness = 0.3
             opacity = 0
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             onCleanup()
+            // Reset values for potential reuse
+            scale = 1.0
+            rotation = 0
+            brightness = 1.0
+            opacity = 1.0
         }
     }
 }

@@ -145,7 +145,14 @@ export class AppHeader extends LitElement {
                 @click=${this.handleOpenFileBrowser}
                 title="Browse Files"
               >
-                Browse
+                <span class="flex items-center gap-1">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path
+                      d="M1.75 1h5.5c.966 0 1.75.784 1.75 1.75v1h4c.966 0 1.75.784 1.75 1.75v7.75A1.75 1.75 0 0113 15H3a1.75 1.75 0 01-1.75-1.75V2.75C1.25 1.784 1.784 1 1.75 1zM2.75 2.5v10.75c0 .138.112.25.25.25h10a.25.25 0 00.25-.25V5.5a.25.25 0 00-.25-.25H8.75v-2.5a.25.25 0 00-.25-.25h-5.5a.25.25 0 00-.25.25z"
+                    />
+                  </svg>
+                  Browse
+                </span>
               </button>
               <button
                 class="btn-primary font-mono text-xs px-4 py-2 vt-create-button"
@@ -222,7 +229,14 @@ export class AppHeader extends LitElement {
                 @click=${this.handleOpenFileBrowser}
                 title="Browse Files (⌘O)"
               >
-                Browse
+                <span class="flex items-center gap-1">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path
+                      d="M1.75 1h5.5c.966 0 1.75.784 1.75 1.75v1h4c.966 0 1.75.784 1.75 1.75v7.75A1.75 1.75 0 0113 15H3a1.75 1.75 0 01-1.75-1.75V2.75C1.25 1.784 1.784 1 1.75 1zM2.75 2.5v10.75c0 .138.112.25.25.25h10a.25.25 0 00.25-.25V5.5a.25.25 0 00-.25-.25H8.75v-2.5a.25.25 0 00-.25-.25h-5.5a.25.25 0 00-.25.25z"
+                    />
+                  </svg>
+                  Browse
+                </span>
               </button>
               <button
                 class="btn-primary font-mono text-xs px-4 py-2 vt-create-button"

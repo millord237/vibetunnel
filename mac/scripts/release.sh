@@ -113,6 +113,22 @@ echo ""
 # Additional strict pre-conditions before preflight check
 echo -e "${BLUE}🔍 Running strict pre-conditions...${NC}"
 
+# Check if CHANGELOG.md exists in mac directory
+if [[ ! -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
+    echo -e "${YELLOW}⚠️  Warning: CHANGELOG.md not found in mac/ directory${NC}"
+    echo "   The release script expects CHANGELOG.md to be in the mac/ directory"
+    echo "   You can copy it from the project root: cp ../CHANGELOG.md ."
+fi
+
+# Clean up any stuck VibeTunnel volumes before starting
+echo "🧹 Cleaning up any stuck DMG volumes..."
+for volume in /Volumes/VibeTunnel*; do
+    if [ -d "$volume" ]; then
+        echo "   Unmounting $volume..."
+        hdiutil detach "$volume" -force 2>/dev/null || true
+    fi
+done
+
 # Check if we're on main branch
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [[ "$CURRENT_BRANCH" != "main" ]]; then
@@ -170,8 +186,17 @@ fi
 
 # Check if changelog file exists
 if [[ ! -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
-    echo -e "${YELLOW}⚠️  Warning: CHANGELOG.md not found${NC}"
-    echo "   Release notes will be basic"
+    echo -e "${YELLOW}⚠️  Warning: CHANGELOG.md not found in mac/ directory${NC}"
+    echo "   Looking for it in project root..."
+    if [[ -f "$PROJECT_ROOT/../CHANGELOG.md" ]]; then
+        echo "   Found CHANGELOG.md in project root"
+        CHANGELOG_PATH="$PROJECT_ROOT/../CHANGELOG.md"
+    else
+        echo "   CHANGELOG.md not found anywhere - release notes will be basic"
+        CHANGELOG_PATH=""
+    fi
+else
+    CHANGELOG_PATH="$PROJECT_ROOT/CHANGELOG.md"
 fi
 
 # Check if we're up to date with origin/main
@@ -247,12 +272,12 @@ fi
 # Verify build number hasn't been used
 echo "🔍 Checking build number uniqueness..."
 EXISTING_BUILDS=""
-if [[ -f "$PROJECT_ROOT/appcast.xml" ]]; then
-    APPCAST_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/appcast.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
+if [[ -f "$PROJECT_ROOT/../appcast.xml" ]]; then
+    APPCAST_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/../appcast.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
     EXISTING_BUILDS+="$APPCAST_BUILDS"
 fi
-if [[ -f "$PROJECT_ROOT/appcast-prerelease.xml" ]]; then
-    PRERELEASE_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/appcast-prerelease.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
+if [[ -f "$PROJECT_ROOT/../appcast-prerelease.xml" ]]; then
+    PRERELEASE_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/../appcast-prerelease.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
     EXISTING_BUILDS+="$PRERELEASE_BUILDS"
 fi
 
@@ -308,9 +333,9 @@ fi
 echo -e "${GREEN}✅ Version updated to: $VERSION_TO_SET${NC}"
 
 # Check if Xcode project was modified and commit if needed
-if ! git diff --quiet "$PROJECT_ROOT/VibeTunnel.xcodeproj/project.pbxproj"; then
+if ! git diff --quiet "$PROJECT_ROOT/VibeTunnel-Mac.xcodeproj/project.pbxproj"; then
     echo "📝 Committing Xcode project changes..."
-    git add "$PROJECT_ROOT/VibeTunnel.xcodeproj/project.pbxproj"
+    git add "$PROJECT_ROOT/VibeTunnel-Mac.xcodeproj/project.pbxproj"
     git commit -m "Update Xcode project for build $BUILD_NUMBER"
     echo -e "${GREEN}✅ Xcode project changes committed${NC}"
 fi
@@ -567,14 +592,14 @@ echo "📤 Creating GitHub release..."
 # Generate release notes from changelog
 echo "📝 Generating release notes from changelog..."
 CHANGELOG_HTML=""
-if [[ -x "$SCRIPT_DIR/changelog-to-html.sh" ]] && [[ -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
+if [[ -x "$SCRIPT_DIR/changelog-to-html.sh" ]] && [[ -n "$CHANGELOG_PATH" ]] && [[ -f "$CHANGELOG_PATH" ]]; then
     # Extract version for changelog (remove any pre-release suffixes for lookup)
     CHANGELOG_VERSION="$RELEASE_VERSION"
     if [[ "$CHANGELOG_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
         CHANGELOG_BASE="${BASH_REMATCH[1]}"
         # Try full version first, then base version
-        CHANGELOG_HTML=$("$SCRIPT_DIR/changelog-to-html.sh" "$CHANGELOG_VERSION" "$PROJECT_ROOT/CHANGELOG.md" 2>/dev/null || \
-                        "$SCRIPT_DIR/changelog-to-html.sh" "$CHANGELOG_BASE" "$PROJECT_ROOT/CHANGELOG.md" 2>/dev/null || \
+        CHANGELOG_HTML=$("$SCRIPT_DIR/changelog-to-html.sh" "$CHANGELOG_VERSION" "$CHANGELOG_PATH" 2>/dev/null || \
+                        "$SCRIPT_DIR/changelog-to-html.sh" "$CHANGELOG_BASE" "$CHANGELOG_PATH" 2>/dev/null || \
                         echo "")
     fi
 fi
@@ -611,15 +636,18 @@ echo -e "${BLUE}📋 Step 8/9: Updating appcast...${NC}"
 
 # Generate appcast
 echo "🔐 Generating appcast with EdDSA signatures..."
+# Set the Sparkle account for sign_update
+export SPARKLE_ACCOUNT="VibeTunnel"
+echo "   Using Sparkle account: $SPARKLE_ACCOUNT"
 "$SCRIPT_DIR/generate-appcast.sh"
 
 # Verify the appcast was updated
 if [[ "$RELEASE_TYPE" == "stable" ]]; then
-    if ! grep -q "<sparkle:version>$BUILD_NUMBER</sparkle:version>" "$PROJECT_ROOT/appcast.xml"; then
+    if ! grep -q "<sparkle:version>$BUILD_NUMBER</sparkle:version>" "$PROJECT_ROOT/../appcast.xml"; then
         echo -e "${YELLOW}⚠️  Appcast may not have been updated. Please check manually.${NC}"
     fi
 else
-    if ! grep -q "<sparkle:version>$BUILD_NUMBER</sparkle:version>" "$PROJECT_ROOT/appcast-prerelease.xml"; then
+    if ! grep -q "<sparkle:version>$BUILD_NUMBER</sparkle:version>" "$PROJECT_ROOT/../appcast-prerelease.xml"; then
         echo -e "${YELLOW}⚠️  Pre-release appcast may not have been updated. Please check manually.${NC}"
     fi
 fi
@@ -633,8 +661,17 @@ echo "📤 Committing and pushing changes..."
 # Add version.xcconfig changes
 git add "$VERSION_CONFIG" 2>/dev/null || true
 
-# Add appcast files
-git add "$PROJECT_ROOT/appcast.xml" "$PROJECT_ROOT/appcast-prerelease.xml" 2>/dev/null || true
+# Add appcast files (they're in project root, not mac/)
+if [[ -f "$PROJECT_ROOT/../appcast.xml" ]]; then
+    git add "$PROJECT_ROOT/../appcast.xml" 2>/dev/null || true
+else
+    echo -e "${YELLOW}⚠️  Warning: appcast.xml not found in project root${NC}"
+fi
+if [[ -f "$PROJECT_ROOT/../appcast-prerelease.xml" ]]; then
+    git add "$PROJECT_ROOT/../appcast-prerelease.xml" 2>/dev/null || true
+else
+    echo -e "${YELLOW}⚠️  Warning: appcast-prerelease.xml not found in project root${NC}"
+fi
 
 if ! git diff --cached --quiet; then
     git commit -m "Update appcast and version for $RELEASE_VERSION"

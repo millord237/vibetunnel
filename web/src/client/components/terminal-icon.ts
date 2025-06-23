@@ -17,12 +17,21 @@ export class TerminalIcon extends LitElement {
       width: var(--icon-size, 24px);
       height: var(--icon-size, 24px);
     }
+
+    .terminal-icon {
+      border-radius: 20%;
+      box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.3),
+        0 1px 3px rgba(0, 0, 0, 0.2);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px;
+    }
   `;
 
   render() {
     return html`
       <img
-        src="/icon_512x512.png"
+        src="/apple-touch-icon.png"
         alt="VibeTunnel"
         style="width: ${this.size}px; height: ${this.size}px"
         class="terminal-icon"

@@ -174,8 +174,16 @@ The script will:
 ### Step 5: Verify Success
 - Check the GitHub releases page
 - Verify the appcast was updated correctly with proper changelog content
+- **Critical**: Verify the Sparkle signature is correct:
+  ```bash
+  # Download and verify the DMG signature
+  curl -L -o test.dmg <github-dmg-url>
+  sign_update test.dmg --account VibeTunnel
+  # Compare with appcast sparkle:edSignature
+  ```
 - Test updating from a previous version
 - **Important**: Verify that the Sparkle update dialog shows the formatted changelog, not HTML tags
+- Check that update installs without "improperly signed" errors
 
 ## ⚠️ Critical Requirements
 
@@ -347,6 +355,8 @@ Edit `VibeTunnel/version.xcconfig`:
 - Update MARKETING_VERSION
 - Update CURRENT_PROJECT_VERSION (build number)
 
+**Note**: The Xcode project file is named `VibeTunnel-Mac.xcodeproj`
+
 ### 2. Clean and Build Universal Binary
 ```bash
 rm -rf build DerivedData
@@ -389,6 +399,25 @@ git push
 ```
 
 ## 🔍 Troubleshooting
+
+### "Update is improperly signed" Error
+**Problem**: Users see "The update is improperly signed and could not be validated."
+
+**Cause**: The DMG was signed with the wrong Sparkle key (default instead of VibeTunnel account).
+
+**Quick Fix**:
+```bash
+# 1. Download the DMG from GitHub
+curl -L -o fix.dmg <github-dmg-url>
+
+# 2. Generate correct signature
+sign_update fix.dmg --account VibeTunnel
+
+# 3. Update appcast-prerelease.xml with the new sparkle:edSignature
+# 4. Commit and push
+```
+
+**Prevention**: The updated scripts now always use `--account VibeTunnel`.
 
 ### Debug Sparkle Updates
 ```bash

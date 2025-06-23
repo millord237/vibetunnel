@@ -180,6 +180,7 @@ struct AdvancedSettingsView: View {
     private var verboseLogging = false
     @AppStorage("debugModeEnabled")
     private var debugModeEnabled = false
+    @State private var showingSystemLogs = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
@@ -209,6 +210,24 @@ struct AdvancedSettingsView: View {
                     .padding()
                     .background(Theme.Colors.cardBackground)
                     .cornerRadius(Theme.CornerRadius.card)
+                    
+                    // View System Logs Button
+                    Button(action: { showingSystemLogs = true }) {
+                        HStack {
+                            Image(systemName: "doc.text")
+                                .foregroundColor(Theme.Colors.primaryAccent)
+                            Text("View System Logs")
+                                .font(Theme.Typography.terminalSystem(size: 14))
+                                .foregroundColor(Theme.Colors.terminalForeground)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
+                        }
+                        .padding()
+                        .background(Theme.Colors.cardBackground)
+                        .cornerRadius(Theme.CornerRadius.card)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
 
@@ -244,6 +263,9 @@ struct AdvancedSettingsView: View {
             }
 
             Spacer()
+        }
+        .sheet(isPresented: $showingSystemLogs) {
+            SystemLogsView()
         }
     }
 }

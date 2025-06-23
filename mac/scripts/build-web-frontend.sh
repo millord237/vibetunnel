@@ -139,7 +139,12 @@ fi
 if [ "$BUILD_CONFIG" = "Release" ]; then
     echo "Release build - checking for custom Node.js..."
     
-    if [ ! -f "$CUSTOM_NODE_PATH" ]; then
+    # Skip custom Node.js build in CI to avoid timeout
+    if [ "${CI:-false}" = "true" ]; then
+        echo "CI environment detected - skipping custom Node.js build to avoid timeout"
+        echo "The app will be larger than optimal but will build within CI time limits."
+        npm run build
+    elif [ ! -f "$CUSTOM_NODE_PATH" ]; then
         echo "Custom Node.js not found, building it for optimal size..."
         echo "This will take 10-20 minutes on first run but will be cached."
         node build-custom-node.js --latest
@@ -147,7 +152,7 @@ if [ "$BUILD_CONFIG" = "Release" ]; then
         CUSTOM_NODE_PATH="${CUSTOM_NODE_DIR}/out/Release/node"
     fi
     
-    if [ -f "$CUSTOM_NODE_PATH" ]; then
+    if [ "${CI:-false}" != "true" ] && [ -f "$CUSTOM_NODE_PATH" ]; then
         CUSTOM_NODE_VERSION=$("$CUSTOM_NODE_PATH" --version 2>/dev/null || echo "unknown")
         CUSTOM_NODE_SIZE=$(ls -lh "$CUSTOM_NODE_PATH" 2>/dev/null | awk '{print $5}' || echo "unknown")
         echo "Using custom Node.js for release build:"

@@ -55,6 +55,23 @@ fi
 
 echo "Creating DMG: $DMG_NAME"
 
+# Clean up any stuck VibeTunnel volumes before starting
+echo "Checking for stuck DMG volumes..."
+for volume in /Volumes/VibeTunnel* "/Volumes/$DMG_VOLUME_NAME"*; do
+    if [ -d "$volume" ]; then
+        echo "  Unmounting stuck volume: $volume"
+        hdiutil detach "$volume" -force 2>/dev/null || true
+        sleep 1
+    fi
+done
+
+# Also check for any DMG processes that might be stuck
+if pgrep -f "VibeTunnel.*\.dmg" > /dev/null; then
+    echo "  Found stuck DMG processes, killing them..."
+    pkill -f "VibeTunnel.*\.dmg" || true
+    sleep 2
+fi
+
 # Create temporary directory for DMG contents
 DMG_TEMP="$BUILD_DIR/dmg-temp"
 rm -rf "$DMG_TEMP"
@@ -83,6 +100,12 @@ echo "Applying custom styling to DMG..."
 
 # Mount the DMG
 MOUNT_POINT="/Volumes/$DMG_VOLUME_NAME"
+# Ensure the mount point doesn't exist before mounting
+if [ -d "$MOUNT_POINT" ]; then
+    echo "Mount point already exists, attempting to unmount..."
+    hdiutil detach "$MOUNT_POINT" -force 2>/dev/null || true
+    sleep 2
+fi
 hdiutil attach "$DMG_RW_PATH" -mountpoint "$MOUNT_POINT" -nobrowse
 
 
@@ -151,15 +174,26 @@ sleep 3
 osascript -e 'tell application "Finder" to close every window'
 
 
-# Unmount with retry
+# Unmount with retry and force
 echo "Unmounting DMG..."
 for i in {1..5}; do
     if hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null; then
         break
     fi
     echo "  Retry $i/5..."
+    if [ $i -eq 3 ]; then
+        echo "  Attempting force unmount..."
+        hdiutil detach "$MOUNT_POINT" -force 2>/dev/null || true
+    fi
     sleep 2
 done
+
+# Final check - if still mounted, force unmount
+if [ -d "$MOUNT_POINT" ]; then
+    echo "  Volume still mounted, force unmounting..."
+    hdiutil detach "$MOUNT_POINT" -force 2>/dev/null || true
+    sleep 1
+fi
 
 # Convert to compressed read-only DMG
 echo "Converting to final DMG format..."

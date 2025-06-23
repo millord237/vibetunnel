@@ -122,12 +122,33 @@ EOF
 cd web
 npm install
 npm run build
-node build-native.js  # Creates Bun executable
+
+# Optional: Build with custom Node.js for smaller binary (46% size reduction)
+# export VIBETUNNEL_USE_CUSTOM_NODE=YES
+# node build-custom-node.js  # Build optimized Node.js (one-time, ~20 min)
+# npm run build              # Will use custom Node.js automatically
 
 # Build the macOS app
 cd ../mac
 ./scripts/build.sh --configuration Release
 ```
+
+### Custom Node.js Builds
+
+VibeTunnel supports building with a custom Node.js for a 46% smaller executable (61MB vs 107MB):
+
+```bash
+# Build custom Node.js (one-time, ~20 minutes)
+node build-custom-node.js
+
+# Use environment variable for all builds
+export VIBETUNNEL_USE_CUSTOM_NODE=YES
+
+# Or use in Xcode Build Settings
+# Add User-Defined Setting: VIBETUNNEL_USE_CUSTOM_NODE = YES
+```
+
+See [Custom Node Build Flags](docs/custom-node-build-flags.md) for detailed optimization information.
 
 ## Development
 

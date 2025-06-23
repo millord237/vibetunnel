@@ -121,17 +121,37 @@ Each `--without-*` flag contributes to size reduction:
 
 ## Usage Instructions
 
-1. **Build custom Node.js**:
-   ```bash
-   node build-custom-node.js --version=24.2.0
-   ```
+### Building Custom Node.js
 
-2. **Use with vibetunnel**:
-   ```bash
-   node build-native.js --custom-node="/path/to/custom/node"
-   ```
+```bash
+node build-custom-node.js               # Builds Node.js 24.2.0 (default)
+node build-custom-node.js --version=24.2.0  # Specific version
+node build-custom-node.js --latest      # Latest version
+```
 
-3. **Result**: A 61MB portable executable (vs 107MB with standard Node.js)
+### Using Custom Node.js
+
+#### Option 1: Command Line
+```bash
+node build-native.js --custom-node      # Auto-detect from .node-builds/
+node build-native.js --custom-node="/path/to/custom/node"  # Specific path
+```
+
+#### Option 2: Environment Variable (Recommended for Xcode)
+```bash
+export VIBETUNNEL_USE_CUSTOM_NODE=YES   # Use custom Node.js
+export VIBETUNNEL_USE_CUSTOM_NODE=NO    # Use system Node.js
+node build-native.js                    # Respects environment variable
+```
+
+### Xcode Integration
+
+For macOS development, set `VIBETUNNEL_USE_CUSTOM_NODE` in Build Settings:
+- **YES**: Always use custom Node.js (61MB executable)
+- **NO**: Always use system Node.js (107MB executable)
+- **(not set)**: Auto-detect based on build configuration
+
+See [Xcode Custom Node Setup](xcode-custom-node-setup.md) for detailed instructions.
 
 ## Future Optimization Opportunities
 

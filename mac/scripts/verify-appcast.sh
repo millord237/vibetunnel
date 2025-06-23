@@ -134,26 +134,26 @@ validate_appcast() {
 }
 
 # Validate both appcast files
-validate_appcast "$PROJECT_ROOT/appcast.xml" "Stable appcast"
+validate_appcast "$PROJECT_ROOT/../appcast.xml" "Stable appcast"
 echo ""
-validate_appcast "$PROJECT_ROOT/appcast-prerelease.xml" "Pre-release appcast"
+validate_appcast "$PROJECT_ROOT/../appcast-prerelease.xml" "Pre-release appcast"
 
 # Cross-validation between appcasts
 echo ""
 echo "📌 Cross-Validation:"
 
-if [[ -f "$PROJECT_ROOT/appcast.xml" ]] && [[ -f "$PROJECT_ROOT/appcast-prerelease.xml" ]]; then
+if [[ -f "$PROJECT_ROOT/../appcast.xml" ]] && [[ -f "$PROJECT_ROOT/../appcast-prerelease.xml" ]]; then
     # Get all build numbers from both files
     ALL_BUILDS=()
-    if [[ -f "$PROJECT_ROOT/appcast.xml" ]]; then
+    if [[ -f "$PROJECT_ROOT/../appcast.xml" ]]; then
         while IFS= read -r build; do
             ALL_BUILDS+=("$build")
-        done < <(grep -o '<sparkle:version>[0-9]*</sparkle:version>' "$PROJECT_ROOT/appcast.xml" | sed 's/<[^>]*>//g')
+        done < <(grep -o '<sparkle:version>[0-9]*</sparkle:version>' "$PROJECT_ROOT/../appcast.xml" | sed 's/<[^>]*>//g')
     fi
-    if [[ -f "$PROJECT_ROOT/appcast-prerelease.xml" ]]; then
+    if [[ -f "$PROJECT_ROOT/../appcast-prerelease.xml" ]]; then
         while IFS= read -r build; do
             ALL_BUILDS+=("$build")
-        done < <(grep -o '<sparkle:version>[0-9]*</sparkle:version>' "$PROJECT_ROOT/appcast-prerelease.xml" | sed 's/<[^>]*>//g')
+        done < <(grep -o '<sparkle:version>[0-9]*</sparkle:version>' "$PROJECT_ROOT/../appcast-prerelease.xml" | sed 's/<[^>]*>//g')
     fi
     
     # Check for duplicates across files

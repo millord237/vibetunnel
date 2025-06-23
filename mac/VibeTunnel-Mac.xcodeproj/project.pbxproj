@@ -464,6 +464,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = sh.vibetunnel.vibetunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				VIBETUNNEL_USE_CUSTOM_NODE = YES;
 			};
 			name = Debug;
 		};
@@ -501,6 +502,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = sh.vibetunnel.vibetunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				VIBETUNNEL_USE_CUSTOM_NODE = YES;
 			};
 			name = Release;
 		};

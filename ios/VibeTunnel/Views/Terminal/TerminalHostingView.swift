@@ -117,13 +117,10 @@ struct TerminalHostingView: UIViewRepresentable {
     }
 
     private func updateFont(_ terminal: SwiftTerm.TerminalView, size: CGFloat) {
-        let font: UIFont = if let customFont = UIFont(name: Theme.Typography.terminalFont, size: size) {
-            customFont
-        } else if let fallbackFont = UIFont(name: Theme.Typography.terminalFontFallback, size: size) {
-            fallbackFont
-        } else {
-            UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
-        }
+        // Use system monospaced font which has better compatibility with SwiftTerm
+        // The custom SF Mono font seems to have rendering issues
+        let font = UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        
         // SwiftTerm uses the font property directly
         terminal.font = font
     }
@@ -181,6 +178,8 @@ struct TerminalHostingView: UIViewRepresentable {
         /// Update terminal buffer from binary buffer data using optimized ANSI sequences
         func updateBuffer(from snapshot: BufferSnapshot) {
             guard let terminal else { return }
+            
+            print("[Terminal] updateBuffer called with snapshot: \(snapshot.cols)x\(snapshot.rows), cursor: (\(snapshot.cursorX),\(snapshot.cursorY))")
 
             // Update terminal dimensions if needed
             let currentCols = terminal.getTerminal().cols
@@ -204,11 +203,13 @@ struct TerminalHostingView: UIViewRepresentable {
             let ansiData: String
             if isFirstUpdate || previousSnapshot == nil || viewportChanged {
                 // Full redraw needed
-                ansiData = convertBufferToOptimizedANSI(snapshot)
+                ansiData = convertBufferToOptimizedANSI(snapshot, clearScreen: isFirstUpdate)
                 isFirstUpdate = false
+                print("[Terminal] Full redraw performed")
             } else {
                 // Incremental update
                 ansiData = generateIncrementalUpdate(from: previousSnapshot!, to: snapshot)
+                print("[Terminal] Incremental update performed")
             }
 
             // Store current snapshot for next update
@@ -247,11 +248,16 @@ struct TerminalHostingView: UIViewRepresentable {
             }
         }
 
-        private func convertBufferToOptimizedANSI(_ snapshot: BufferSnapshot) -> String {
+        private func convertBufferToOptimizedANSI(_ snapshot: BufferSnapshot, clearScreen: Bool = false) -> String {
             var output = ""
 
-            // Clear screen and reset cursor
-            output += "\u{001B}[2J\u{001B}[H"
+            if clearScreen {
+                // Clear screen and reset cursor for first update
+                output += "\u{001B}[2J\u{001B}[H"
+            } else {
+                // Just reset cursor to home position
+                output += "\u{001B}[H"
+            }
 
             // Track current attributes to minimize escape sequences
             var currentFg: Int?
@@ -584,6 +590,31 @@ struct TerminalHostingView: UIViewRepresentable {
                 }
             }
         }
+        
+        func getBufferContent() -> String? {
+            guard let terminal else { return nil }
+            
+            // Get the terminal buffer content
+            let terminalInstance = terminal.getTerminal()
+            var content = ""
+            
+            // Read all lines from the terminal buffer
+            for row in 0..<terminalInstance.rows {
+                if let line = terminalInstance.getLine(row: row) {
+                    var lineText = ""
+                    for col in 0..<terminalInstance.cols {
+                        if col < line.count {
+                            let char = line[col]
+                            lineText += String(char.getCharacter())
+                        }
+                    }
+                    // Trim trailing spaces
+                    content += lineText.trimmingCharacters(in: .whitespaces) + "\n"
+                }
+            }
+            
+            return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
 
         // MARK: - TerminalViewDelegate
 
@@ -613,6 +644,14 @@ struct TerminalHostingView: UIViewRepresentable {
             if let terminal {
                 terminal.feed(text: "\u{001b}[B")
             }
+        }
+        
+        func setMaxWidth(_ maxWidth: Int) {
+            // Store the max width preference for terminal rendering
+            // When maxWidth is 0, it means unlimited
+            // This could be used to constrain terminal rendering in the future
+            // For now, just log the preference
+            print("[Terminal] Max width set to: \(maxWidth == 0 ? "unlimited" : "\(maxWidth) columns")")
         }
 
         func setTerminalTitle(source: SwiftTerm.TerminalView, title: String) {

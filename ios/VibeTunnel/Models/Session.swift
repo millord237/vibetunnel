@@ -7,17 +7,20 @@ import Foundation
 /// and terminal dimensions.
 struct Session: Codable, Identifiable, Equatable {
     let id: String
-    let command: String
+    let command: [String]  // Changed from String to [String] to match server
     let workingDir: String
-    let name: String?
+    let name: String
     let status: SessionStatus
     let exitCode: Int?
     let startedAt: String
     let lastModified: String?
     let pid: Int?
-    let waiting: Bool?
-    let width: Int?
-    let height: Int?
+    
+    // Optional fields from HQ mode
+    let source: String?
+    let remoteId: String?
+    let remoteName: String?
+    let remoteUrl: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -29,16 +32,20 @@ struct Session: Codable, Identifiable, Equatable {
         case startedAt
         case lastModified
         case pid
-        case waiting
-        case width
-        case height
+        case source
+        case remoteId
+        case remoteName
+        case remoteUrl
     }
 
     /// User-friendly display name for the session.
     ///
-    /// Returns the custom name if set, otherwise the command.
+    /// Returns the custom name if not empty, otherwise the command.
     var displayName: String {
-        name ?? command
+        if !name.isEmpty {
+            return name
+        }
+        return command.joined(separator: " ")
     }
 
     /// Indicates whether the session is currently active.
@@ -128,14 +135,14 @@ struct SessionCreateData: Codable {
     ///   - command: Command to execute (default: "zsh").
     ///   - workingDir: Working directory for the session.
     ///   - name: Optional custom name.
-    ///   - spawnTerminal: Whether to spawn a terminal (default: false).
+    ///   - spawnTerminal: Whether to spawn a terminal (default: true).
     ///   - cols: Terminal width in columns (default: 120).
     ///   - rows: Terminal height in rows (default: 30).
     init(
         command: String = "zsh",
         workingDir: String,
         name: String? = nil,
-        spawnTerminal: Bool = false,
+        spawnTerminal: Bool = true,
         cols: Int = 120,
         rows: Int = 30
     ) {

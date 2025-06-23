@@ -2,6 +2,78 @@ import Foundation
 import Testing
 @testable import VibeTunnel
 
+// Temporarily include MockWebSocketFactory here until it's properly added to the project
+@MainActor
+class MockWebSocket: WebSocketProtocol {
+    weak var delegate: WebSocketDelegate?
+    
+    // State tracking
+    private(set) var isConnected = false
+    private(set) var lastConnectURL: URL?
+    private(set) var lastConnectHeaders: [String: String]?
+    
+    // Control test behavior
+    var shouldFailConnection = false
+    var connectionError: Error?
+    
+    func connect(to url: URL, with headers: [String: String]) async throws {
+        lastConnectURL = url
+        lastConnectHeaders = headers
+        
+        if shouldFailConnection {
+            let error = connectionError ?? WebSocketError.connectionFailed
+            throw error
+        }
+        
+        isConnected = true
+        delegate?.webSocketDidConnect(self)
+    }
+    
+    func send(_ message: WebSocketMessage) async throws {
+        guard isConnected else {
+            throw WebSocketError.connectionFailed
+        }
+    }
+    
+    func sendPing() async throws {
+        guard isConnected else {
+            throw WebSocketError.connectionFailed
+        }
+    }
+    
+    func disconnect(with code: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        if isConnected {
+            isConnected = false
+            delegate?.webSocketDidDisconnect(self, closeCode: code, reason: reason)
+        }
+    }
+    
+    func simulateMessage(_ message: WebSocketMessage) {
+        guard isConnected else { return }
+        delegate?.webSocket(self, didReceiveMessage: message)
+    }
+    
+    func simulateError(_ error: Error) {
+        guard isConnected else { return }
+        delegate?.webSocket(self, didFailWithError: error)
+    }
+}
+
+@MainActor
+class MockWebSocketFactory: WebSocketFactory {
+    private(set) var createdWebSockets: [MockWebSocket] = []
+    
+    func createWebSocket() -> WebSocketProtocol {
+        let webSocket = MockWebSocket()
+        createdWebSockets.append(webSocket)
+        return webSocket
+    }
+    
+    var lastCreatedWebSocket: MockWebSocket? {
+        createdWebSockets.last
+    }
+}
+
 @Suite("BufferWebSocketClient Tests", .tags(.critical, .websocket))
 @MainActor
 struct BufferWebSocketClientTests {
@@ -270,8 +342,7 @@ private func saveTestServerConfig() {
     let config = ServerConfig(
         host: "localhost",
         port: 8888,
-        useSSL: false,
-        username: nil,
+        name: nil,
         password: nil
     )
     

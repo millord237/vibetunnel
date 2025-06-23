@@ -492,7 +492,7 @@ export class VibeTunnelApp extends LitElement {
             `
           )
         : html`
-            <div class="max-w-4xl mx-auto">
+            <div>
               <app-header
                 .sessions=${this.sessions}
                 .hideExited=${this.hideExited}
