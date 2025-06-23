@@ -411,6 +411,12 @@ export class PtyManager extends EventEmitter {
    * Monitor stdin file for input data using Unix socket for lowest latency
    */
   private monitorStdinFile(session: PtySession): void {
+    // Skip socket creation in test environments to avoid path length issues
+    if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+      logger.debug(`Skipping input socket creation for session ${session.id} in test environment`);
+      return;
+    }
+
     // Create Unix domain socket for fast IPC
     const socketPath = path.join(session.controlDir, 'input.sock');
 
