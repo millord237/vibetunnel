@@ -8,51 +8,57 @@ import UIKit
 enum Theme {
     // MARK: - Colors
 
-    /// Color palette for the app.
+    /// Color palette for the app with automatic light/dark mode support.
     enum Colors {
-        // Terminal-inspired colors
-        static let terminalBackground = Color(hex: "0A0E14")
-        static let terminalForeground = Color(hex: "B3B1AD")
-        static let terminalSelection = Color(hex: "273747")
-
-        // Accent colors
+        // Background colors
+        static let terminalBackground = Color(light: Color(hex: "FFFFFF"), dark: Color(hex: "0A0E14"))
+        static let cardBackground = Color(light: Color(hex: "F8F9FA"), dark: Color(hex: "0D1117"))
+        static let headerBackground = Color(light: Color(hex: "FFFFFF"), dark: Color(hex: "010409"))
+        
+        // Border colors
+        static let cardBorder = Color(light: Color(hex: "E1E4E8"), dark: Color(hex: "1C2128"))
+        
+        // Text colors
+        static let terminalForeground = Color(light: Color(hex: "24292E"), dark: Color(hex: "B3B1AD"))
+        
+        // Accent colors (same for both modes)
         static let primaryAccent = Color(hex: "00FF88") // Green accent matching web
         static let secondaryAccent = Color(hex: "59C2FF")
         static let successAccent = Color(hex: "AAD94C")
         static let warningAccent = Color(hex: "FFB454")
         static let errorAccent = Color(hex: "F07178")
-
-        // UI colors
-        static let cardBackground = Color(hex: "0D1117")
-        static let cardBorder = Color(hex: "1C2128")
-        static let headerBackground = Color(hex: "010409")
-        static let overlayBackground = Color.black.opacity(0.7)
+        
+        // Selection colors
+        static let terminalSelection = Color(light: Color(hex: "E1E4E8"), dark: Color(hex: "273747"))
+        
+        // Overlay colors
+        static let overlayBackground = Color(light: Color.black.opacity(0.5), dark: Color.black.opacity(0.7))
 
         // Additional UI colors for FileBrowser
         static let terminalAccent = primaryAccent
-        static let terminalGray = Color(hex: "8B949E")
-        static let terminalDarkGray = Color(hex: "161B22")
-        static let terminalWhite = Color.white
+        static let terminalGray = Color(light: Color(hex: "586069"), dark: Color(hex: "8B949E"))
+        static let terminalDarkGray = Color(light: Color(hex: "F6F8FA"), dark: Color(hex: "161B22"))
+        static let terminalWhite = Color(light: Color(hex: "000000"), dark: Color.white)
 
-        // Terminal ANSI colors
-        static let ansiBlack = Color(hex: "01060E")
-        static let ansiRed = Color(hex: "EA6C73")
-        static let ansiGreen = Color(hex: "91B362")
-        static let ansiYellow = Color(hex: "F9AF4F")
-        static let ansiBlue = Color(hex: "53BDFA")
-        static let ansiMagenta = Color(hex: "FAE994")
-        static let ansiCyan = Color(hex: "90E1C6")
-        static let ansiWhite = Color(hex: "C7C7C7")
+        // Terminal ANSI colors - using slightly adjusted colors for light mode
+        static let ansiBlack = Color(light: Color(hex: "24292E"), dark: Color(hex: "01060E"))
+        static let ansiRed = Color(light: Color(hex: "D73A49"), dark: Color(hex: "EA6C73"))
+        static let ansiGreen = Color(light: Color(hex: "28A745"), dark: Color(hex: "91B362"))
+        static let ansiYellow = Color(light: Color(hex: "DBAB09"), dark: Color(hex: "F9AF4F"))
+        static let ansiBlue = Color(light: Color(hex: "0366D6"), dark: Color(hex: "53BDFA"))
+        static let ansiMagenta = Color(light: Color(hex: "6F42C1"), dark: Color(hex: "FAE994"))
+        static let ansiCyan = Color(light: Color(hex: "0598BC"), dark: Color(hex: "90E1C6"))
+        static let ansiWhite = Color(light: Color(hex: "586069"), dark: Color(hex: "C7C7C7"))
 
         // Bright ANSI colors
-        static let ansiBrightBlack = Color(hex: "686868")
-        static let ansiBrightRed = Color(hex: "F07178")
-        static let ansiBrightGreen = Color(hex: "C2D94C")
-        static let ansiBrightYellow = Color(hex: "FFB454")
-        static let ansiBrightBlue = Color(hex: "59C2FF")
-        static let ansiBrightMagenta = Color(hex: "FFEE99")
-        static let ansiBrightCyan = Color(hex: "95E6CB")
-        static let ansiBrightWhite = Color(hex: "FFFFFF")
+        static let ansiBrightBlack = Color(light: Color(hex: "959DA5"), dark: Color(hex: "686868"))
+        static let ansiBrightRed = Color(light: Color(hex: "CB2431"), dark: Color(hex: "F07178"))
+        static let ansiBrightGreen = Color(light: Color(hex: "22863A"), dark: Color(hex: "C2D94C"))
+        static let ansiBrightYellow = Color(light: Color(hex: "B08800"), dark: Color(hex: "FFB454"))
+        static let ansiBrightBlue = Color(light: Color(hex: "005CC5"), dark: Color(hex: "59C2FF"))
+        static let ansiBrightMagenta = Color(light: Color(hex: "5A32A3"), dark: Color(hex: "FFEE99"))
+        static let ansiBrightCyan = Color(light: Color(hex: "0598BC"), dark: Color(hex: "95E6CB"))
+        static let ansiBrightWhite = Color(light: Color(hex: "24292E"), dark: Color(hex: "FFFFFF"))
     }
 
     // MARK: - Typography
@@ -107,21 +113,21 @@ enum Theme {
     // MARK: - Shadows
 
     enum CardShadow {
-        static let color = Color.black.opacity(0.3)
+        static let color = Color(light: Color.black.opacity(0.1), dark: Color.black.opacity(0.3))
         static let radius: CGFloat = 8
         static let xOffset: CGFloat = 0
         static let yOffset: CGFloat = 2
     }
 
     enum ButtonShadow {
-        static let color = Color.black.opacity(0.2)
+        static let color = Color(light: Color.black.opacity(0.08), dark: Color.black.opacity(0.2))
         static let radius: CGFloat = 4
         static let xOffset: CGFloat = 0
         static let yOffset: CGFloat = 1
     }
 }
 
-// MARK: - Color Extension
+// MARK: - Color Extensions
 
 extension Color {
     init(hex: String) {
@@ -147,6 +153,18 @@ extension Color {
             blue: Double(blue) / 255,
             opacity: Double(alpha) / 255
         )
+    }
+    
+    /// Creates a color that automatically adapts to light/dark mode
+    init(light: Color, dark: Color) {
+        self.init(UIColor { traitCollection in
+            switch traitCollection.userInterfaceStyle {
+            case .dark:
+                return UIColor(dark)
+            default:
+                return UIColor(light)
+            }
+        })
     }
 }
 

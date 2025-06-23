@@ -148,7 +148,7 @@ struct SessionListView: View {
                     }
                 }
             }
-            .sheet(item: $selectedSession) { session in
+            .fullScreenCover(item: $selectedSession) { session in
                 TerminalView(session: session)
             }
             .sheet(isPresented: $showingFileBrowser) {
@@ -187,7 +187,6 @@ struct SessionListView: View {
                 viewModel.stopAutoRefresh()
             }
         }
-        .preferredColorScheme(.dark)
         .onChange(of: navigationManager.shouldNavigateToSession) { _, shouldNavigate in
             if shouldNavigate,
                let sessionId = navigationManager.selectedSessionId,

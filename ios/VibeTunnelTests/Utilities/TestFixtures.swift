@@ -18,7 +18,7 @@ enum TestFixtures {
 
     static let validSession = Session(
         id: "test-session-123",
-        command: "/bin/bash",
+        command: ["/bin/bash"],
         workingDir: "/Users/test",
         name: "Test Session",
         status: .running,
@@ -26,14 +26,15 @@ enum TestFixtures {
         startedAt: "2024-01-01T10:00:00Z",
         lastModified: "2024-01-01T10:05:00Z",
         pid: 12_345,
-        waiting: false,
-        width: 80,
-        height: 24
+        source: nil,
+        remoteId: nil,
+        remoteName: nil,
+        remoteUrl: nil
     )
 
     static let exitedSession = Session(
         id: "exited-session-456",
-        command: "/usr/bin/echo",
+        command: ["/usr/bin/echo"],
         workingDir: "/tmp",
         name: "Exited Session",
         status: .exited,
@@ -41,38 +42,33 @@ enum TestFixtures {
         startedAt: "2024-01-01T09:00:00Z",
         lastModified: "2024-01-01T09:00:05Z",
         pid: nil,
-        waiting: false,
-        width: 80,
-        height: 24
+        source: nil,
+        remoteId: nil,
+        remoteName: nil,
+        remoteUrl: nil
     )
 
     static let sessionsJSON = """
     [
         {
             "id": "test-session-123",
-            "command": "/bin/bash",
+            "command": ["/bin/bash"],
             "workingDir": "/Users/test",
             "name": "Test Session",
             "status": "running",
             "startedAt": "2024-01-01T10:00:00Z",
             "lastModified": "2024-01-01T10:05:00Z",
-            "pid": 12345,
-            "waiting": false,
-            "width": 80,
-            "height": 24
+            "pid": 12345
         },
         {
             "id": "exited-session-456",
-            "command": "/usr/bin/echo",
+            "command": ["/usr/bin/echo"],
             "workingDir": "/tmp",
             "name": "Exited Session",
             "status": "exited",
             "exitCode": 0,
             "startedAt": "2024-01-01T09:00:00Z",
-            "lastModified": "2024-01-01T09:00:05Z",
-            "waiting": false,
-            "width": 80,
-            "height": 24
+            "lastModified": "2024-01-01T09:00:05Z"
         }
     ]
     """

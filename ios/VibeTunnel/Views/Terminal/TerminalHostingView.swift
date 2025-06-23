@@ -178,6 +178,8 @@ struct TerminalHostingView: UIViewRepresentable {
         /// Update terminal buffer from binary buffer data using optimized ANSI sequences
         func updateBuffer(from snapshot: BufferSnapshot) {
             guard let terminal else { return }
+            
+            print("[Terminal] updateBuffer called with snapshot: \(snapshot.cols)x\(snapshot.rows), cursor: (\(snapshot.cursorX),\(snapshot.cursorY))")
 
             // Update terminal dimensions if needed
             let currentCols = terminal.getTerminal().cols
@@ -201,11 +203,13 @@ struct TerminalHostingView: UIViewRepresentable {
             let ansiData: String
             if isFirstUpdate || previousSnapshot == nil || viewportChanged {
                 // Full redraw needed
-                ansiData = convertBufferToOptimizedANSI(snapshot)
+                ansiData = convertBufferToOptimizedANSI(snapshot, clearScreen: isFirstUpdate)
                 isFirstUpdate = false
+                print("[Terminal] Full redraw performed")
             } else {
                 // Incremental update
                 ansiData = generateIncrementalUpdate(from: previousSnapshot!, to: snapshot)
+                print("[Terminal] Incremental update performed")
             }
 
             // Store current snapshot for next update
@@ -244,11 +248,16 @@ struct TerminalHostingView: UIViewRepresentable {
             }
         }
 
-        private func convertBufferToOptimizedANSI(_ snapshot: BufferSnapshot) -> String {
+        private func convertBufferToOptimizedANSI(_ snapshot: BufferSnapshot, clearScreen: Bool = false) -> String {
             var output = ""
 
-            // Clear screen and reset cursor
-            output += "\u{001B}[2J\u{001B}[H"
+            if clearScreen {
+                // Clear screen and reset cursor for first update
+                output += "\u{001B}[2J\u{001B}[H"
+            } else {
+                // Just reset cursor to home position
+                output += "\u{001B}[H"
+            }
 
             // Track current attributes to minimize escape sequences
             var currentFg: Int?
