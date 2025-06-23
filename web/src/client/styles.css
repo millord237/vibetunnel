@@ -104,6 +104,32 @@
   .form-label {
     @apply text-dark-text-muted text-sm font-medium mb-2 flex items-center gap-2;
   }
+
+  /* Responsive session flex layout */
+  .session-flex-responsive {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0 0.5rem;
+    justify-content: flex-start;
+  }
+
+  .session-flex-responsive > * {
+    flex: 1 1 auto;
+    min-width: 300px;
+    max-width: 500px;
+  }
+
+  @media (max-width: 420px) {
+    .session-flex-responsive {
+      padding: 0 0.25rem;
+    }
+
+    .session-flex-responsive > * {
+      min-width: 100%;
+      max-width: 100%;
+    }
+  }
 }
 
 /* Fira Code Variable Font */
@@ -767,25 +793,31 @@ body {
   /* View Transitions for Create Session */
   ::view-transition-old(create-session-button),
   ::view-transition-new(create-session-button) {
-    animation-duration: 0.15s;
+    animation-duration: 0.25s;
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   ::view-transition-old(create-session-modal),
   ::view-transition-new(create-session-modal) {
-    animation-duration: 0.15s;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    /* Handled by individual animations below */
+    mix-blend-mode: normal;
+    z-index: 1000;
   }
 
-  /* Custom morph animation from button to modal */
+  /* Custom morph animation from button to modal with spring effect */
   @keyframes expand-from-button {
-    from {
+    0% {
       transform: scale(0)
         translate(calc(var(--vt-button-x) - 50vw), calc(var(--vt-button-y) - 50vh));
       opacity: 0;
       border-radius: 0.5rem;
     }
-    to {
+    85% {
+      transform: scale(1.03) translate(0, 0);
+      opacity: 1;
+      border-radius: 0.75rem;
+    }
+    100% {
       transform: scale(1) translate(0, 0);
       opacity: 1;
       border-radius: 0.75rem;
@@ -793,24 +825,26 @@ body {
   }
 
   @keyframes shrink-to-button {
-    from {
+    0% {
       transform: scale(1) translate(0, 0);
       opacity: 1;
+      border-radius: 0.75rem;
     }
-    to {
+    100% {
       transform: scale(0)
         translate(calc(var(--vt-button-x) - 50vw), calc(var(--vt-button-y) - 50vh));
       opacity: 0;
+      border-radius: 0.5rem;
     }
   }
 
   /* Apply the custom animations */
   ::view-transition-new(create-session-modal) {
-    animation: expand-from-button 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: expand-from-button 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   ::view-transition-old(create-session-modal) {
-    animation: shrink-to-button 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: shrink-to-button 0.25s cubic-bezier(0.4, 0, 0.6, 1);
   }
 
   /* Hide button during forward transition */
@@ -830,7 +864,12 @@ body {
 
   /* Ensure smooth backdrop fade */
   .modal-backdrop {
-    animation: fade-in 0.15s ease-out;
+    animation: fade-in 0.3s ease-out;
+  }
+
+  /* During close transition, fade backdrop out faster */
+  ::view-transition-old(create-session-modal) ~ .modal-backdrop {
+    animation: fade-out 0.25s ease-out;
   }
 
   @keyframes fade-in {
