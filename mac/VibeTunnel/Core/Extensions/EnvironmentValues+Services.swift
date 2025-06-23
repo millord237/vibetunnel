@@ -53,7 +53,7 @@ extension View {
         systemPermissionManager: SystemPermissionManager? = nil,
         terminalLauncher: TerminalLauncher? = nil
     )
-        -> some View
+    -> some View
     {
         self
             .environment(\.serverManager, serverManager ?? ServerManager.shared)

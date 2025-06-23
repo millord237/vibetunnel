@@ -21,81 +21,81 @@ struct VibeTunnelApp: App {
 
     var body: some Scene {
         #if os(macOS)
-            // Hidden WindowGroup to make Settings work in MenuBarExtra-only apps
-            // This is a workaround for FB10184971
-            WindowGroup("HiddenWindow") {
-                HiddenWindowView()
-            }
-            .windowResizability(.contentSize)
-            .defaultSize(width: 1, height: 1)
-            .windowStyle(.hiddenTitleBar)
+        // Hidden WindowGroup to make Settings work in MenuBarExtra-only apps
+        // This is a workaround for FB10184971
+        WindowGroup("HiddenWindow") {
+            HiddenWindowView()
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 1, height: 1)
+        .windowStyle(.hiddenTitleBar)
 
-            // Welcome Window
-            WindowGroup("Welcome", id: "welcome") {
-                WelcomeView()
+        // Welcome Window
+        WindowGroup("Welcome", id: "welcome") {
+            WelcomeView()
+                .environment(sessionMonitor)
+                .environment(serverManager)
+                .environment(ngrokService)
+                .environment(permissionManager)
+                .environment(terminalLauncher)
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 580, height: 480)
+        .windowStyle(.hiddenTitleBar)
+
+        // Session Detail Window
+        WindowGroup("Session Details", id: "session-detail", for: String.self) { $sessionId in
+            if let sessionId,
+               let session = sessionMonitor.sessions[sessionId]
+            {
+                SessionDetailView(session: session)
                     .environment(sessionMonitor)
                     .environment(serverManager)
                     .environment(ngrokService)
                     .environment(permissionManager)
                     .environment(terminalLauncher)
+            } else {
+                Text("Session not found")
+                    .frame(width: 400, height: 300)
             }
-            .windowResizability(.contentSize)
-            .defaultSize(width: 580, height: 480)
-            .windowStyle(.hiddenTitleBar)
+        }
+        .windowResizability(.contentSize)
 
-            // Session Detail Window
-            WindowGroup("Session Details", id: "session-detail", for: String.self) { $sessionId in
-                if let sessionId,
-                   let session = sessionMonitor.sessions[sessionId]
-                {
-                    SessionDetailView(session: session)
-                        .environment(sessionMonitor)
-                        .environment(serverManager)
-                        .environment(ngrokService)
-                        .environment(permissionManager)
-                        .environment(terminalLauncher)
-                } else {
-                    Text("Session not found")
-                        .frame(width: 400, height: 300)
-                }
-            }
-            .windowResizability(.contentSize)
-
-            Settings {
-                SettingsView()
-                    .environment(sessionMonitor)
-                    .environment(serverManager)
-                    .environment(ngrokService)
-                    .environment(permissionManager)
-                    .environment(terminalLauncher)
-            }
-            .commands {
-                CommandGroup(after: .appInfo) {
-                    Button("About VibeTunnel") {
-                        SettingsOpener.openSettings()
-                        // Navigate to About tab after settings opens
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(100))
-                            NotificationCenter.default.post(
-                                name: .openSettingsTab,
-                                object: SettingsTab.about
-                            )
-                        }
+        Settings {
+            SettingsView()
+                .environment(sessionMonitor)
+                .environment(serverManager)
+                .environment(ngrokService)
+                .environment(permissionManager)
+                .environment(terminalLauncher)
+        }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("About VibeTunnel") {
+                    SettingsOpener.openSettings()
+                    // Navigate to About tab after settings opens
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(100))
+                        NotificationCenter.default.post(
+                            name: .openSettingsTab,
+                            object: SettingsTab.about
+                        )
                     }
                 }
             }
+        }
 
-            MenuBarExtra {
-                MenuBarView()
-                    .environment(sessionMonitor)
-                    .environment(serverManager)
-                    .environment(ngrokService)
-                    .environment(permissionManager)
-                    .environment(terminalLauncher)
-            } label: {
-                Image("menubar")
-                    .renderingMode(.template)
-            }
+        MenuBarExtra {
+            MenuBarView()
+                .environment(sessionMonitor)
+                .environment(serverManager)
+                .environment(ngrokService)
+                .environment(permissionManager)
+                .environment(terminalLauncher)
+        } label: {
+            Image("menubar")
+                .renderingMode(.template)
+        }
         #endif
     }
 }
@@ -121,25 +121,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             NSClassFromString("XCTestCase") != nil
         let isRunningInPreview = processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
         #if DEBUG
-            let isRunningInDebug = true
+        let isRunningInDebug = true
         #else
-            let isRunningInDebug = processInfo.environment["DYLD_INSERT_LIBRARIES"]?
-                .contains("libMainThreadChecker.dylib") ?? false ||
-                processInfo.environment["__XCODE_BUILT_PRODUCTS_DIR_PATHS"] != nil
+        let isRunningInDebug = processInfo.environment["DYLD_INSERT_LIBRARIES"]?
+            .contains("libMainThreadChecker.dylib") ?? false ||
+            processInfo.environment["__XCODE_BUILT_PRODUCTS_DIR_PATHS"] != nil
         #endif
 
         // Handle single instance check before doing anything else
         #if DEBUG
         // Skip single instance check in debug builds
         #else
-            if !isRunningInPreview && !isRunningInTests && !isRunningInDebug {
-                handleSingleInstanceCheck()
-                registerForDistributedNotifications()
+        if !isRunningInPreview && !isRunningInTests && !isRunningInDebug {
+            handleSingleInstanceCheck()
+            registerForDistributedNotifications()
 
-                // Check if app needs to be moved to Applications folder
-                let applicationMover = ApplicationMover()
-                applicationMover.checkAndOfferToMoveToApplications()
-            }
+            // Check if app needs to be moved to Applications folder
+            let applicationMover = ApplicationMover()
+            applicationMover.checkAndOfferToMoveToApplications()
+        }
         #endif
 
         // Initialize Sparkle updater manager
@@ -340,11 +340,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             NSClassFromString("XCTestCase") != nil
         let isRunningInPreview = processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
         #if DEBUG
-            let isRunningInDebug = true
+        let isRunningInDebug = true
         #else
-            let isRunningInDebug = processInfo.environment["DYLD_INSERT_LIBRARIES"]?
-                .contains("libMainThreadChecker.dylib") ?? false ||
-                processInfo.environment["__XCODE_BUILT_PRODUCTS_DIR_PATHS"] != nil
+        let isRunningInDebug = processInfo.environment["DYLD_INSERT_LIBRARIES"]?
+            .contains("libMainThreadChecker.dylib") ?? false ||
+            processInfo.environment["__XCODE_BUILT_PRODUCTS_DIR_PATHS"] != nil
         #endif
 
         // Skip cleanup during tests
@@ -374,13 +374,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         #if DEBUG
         // Skip removing observer in debug builds
         #else
-            if !isRunningInPreview && !isRunningInTests && !isRunningInDebug {
-                DistributedNotificationCenter.default().removeObserver(
-                    self,
-                    name: Self.showSettingsNotification,
-                    object: nil
-                )
-            }
+        if !isRunningInPreview && !isRunningInTests && !isRunningInDebug {
+            DistributedNotificationCenter.default().removeObserver(
+                self,
+                name: Self.showSettingsNotification,
+                object: nil
+            )
+        }
         #endif
 
         // Remove update check notification observer

@@ -62,7 +62,7 @@ class ServerManager {
         get {
             let mode = DashboardAccessMode(rawValue: UserDefaults.standard.string(forKey: "dashboardAccessMode") ?? ""
             ) ??
-                .localhost
+            .localhost
             return mode.bindAddress
         }
         set {

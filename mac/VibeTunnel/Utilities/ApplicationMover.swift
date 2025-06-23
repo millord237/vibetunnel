@@ -172,8 +172,8 @@ final class ApplicationMover {
             logger.debug("ApplicationMover: hdiutil returned \(data.count) bytes")
 
             guard let plist = try PropertyListSerialization
-                .propertyList(from: data, options: [], format: nil) as? [String: Any],
-                let images = plist["images"] as? [[String: Any]]
+                    .propertyList(from: data, options: [], format: nil) as? [String: Any],
+                  let images = plist["images"] as? [[String: Any]]
             else {
                 logger.debug("ApplicationMover: No disk images found in hdiutil output")
                 return nil

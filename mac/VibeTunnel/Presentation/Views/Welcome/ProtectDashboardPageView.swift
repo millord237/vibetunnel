@@ -124,7 +124,7 @@ struct ProtectDashboardPageView: View {
 
             // When password is set for the first time, automatically switch to network mode
             let currentMode = DashboardAccessMode(rawValue: UserDefaults.standard
-                .string(forKey: "dashboardAccessMode") ?? ""
+                                                    .string(forKey: "dashboardAccessMode") ?? ""
             ) ?? .localhost
             if currentMode == .localhost {
                 UserDefaults.standard.set(DashboardAccessMode.network.rawValue, forKey: "dashboardAccessMode")

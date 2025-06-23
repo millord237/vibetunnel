@@ -171,7 +171,7 @@ struct GlowingAppIcon: View {
             enableInteraction: true,
             glowIntensity: 0.3
         ) {
-            print("Icon clicked!")
+            // Icon clicked - action handled here
         }
     }
     .padding()

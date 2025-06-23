@@ -134,7 +134,7 @@ actor TerminalManager {
         seconds: TimeInterval,
         operation: @escaping @Sendable () async throws -> T
     )
-        async throws -> T
+    async throws -> T
     {
         try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask {

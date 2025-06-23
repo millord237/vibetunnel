@@ -480,7 +480,7 @@ final class BunServer {
         seconds: TimeInterval,
         operation: @escaping @Sendable () async -> T
     )
-        async -> T?
+    async -> T?
     {
         await withTaskGroup(of: T?.self) { group in
             group.addTask {

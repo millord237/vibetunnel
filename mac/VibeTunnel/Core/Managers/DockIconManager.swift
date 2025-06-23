@@ -56,7 +56,8 @@ final class DockIconManager: NSObject, @unchecked Sendable {
 
             // Log window details for debugging
             // for window in visibleWindows {
-            //     logger.debug("  Visible window: \(window.title.isEmpty ? "(untitled)" : window.title, privacy: .public)")
+            //     logger.debug("  Visible window: \(window.title.isEmpty ? "(untitled)" : window.title, privacy:
+            //     .public)")
             // }
 
             // Show dock if user wants it shown OR if any windows are open

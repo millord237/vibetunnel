@@ -150,7 +150,7 @@ final class WindowTracker {
         tabReference: String?,
         tabID: String?
     )
-        -> WindowInfo?
+    -> WindowInfo?
     {
         let allWindows = Self.getAllTerminalWindows()
 

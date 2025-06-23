@@ -39,7 +39,7 @@ final class SparkleUserDriverDelegate: NSObject, @preconcurrency SPUStandardUser
         _ update: SUAppcastItem,
         andInImmediateFocus immediateFocus: Bool
     )
-        -> Bool
+    -> Bool
     {
         logger.info("Should handle showing update: \(update.displayVersionString), immediate: \(immediateFocus)")
 
@@ -211,7 +211,7 @@ final class SparkleUserDriverDelegate: NSObject, @preconcurrency SPUStandardUser
 
         case "LATER_ACTION":
             logger.info("User tapped 'Remind Me Later' in notification")
-            // The next reminder is already scheduled
+        // The next reminder is already scheduled
 
         default:
             break
