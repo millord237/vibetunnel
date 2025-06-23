@@ -163,7 +163,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         // Initialize dock icon visibility through DockIconManager
-        DockIconManager.initialize()
         DockIconManager.shared.updateDockVisibility()
 
         // Show welcome screen when version changes
