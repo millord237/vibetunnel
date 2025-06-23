@@ -77,3 +77,91 @@ export type SpecialKey =
   | 'enter'
   | 'ctrl_enter'
   | 'shift_enter';
+
+/**
+ * Push notification subscription
+ */
+export interface PushSubscription {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}
+
+/**
+ * Stored push subscription with metadata
+ */
+export interface StoredPushSubscription extends PushSubscription {
+  id: string;
+  deviceId: string;
+  userAgent?: string;
+  createdAt: string;
+  lastUsed: string;
+}
+
+/**
+ * Push notification preferences
+ */
+export interface PushNotificationPreferences {
+  enabled: boolean;
+  sessionExit: boolean;
+  sessionStart: boolean;
+  sessionError: boolean;
+  systemAlerts: boolean;
+  soundEnabled: boolean;
+  vibrationEnabled: boolean;
+}
+
+/**
+ * Push notification types
+ */
+export type PushNotificationType =
+  | 'session_exit'
+  | 'session_start'
+  | 'session_error'
+  | 'system_alert'
+  | 'test';
+
+/**
+ * Push notification data
+ */
+export interface PushNotificationData {
+  type: PushNotificationType;
+  title: string;
+  body: string;
+  icon?: string;
+  badge?: string;
+  tag?: string;
+  data?: Record<string, unknown>;
+  actions?: Array<{
+    action: string;
+    title: string;
+    icon?: string;
+  }>;
+  requireInteraction?: boolean;
+  silent?: boolean;
+}
+
+/**
+ * Push notification history entry
+ */
+export interface PushNotificationHistoryEntry {
+  id: string;
+  timestamp: string;
+  type: PushNotificationType;
+  title: string;
+  body: string;
+  success: boolean;
+  error?: string;
+  deviceId?: string;
+}
+
+/**
+ * Device registration for push notifications
+ */
+export interface PushDeviceRegistration {
+  deviceId: string;
+  subscription: PushSubscription;
+  userAgent?: string;
+}

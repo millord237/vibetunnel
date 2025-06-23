@@ -34,10 +34,11 @@
     "express": "^4.19.2",
     "lit": "^3.3.0",
     "mime-types": "^3.0.1",
+    "monaco-editor": "^0.52.2",
     "postject": "^1.0.0-alpha.6",
     "signal-exit": "^4.1.0",
-    "ws": "^8.18.2",
-    "monaco-editor": "^0.52.2"
+    "web-push": "^3.6.7",
+    "ws": "^8.18.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
@@ -47,6 +48,7 @@
     "@types/node": "^24.0.3",
     "@types/supertest": "^6.0.3",
     "@types/uuid": "^10.0.0",
+    "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.34.1",
     "@typescript-eslint/parser": "^8.34.1",

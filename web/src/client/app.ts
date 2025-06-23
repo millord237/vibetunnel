@@ -19,6 +19,9 @@ import './components/session-view.js';
 import './components/session-card.js';
 import './components/file-browser.js';
 import './components/log-viewer.js';
+import './components/notification-permission-banner.js';
+import './components/notification-settings.js';
+import './components/notification-status.js';
 
 import type { SessionCard } from './components/session-card.js';
 
@@ -40,6 +43,7 @@ export class VibeTunnelApp extends LitElement {
   @state() private hideExited = this.loadHideExitedState();
   @state() private showCreateModal = false;
   @state() private showFileBrowser = false;
+  @state() private showNotificationSettings = false;
   private initialLoadComplete = false;
 
   private hotReloadWs: WebSocket | null = null;
@@ -53,6 +57,7 @@ export class VibeTunnelApp extends LitElement {
     this.startAutoRefresh();
     this.setupRouting();
     this.setupKeyboardShortcuts();
+    this.setupNotificationHandlers();
   }
 
   disconnectedCallback() {
@@ -430,6 +435,28 @@ export class VibeTunnelApp extends LitElement {
     }
   }
 
+  private setupNotificationHandlers() {
+    // Listen for notification settings events
+    this.addEventListener('show-notification-settings', this.handleShowNotificationSettings);
+  }
+
+  private handleShowNotificationSettings = () => {
+    this.showNotificationSettings = true;
+  };
+
+  private handleCloseNotificationSettings = () => {
+    this.showNotificationSettings = false;
+  };
+
+  private handleNotificationEnabled = (e: CustomEvent) => {
+    const { success, reason } = e.detail;
+    if (success) {
+      this.showSuccess('Notifications enabled successfully');
+    } else {
+      this.showError(`Failed to enable notifications: ${reason || 'Unknown error'}`);
+    }
+  };
+
   render() {
     return html`
       <!-- Error notification overlay -->
@@ -501,6 +528,7 @@ export class VibeTunnelApp extends LitElement {
                 @kill-all-sessions=${this.handleKillAll}
                 @clean-exited-sessions=${this.handleCleanExited}
                 @open-file-browser=${() => (this.showFileBrowser = true)}
+                @open-notification-settings=${this.handleShowNotificationSettings}
               ></app-header>
               <session-list
                 .sessions=${this.sessions}
@@ -526,6 +554,19 @@ export class VibeTunnelApp extends LitElement {
         .session=${null}
         @browser-cancel=${() => (this.showFileBrowser = false)}
       ></file-browser>
+
+      <!-- Notification Permission Banner -->
+      <notification-permission-banner></notification-permission-banner>
+
+      <!-- Notification Settings Modal -->
+      <notification-settings
+        .visible=${this.showNotificationSettings}
+        @close=${this.handleCloseNotificationSettings}
+        @notifications-enabled=${() => this.showSuccess('Notifications enabled')}
+        @notifications-disabled=${() => this.showSuccess('Notifications disabled')}
+        @success=${(e: CustomEvent) => this.showSuccess(e.detail)}
+        @error=${(e: CustomEvent) => this.showError(e.detail)}
+      ></notification-settings>
 
       <!-- Version and logs link in bottom right -->
       <div class="fixed bottom-4 right-4 text-dark-text-secondary text-xs font-mono">

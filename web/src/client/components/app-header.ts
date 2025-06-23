@@ -15,6 +15,7 @@ import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from './session-list.js';
 import './terminal-icon.js';
+import './notification-status.js';
 
 @customElement('app-header')
 export class AppHeader extends LitElement {
@@ -154,6 +155,10 @@ export class AppHeader extends LitElement {
                   Browse
                 </span>
               </button>
+              <notification-status
+                @open-settings=${() =>
+                  this.dispatchEvent(new CustomEvent('open-notification-settings'))}
+              ></notification-status>
               <button
                 class="btn-primary font-mono text-xs px-4 py-2 vt-create-button"
                 @click=${this.handleCreateSession}
@@ -238,6 +243,10 @@ export class AppHeader extends LitElement {
                   Browse
                 </span>
               </button>
+              <notification-status
+                @open-settings=${() =>
+                  this.dispatchEvent(new CustomEvent('open-notification-settings'))}
+              ></notification-status>
               <button
                 class="btn-primary font-mono text-xs px-4 py-2 vt-create-button"
                 @click=${this.handleCreateSession}

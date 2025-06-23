@@ -15,7 +15,11 @@ import { createSessionRoutes } from './routes/sessions.js';
 import { createRemoteRoutes } from './routes/remotes.js';
 import { createFilesystemRoutes } from './routes/filesystem.js';
 import { createLogRoutes } from './routes/logs.js';
+import { createPushRoutes } from './routes/push.js';
 import { ControlDirWatcher } from './services/control-dir-watcher.js';
+import { VapidManager } from './utils/vapid-manager.js';
+import { PushNotificationService } from './services/push-notification-service.js';
+import { BellEventHandler } from './services/bell-event-handler.js';
 import { BufferAggregator } from './services/buffer-aggregator.js';
 import { ActivityMonitor } from './services/activity-monitor.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -48,6 +52,11 @@ interface Config {
   showHelp: boolean;
   showVersion: boolean;
   debug: boolean;
+  // Push notification configuration
+  pushEnabled: boolean;
+  vapidEmail: string | null;
+  generateVapidKeys: boolean;
+  bellNotificationsEnabled: boolean;
 }
 
 // Show help message
@@ -65,6 +74,12 @@ Options:
   --password <string>   Basic auth password (or VIBETUNNEL_PASSWORD env var)
   --debug               Enable debug logging
 
+Push Notification Options:
+  --push-enabled        Enable push notifications (default: enabled)
+  --push-disabled       Disable push notifications
+  --vapid-email <email> Contact email for VAPID (or PUSH_CONTACT_EMAIL env var)
+  --generate-vapid-keys Generate new VAPID keys if none exist
+
 HQ Mode Options:
   --hq                  Run as HQ (headquarters) server
 
@@ -80,6 +95,7 @@ Environment Variables:
   VIBETUNNEL_USERNAME   Default username if --username not specified
   VIBETUNNEL_PASSWORD   Default password if --password not specified
   VIBETUNNEL_CONTROL_DIR Control directory for session data
+  PUSH_CONTACT_EMAIL    Contact email for VAPID configuration
 
 Examples:
   # Run a simple server with authentication
@@ -112,6 +128,11 @@ function parseArgs(): Config {
     showHelp: false,
     showVersion: false,
     debug: false,
+    // Push notification configuration
+    pushEnabled: true, // Enable by default with auto-generation
+    vapidEmail: null as string | null,
+    generateVapidKeys: true, // Generate keys automatically
+    bellNotificationsEnabled: true, // Enable bell notifications by default
   };
 
   // Check for help flag first
@@ -155,6 +176,15 @@ function parseArgs(): Config {
       config.allowInsecureHQ = true;
     } else if (args[i] === '--debug') {
       config.debug = true;
+    } else if (args[i] === '--push-enabled') {
+      config.pushEnabled = true;
+    } else if (args[i] === '--push-disabled') {
+      config.pushEnabled = false;
+    } else if (args[i] === '--vapid-email' && i + 1 < args.length) {
+      config.vapidEmail = args[i + 1];
+      i++; // Skip the email value in next iteration
+    } else if (args[i] === '--generate-vapid-keys') {
+      config.generateVapidKeys = true;
     } else if (args[i].startsWith('--')) {
       // Unknown argument
       logger.error(`Unknown argument: ${args[i]}`);
@@ -169,6 +199,11 @@ function parseArgs(): Config {
   }
   if (!config.basicAuthPassword && process.env.VIBETUNNEL_PASSWORD) {
     config.basicAuthPassword = process.env.VIBETUNNEL_PASSWORD;
+  }
+
+  // Check environment variables for push notifications
+  if (!config.vapidEmail && process.env.PUSH_CONTACT_EMAIL) {
+    config.vapidEmail = process.env.PUSH_CONTACT_EMAIL;
   }
 
   return config;
@@ -248,12 +283,13 @@ interface AppInstance {
   controlDirWatcher: ControlDirWatcher | null;
   bufferAggregator: BufferAggregator | null;
   activityMonitor: ActivityMonitor;
+  pushNotificationService: PushNotificationService | null;
 }
 
 // Track if app has been created
 let appCreated = false;
 
-export function createApp(): AppInstance {
+export async function createApp(): Promise<AppInstance> {
   // Prevent multiple app instances
   if (appCreated) {
     logger.error('App already created, preventing duplicate instance');
@@ -321,6 +357,44 @@ export function createApp(): AppInstance {
   const activityMonitor = new ActivityMonitor(CONTROL_DIR);
   logger.debug('Initialized activity monitor');
 
+  // Initialize push notification services
+  let vapidManager: VapidManager | null = null;
+  let pushNotificationService: PushNotificationService | null = null;
+  let bellEventHandler: BellEventHandler | null = null;
+
+  if (config.pushEnabled) {
+    try {
+      logger.log('Initializing push notification services');
+
+      // Initialize VAPID manager with auto-generation
+      vapidManager = new VapidManager();
+      await vapidManager.initialize({
+        contactEmail: config.vapidEmail || 'noreply@vibetunnel.local',
+        generateIfMissing: true, // Auto-generate keys if none exist
+      });
+
+      logger.log('VAPID keys initialized successfully');
+
+      // Initialize push notification service
+      pushNotificationService = new PushNotificationService(vapidManager);
+      await pushNotificationService.initialize();
+
+      // Initialize bell event handler
+      bellEventHandler = new BellEventHandler();
+      bellEventHandler.setPushNotificationService(pushNotificationService);
+
+      logger.log(chalk.green('Push notification services initialized'));
+    } catch (error) {
+      logger.error('Failed to initialize push notification services:', error);
+      logger.warn('Continuing without push notifications');
+      vapidManager = null;
+      pushNotificationService = null;
+      bellEventHandler = null;
+    }
+  } else {
+    logger.debug('Push notifications disabled');
+  }
+
   // Initialize HQ components
   let remoteRegistry: RemoteRegistry | null = null;
   let hqClient: HQClient | null = null;
@@ -381,6 +455,16 @@ export function createApp(): AppInstance {
     });
   });
 
+  // Connect bell event handler to PTY manager if push notifications are enabled
+  if (bellEventHandler) {
+    ptyManager.on('bell', (bellContext) => {
+      bellEventHandler.processBellEvent(bellContext).catch((error) => {
+        logger.error('Failed to process bell event:', error);
+      });
+    });
+    logger.debug('Connected bell event handler to PTY manager');
+  }
+
   // Mount routes
   app.use(
     '/api',
@@ -411,6 +495,19 @@ export function createApp(): AppInstance {
   // Mount log routes
   app.use('/api', createLogRoutes());
   logger.debug('Mounted log routes');
+
+  // Mount push notification routes
+  if (vapidManager) {
+    app.use(
+      '/api',
+      createPushRoutes({
+        vapidManager,
+        pushNotificationService,
+        bellEventHandler,
+      })
+    );
+    logger.debug('Mounted push notification routes');
+  }
 
   // WebSocket endpoint for buffer updates
   wss.on('connection', (ws, _req) => {
@@ -542,6 +639,7 @@ export function createApp(): AppInstance {
     controlDirWatcher,
     bufferAggregator,
     activityMonitor,
+    pushNotificationService,
   };
 }
 
@@ -549,7 +647,7 @@ export function createApp(): AppInstance {
 let serverStarted = false;
 
 // Export a function to start the server
-export function startVibeTunnelServer() {
+export async function startVibeTunnelServer() {
   // Initialize logger first (we'll set debug mode after parsing args)
   initLogger(false);
 
@@ -563,7 +661,7 @@ export function startVibeTunnelServer() {
 
   logger.debug('Creating VibeTunnel application instance');
   // Create and configure the app
-  const appInstance = createApp();
+  const appInstance = await createApp();
   const {
     startServer,
     server,
@@ -584,13 +682,27 @@ export function startVibeTunnelServer() {
   startServer();
 
   // Cleanup old terminals every 5 minutes
-  const _cleanupInterval = setInterval(
+  const _terminalCleanupInterval = setInterval(
     () => {
       terminalManager.cleanup(5 * 60 * 1000); // 5 minutes
     },
     5 * 60 * 1000
   );
   logger.debug('Started terminal cleanup interval (5 minutes)');
+
+  // Cleanup inactive push subscriptions every 30 minutes
+  let _subscriptionCleanupInterval: NodeJS.Timeout | null = null;
+  if (appInstance.pushNotificationService) {
+    _subscriptionCleanupInterval = setInterval(
+      () => {
+        appInstance.pushNotificationService!.cleanupInactiveSubscriptions().catch((error) => {
+          logger.error('Failed to cleanup inactive subscriptions:', error);
+        });
+      },
+      30 * 60 * 1000 // 30 minutes
+    );
+    logger.debug('Started subscription cleanup interval (30 minutes)');
+  }
 
   // Graceful shutdown
   let localShuttingDown = false;
@@ -606,6 +718,13 @@ export function startVibeTunnelServer() {
     logger.log(chalk.yellow('\nShutting down...'));
 
     try {
+      // Clear cleanup intervals
+      clearInterval(_terminalCleanupInterval);
+      if (_subscriptionCleanupInterval) {
+        clearInterval(_subscriptionCleanupInterval);
+      }
+      logger.debug('Cleared cleanup intervals');
+
       // Stop activity monitor
       activityMonitor.stop();
       logger.debug('Stopped activity monitor');
