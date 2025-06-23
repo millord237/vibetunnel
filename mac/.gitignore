@@ -29,3 +29,8 @@ VibeTunnel/Resources/node-server/
 
 # Local development configuration
 VibeTunnel/Local.xcconfig
+
+# Sparkle private key - NEVER commit this!
+sparkle-private-ed-key.pem
+sparkle-private-key-KEEP-SECURE.txt
+*.pem
