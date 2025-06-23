@@ -13,7 +13,7 @@ done
 # If not found in standard locations with valid binary, search for it
 if [ -z "$APP_PATH" ]; then
     # First try DerivedData (for development)
-    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "VibeTunnel.app" -type d 2>/dev/null | grep -v "\.dSYM" | head -1)
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "VibeTunnel.app" -type d 2>/dev/null | grep -v "\.dSYM" | grep -v "Index\.noindex" | head -1)
     
     # If still not found, use mdfind as last resort
     if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
