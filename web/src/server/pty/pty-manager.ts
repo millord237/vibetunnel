@@ -200,10 +200,16 @@ export class PtyManager {
         const ptyEnv = {
           ...process.env,
           TERM: term,
-          SHELL: command[0], // Set SHELL to the command being run (like Linux does)
         };
 
-        ptyProcess = pty.spawn(command[0], command.slice(1), {
+        // Resolve command to handle aliases and shell builtins
+        const resolved = ProcessUtils.resolveCommand(command);
+
+        if (resolved.useShell) {
+          logger.debug(`Using shell to execute command: ${command.join(' ')}`);
+        }
+
+        ptyProcess = pty.spawn(resolved.command, resolved.args, {
           name: term,
           cols,
           rows,

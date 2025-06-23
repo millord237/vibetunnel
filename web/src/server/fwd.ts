@@ -42,7 +42,7 @@ function showUsage() {
 export async function startVibeTunnelForward(args: string[]) {
   // Log startup with version (logger already initialized in cli.ts)
   logger.log(chalk.blue(`VibeTunnel Forward v${VERSION}`) + chalk.gray(` (${BUILD_DATE})`));
-  if (args.includes('--debug')) {
+  if (process.env.VIBETUNNEL_DEBUG === '1' || process.env.VIBETUNNEL_DEBUG === 'true') {
     logger.debug('Debug mode enabled');
   }
 

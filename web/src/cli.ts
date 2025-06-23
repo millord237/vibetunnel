@@ -6,7 +6,9 @@ import { VERSION } from './server/version.js';
 import { createLogger, initLogger, closeLogger } from './server/utils/logger.js';
 
 // Initialize logger before anything else
-initLogger(process.argv.includes('--debug'));
+// Check VIBETUNNEL_DEBUG environment variable for debug mode
+const debugMode = process.env.VIBETUNNEL_DEBUG === '1' || process.env.VIBETUNNEL_DEBUG === 'true';
+initLogger(debugMode);
 const logger = createLogger('cli');
 
 // Source maps are only included if built with --sourcemap flag

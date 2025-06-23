@@ -7,6 +7,8 @@
 import { spawnSync } from 'child_process';
 import { createLogger } from '../utils/logger.js';
 import chalk from 'chalk';
+import * as os from 'os';
+import * as path from 'path';
 
 const logger = createLogger('process-utils');
 
@@ -157,5 +159,191 @@ export class ProcessUtils {
 
     logger.log(chalk.yellow(`process ${pid} did not exit within ${timeoutMs}ms timeout`));
     return false;
+  }
+
+  /**
+   * Determine how to spawn a command, checking if it exists in PATH or needs shell execution
+   * Returns the actual command and args to use for spawning
+   */
+  static resolveCommand(command: string[]): { command: string; args: string[]; useShell: boolean } {
+    if (command.length === 0) {
+      throw new Error('No command provided');
+    }
+
+    const cmdName = command[0];
+    const cmdArgs = command.slice(1);
+
+    // Check if command exists in PATH using 'which' (Unix) or 'where' (Windows)
+    const whichCommand = process.platform === 'win32' ? 'where' : 'which';
+
+    try {
+      const result = spawnSync(whichCommand, [cmdName], {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: 2000, // 2 second timeout
+      });
+
+      if (result.status === 0 && result.stdout && result.stdout.trim()) {
+        // Command found in PATH
+        logger.debug(`Command '${cmdName}' found at: ${result.stdout.trim()}`);
+        return {
+          command: cmdName,
+          args: cmdArgs,
+          useShell: false,
+        };
+      }
+    } catch (error) {
+      logger.debug(`Failed to check command existence for '${cmdName}':`, error);
+    }
+
+    // Command not found in PATH, likely an alias or shell builtin
+    // Need to run through shell
+    logger.debug(`Command '${cmdName}' not found in PATH, will use shell`);
+
+    // Determine user's shell
+    const userShell = ProcessUtils.getUserShell();
+
+    // Use interactive shell to execute the command
+    // This ensures aliases and shell functions are available
+    if (process.platform === 'win32') {
+      // Windows shells have different syntax
+      if (userShell.includes('bash')) {
+        // Git Bash on Windows: Use Unix-style syntax
+        return {
+          command: userShell,
+          args: ['-i', '-c', command.join(' ')],
+          useShell: true,
+        };
+      } else if (userShell.includes('pwsh') || userShell.includes('powershell')) {
+        // PowerShell: Use -Command for execution
+        // Note: PowerShell aliases work differently than Unix aliases
+        return {
+          command: userShell,
+          args: ['-NoLogo', '-Command', command.join(' ')],
+          useShell: true,
+        };
+      } else {
+        // cmd.exe: Use /C to execute and exit
+        // Note: cmd.exe uses 'doskey' for aliases, not traditional aliases
+        return {
+          command: userShell,
+          args: ['/C', command.join(' ')],
+          useShell: true,
+        };
+      }
+    } else {
+      // Unix shells: Use -i -c for interactive execution
+      return {
+        command: userShell,
+        args: ['-i', '-c', command.join(' ')],
+        useShell: true,
+      };
+    }
+  }
+
+  /**
+   * Get the user's preferred shell
+   * Falls back to sensible defaults if SHELL env var is not set
+   */
+  static getUserShell(): string {
+    // First try SHELL environment variable (most reliable on Unix)
+    if (process.env.SHELL) {
+      return process.env.SHELL;
+    }
+
+    // Platform-specific defaults
+    if (process.platform === 'win32') {
+      // Check for modern shells first
+
+      // 1. Check for PowerShell Core (pwsh) - cross-platform version
+      try {
+        const result = spawnSync('pwsh', ['-Command', 'echo test'], {
+          encoding: 'utf8',
+          windowsHide: true,
+          timeout: 1000,
+        });
+        if (result.status === 0) {
+          return 'pwsh';
+        }
+      } catch (_) {
+        // PowerShell Core not available
+      }
+
+      // 2. Check for Windows PowerShell (older, Windows-only)
+      const powershellPath = path.join(
+        process.env.SystemRoot || 'C:\\Windows',
+        'System32',
+        'WindowsPowerShell',
+        'v1.0',
+        'powershell.exe'
+      );
+      try {
+        const result = spawnSync(powershellPath, ['-Command', 'echo test'], {
+          encoding: 'utf8',
+          windowsHide: true,
+          timeout: 1000,
+        });
+        if (result.status === 0) {
+          return powershellPath;
+        }
+      } catch (_) {
+        // PowerShell not available
+      }
+
+      // 3. Check for Git Bash if available
+      const gitBashPaths = [
+        'C:\\Program Files\\Git\\bin\\bash.exe',
+        'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+        path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'bin', 'bash.exe'),
+      ];
+      for (const gitBashPath of gitBashPaths) {
+        try {
+          const result = spawnSync(gitBashPath, ['-c', 'echo test'], {
+            encoding: 'utf8',
+            windowsHide: true,
+            timeout: 1000,
+          });
+          if (result.status === 0) {
+            return gitBashPath;
+          }
+        } catch (_) {
+          // Git Bash not at this location
+        }
+      }
+
+      // 4. Fall back to cmd.exe
+      return process.env.ComSpec || 'cmd.exe';
+    } else {
+      // Unix-like systems
+      // Node.js os.userInfo() includes shell on some platforms
+      try {
+        const userInfo = os.userInfo();
+        if ('shell' in userInfo && userInfo.shell) {
+          return userInfo.shell as string;
+        }
+      } catch (_) {
+        // userInfo might fail in some environments
+      }
+
+      // Check common shell paths in order of preference
+      const commonShells = ['/bin/zsh', '/bin/bash', '/usr/bin/zsh', '/usr/bin/bash', '/bin/sh'];
+      for (const shell of commonShells) {
+        try {
+          // Just check if the shell exists and is executable
+          const result = spawnSync('test', ['-x', shell], {
+            encoding: 'utf8',
+            timeout: 500,
+          });
+          if (result.status === 0) {
+            return shell;
+          }
+        } catch (_) {
+          // test command failed, try next shell
+        }
+      }
+
+      // Final fallback - /bin/sh should always exist on Unix
+      return '/bin/sh';
+    }
   }
 }

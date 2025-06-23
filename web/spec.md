@@ -57,15 +57,26 @@ web/
 ### Session Management
 
 #### PTY Manager (`pty/pty-manager.ts`)
-- `createSession()` (72-167): Spawns PTY processes
+- `createSession()` (155-287): Spawns PTY processes
   - Supports `forwardToStdout` option for direct stdout forwarding
   - Supports `onExit` callback for handling process termination
-- `sendInput()` (265-315): Handles keyboard input
-- `killSession()` (453-537): SIGTERM→SIGKILL escalation
-- `resizeSession()` (394-447): Terminal dimension changes
-- Control pipe support using file watching on all platforms (320-349)
-- `shutdown()` (794-821): Clean termination of all active sessions
+  - **Automatic alias resolution**: Uses `ProcessUtils.resolveCommand()` to detect and run aliases through shell
+- `sendInput()` (515-588): Handles keyboard input
+- `killSession()` (687-764): SIGTERM→SIGKILL escalation
+- `resizeSession()` (638-681): Terminal dimension changes
+- Control pipe support using file watching on all platforms (414-475)
+- `shutdown()` (937-974): Clean termination of all active sessions
 - Proper TypeScript types throughout (no "as any" assertions)
+
+#### Process Utils (`pty/process-utils.ts`)
+- `resolveCommand()` (168-242): Detects if command exists in PATH or needs shell execution
+  - Uses `which` (Unix) or `where` (Windows) to check command existence
+  - Returns appropriate shell command with args for aliases/builtins
+  - Platform-specific shell argument handling
+- `getUserShell()` (219-281): Determines user's preferred shell
+  - Checks `$SHELL` environment variable first
+  - Windows: Checks for pwsh, PowerShell, Git Bash, then cmd.exe
+  - Unix: Checks common shell paths (/bin/zsh, /bin/bash, etc.)
 
 #### Session Manager (`pty/session-manager.ts`)
 - Session persistence in `~/.vibetunnel/control/`
@@ -397,10 +408,14 @@ Simplified CLI tool that spawns PTY sessions using VibeTunnel infrastructure.
 - Interactive terminal forwarding with colorful output (chalk)
 - Session creation with pre-generated IDs support
 - Graceful cleanup on exit
+- **Automatic shell alias support** via ProcessUtils.resolveCommand()
 
 ### Usage
 ```bash
 npx tsx src/fwd.ts [--session-id <id>] <command> [args...]
+
+# Examples with aliases
+npx tsx src/fwd.ts claude-danger  # Automatically resolved through shell
 ```
 
 ### Integration Points
@@ -435,9 +450,10 @@ npx tsx src/fwd.ts [--session-id <id>] <command> [args...]
 - `src/client/assets/`: Static files (fonts, icons, HTML)
 
 ### Configuration
-- Environment: `PORT`, `VIBETUNNEL_USERNAME`, `VIBETUNNEL_PASSWORD`
+- Environment: `PORT`, `VIBETUNNEL_USERNAME`, `VIBETUNNEL_PASSWORD`, `VIBETUNNEL_DEBUG`
 - CLI: `--port`, `--username`, `--password`, `--hq`, `--hq-url`, `--name`
 - Express static: `.html` extension handling for clean URLs
+- Debug logging: Set `VIBETUNNEL_DEBUG=1` or `VIBETUNNEL_DEBUG=true`
 
 ### Protocols
 - REST API: Session CRUD, terminal I/O, activity status
