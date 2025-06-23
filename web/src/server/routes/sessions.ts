@@ -7,6 +7,7 @@ import { RemoteRegistry } from '../services/remote-registry.js';
 import { ActivityMonitor } from '../services/activity-monitor.js';
 import { cellsToText } from '../../shared/terminal-text-formatter.js';
 import { createLogger } from '../utils/logger.js';
+import { generateSessionName } from '../utils/session-naming.js';
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -186,7 +187,8 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
         try {
           // Generate session ID
           const sessionId = generateSessionId();
-          const sessionName = name || `session_${Date.now()}`;
+          const sessionName =
+            name || generateSessionName(command, resolvePath(workingDir, process.cwd()));
 
           // Request Mac app to spawn terminal
           logger.log(
@@ -227,9 +229,8 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       }
 
       // Create local session
-      const sessionName =
-        name || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const cwd = resolvePath(workingDir, process.cwd());
+      const sessionName = name || generateSessionName(command, cwd);
 
       logger.log(chalk.blue(`creating session: ${command.join(' ')} in ${cwd}`));
 

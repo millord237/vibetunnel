@@ -17,6 +17,7 @@ import chalk from 'chalk';
 import { PtyManager } from './pty/index.js';
 import { VERSION, BUILD_DATE, GIT_COMMIT } from './version.js';
 import { createLogger, closeLogger } from './utils/logger.js';
+import { generateSessionName } from './utils/session-naming.js';
 
 const logger = createLogger('fwd');
 
@@ -79,8 +80,8 @@ export async function startVibeTunnelForward(args: string[]) {
   const ptyManager = new PtyManager(controlPath);
 
   try {
-    // Create the session
-    const sessionName = `fwd_${command[0]}_${Date.now()}`;
+    // Create a human-readable session name
+    const sessionName = generateSessionName(command, cwd);
 
     // Pre-generate session ID if not provided
     const finalSessionId = sessionId || `fwd_${Date.now()}`;
