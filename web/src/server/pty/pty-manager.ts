@@ -75,17 +75,32 @@ export class PtyManager {
       logger.debug(`'which' failed for '${executable}', attempting alias resolution`);
 
       try {
-        // Try to resolve the alias using bash
+        // Get all aliases from bash
         // We need to use an interactive shell to load aliases
-        const aliasCommand = `bash -i -c "type -p ${executable} 2>/dev/null || alias ${executable} 2>/dev/null | sed -E 's/^alias [^=]+=//'"`;
-        const aliasResult = execSync(aliasCommand, { encoding: 'utf-8' }).trim();
+        const aliasListCommand = `bash -i -c "alias"`;
+        const aliasOutput = execSync(aliasListCommand, { encoding: 'utf-8' });
 
-        if (aliasResult && aliasResult !== executable) {
-          // Remove quotes if present
-          const cleanedAlias = aliasResult.replace(/^['"]|['"]$/g, '');
+        // Parse the alias output (format: alias key='value')
+        const aliases = new Map<string, string>();
+        const lines = aliasOutput.split('\n');
 
-          // If the alias contains arguments, extract just the command
-          const aliasExecutable = cleanedAlias.split(/\s+/)[0];
+        for (const line of lines) {
+          // Match pattern: alias name='command' or alias name="command"
+          const match = line.match(/^alias\s+([^=]+)=(['"]?)(.+)\2$/);
+          if (match) {
+            const aliasName = match[1];
+            const aliasValue = match[3];
+            aliases.set(aliasName, aliasValue);
+          }
+        }
+
+        // Check if our executable is an alias
+        const aliasValue = aliases.get(executable);
+        if (aliasValue) {
+          logger.debug(`Found alias: ${executable}='${aliasValue}'`);
+
+          // Extract just the command from the alias value (first word)
+          const aliasExecutable = aliasValue.split(/\s+/)[0];
 
           // Now try to resolve this to an absolute path
           if (path.isAbsolute(aliasExecutable)) {
@@ -96,7 +111,7 @@ export class PtyManager {
             try {
               const finalPath = execSync(`which ${aliasExecutable}`, { encoding: 'utf-8' }).trim();
               logger.log(
-                chalk.cyan(`Resolved alias '${executable}' → '${cleanedAlias}' → '${finalPath}'`)
+                chalk.cyan(`Resolved alias '${executable}' → '${aliasValue}' → '${finalPath}'`)
               );
               return finalPath;
             } catch (_e) {
