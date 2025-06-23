@@ -168,7 +168,7 @@ async function handlePushNotification(payload: PushNotificationPayload): Promise
       tag: tag || `${NOTIFICATION_TAG_PREFIX}${data.type}-${Date.now()}`,
       requireInteraction: requireInteraction || data.type === 'session-error',
       silent: false,
-      // @ts-ignore - renotify is a valid option but not in TypeScript types
+      // @ts-expect-error - renotify is a valid option but not in TypeScript types
       renotify: true,
       actions: actions || getDefaultActions(data),
       timestamp: data.timestamp,
@@ -176,7 +176,7 @@ async function handlePushNotification(payload: PushNotificationPayload): Promise
 
     // Add vibration pattern for mobile devices
     if ('vibrate' in navigator) {
-      // @ts-ignore - vibrate is a valid option but not in TypeScript types
+      // @ts-expect-error - vibrate is a valid option but not in TypeScript types
       notificationOptions.vibrate = getVibrationPattern(data.type);
     }
 
@@ -402,7 +402,7 @@ async function queueNotification(payload: PushNotificationPayload): Promise<void
 
   // Register for background sync
   try {
-    // @ts-ignore - sync is part of Background Sync API
+    // @ts-expect-error - sync is part of Background Sync API
     await self.registration.sync.register('notification-sync');
   } catch (error) {
     console.warn('[SW] Background sync not supported:', error);
