@@ -1057,6 +1057,9 @@ pub async fn get_update_history(
 }
 
 // Backend Manager Commands
+// Multi-backend commands - not applicable to our Node.js subprocess approach
+// These would be used if we supported multiple backend types (Bun, Node, Deno, etc.)
+/*
 #[tauri::command]
 pub async fn get_available_backends(
     state: State<'_, AppState>,
@@ -1177,6 +1180,7 @@ pub async fn get_backend_stats(
         health_summary,
     })
 }
+*/
 
 // Debug Features Commands
 #[derive(Debug, Serialize, Deserialize)]

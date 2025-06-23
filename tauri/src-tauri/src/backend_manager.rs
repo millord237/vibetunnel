@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::RwLock;
@@ -264,6 +265,67 @@ impl NodeJsServer {
         matches!(*self.state.read().await, ServerState::Running)
     }
 
+    /// Handle server crash with recovery
+    pub async fn handle_crash(
+        &self,
+        exit_code: i32,
+        consecutive_crashes: Arc<AtomicU32>,
+        is_handling_crash: Arc<AtomicBool>,
+        crash_recovery_enabled: Arc<AtomicBool>,
+    ) {
+        // Mark that we're handling a crash
+        is_handling_crash.store(true, Ordering::Relaxed);
+        
+        warn!("Server crashed with exit code: {}", exit_code);
+        
+        // Update state
+        *self.state.write().await = ServerState::Idle;
+        
+        // Check if crash recovery is enabled
+        if !crash_recovery_enabled.load(Ordering::Relaxed) {
+            info!("Crash recovery disabled, not restarting");
+            is_handling_crash.store(false, Ordering::Relaxed);
+            return;
+        }
+        
+        // Increment crash counter
+        let crashes = consecutive_crashes.fetch_add(1, Ordering::Relaxed) + 1;
+        
+        // Check if we've crashed too many times
+        const MAX_CONSECUTIVE_CRASHES: u32 = 5;
+        if crashes >= MAX_CONSECUTIVE_CRASHES {
+            error!("Server crashed {} times consecutively, giving up", crashes);
+            is_handling_crash.store(false, Ordering::Relaxed);
+            return;
+        }
+        
+        // Calculate backoff delay
+        let delay_secs = match crashes {
+            1 => 2,
+            2 => 4,
+            3 => 8,
+            4 => 16,
+            _ => 32,
+        };
+        
+        info!("Restarting server after {} seconds (attempt {})", delay_secs, crashes);
+        tokio::time::sleep(tokio::time::Duration::from_secs(delay_secs)).await;
+        
+        // Try to restart
+        match self.restart().await {
+            Ok(_) => {
+                info!("Server restarted successfully");
+                // Reset crash counter on successful restart
+                consecutive_crashes.store(0, Ordering::Relaxed);
+            }
+            Err(e) => {
+                error!("Failed to restart server: {}", e);
+            }
+        }
+        
+        is_handling_crash.store(false, Ordering::Relaxed);
+    }
+
     /// Get server state
     pub async fn get_state(&self) -> ServerState {
         *self.state.read().await
@@ -391,9 +453,9 @@ impl NodeJsServer {
 /// Backend manager that handles the Node.js server
 pub struct BackendManager {
     server: Arc<NodeJsServer>,
-    crash_recovery_enabled: Arc<RwLock<bool>>,
-    consecutive_crashes: Arc<RwLock<u32>>,
-    is_handling_crash: Arc<RwLock<bool>>,
+    crash_recovery_enabled: Arc<AtomicBool>,
+    consecutive_crashes: Arc<AtomicU32>,
+    is_handling_crash: Arc<AtomicBool>,
 }
 
 impl BackendManager {
@@ -404,54 +466,52 @@ impl BackendManager {
             "127.0.0.1".to_string(),
         ));
         
-        let manager = Self { 
-            server: server.clone(),
-            crash_recovery_enabled: Arc::new(RwLock::new(true)),
-            consecutive_crashes: Arc::new(RwLock::new(0)),
-            is_handling_crash: Arc::new(RwLock::new(false)),
-        };
+        Self { 
+            server,
+            crash_recovery_enabled: Arc::new(AtomicBool::new(true)),
+            consecutive_crashes: Arc::new(AtomicU32::new(0)),
+            is_handling_crash: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Start the backend server
+    pub async fn start(&self) -> Result<(), String> {
+        // Start the server first
+        let result = self.server.start().await;
         
-        // Set up crash handler
-        let server_for_crash = server.clone();
-        let consecutive_crashes = manager.consecutive_crashes.clone();
-        let is_handling_crash = manager.is_handling_crash.clone();
-        let crash_recovery_enabled = manager.crash_recovery_enabled.clone();
-        
-        tokio::spawn(async move {
-            server_for_crash.set_on_crash(move |exit_code| {
+        if result.is_ok() {
+            // Reset consecutive crashes on successful start
+            self.consecutive_crashes.store(0, Ordering::Relaxed);
+            
+            // Set up crash handler after successful start
+            let consecutive_crashes = self.consecutive_crashes.clone();
+            let is_handling_crash = self.is_handling_crash.clone();
+            let crash_recovery_enabled = self.crash_recovery_enabled.clone();
+            let server = self.server.clone();
+            
+            self.server.set_on_crash(move |exit_code| {
                 let consecutive_crashes = consecutive_crashes.clone();
                 let is_handling_crash = is_handling_crash.clone();
                 let crash_recovery_enabled = crash_recovery_enabled.clone();
-                let server = server_for_crash.clone();
+                let server = server.clone();
                 
                 tokio::spawn(async move {
-                    handle_server_crash(
+                    server.handle_crash(
                         exit_code,
-                        server,
                         consecutive_crashes,
                         is_handling_crash,
                         crash_recovery_enabled,
                     ).await;
                 });
             }).await;
-        });
-        
-        manager
-    }
-
-    /// Start the backend server
-    pub async fn start(&self) -> Result<(), String> {
-        // Reset consecutive crashes on successful start
-        let result = self.server.start().await;
-        if result.is_ok() {
-            *self.consecutive_crashes.write().await = 0;
         }
+        
         result
     }
     
     /// Enable or disable crash recovery
     pub async fn set_crash_recovery_enabled(&self, enabled: bool) {
-        *self.crash_recovery_enabled.write().await = enabled;
+        self.crash_recovery_enabled.store(enabled, Ordering::Relaxed);
     }
 
     /// Stop the backend server
