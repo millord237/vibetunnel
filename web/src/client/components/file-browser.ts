@@ -101,8 +101,11 @@ export class FileBrowser extends LitElement {
   @state() private errorMessage = '';
   @state() private mobileView: 'list' | 'preview' = 'list';
   @state() private isMobile = window.innerWidth < 768;
+  @state() private editingPath = false;
+  @state() private pathInputValue = '';
 
   private editorRef = createRef<HTMLElement>();
+  private pathInputRef = createRef<HTMLInputElement>();
 
   async connectedCallback() {
     super.connectedCallback();
@@ -150,12 +153,24 @@ export class FileBrowser extends LitElement {
         this.currentFullPath = data.fullPath;
         this.files = data.files || [];
         this.gitStatus = data.gitStatus;
+        // Clear any previous error message on successful load
+        this.errorMessage = '';
       } else {
-        const errorData = await response.text();
-        logger.error(`failed to load directory: ${response.status}`, new Error(errorData));
+        let errorMessage = 'Failed to load directory';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response isn't JSON, use default message
+          errorMessage = `Failed to load directory (${response.status})`;
+        }
+
+        logger.error(`failed to load directory: ${response.status}`, new Error(errorMessage));
+        this.showErrorMessage(errorMessage);
       }
     } catch (error) {
       logger.error('error loading directory:', error);
+      this.showErrorMessage('Network error loading directory');
     } finally {
       this.loading = false;
     }
@@ -281,7 +296,36 @@ export class FileBrowser extends LitElement {
   }
 
   private handleParentClick() {
-    const parentPath = this.currentPath.split('/').slice(0, -1).join('/') || '.';
+    // Handle navigation to parent directory
+    let parentPath: string;
+
+    if (this.currentFullPath === '/') {
+      // Already at root, can't go higher
+      return;
+    }
+
+    if (this.currentFullPath) {
+      // Use full path for accurate parent calculation
+      const parts = this.currentFullPath.split('/').filter((part) => part !== '');
+      if (parts.length === 0) {
+        // We're at root
+        parentPath = '/';
+      } else {
+        // Remove last part to get parent
+        parts.pop();
+        parentPath = parts.length === 0 ? '/' : '/' + parts.join('/');
+      }
+    } else {
+      // Fallback to current path logic
+      const parts = this.currentPath.split('/').filter((part) => part !== '');
+      if (parts.length <= 1) {
+        parentPath = '/';
+      } else {
+        parts.pop();
+        parentPath = '/' + parts.join('/');
+      }
+    }
+
     this.loadDirectory(parentPath);
   }
 
@@ -479,12 +523,30 @@ export class FileBrowser extends LitElement {
                 <span>Back</span>
               </button>
               <div class="text-dark-text min-w-0 flex-1 overflow-hidden">
-                <div
-                  class="text-blue-400 text-xs sm:text-sm overflow-hidden text-ellipsis whitespace-nowrap font-mono"
-                  title="${this.currentFullPath || this.currentPath || 'File Browser'}"
-                >
-                  ${this.currentFullPath || this.currentPath || 'File Browser'}
-                </div>
+                ${this.editingPath
+                  ? html`
+                      <input
+                        ${ref(this.pathInputRef)}
+                        type="text"
+                        .value=${this.pathInputValue}
+                        @input=${this.handlePathInput}
+                        @keydown=${this.handlePathKeyDown}
+                        @blur=${this.handlePathBlur}
+                        class="bg-dark-bg border border-dark-border rounded px-2 py-1 text-blue-400 text-xs sm:text-sm font-mono w-full min-w-0 focus:outline-none focus:border-accent-green"
+                        placeholder="Enter path and press Enter"
+                      />
+                    `
+                  : html`
+                      <div
+                        class="text-blue-400 text-xs sm:text-sm overflow-hidden text-ellipsis whitespace-nowrap font-mono cursor-pointer hover:bg-dark-bg-lighter rounded px-1 py-1 -mx-1"
+                        title="${this.currentFullPath ||
+                        this.currentPath ||
+                        'File Browser'} (click to edit)"
+                        @click=${this.handlePathClick}
+                      >
+                        ${this.currentFullPath || this.currentPath || 'File Browser'}
+                      </div>
+                    `}
               </div>
             </div>
             <div class="flex items-center gap-2 text-xs flex-shrink-0 ml-2">
@@ -553,7 +615,7 @@ export class FileBrowser extends LitElement {
                       </div>
                     `
                   : html`
-                      ${this.currentPath !== '.' && this.currentPath !== '/'
+                      ${this.currentFullPath !== '/'
                         ? html`
                             <div
                               class="p-3 hover:bg-dark-bg-lighter cursor-pointer transition-colors flex items-center gap-2 border-b border-dark-border"
@@ -717,8 +779,17 @@ export class FileBrowser extends LitElement {
 
     if (e.key === 'Escape') {
       e.preventDefault();
-      this.handleCancel();
-    } else if (e.key === 'Enter' && this.selectedFile && this.selectedFile.type === 'file') {
+      if (this.editingPath) {
+        this.cancelPathEdit();
+      } else {
+        this.handleCancel();
+      }
+    } else if (
+      e.key === 'Enter' &&
+      this.selectedFile &&
+      this.selectedFile.type === 'file' &&
+      !this.editingPath
+    ) {
       e.preventDefault();
       this.insertPathIntoTerminal();
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'c' && this.selectedFile) {
@@ -777,5 +848,53 @@ export class FileBrowser extends LitElement {
       document.removeEventListener('touchstart', handlers.handleTouchStart);
       document.removeEventListener('touchend', handlers.handleTouchEnd);
     }
+  }
+
+  private handlePathClick() {
+    this.editingPath = true;
+    this.pathInputValue = this.currentFullPath || this.currentPath || '';
+    this.requestUpdate();
+    // Focus the input after render
+    setTimeout(() => {
+      if (this.pathInputRef.value) {
+        this.pathInputRef.value.focus();
+        this.pathInputRef.value.select();
+      }
+    }, 0);
+  }
+
+  private handlePathInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    this.pathInputValue = input.value;
+  }
+
+  private handlePathKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      this.navigateToPath();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      this.cancelPathEdit();
+    }
+  }
+
+  private handlePathBlur() {
+    // Don't cancel on blur, let user decide with Escape or Enter
+    // this.cancelPathEdit();
+  }
+
+  private async navigateToPath() {
+    const path = this.pathInputValue.trim();
+    if (path) {
+      this.editingPath = false;
+      await this.loadDirectory(path);
+    } else {
+      this.cancelPathEdit();
+    }
+  }
+
+  private cancelPathEdit() {
+    this.editingPath = false;
+    this.pathInputValue = '';
   }
 }

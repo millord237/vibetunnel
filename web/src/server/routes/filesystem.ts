@@ -143,7 +143,18 @@ export function createFilesystemRoutes(): Router {
       const fullPath = path.resolve(requestedPath);
 
       // Check if path exists and is a directory
-      const stats = await fs.stat(fullPath);
+      let stats;
+      try {
+        stats = await fs.stat(fullPath);
+      } catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+          logger.warn(`directory not found: ${requestedPath}`);
+          return res.status(404).json({ error: 'Directory not found' });
+        }
+        // Re-throw other errors to be handled by outer catch
+        throw error;
+      }
+
       if (!stats.isDirectory()) {
         logger.warn(`path is not a directory: ${requestedPath}`);
         return res.status(400).json({ error: 'Path is not a directory' });
