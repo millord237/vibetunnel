@@ -6,6 +6,48 @@
         <description>VibeTunnel pre-release and beta updates feed</description>
         <language>en</language>
         <item>
+            <title>VibeTunnel 1.0.0-beta.3</title>
+            <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.3/VibeTunnel-1.0.0-beta.3.dmg</link>
+            <sparkle:version>110</sparkle:version>
+            <sparkle:shortVersionString>1.0.0-beta.3</sparkle:shortVersionString>
+            <description><![CDATA[
+                <h2>VibeTunnel 1.0.0-beta.3</h2><p><strong>Pre-release version</strong></p><div><h3>🎉 Beta 3 Release</h3>
+<p>There's too much to list! This is the version you've been waiting for.</p>
+
+<h3>✨ Highlights</h3>
+<ul>
+<li>Redesigned, responsive, animated frontend</li>
+<li>File-Picker to see files on-the-go</li>
+<li>Creating new Terminals is now much more reliable</li>
+<li>Fresh new icon for Progressive Web App installations</li>
+</ul>
+
+<h3>🎨 Improvements</h3>
+<ul>
+<li>Improved terminal width spanning and layout optimization</li>
+<li>Added terminal font size adjustment in the settings dropdown</li>
+<li>Refined bounce animations for a more subtle, professional feel</li>
+<li>Added retro CRT-style phosphor decay visual effect for closed terminals</li>
+<li>Fixed buffer aggregator message handling for smoother terminal updates</li>
+<li>Better support for shell aliases and improved debug logging</li>
+<li>Enhanced Unix socket server implementation for faster local communication</li>
+<li>Special handling for Warp terminal with custom enter key behavior</li>
+<li>New dock menu with quick actions when right-clicking the app icon</li>
+<li>More resilient vt command-line tool with better error handling</li>
+<li>Ensured vibetunnel server properly terminates when Mac app is killed</li>
+</ul>
+<p><a href="https://github.com/amantus-ai/vibetunnel/blob/main/CHANGELOG.md#100-beta3---2025-06-23">View full changelog</a></p></div>
+            ]]></description>
+            <pubDate>Sun, 23 Jun 2025 04:30:00 +0000</pubDate>
+            <enclosure 
+                url="https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.3/VibeTunnel-1.0.0-beta.3.dmg"
+                length="20156342"
+                type="application/octet-stream"
+                sparkle:edSignature="kY87vo1HXpFx6aKb9LDXbe/AmQND5iH+W7a3qpf2AejmEl+i7wKch/JY3zhBHrmWIuksiKOwFIIklT4sQFMjDw=="
+            />
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+        </item>
+        <item>
             <title>VibeTunnel 1.0.0-beta.2</title>
             <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0-beta.2/VibeTunnel-1.0.0-beta.2.dmg</link>
             <sparkle:version>107</sparkle:version>
