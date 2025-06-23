@@ -114,15 +114,6 @@ export class NotificationStatus extends LitElement {
         title="${tooltip}"
       >
         ${this.renderIcon()}
-
-        <!-- Notification indicator dot -->
-        ${this.permission === 'default' && this.isSupported
-          ? html`
-              <span
-                class="absolute -top-1 -right-1 w-2 h-2 bg-status-warning rounded-full animate-pulse"
-              ></span>
-            `
-          : ''}
       </button>
     `;
   }
