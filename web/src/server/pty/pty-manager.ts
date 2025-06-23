@@ -320,38 +320,26 @@ export class PtyManager extends EventEmitter {
       try {
         // Check for bell character (ASCII 7) - filter out OSC sequences
         if (data.includes('\x07')) {
-          // Check if this is an OSC (Operating System Command) sequence
-          // OSC sequences use \x07 as terminators: \x1b]...\x07
-          const isOSCSequence = data.includes('\x1b]') && data.includes('\x07');
-
-          if (isOSCSequence) {
-            // This is a terminal title/icon update, not a real bell - ignore it
-            logger.debug(`Ignoring OSC sequence bell in session ${session.id}`);
+          logger.debug(`Bell data in session ${session.id}: ${JSON.stringify(data)}`);
+          
+          // Count total bells and OSC-terminated bells
+          const totalBells = (data.match(/\x07/g) || []).length;
+          
+          // Count OSC sequences terminated with bell: \x1b]...\x07
+          const oscMatches = data.match(/\x1b]([^\x07\x1b]|\x1b[^]])*\x07/g) || [];
+          const oscTerminatedBells = oscMatches.length;
+          
+          // If there are more bells than OSC terminators, we have real bells
+          const realBells = totalBells - oscTerminatedBells;
+          
+          if (realBells > 0) {
+            logger.debug(`Real bell(s) detected in session ${session.id}: ${realBells} bells (${oscTerminatedBells} OSC-terminated)`);
+            this.emit('bell', {
+              sessionInfo: session.sessionInfo,
+              timestamp: new Date(),
+            });
           } else {
-            // Check for other escape sequences that might use bell as terminator
-            const hasOtherEscapes =
-              data.includes('\x1b[') || data.includes('\x1b(') || data.includes('\x1b)');
-
-            if (hasOtherEscapes) {
-              logger.debug(`Ignoring escape sequence bell in session ${session.id}`);
-            } else {
-              // Only consider standalone bells or bells in plain text
-              const bellChar = String.fromCharCode(7);
-              const isStandaloneBell = data.trim() === bellChar || data === bellChar;
-              const isBellInText = !data.includes('\x1b') && data.length > 1;
-
-              if (isStandaloneBell || isBellInText) {
-                logger.debug(
-                  `Real bell detected in session ${session.id}: ${JSON.stringify(data)}`
-                );
-                this.emit('bell', {
-                  sessionInfo: session.sessionInfo,
-                  timestamp: new Date(),
-                });
-              } else {
-                logger.debug(`Filtered bell in session ${session.id}: ${JSON.stringify(data)}`);
-              }
-            }
+            logger.debug(`Ignoring OSC sequence bells in session ${session.id}: ${oscTerminatedBells} OSC bells, ${realBells} real bells`);
           }
         }
 
