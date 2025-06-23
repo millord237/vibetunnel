@@ -14,13 +14,11 @@ There's too much to list!
 - Added retro CRT-style phosphor decay visual effect for closed terminals
 - Fixed buffer aggregator message handling for smoother terminal updates
 - Better support for shell aliases and improved debug logging
-### 🚀 Server Enhancements  
-- **Improved Buffer Handling** 
-- **Shell Alias Support** 
-- **Unix Socket Support**
+- Enhanced Unix socket server implementation for faster local communication
+- Special handling for Warp terminal with custom enter key behavior
 
 ### 🖥️ Mac App Updates
-- **Warp Terminal Support** - Special handling for Warp terminal with custom enter key behavior
+- **Warp Terminal Support**
 - **Dock Menu Integration** - New dock menu with quick actions when right-clicking the app icon
 - **Improved vt Script** - More resilient vt command-line tool with better error handling
 - **Build System Fixes** - Fixed build issues on macOS Sequoia and improved hash file handling
