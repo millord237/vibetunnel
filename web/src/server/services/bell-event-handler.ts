@@ -7,6 +7,7 @@
 
 import { SessionInfo } from '../../shared/types.js';
 import { createLogger } from '../utils/logger.js';
+import { PushNotificationService } from './push-notification-service.js';
 
 const logger = createLogger('bell-event-handler');
 
@@ -45,7 +46,7 @@ export interface BellNotificationPayload {
  * Ultra-simple bell event handler
  */
 export class BellEventHandler {
-  private pushNotificationService: any = null;
+  private pushNotificationService: PushNotificationService | null = null;
 
   constructor() {
     logger.debug('BellEventHandler initialized');
@@ -54,7 +55,7 @@ export class BellEventHandler {
   /**
    * Set the push notification service for sending notifications
    */
-  setPushNotificationService(service: any): void {
+  setPushNotificationService(service: PushNotificationService): void {
     this.pushNotificationService = service;
     logger.debug('Push notification service configured');
   }

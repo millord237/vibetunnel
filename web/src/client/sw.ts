@@ -61,7 +61,7 @@ interface PushNotificationPayload {
 }
 
 // Install event
-self.addEventListener('install', (event: ExtendableEvent) => {
+self.addEventListener('install', (_event: ExtendableEvent) => {
   console.log('[SW] Installing service worker');
 
   // Force activation of new service worker
@@ -158,8 +158,13 @@ async function handlePushNotification(payload: PushNotificationPayload): Promise
   }
 }
 
-function getDefaultActions(data: NotificationData): any[] {
-  const baseActions: any[] = [
+interface NotificationAction {
+  action: string;
+  title: string;
+}
+
+function getDefaultActions(data: NotificationData): NotificationAction[] {
+  const baseActions: NotificationAction[] = [
     {
       action: 'dismiss',
       title: 'Dismiss',

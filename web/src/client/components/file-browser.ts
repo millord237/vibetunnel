@@ -462,7 +462,8 @@ export class FileBrowser extends LitElement {
     }
 
     // Fallback to simple diff display
-    const lines = this.diff!.diff.split('\n');
+    if (!this.diff) return html``;
+    const lines = this.diff.diff.split('\n');
     return html`
       <div class="overflow-auto h-full p-4 font-mono text-xs">
         ${lines.map((line) => {
@@ -839,11 +840,22 @@ export class FileBrowser extends LitElement {
     document.addEventListener('touchend', handleTouchEnd);
 
     // Store handlers for removal
-    (this as any)._touchHandlers = { handleTouchStart, handleTouchEnd };
+    interface TouchHandlers {
+      handleTouchStart: (e: TouchEvent) => void;
+      handleTouchEnd: (e: TouchEvent) => void;
+    }
+    (this as unknown as { _touchHandlers: TouchHandlers })._touchHandlers = {
+      handleTouchStart,
+      handleTouchEnd,
+    };
   }
 
   private removeTouchHandlers() {
-    const handlers = (this as any)._touchHandlers;
+    interface TouchHandlers {
+      handleTouchStart: (e: TouchEvent) => void;
+      handleTouchEnd: (e: TouchEvent) => void;
+    }
+    const handlers = (this as unknown as { _touchHandlers?: TouchHandlers })._touchHandlers;
     if (handlers) {
       document.removeEventListener('touchstart', handlers.handleTouchStart);
       document.removeEventListener('touchend', handlers.handleTouchEnd);
