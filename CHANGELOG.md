@@ -2,7 +2,7 @@
 
 ## [1.0.0-beta.3] - 2025-06-23
 
-There's too much to list! 
+There's too much to list! This is the version you've been waiting for. 
 
 - Redesigned, responsive, animated frontend.
 - Improved terminal width spanning and layout optimization
@@ -19,19 +19,6 @@ There's too much to list!
 - New dock menu with quick actions when right-clicking the app icon
 - More resilient vt command-line tool with better error handling
 - Ensured vibetunnel server properly terminates when Mac app is killed
-### 🖥️ Mac App Updates
-- **Warp Terminal Support**
-- **Dock Menu Integration** 
-- **Improved vt Script** 
-- **Build System Fixes** - Fixed build issues on macOS Sequoia and improved hash file handling
-- **Server Lifecycle** 
-
-### 🐛 Bug Fixes
-- Fixed derived data path filtering to avoid indexing unnecessary files
-- Fixed port formatting in server configuration
-- Improved server change detection for smoother transitions
-- Fixed window hiding behavior from dock
-- Resolved compilation warnings and removed unused imports
 
 ## [1.0.0-beta.2] - 2025-06-19
 
