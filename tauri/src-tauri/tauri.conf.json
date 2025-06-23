@@ -3,8 +3,8 @@
   "productName": "VibeTunnel",
   "identifier": "com.vibetunnel.app",
   "build": {
-    "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeDevCommand": "cd ../web && npm run build",
+    "beforeBuildCommand": "cd ../web && npm run build",
     "frontendDist": "../public"
   },
   "app": {
@@ -27,7 +27,11 @@
       "icons/menu-bar-icon.png",
       "icons/menu-bar-icon@2x.png",
       "icons/tray-icon.png",
-      "icons/tray-icon@2x.png"
+      "icons/tray-icon@2x.png",
+      "../web/native/vibetunnel*",
+      "../web/native/*.node",
+      "../web/native/spawn-helper",
+      "../web/public/**/*"
     ],
     "macOS": {
       "frameworks": [],

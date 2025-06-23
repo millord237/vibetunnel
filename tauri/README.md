@@ -12,10 +12,19 @@ Tauri is a toolkit that helps developers make applications for major desktop pla
 
 ## Architecture
 
-The VibeTunnel Tauri app consists of:
+The VibeTunnel Tauri app uses a subprocess architecture similar to the Mac app:
+
 - **Frontend**: HTML/CSS/JavaScript served from the `public/` directory
-- **Backend**: Rust code in `src-tauri/` that handles system operations, terminal management, and server functionality
-- **IPC Bridge**: Commands defined in Rust that can be called from the frontend
+- **Backend**: Rust code in `src-tauri/` that manages the Node.js subprocess
+- **Node.js Server**: The `vibetunnel` executable spawned as a subprocess handles all terminal operations
+- **IPC Bridge**: Commands defined in Rust that proxy to the Node.js server API
+
+### Key Changes from Embedded Server
+Instead of embedding terminal management in Rust, the Tauri app:
+1. Spawns the same `vibetunnel` Node.js executable used by the Mac app
+2. Proxies terminal commands to the Node.js server via HTTP API
+3. Monitors the subprocess health and handles crashes
+4. Bundles the Node.js executable and its dependencies as resources
 
 ## Prerequisites
 
@@ -45,11 +54,16 @@ npm install
 
 To run the app in development mode with hot-reloading:
 ```bash
-npm run tauri dev
+./dev.sh
+# or manually:
+cd ../web && npm run build  # Build vibetunnel executable first
+cd ../tauri && npm run tauri dev
 ```
 
 This will:
+- Build the Node.js server executable
 - Start the Rust backend with file watching
+- Spawn the Node.js subprocess
 - Serve the frontend with hot-reloading
 - Open the app window automatically
 - Show debug output in the terminal
@@ -58,13 +72,21 @@ This will:
 
 To build the app for production:
 ```bash
-npm run tauri build
+./build.sh
+# or manually:
+cd ../web && npm run build  # Build vibetunnel executable first
+cd ../tauri && npm run tauri build
 ```
 
 This creates an optimized build in `src-tauri/target/release/bundle/`:
 - **macOS**: `.app` bundle and `.dmg` installer
 - **Linux**: `.deb` and `.AppImage` packages
 - **Windows**: `.msi` and `.exe` installers
+
+The build includes:
+- The `vibetunnel` Node.js executable
+- Native modules (`pty.node`, `spawn-helper`)
+- Web static assets from `web/public/`
 
 ## Project Structure
 
@@ -78,10 +100,13 @@ tauri/
 │   ├── src/               # Rust source code
 │   │   ├── main.rs        # App entry point
 │   │   ├── commands.rs    # Tauri commands (IPC)
-│   │   ├── terminal.rs    # Terminal management
+│   │   ├── backend_manager.rs # Node.js subprocess management
+│   │   ├── api_client.rs  # HTTP client for Node.js API
 │   │   └── ...            # Other modules
 │   ├── Cargo.toml         # Rust dependencies
 │   └── tauri.conf.json    # Tauri configuration
+├── build.sh               # Production build script
+├── dev.sh                 # Development run script
 ├── package.json           # Node.js dependencies
 └── README.md             # This file
 ```

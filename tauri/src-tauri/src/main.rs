@@ -8,9 +8,9 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod api_client;
 mod api_testing;
 mod app_mover;
-mod auth;
 mod auth_cache;
 mod auto_launch;
 mod backend_manager;
@@ -24,7 +24,6 @@ mod ngrok;
 mod notification_manager;
 mod permissions;
 mod port_conflict;
-mod server;
 mod session_monitor;
 mod settings;
 mod state;
@@ -41,7 +40,6 @@ mod welcome;
 
 use commands::ServerStatus;
 use commands::*;
-use server::HttpServer;
 use state::AppState;
 
 #[tauri::command]

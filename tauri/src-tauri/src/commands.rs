@@ -1,4 +1,3 @@
-use crate::server::HttpServer;
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -37,30 +36,55 @@ pub async fn create_terminal(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<Terminal, String> {
-    let terminal_manager = &state.terminal_manager;
+    // Check if server is running
+    if !state.backend_manager.is_running().await {
+        return Err("Server is not running. Please start the server first.".to_string());
+    }
 
-    let result = terminal_manager
-        .create_session(
-            options.name.unwrap_or_else(|| "Terminal".to_string()),
-            options.rows.unwrap_or(24),
-            options.cols.unwrap_or(80),
-            options.cwd,
-            options.env,
-            options.shell,
-        )
-        .await?;
+    // Create session via API
+    let req = crate::api_client::CreateSessionRequest {
+        name: options.name,
+        rows: options.rows,
+        cols: options.cols,
+        cwd: options.cwd,
+        env: options.env,
+        shell: options.shell,
+    };
+
+    let session = state.api_client.create_session(req).await?;
 
     // Update menu bar session count
-    let session_count = terminal_manager.list_sessions().await.len();
-    crate::tray_menu::TrayMenuManager::update_session_count(&app, session_count).await;
+    let sessions = state.api_client.list_sessions().await?;
+    crate::tray_menu::TrayMenuManager::update_session_count(&app, sessions.len()).await;
 
-    Ok(result)
+    Ok(Terminal {
+        id: session.id,
+        name: session.name,
+        pid: session.pid,
+        rows: session.rows,
+        cols: session.cols,
+        created_at: session.created_at,
+    })
 }
 
 #[tauri::command]
 pub async fn list_terminals(state: State<'_, AppState>) -> Result<Vec<Terminal>, String> {
-    let terminal_manager = &state.terminal_manager;
-    Ok(terminal_manager.list_sessions().await)
+    // Check if server is running
+    if !state.backend_manager.is_running().await {
+        return Ok(Vec::new());
+    }
+
+    // List sessions via API
+    let sessions = state.api_client.list_sessions().await?;
+    
+    Ok(sessions.into_iter().map(|s| Terminal {
+        id: s.id,
+        name: s.name,
+        pid: s.pid,
+        rows: s.rows,
+        cols: s.cols,
+        created_at: s.created_at,
+    }).collect())
 }
 
 #[tauri::command]
@@ -69,12 +93,17 @@ pub async fn close_terminal(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let terminal_manager = &state.terminal_manager;
-    terminal_manager.close_session(&id).await?;
+    // Check if server is running
+    if !state.backend_manager.is_running().await {
+        return Err("Server is not running".to_string());
+    }
+
+    // Close session via API
+    state.api_client.close_session(&id).await?;
 
     // Update menu bar session count
-    let session_count = terminal_manager.list_sessions().await.len();
-    crate::tray_menu::TrayMenuManager::update_session_count(&app, session_count).await;
+    let sessions = state.api_client.list_sessions().await?;
+    crate::tray_menu::TrayMenuManager::update_session_count(&app, sessions.len()).await;
 
     Ok(())
 }
@@ -86,8 +115,13 @@ pub async fn resize_terminal(
     cols: u16,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let terminal_manager = &state.terminal_manager;
-    terminal_manager.resize_session(&id, rows, cols).await
+    // Check if server is running
+    if !state.backend_manager.is_running().await {
+        return Err("Server is not running".to_string());
+    }
+
+    // Resize session via API
+    state.api_client.resize_session(&id, rows, cols).await
 }
 
 #[tauri::command]
@@ -96,8 +130,13 @@ pub async fn write_to_terminal(
     data: Vec<u8>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let terminal_manager = &state.terminal_manager;
-    let result = terminal_manager.write_to_session(&id, &data).await;
+    // Check if server is running
+    if !state.backend_manager.is_running().await {
+        return Err("Server is not running".to_string());
+    }
+
+    // Send input via API
+    let result = state.api_client.send_input(&id, &data).await;
 
     // Notify session monitor of activity
     if result.is_ok() {
@@ -109,8 +148,13 @@ pub async fn write_to_terminal(
 
 #[tauri::command]
 pub async fn read_from_terminal(id: String, state: State<'_, AppState>) -> Result<Vec<u8>, String> {
-    let terminal_manager = &state.terminal_manager;
-    let result = terminal_manager.read_from_session(&id).await;
+    // Check if server is running
+    if !state.backend_manager.is_running().await {
+        return Err("Server is not running".to_string());
+    }
+
+    // Get output via API
+    let result = state.api_client.get_session_output(&id).await;
 
     // Notify session monitor of activity
     if result.is_ok() {
@@ -125,11 +169,11 @@ pub async fn start_server(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<ServerStatus, String> {
-    let mut server = state.http_server.write().await;
-
-    if let Some(http_server) = server.as_ref() {
-        // Get actual port from running server
-        let port = http_server.port();
+    // Check if server is already running
+    if state.backend_manager.is_running().await {
+        // Get port from settings
+        let settings = crate::settings::Settings::load().unwrap_or_default();
+        let port = settings.dashboard.port;
 
         // Check if ngrok is active
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
@@ -145,37 +189,22 @@ pub async fn start_server(
         });
     }
 
-    // Load settings to check if password is enabled
+    // Load settings
     let settings = crate::settings::Settings::load().unwrap_or_default();
+    let port = settings.dashboard.port;
 
-    // Start HTTP server with auth if configured
-    let mut http_server =
-        if settings.dashboard.enable_password && !settings.dashboard.password.is_empty() {
-            let auth_config = crate::auth::AuthConfig::new(true, Some(settings.dashboard.password));
-            HttpServer::with_auth(
-                state.terminal_manager.clone(),
-                state.session_monitor.clone(),
-                auth_config,
-            )
-        } else {
-            HttpServer::new(
-                state.terminal_manager.clone(),
-                state.session_monitor.clone(),
-            )
-        };
+    // Start the Node.js server
+    state.backend_manager.start().await?;
 
-    // Start server with appropriate access mode
-    let (port, url) = match settings.dashboard.access_mode.as_str() {
+    // Handle access mode
+    let url = match settings.dashboard.access_mode.as_str() {
         "network" => {
-            let port = http_server.start_with_mode("network").await?;
-            (port, format!("http://0.0.0.0:{}", port))
+            // For network mode, the Node.js server handles the binding
+            format!("http://0.0.0.0:{}", port)
         }
         "ngrok" => {
-            // For ngrok mode, start in localhost and let ngrok handle the tunneling
-            let port = http_server.start_with_mode("localhost").await?;
-
             // Try to start ngrok tunnel if auth token is configured
-            let url = if let Some(auth_token) = settings.advanced.ngrok_auth_token {
+            if let Some(auth_token) = settings.advanced.ngrok_auth_token {
                 if !auth_token.is_empty() {
                     match state
                         .ngrok_manager
@@ -185,25 +214,24 @@ pub async fn start_server(
                         Ok(tunnel) => tunnel.url,
                         Err(e) => {
                             tracing::error!("Failed to start ngrok tunnel: {}", e);
+                            // Stop the server since ngrok failed
+                            let _ = state.backend_manager.stop().await;
                             return Err(format!("Failed to start ngrok tunnel: {}", e));
                         }
                     }
                 } else {
+                    let _ = state.backend_manager.stop().await;
                     return Err("Ngrok auth token is required for ngrok access mode".to_string());
                 }
             } else {
+                let _ = state.backend_manager.stop().await;
                 return Err("Ngrok auth token is required for ngrok access mode".to_string());
-            };
-
-            (port, url)
+            }
         }
         _ => {
-            let port = http_server.start_with_mode("localhost").await?;
-            (port, format!("http://127.0.0.1:{}", port))
+            format!("http://127.0.0.1:{}", port)
         }
     };
-
-    *server = Some(http_server);
 
     // Update menu bar server status
     crate::tray_menu::TrayMenuManager::update_server_status(&app, port, true).await;
@@ -217,11 +245,8 @@ pub async fn start_server(
 
 #[tauri::command]
 pub async fn stop_server(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
-    let mut server = state.http_server.write().await;
-
-    if let Some(mut http_server) = server.take() {
-        http_server.stop().await?;
-    }
+    // Stop the Node.js server
+    state.backend_manager.stop().await?;
 
     // Also stop ngrok tunnel if active
     let _ = state.ngrok_manager.stop_tunnel().await;
@@ -234,17 +259,16 @@ pub async fn stop_server(state: State<'_, AppState>, app: tauri::AppHandle) -> R
 
 #[tauri::command]
 pub async fn get_server_status(state: State<'_, AppState>) -> Result<ServerStatus, String> {
-    let server = state.http_server.read().await;
-
-    if let Some(http_server) = server.as_ref() {
-        let port = http_server.port();
+    if state.backend_manager.is_running().await {
+        // Get port from settings
+        let settings = crate::settings::Settings::load().unwrap_or_default();
+        let port = settings.dashboard.port;
 
         // Check if ngrok is active and return its URL
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
             ngrok_tunnel.url
         } else {
             // Check settings to determine the correct URL format
-            let settings = crate::settings::Settings::load().unwrap_or_default();
             match settings.dashboard.access_mode.as_str() {
                 "network" => format!("http://0.0.0.0:{}", port),
                 _ => format!("http://127.0.0.1:{}", port),

@@ -1,3 +1,4 @@
+use crate::api_client::ApiClient;
 use crate::api_testing::APITestingManager;
 use crate::auth_cache::AuthCacheManager;
 use crate::backend_manager::BackendManager;
@@ -5,7 +6,6 @@ use crate::debug_features::DebugFeaturesManager;
 use crate::ngrok::NgrokManager;
 use crate::notification_manager::NotificationManager;
 use crate::permissions::PermissionsManager;
-use crate::server::HttpServer;
 use crate::session_monitor::SessionMonitor;
 use crate::terminal::TerminalManager;
 use crate::terminal_integrations::TerminalIntegrationsManager;
@@ -22,7 +22,7 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct AppState {
     pub terminal_manager: Arc<TerminalManager>,
-    pub http_server: Arc<RwLock<Option<HttpServer>>>,
+    pub api_client: Arc<ApiClient>,
     pub ngrok_manager: Arc<NgrokManager>,
     pub server_monitoring: Arc<AtomicBool>,
     pub server_target_port: Arc<RwLock<Option<u16>>>,
@@ -54,8 +54,11 @@ impl AppState {
         let mut update_manager = UpdateManager::new(current_version);
         update_manager.set_notification_manager(notification_manager.clone());
 
-        let mut backend_manager = BackendManager::new();
-        backend_manager.set_notification_manager(notification_manager.clone());
+        // Get port from settings or use default
+        let settings = crate::settings::Settings::load().unwrap_or_default();
+        let port = settings.dashboard.port;
+        let backend_manager = BackendManager::new(port);
+        let api_client = Arc::new(ApiClient::new(port));
 
         let mut debug_features_manager = DebugFeaturesManager::new();
         debug_features_manager.set_notification_manager(notification_manager.clone());
@@ -79,7 +82,7 @@ impl AppState {
 
         Self {
             terminal_manager,
-            http_server: Arc::new(RwLock::new(None)),
+            api_client,
             ngrok_manager: Arc::new(NgrokManager::new()),
             server_monitoring: Arc::new(AtomicBool::new(true)),
             server_target_port: Arc::new(RwLock::new(None)),
