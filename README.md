@@ -199,6 +199,14 @@ sudo tccutil reset ScreenCapture sh.vibetunnel.vibetunnel
 sudo tccutil reset AppleEvents
 ```
 
+## Support VibeTunnel
+
+Love VibeTunnel? Help us keep the terminal vibes flowing! Your support helps us buy pizza and drinks while we keep hacking on your favorite AI agent orchestration platform.
+
+[![Support us on Polar](https://img.shields.io/badge/Support%20us-on%20Polar-purple)](https://vibetunnel.sh/#support)
+
+All donations go directly to the development team. Choose your own amount - one-time or monthly!
+
 ## Credits
 
 Created with ❤️ by:
