@@ -113,6 +113,13 @@ echo ""
 # Additional strict pre-conditions before preflight check
 echo -e "${BLUE}🔍 Running strict pre-conditions...${NC}"
 
+# Check if CHANGELOG.md exists in mac directory
+if [[ ! -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
+    echo -e "${YELLOW}⚠️  Warning: CHANGELOG.md not found in mac/ directory${NC}"
+    echo "   The release script expects CHANGELOG.md to be in the mac/ directory"
+    echo "   You can copy it from the project root: cp ../CHANGELOG.md ."
+fi
+
 # Check if we're on main branch
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [[ "$CURRENT_BRANCH" != "main" ]]; then

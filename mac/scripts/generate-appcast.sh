@@ -39,6 +39,10 @@ fi
 
 GITHUB_REPO_FULL="${GITHUB_USERNAME}/${GITHUB_REPO}"
 SPARKLE_PRIVATE_KEY_PATH="${SPARKLE_PRIVATE_KEY_PATH:-private/sparkle_private_key}"
+# Try alternate location if primary doesn't exist
+if [[ ! -f "$SPARKLE_PRIVATE_KEY_PATH" ]] && [[ -f "sparkle-private-ed-key.pem" ]]; then
+    SPARKLE_PRIVATE_KEY_PATH="sparkle-private-ed-key.pem"
+fi
 
 # Verify private key exists
 if [ ! -f "$SPARKLE_PRIVATE_KEY_PATH" ]; then
