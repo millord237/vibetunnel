@@ -37,6 +37,9 @@ if [[ -z "${GITHUB_USERNAME:-}" ]] || [[ -z "${GITHUB_REPO:-}" ]]; then
     fi
 fi
 
+# Set the Sparkle account if provided via environment
+SPARKLE_ACCOUNT="${SPARKLE_ACCOUNT:-}"
+
 GITHUB_REPO_FULL="${GITHUB_USERNAME}/${GITHUB_REPO}"
 SPARKLE_PRIVATE_KEY_PATH="${SPARKLE_PRIVATE_KEY_PATH:-private/sparkle_private_key}"
 # Try alternate location if primary doesn't exist
@@ -121,8 +124,14 @@ generate_signature() {
         exit 1
     fi
     
-    # Sign using the private key file (no fallback)
-    local signature=$($sign_update_bin "$file_path" -f "$SPARKLE_PRIVATE_KEY_PATH" -p 2>/dev/null)
+    # Sign using the private key file with account if specified
+    local sign_cmd="$sign_update_bin \"$file_path\" -f \"$SPARKLE_PRIVATE_KEY_PATH\" -p"
+    if [ -n "$SPARKLE_ACCOUNT" ]; then
+        sign_cmd="$sign_cmd --account \"$SPARKLE_ACCOUNT\""
+        echo "Using Sparkle account: $SPARKLE_ACCOUNT" >&2
+    fi
+    
+    local signature=$(eval $sign_cmd 2>/dev/null)
     if [ -n "$signature" ] && [ "$signature" != "-----END PRIVATE KEY-----" ]; then
         echo "$signature"
         return 0
@@ -130,6 +139,11 @@ generate_signature() {
     
     echo -e "${RED}❌ Error: Failed to generate signature for $filename${NC}" >&2
     echo "Please ensure the private key at $SPARKLE_PRIVATE_KEY_PATH is valid" >&2
+    if [ -n "$SPARKLE_ACCOUNT" ]; then
+        echo "Also check that the account '$SPARKLE_ACCOUNT' is correct" >&2
+    else
+        echo "You may need to specify SPARKLE_ACCOUNT environment variable" >&2
+    fi
     exit 1
 }
 
@@ -328,6 +342,19 @@ EOF
 # Main function
 main() {
     print_info "Generating appcast files for $GITHUB_REPO_FULL"
+    
+    # Check if we need to detect the Sparkle account
+    if [ -z "$SPARKLE_ACCOUNT" ] && command -v security >/dev/null 2>&1; then
+        print_info "Attempting to detect Sparkle account from Keychain..."
+        # Try to find EdDSA keys in the Keychain
+        DETECTED_ACCOUNT=$(security find-generic-password -s "https://sparkle-project.org" 2>/dev/null | grep "acct" | sed 's/.*acct"<blob>="\(.*\)"/\1/' || echo "")
+        if [ -n "$DETECTED_ACCOUNT" ]; then
+            SPARKLE_ACCOUNT="$DETECTED_ACCOUNT"
+            print_info "Detected Sparkle account: $SPARKLE_ACCOUNT"
+        else
+            print_warning "Could not detect Sparkle account. Using default signing."
+        fi
+    fi
     
     # Create temporary directory
     local temp_dir=$(mktemp -d)

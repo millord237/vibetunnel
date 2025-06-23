@@ -120,6 +120,15 @@ if [[ ! -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
     echo "   You can copy it from the project root: cp ../CHANGELOG.md ."
 fi
 
+# Clean up any stuck VibeTunnel volumes before starting
+echo "🧹 Cleaning up any stuck DMG volumes..."
+for volume in /Volumes/VibeTunnel*; do
+    if [ -d "$volume" ]; then
+        echo "   Unmounting $volume..."
+        hdiutil detach "$volume" -force 2>/dev/null || true
+    fi
+done
+
 # Check if we're on main branch
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [[ "$CURRENT_BRANCH" != "main" ]]; then
@@ -177,8 +186,17 @@ fi
 
 # Check if changelog file exists
 if [[ ! -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
-    echo -e "${YELLOW}⚠️  Warning: CHANGELOG.md not found${NC}"
-    echo "   Release notes will be basic"
+    echo -e "${YELLOW}⚠️  Warning: CHANGELOG.md not found in mac/ directory${NC}"
+    echo "   Looking for it in project root..."
+    if [[ -f "$PROJECT_ROOT/../CHANGELOG.md" ]]; then
+        echo "   Found CHANGELOG.md in project root"
+        CHANGELOG_PATH="$PROJECT_ROOT/../CHANGELOG.md"
+    else
+        echo "   CHANGELOG.md not found anywhere - release notes will be basic"
+        CHANGELOG_PATH=""
+    fi
+else
+    CHANGELOG_PATH="$PROJECT_ROOT/CHANGELOG.md"
 fi
 
 # Check if we're up to date with origin/main
@@ -574,14 +592,14 @@ echo "📤 Creating GitHub release..."
 # Generate release notes from changelog
 echo "📝 Generating release notes from changelog..."
 CHANGELOG_HTML=""
-if [[ -x "$SCRIPT_DIR/changelog-to-html.sh" ]] && [[ -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
+if [[ -x "$SCRIPT_DIR/changelog-to-html.sh" ]] && [[ -n "$CHANGELOG_PATH" ]] && [[ -f "$CHANGELOG_PATH" ]]; then
     # Extract version for changelog (remove any pre-release suffixes for lookup)
     CHANGELOG_VERSION="$RELEASE_VERSION"
     if [[ "$CHANGELOG_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
         CHANGELOG_BASE="${BASH_REMATCH[1]}"
         # Try full version first, then base version
-        CHANGELOG_HTML=$("$SCRIPT_DIR/changelog-to-html.sh" "$CHANGELOG_VERSION" "$PROJECT_ROOT/CHANGELOG.md" 2>/dev/null || \
-                        "$SCRIPT_DIR/changelog-to-html.sh" "$CHANGELOG_BASE" "$PROJECT_ROOT/CHANGELOG.md" 2>/dev/null || \
+        CHANGELOG_HTML=$("$SCRIPT_DIR/changelog-to-html.sh" "$CHANGELOG_VERSION" "$CHANGELOG_PATH" 2>/dev/null || \
+                        "$SCRIPT_DIR/changelog-to-html.sh" "$CHANGELOG_BASE" "$CHANGELOG_PATH" 2>/dev/null || \
                         echo "")
     fi
 fi
@@ -618,6 +636,9 @@ echo -e "${BLUE}📋 Step 8/9: Updating appcast...${NC}"
 
 # Generate appcast
 echo "🔐 Generating appcast with EdDSA signatures..."
+# Set the Sparkle account for sign_update
+export SPARKLE_ACCOUNT="VibeTunnel"
+echo "   Using Sparkle account: $SPARKLE_ACCOUNT"
 "$SCRIPT_DIR/generate-appcast.sh"
 
 # Verify the appcast was updated
@@ -640,8 +661,17 @@ echo "📤 Committing and pushing changes..."
 # Add version.xcconfig changes
 git add "$VERSION_CONFIG" 2>/dev/null || true
 
-# Add appcast files
-git add "$PROJECT_ROOT/../appcast.xml" "$PROJECT_ROOT/../appcast-prerelease.xml" 2>/dev/null || true
+# Add appcast files (they're in project root, not mac/)
+if [[ -f "$PROJECT_ROOT/../appcast.xml" ]]; then
+    git add "$PROJECT_ROOT/../appcast.xml" 2>/dev/null || true
+else
+    echo -e "${YELLOW}⚠️  Warning: appcast.xml not found in project root${NC}"
+fi
+if [[ -f "$PROJECT_ROOT/../appcast-prerelease.xml" ]]; then
+    git add "$PROJECT_ROOT/../appcast-prerelease.xml" 2>/dev/null || true
+else
+    echo -e "${YELLOW}⚠️  Warning: appcast-prerelease.xml not found in project root${NC}"
+fi
 
 if ! git diff --cached --quiet; then
     git commit -m "Update appcast and version for $RELEASE_VERSION"
