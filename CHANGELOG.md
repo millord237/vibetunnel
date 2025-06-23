@@ -4,17 +4,19 @@
 
 There's too much to list! 
 
-- Redesigned, responsive frontend.
+- Redesigned, responsive, animated frontend.
 - File-Picker to see files on-the-go.
 - Creating new Terminals is now much more reliable.
-
+- Added terminal font size adjustment in the settings dropdown
+- Fresh new icon for Progressive Web App installations
+- Refined bounce animations for a more subtle, professional feel
 
 ### 🎨 Web Frontend Improvements
 - **Enhanced Terminal Grid Layout** - Switched to CSS Grid for better responsive terminal layouts
 - **Phosphor Decay Effect** - Added retro CRT-style phosphor decay visual effect for closed terminals
-- **Font Size Controls** - Added terminal font size adjustment in the settings dropdown
-- **Improved Terminal Animations** - Refined bounce animations for a more subtle, professional feel
-- **Updated PWA Icon** - Fresh new icon for Progressive Web App installations
+- **Font Size Controls** 
+- **Improved Terminal Animations** 
+- **Updated PWA Icon** 
 - **Better Session Management** - Improved terminal width spanning and layout optimization
 
 ### 🚀 Server Enhancements  
