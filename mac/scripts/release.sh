@@ -254,12 +254,12 @@ fi
 # Verify build number hasn't been used
 echo "🔍 Checking build number uniqueness..."
 EXISTING_BUILDS=""
-if [[ -f "$PROJECT_ROOT/appcast.xml" ]]; then
-    APPCAST_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/appcast.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
+if [[ -f "$PROJECT_ROOT/../appcast.xml" ]]; then
+    APPCAST_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/../appcast.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
     EXISTING_BUILDS+="$APPCAST_BUILDS"
 fi
-if [[ -f "$PROJECT_ROOT/appcast-prerelease.xml" ]]; then
-    PRERELEASE_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/appcast-prerelease.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
+if [[ -f "$PROJECT_ROOT/../appcast-prerelease.xml" ]]; then
+    PRERELEASE_BUILDS=$(grep -E '<sparkle:version>[0-9]+</sparkle:version>' "$PROJECT_ROOT/../appcast-prerelease.xml" 2>/dev/null | sed 's/.*<sparkle:version>\([0-9]*\)<\/sparkle:version>.*/\1/' | tr '\n' ' ' || true)
     EXISTING_BUILDS+="$PRERELEASE_BUILDS"
 fi
 
@@ -622,11 +622,11 @@ echo "🔐 Generating appcast with EdDSA signatures..."
 
 # Verify the appcast was updated
 if [[ "$RELEASE_TYPE" == "stable" ]]; then
-    if ! grep -q "<sparkle:version>$BUILD_NUMBER</sparkle:version>" "$PROJECT_ROOT/appcast.xml"; then
+    if ! grep -q "<sparkle:version>$BUILD_NUMBER</sparkle:version>" "$PROJECT_ROOT/../appcast.xml"; then
         echo -e "${YELLOW}⚠️  Appcast may not have been updated. Please check manually.${NC}"
     fi
 else
-    if ! grep -q "<sparkle:version>$BUILD_NUMBER</sparkle:version>" "$PROJECT_ROOT/appcast-prerelease.xml"; then
+    if ! grep -q "<sparkle:version>$BUILD_NUMBER</sparkle:version>" "$PROJECT_ROOT/../appcast-prerelease.xml"; then
         echo -e "${YELLOW}⚠️  Pre-release appcast may not have been updated. Please check manually.${NC}"
     fi
 fi
@@ -641,7 +641,7 @@ echo "📤 Committing and pushing changes..."
 git add "$VERSION_CONFIG" 2>/dev/null || true
 
 # Add appcast files
-git add "$PROJECT_ROOT/appcast.xml" "$PROJECT_ROOT/appcast-prerelease.xml" 2>/dev/null || true
+git add "$PROJECT_ROOT/../appcast.xml" "$PROJECT_ROOT/../appcast-prerelease.xml" 2>/dev/null || true
 
 if ! git diff --cached --quiet; then
     git commit -m "Update appcast and version for $RELEASE_VERSION"
