@@ -813,7 +813,7 @@ body {
       border-radius: 0.5rem;
     }
     85% {
-      transform: scale(1.03) translate(0, 0);
+      transform: scale(1.01) translate(0, 0);
       opacity: 1;
       border-radius: 0.75rem;
     }
@@ -840,7 +840,7 @@ body {
 
   /* Apply the custom animations */
   ::view-transition-new(create-session-modal) {
-    animation: expand-from-button 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: expand-from-button 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
   ::view-transition-old(create-session-modal) {
