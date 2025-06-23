@@ -58,10 +58,10 @@ export class VibeTunnelApp extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.setupHotReload();
-    this.checkAuthenticationStatus();
-    this.setupRouting();
     this.setupKeyboardShortcuts();
     this.setupNotificationHandlers();
+    // Initialize authentication and routing together
+    this.initializeApp();
   }
 
   disconnectedCallback() {
@@ -87,6 +87,14 @@ export class VibeTunnelApp extends LitElement {
     window.addEventListener('keydown', this.handleKeyDown);
   }
 
+  private async initializeApp() {
+    // First check authentication
+    await this.checkAuthenticationStatus();
+
+    // Then setup routing after auth is determined and sessions are loaded
+    this.setupRouting();
+  }
+
   private async checkAuthenticationStatus() {
     // Check if no-auth is enabled first
     try {
@@ -99,7 +107,7 @@ export class VibeTunnelApp extends LitElement {
           console.log('🔓 No auth required, bypassing authentication');
           this.isAuthenticated = true;
           this.currentView = 'list';
-          this.loadSessions();
+          await this.loadSessions(); // Wait for sessions to load
           this.startAutoRefresh();
           return;
         }
@@ -113,19 +121,31 @@ export class VibeTunnelApp extends LitElement {
 
     if (this.isAuthenticated) {
       this.currentView = 'list';
-      this.loadSessions();
+      await this.loadSessions(); // Wait for sessions to load
       this.startAutoRefresh();
     } else {
       this.currentView = 'auth';
     }
   }
 
-  private handleAuthSuccess() {
+  private async handleAuthSuccess() {
     console.log('✅ Authentication successful');
     this.isAuthenticated = true;
     this.currentView = 'list';
-    this.loadSessions();
+    await this.loadSessions();
     this.startAutoRefresh();
+
+    // Check if there was a session ID in the URL that we should navigate to
+    const url = new URL(window.location.href);
+    const sessionId = url.searchParams.get('session');
+    if (sessionId) {
+      // Try to find the session and navigate to it
+      const session = this.sessions.find((s) => s.id === sessionId);
+      if (session) {
+        this.selectedSessionId = sessionId;
+        this.currentView = 'session';
+      }
+    }
   }
 
   private async handleLogout() {
@@ -486,8 +506,27 @@ export class VibeTunnelApp extends LitElement {
     }
 
     if (sessionId) {
-      this.selectedSessionId = sessionId;
-      this.currentView = 'session';
+      // Check if we have sessions loaded
+      if (this.sessions.length === 0 && this.isAuthenticated) {
+        // Sessions not loaded yet, load them first
+        await this.loadSessions();
+      }
+
+      // Now check if the session exists
+      const session = this.sessions.find((s) => s.id === sessionId);
+      if (session) {
+        this.selectedSessionId = sessionId;
+        this.currentView = 'session';
+      } else {
+        // Session not found, go to list view
+        console.warn(`Session ${sessionId} not found in sessions list`);
+        this.selectedSessionId = null;
+        this.currentView = 'list';
+        // Clear the session param from URL
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('session');
+        window.history.replaceState({}, '', newUrl.toString());
+      }
     } else {
       this.selectedSessionId = null;
       this.currentView = 'list';
