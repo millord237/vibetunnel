@@ -173,7 +173,7 @@ pub async fn start_server(
     if state.backend_manager.is_running().await {
         // Get port from settings
         let settings = crate::settings::Settings::load().unwrap_or_default();
-        let port = settings.dashboard.port;
+        let port = settings.dashboard.server_port;
 
         // Check if ngrok is active
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
@@ -191,7 +191,7 @@ pub async fn start_server(
 
     // Load settings
     let settings = crate::settings::Settings::load().unwrap_or_default();
-    let port = settings.dashboard.port;
+    let port = settings.dashboard.server_port;
 
     // Start the Node.js server
     state.backend_manager.start().await?;
@@ -262,7 +262,7 @@ pub async fn get_server_status(state: State<'_, AppState>) -> Result<ServerStatu
     if state.backend_manager.is_running().await {
         // Get port from settings
         let settings = crate::settings::Settings::load().unwrap_or_default();
-        let port = settings.dashboard.port;
+        let port = settings.dashboard.server_port;
 
         // Check if ngrok is active and return its URL
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
@@ -1910,9 +1910,7 @@ pub async fn set_dashboard_password(
     settings.save()?;
 
     // Update the running server's auth configuration if it's running
-    let server = state.http_server.read().await;
-    if server.is_some() {
-        drop(server);
+    if state.backend_manager.is_running().await {
         // Restart server to apply new auth settings
         restart_server(state, app).await?;
     }
@@ -1988,10 +1986,9 @@ pub async fn test_api_endpoint(
     endpoint: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    let server = state.http_server.read().await;
-
-    if let Some(http_server) = server.as_ref() {
-        let port = http_server.port();
+    if state.backend_manager.is_running().await {
+        let settings = crate::settings::Settings::load().unwrap_or_default();
+        let port = settings.dashboard.server_port;
         let url = format!("http://127.0.0.1:{}{}", port, endpoint);
 
         // Create a simple HTTP client request

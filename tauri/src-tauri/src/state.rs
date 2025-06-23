@@ -56,7 +56,7 @@ impl AppState {
 
         // Get port from settings or use default
         let settings = crate::settings::Settings::load().unwrap_or_default();
-        let port = settings.dashboard.port;
+        let port = settings.dashboard.server_port;
         let backend_manager = BackendManager::new(port);
         let api_client = Arc::new(ApiClient::new(port));
 

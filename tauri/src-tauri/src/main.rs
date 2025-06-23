@@ -17,6 +17,7 @@ mod backend_manager;
 mod cli_installer;
 mod commands;
 mod debug_features;
+mod errors;
 mod fs_api;
 mod keychain;
 mod network_utils;
@@ -494,9 +495,9 @@ fn main() {
                             // Get server status and open dashboard in browser
                             let app = tray.app_handle();
                             let state = app.state::<AppState>();
-                            let server_guard = state.http_server.blocking_read();
-                            if let Some(server) = server_guard.as_ref() {
-                                let url = format!("http://127.0.0.1:{}", server.port());
+                            if state.backend_manager.blocking_is_running() {
+                                let settings = crate::settings::Settings::load().unwrap_or_default();
+                                let url = format!("http://127.0.0.1:{}", settings.dashboard.server_port);
                                 let _ = open::that(url);
                             }
                         }
@@ -545,11 +546,14 @@ fn handle_tray_menu_event(app: &AppHandle, event_id: &str) {
         "dashboard" => {
             // Get server status and open dashboard in browser
             let state = app.state::<AppState>();
-            let server_guard = state.http_server.blocking_read();
-            if let Some(server) = server_guard.as_ref() {
-                let url = format!("http://127.0.0.1:{}", server.port());
-                let _ = open::that(url);
-            }
+            let backend_manager = state.backend_manager.clone();
+            tauri::async_runtime::spawn(async move {
+                if backend_manager.is_running().await {
+                    let settings = crate::settings::Settings::load().unwrap_or_default();
+                    let url = format!("http://127.0.0.1:{}", settings.dashboard.server_port);
+                    let _ = open::that(url);
+                }
+            });
         }
         "show_tutorial" => {
             // Show welcome window instead
@@ -603,11 +607,14 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             // Terminal creation should be done via the web dashboard
             // Open dashboard in browser
             let state = app.state::<AppState>();
-            let server_guard = state.http_server.blocking_read();
-            if let Some(server) = server_guard.as_ref() {
-                let url = format!("http://127.0.0.1:{}", server.port());
-                let _ = open::that(url);
-            }
+            let backend_manager = state.backend_manager.clone();
+            tauri::async_runtime::spawn(async move {
+                if backend_manager.is_running().await {
+                    let settings = crate::settings::Settings::load().unwrap_or_default();
+                    let url = format!("http://127.0.0.1:{}", settings.dashboard.server_port);
+                    let _ = open::that(url);
+                }
+            });
         }
         "reload" => {
             if let Some(window) = app.get_webview_window("main") {
@@ -617,11 +624,14 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         "show-dashboard" => {
             // Open dashboard in browser instead of showing main window
             let state = app.state::<AppState>();
-            let server_guard = state.http_server.blocking_read();
-            if let Some(server) = server_guard.as_ref() {
-                let url = format!("http://127.0.0.1:{}", server.port());
-                let _ = open::that(url);
-            }
+            let backend_manager = state.backend_manager.clone();
+            tauri::async_runtime::spawn(async move {
+                if backend_manager.is_running().await {
+                    let settings = crate::settings::Settings::load().unwrap_or_default();
+                    let url = format!("http://127.0.0.1:{}", settings.dashboard.server_port);
+                    let _ = open::that(url);
+                }
+            });
         }
         "quit" => {
             quit_app(app.clone());
@@ -777,10 +787,7 @@ async fn start_server_with_monitoring(app_handle: AppHandle) {
             check_interval.tick().await;
 
             // Check if server is still running
-            let server_running = {
-                let server = monitoring_state.http_server.read().await;
-                server.is_some()
-            };
+            let server_running = monitoring_state.backend_manager.is_running().await;
 
             if server_running {
                 // Perform health check
@@ -891,17 +898,20 @@ async fn perform_server_health_check(state: &AppState) -> bool {
 
 // Internal server management functions that work directly with AppState
 async fn start_server_internal(state: &AppState) -> Result<ServerStatus, String> {
-    let mut server = state.http_server.write().await;
-
-    if let Some(http_server) = server.as_ref() {
-        // Get actual port from running server
-        let port = http_server.port();
+    // Check if backend is already running
+    if state.backend_manager.is_running().await {
+        // Get port from settings
+        let settings = crate::settings::Settings::load().unwrap_or_default();
+        let port = settings.dashboard.server_port;
 
         // Check if ngrok is active
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
             ngrok_tunnel.url
         } else {
-            format!("http://127.0.0.1:{}", port)
+            match settings.dashboard.access_mode.as_str() {
+                "network" => format!("http://0.0.0.0:{}", port),
+                _ => format!("http://127.0.0.1:{}", port),
+            }
         };
 
         return Ok(ServerStatus {
@@ -911,37 +921,22 @@ async fn start_server_internal(state: &AppState) -> Result<ServerStatus, String>
         });
     }
 
-    // Load settings to check if password is enabled
+    // Start the Node.js backend
+    state.backend_manager.start().await?;
+
+    // Load settings for access mode
     let settings = crate::settings::Settings::load().unwrap_or_default();
+    let port = settings.dashboard.server_port;
 
-    // Start HTTP server with auth if configured
-    let mut http_server =
-        if settings.dashboard.enable_password && !settings.dashboard.password.is_empty() {
-            let auth_config = crate::auth::AuthConfig::new(true, Some(settings.dashboard.password));
-            HttpServer::with_auth(
-                state.terminal_manager.clone(),
-                state.session_monitor.clone(),
-                auth_config,
-            )
-        } else {
-            HttpServer::new(
-                state.terminal_manager.clone(),
-                state.session_monitor.clone(),
-            )
-        };
-
-    // Start server with appropriate access mode
-    let (port, url) = match settings.dashboard.access_mode.as_str() {
+    // Handle access mode
+    let url = match settings.dashboard.access_mode.as_str() {
         "network" => {
-            let port = http_server.start_with_mode("network").await?;
-            (port, format!("http://0.0.0.0:{}", port))
+            // Node.js server handles network binding internally
+            format!("http://0.0.0.0:{}", port)
         }
         "ngrok" => {
-            // For ngrok mode, start in localhost and let ngrok handle the tunneling
-            let port = http_server.start_with_mode("localhost").await?;
-
             // Try to start ngrok tunnel if auth token is configured
-            let url = if let Some(auth_token) = settings.advanced.ngrok_auth_token {
+            if let Some(auth_token) = settings.advanced.ngrok_auth_token {
                 if !auth_token.is_empty() {
                     match state
                         .ngrok_manager
@@ -959,17 +954,12 @@ async fn start_server_internal(state: &AppState) -> Result<ServerStatus, String>
                 }
             } else {
                 return Err("Ngrok auth token is required for ngrok access mode".to_string());
-            };
-
-            (port, url)
+            }
         }
         _ => {
-            let port = http_server.start_with_mode("localhost").await?;
-            (port, format!("http://127.0.0.1:{}", port))
+            format!("http://127.0.0.1:{}", port)
         }
     };
-
-    *server = Some(http_server);
 
     Ok(ServerStatus {
         running: true,
@@ -979,11 +969,8 @@ async fn start_server_internal(state: &AppState) -> Result<ServerStatus, String>
 }
 
 async fn stop_server_internal(state: &AppState) -> Result<(), String> {
-    let mut server = state.http_server.write().await;
-
-    if let Some(mut http_server) = server.take() {
-        http_server.stop().await?;
-    }
+    // Stop the Node.js backend
+    state.backend_manager.stop().await?;
 
     // Also stop ngrok tunnel if active
     let _ = state.ngrok_manager.stop_tunnel().await;
@@ -992,17 +979,16 @@ async fn stop_server_internal(state: &AppState) -> Result<(), String> {
 }
 
 async fn get_server_status_internal(state: &AppState) -> Result<ServerStatus, String> {
-    let server = state.http_server.read().await;
-
-    if let Some(http_server) = server.as_ref() {
-        let port = http_server.port();
+    if state.backend_manager.is_running().await {
+        // Get port from settings
+        let settings = crate::settings::Settings::load().unwrap_or_default();
+        let port = settings.dashboard.server_port;
 
         // Check if ngrok is active and return its URL
         let url = if let Some(ngrok_tunnel) = state.ngrok_manager.get_tunnel_status() {
             ngrok_tunnel.url
         } else {
             // Check settings to determine the correct URL format
-            let settings = crate::settings::Settings::load().unwrap_or_default();
             match settings.dashboard.access_mode.as_str() {
                 "network" => format!("http://0.0.0.0:{}", port),
                 _ => format!("http://127.0.0.1:{}", port),

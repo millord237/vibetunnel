@@ -224,13 +224,13 @@ impl TrayMenuManager {
         if let Some(tray) = app.tray_by_id("main") {
             // Get current server status from state
             let state = app.state::<crate::state::AppState>();
-            let server_guard = state.http_server.read().await;
-            let (running, port) = if let Some(server) = server_guard.as_ref() {
-                (true, server.port())
+            let running = state.backend_manager.is_running().await;
+            let settings = crate::settings::Settings::load().unwrap_or_default();
+            let port = if running {
+                settings.dashboard.server_port
             } else {
-                (false, 4020)
+                4020
             };
-            drop(server_guard);
             
             // Get monitored sessions for detailed info
             let sessions = state.session_monitor.get_sessions().await;

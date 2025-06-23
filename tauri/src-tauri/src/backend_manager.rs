@@ -469,6 +469,14 @@ impl BackendManager {
         self.server.is_running().await
     }
 
+    /// Check if server is running (blocking version)
+    pub fn blocking_is_running(&self) -> bool {
+        tokio::task::block_in_place(|| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(self.is_running())
+        })
+    }
+
     /// Get server instance
     pub fn get_server(&self) -> Arc<NodeJsServer> {
         self.server.clone()
