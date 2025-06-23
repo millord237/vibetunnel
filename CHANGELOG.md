@@ -16,13 +16,15 @@ There's too much to list!
 - Better support for shell aliases and improved debug logging
 - Enhanced Unix socket server implementation for faster local communication
 - Special handling for Warp terminal with custom enter key behavior
-
+- New dock menu with quick actions when right-clicking the app icon
+- More resilient vt command-line tool with better error handling
+- Ensured vibetunnel server properly terminates when Mac app is killed
 ### 🖥️ Mac App Updates
 - **Warp Terminal Support**
-- **Dock Menu Integration** - New dock menu with quick actions when right-clicking the app icon
-- **Improved vt Script** - More resilient vt command-line tool with better error handling
+- **Dock Menu Integration** 
+- **Improved vt Script** 
 - **Build System Fixes** - Fixed build issues on macOS Sequoia and improved hash file handling
-- **Server Lifecycle** - Ensured vibetunnel server properly terminates when Mac app is killed
+- **Server Lifecycle** 
 
 ### 🐛 Bug Fixes
 - Fixed derived data path filtering to avoid indexing unnecessary files
