@@ -35,6 +35,7 @@ Before you begin, ensure you have the following installed:
   - **macOS**: Xcode Command Line Tools
   - **Linux**: `webkit2gtk`, `libgtk-3-dev`, `libappindicator3-dev`
   - **Windows**: WebView2 (comes with Windows 11/10)
+- Tauri: `cargo install tauri-cli`
 
 ## Getting Started
 
