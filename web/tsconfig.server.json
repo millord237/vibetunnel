@@ -1,25 +1,26 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "module": "ES2020",
-    "lib": ["ES2020", "dom", "dom.iterable"],
-    "outDir": "./public",
+    "module": "CommonJS",
+    "lib": ["ES2020"],
+    "outDir": "./dist",
     "rootDir": "./src",
-    "inlineSourceMap": false,
-    "inlineSources": true,
     "declaration": true,
+    "types": ["node"],
     "composite": true
   },
   "include": [
-    "src/client/**/*",
+    "src/server/**/*",
     "src/shared/**/*",
-    "src/types/**/*"
+    "src/types/**/*",
+    "src/cli.ts",
+    "src/index.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "src/cli.ts",
-    "src/client/sw.ts",
+    "public",
+    "src/client/**/*",
     "src/**/*.test.ts",
     "src/**/*.spec.ts"
   ]

@@ -81,7 +81,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
             });
 
             if (response.ok) {
-              const remoteSessions = await response.json();
+              const remoteSessions = (await response.json()) as Session[];
               logger.debug(`got ${remoteSessions.length} sessions from remote ${remote.name}`);
 
               // Track session IDs for this remote
@@ -169,7 +169,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
           return res.status(response.status).json(error);
         }
 
-        const result = await response.json();
+        const result = (await response.json()) as { sessionId: string };
         logger.debug(`remote session creation took ${Date.now() - startTime}ms`);
 
         // Track the session in the remote's sessionIds
@@ -543,7 +543,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
             });
 
             if (response.ok) {
-              const result = await response.json();
+              const result = (await response.json()) as { cleanedSessions: string[] };
               const cleanedSessionIds = result.cleanedSessions || [];
               const cleanedCount = cleanedSessionIds.length;
               totalCleaned += cleanedCount;
