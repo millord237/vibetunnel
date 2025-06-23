@@ -619,71 +619,72 @@ private struct PortConfigurationView: View {
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "PortConfiguration")
 
     var body: some View {
-        HStack {
-            Text("Server port:")
-            Spacer()
-            HStack(spacing: 4) {
-                TextField("", text: $serverPort)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 80)
-                    .multilineTextAlignment(.center)
-                    .onChange(of: serverPort) { _, newValue in
-                        // Validate port number
-                        if let port = Int(newValue), port > 0, port < 65_536 {
-                            portNumber = port
-                            Task {
-                                await checkPortAvailability(port)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Server port:")
+                Spacer()
+                HStack(spacing: 4) {
+                    TextField("", text: $serverPort)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .multilineTextAlignment(.center)
+                        .onChange(of: serverPort) { _, newValue in
+                            // Validate port number
+                            if let port = Int(newValue), port > 0, port < 65_536 {
+                                portNumber = port
+                                Task {
+                                    await checkPortAvailability(port)
+                                }
+                                restartServerWithNewPort(port)
                             }
-                            restartServerWithNewPort(port)
                         }
+
+                    VStack(spacing: 0) {
+                        Button(
+                            action: {
+                                if portNumber < 65_535 {
+                                    portNumber += 1
+                                    serverPort = String(portNumber)
+                                    restartServerWithNewPort(portNumber)
+                                }
+                            },
+                            label: {
+                                Image(systemName: "chevron.up")
+                                    .font(.system(size: 10))
+                                    .frame(width: 16, height: 12)
+                            }
+                        )
+                        .buttonStyle(.plain)
+                        .help("Increase port number")
+
+                        Button(
+                            action: {
+                                if portNumber > 1 {
+                                    portNumber -= 1
+                                    serverPort = String(portNumber)
+                                    restartServerWithNewPort(portNumber)
+                                }
+                            },
+                            label: {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10))
+                                    .frame(width: 16, height: 12)
+                            }
+                        )
+                        .buttonStyle(.plain)
+                        .help("Decrease port number")
                     }
-
-                VStack(spacing: 0) {
-                    Button(
-                        action: {
-                            if portNumber < 65_535 {
-                                portNumber += 1
-                                serverPort = String(portNumber)
-                                restartServerWithNewPort(portNumber)
-                            }
-                        },
-                        label: {
-                            Image(systemName: "chevron.up")
-                                .font(.system(size: 10))
-                                .frame(width: 16, height: 12)
-                        }
-                    )
-                    .buttonStyle(.plain)
-                    .help("Increase port number")
-
-                    Button(
-                        action: {
-                            if portNumber > 1 {
-                                portNumber -= 1
-                                serverPort = String(portNumber)
-                                restartServerWithNewPort(portNumber)
-                            }
-                        },
-                        label: {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10))
-                                .frame(width: 16, height: 12)
-                        }
-                    )
-                    .buttonStyle(.plain)
-                    .help("Decrease port number")
+                }
+                .onAppear {
+                    portNumber = Int(serverPort) ?? 4_020
+                }
+                .task {
+                    await checkPortAvailability(portNumber)
                 }
             }
-            .onAppear {
-                portNumber = Int(serverPort) ?? 4_020
-            }
-            .task {
-                await checkPortAvailability(portNumber)
-            }
-        }
 
-        // Port conflict warning
-        if let conflict = portConflict {
+            // Port conflict warning
+            if let conflict = portConflict {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -760,6 +761,7 @@ private struct PortConfigurationView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
+            }
         }
     }
 
