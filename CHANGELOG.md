@@ -1,6 +1,10 @@
 # Changelog
 
 ## [1.0.0-beta.3] - 2025-06-23
+
+There's too much to list! 
+
+- Redesigned, 
 - Switched to CSS Grid for better responsive terminal layouts
 
 
