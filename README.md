@@ -37,6 +37,9 @@ vt npm run dev
 # Monitor AI agents
 vt claude --dangerously-skip-permissions
 
+# Shell aliases work automatically!
+vt claude-danger  # Your custom aliases are resolved
+
 # Open an interactive shell
 vt --shell
 ```
@@ -55,6 +58,7 @@ Visit [http://localhost:4020](http://localhost:4020) to see all your terminal se
 - **🎬 Session Recording** - All sessions recorded in asciinema format for later playback
 - **⚡ High Performance** - Powered by Bun runtime for blazing-fast JavaScript execution
 - **🍎 Apple Silicon Native** - Optimized for M1/M2/M3 Macs with ARM64-only binaries
+- **🐚 Shell Alias Support** - Your custom aliases and shell functions work automatically
 
 ## Architecture
 
@@ -134,6 +138,20 @@ For development setup and contribution guidelines, see [CONTRIBUTING.md](docs/CO
 - **Server**: `web/src/server/` (TypeScript/Node.js)
 - **Web UI**: `web/src/client/` (Lit/TypeScript)
 - **iOS App**: `ios/VibeTunnel/`
+
+### Debug Logging
+
+Enable debug logging for troubleshooting:
+
+```bash
+# Enable debug mode
+export VIBETUNNEL_DEBUG=1
+
+# Or use inline
+VIBETUNNEL_DEBUG=1 vt your-command
+```
+
+Debug logs are written to `~/.vibetunnel/log.txt`.
 
 ## Documentation
 
