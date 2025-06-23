@@ -109,11 +109,11 @@ jobs:
 
     - name: Build frontend and backend
       working-directory: web
-      run: npm run build
+      run: npm run build:ci
 
     - name: Run tests
       working-directory: web
-      run: npm run test
+      run: npm run test:ci
       env:
         CI: true
 
