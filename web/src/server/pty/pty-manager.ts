@@ -350,10 +350,10 @@ export class PtyManager extends EventEmitter {
           }
         }
 
-        // Write to asciinema file
+        // Write to asciinema file (now async, non-blocking)
         asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
 
-        // Forward to stdout if requested (for fwd.ts)
+        // Forward to stdout if requested (for fwd.ts) with batching
         if (forwardToStdout) {
           process.stdout.write(data);
         }
