@@ -5,8 +5,8 @@
 There's too much to list! 
 
 - Redesigned, responsive frontend.
-- File-Picker
-- Switched to CSS Grid for better responsive terminal layouts
+- File-Picker to see files on-the-go.
+- Creating new Terminals is now much more reliable.
 
 
 ### 🎨 Web Frontend Improvements
