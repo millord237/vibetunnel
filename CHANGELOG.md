@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.0-beta.3] - 2025-06-23
+
+### 🎨 Improvements
+- Added experimental Tauri-based cross-platform desktop app
+- Enhanced iOS companion app development
+- Updated PWA icon and favicon for better web experience
+- Improved terminal bounce animation effects
+- Removed server mode setting - Go is now the only supported server backend
+
+### 🐛 Bug Fixes
+- Fixed compilation warnings and unused imports
+- Removed recording feature from Tauri implementation to focus on core functionality
+
+### 🛠️ Technical Updates
+- Added Rust formatter and linter configuration
+- Major refactoring of Tauri app with enhanced features and managers
+- Improved Unix socket server implementation
+- Better light/dark mode support in welcome screens
+
 ## [1.0.0-beta.2] - 2025-06-19
 
 ### 🎨 Improvements
