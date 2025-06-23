@@ -72,6 +72,7 @@ enum TerminalWidth: CaseIterable {
 }
 
 /// Manager for terminal width preferences
+@MainActor
 class TerminalWidthManager {
     static let shared = TerminalWidthManager()
     

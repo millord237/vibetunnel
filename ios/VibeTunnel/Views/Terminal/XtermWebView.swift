@@ -8,7 +8,7 @@ struct XtermWebView: UIViewRepresentable {
     let theme: TerminalTheme
     let onInput: (String) -> Void
     let onResize: (Int, Int) -> Void
-    @ObservedObject var viewModel: TerminalViewModel
+    var viewModel: TerminalViewModel
     
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -363,6 +363,7 @@ struct XtermWebView: UIViewRepresentable {
 }
 
 // MARK: - SSEClientDelegate
+@MainActor
 extension XtermWebView.Coordinator: SSEClientDelegate {
     func sseClient(_ client: SSEClient, didReceiveEvent event: SSEClient.SSEEvent) {
         switch event {

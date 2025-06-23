@@ -5,7 +5,7 @@ import Foundation
 /// SSEClient handles the text-based streaming protocol used by the VibeTunnel server
 /// to send terminal output in real-time. It parses the event stream format and
 /// provides decoded events to a delegate.
-class SSEClient: NSObject {
+final class SSEClient: NSObject, @unchecked Sendable {
     private var task: URLSessionDataTask?
     private var session: URLSession!
     private let url: URL
