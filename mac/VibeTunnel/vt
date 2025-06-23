@@ -13,15 +13,25 @@ done
 # If not found in standard locations with valid binary, search for it
 if [ -z "$APP_PATH" ]; then
     # First try DerivedData (for development)
-    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "VibeTunnel.app" -type d 2>/dev/null | grep -v "\.dSYM" | grep -v "Index\.noindex" | head -1)
+    for CANDIDATE in $(find ~/Library/Developer/Xcode/DerivedData -name "VibeTunnel.app" -type d 2>/dev/null | grep -v "\.dSYM" | grep -v "Index\.noindex"); do
+        if [ -f "$CANDIDATE/Contents/Resources/vibetunnel" ]; then
+            APP_PATH="$CANDIDATE"
+            break
+        fi
+    done
     
     # If still not found, use mdfind as last resort
-    if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
-        APP_PATH=$(mdfind -name "VibeTunnel.app" 2>/dev/null | grep -v "\.dSYM" | head -1)
+    if [ -z "$APP_PATH" ]; then
+        for CANDIDATE in $(mdfind -name "VibeTunnel.app" 2>/dev/null | grep -v "\.dSYM"); do
+            if [ -f "$CANDIDATE/Contents/Resources/vibetunnel" ]; then
+                APP_PATH="$CANDIDATE"
+                break
+            fi
+        done
     fi
     
-    if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
-        echo "Error: VibeTunnel.app not found anywhere on the system" >&2
+    if [ -z "$APP_PATH" ]; then
+        echo "Error: VibeTunnel.app with vibetunnel binary not found anywhere on the system" >&2
         exit 1
     fi
 fi
