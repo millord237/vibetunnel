@@ -1,7 +1,7 @@
 import Foundation
 
 /// Common terminal width presets
-enum TerminalWidth: CaseIterable {
+enum TerminalWidth: CaseIterable, Equatable {
     case unlimited
     case classic80
     case modern100

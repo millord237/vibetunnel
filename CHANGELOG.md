@@ -4,7 +4,8 @@
 
 There's too much to list! 
 
-- Redesigned, 
+- Redesigned, responsive frontend.
+- File-Picker
 - Switched to CSS Grid for better responsive terminal layouts
 
 
