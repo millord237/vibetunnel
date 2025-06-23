@@ -8,6 +8,9 @@ import type { Session } from '../shared/types.js';
 // Import logger
 import { createLogger } from './utils/logger.js';
 
+// Import version
+import { VERSION } from './version.js';
+
 // Import components
 import './components/app-header.js';
 import './components/session-create-form.js';
@@ -523,6 +526,12 @@ export class VibeTunnelApp extends LitElement {
         .session=${null}
         @browser-cancel=${() => (this.showFileBrowser = false)}
       ></file-browser>
+
+      <!-- Version and logs link in bottom right -->
+      <div class="fixed bottom-4 right-4 text-dark-text-secondary text-xs font-mono">
+        <a href="/logs" class="hover:text-dark-text transition-colors">Logs</a>
+        <span class="ml-2">v${VERSION}</span>
+      </div>
     `;
   }
 }

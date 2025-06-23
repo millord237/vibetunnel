@@ -404,6 +404,59 @@ export function createFilesystemRoutes(): Router {
     }
   });
 
+  // Get file content for diff view (current and HEAD versions)
+  router.get('/fs/diff-content', async (req: Request, res: Response) => {
+    try {
+      const requestedPath = req.query.path as string;
+      if (!requestedPath) {
+        return res.status(400).json({ error: 'Path is required' });
+      }
+
+      logger.debug(`getting diff content: ${requestedPath}`);
+
+      // Security check
+      if (!isPathSafe(requestedPath, process.cwd())) {
+        logger.warn(`access denied for diff content: ${requestedPath}`);
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const fullPath = path.resolve(process.cwd(), requestedPath);
+      const relativePath = path.relative(process.cwd(), fullPath);
+
+      // Get current file content
+      const currentContent = await fs.readFile(fullPath, 'utf-8');
+
+      // Get HEAD version content
+      let originalContent = currentContent; // Default to current if not in git
+      try {
+        const { stdout } = await execAsync(`git show HEAD:"${relativePath}"`, {
+          cwd: process.cwd(),
+        });
+        originalContent = stdout;
+      } catch (error) {
+        // File might be new (not in HEAD), use empty string
+        if (error instanceof Error && error.message.includes('does not exist')) {
+          originalContent = '';
+        } else {
+          // For other errors, use current content as fallback
+          logger.debug(`could not get HEAD version of ${requestedPath}, using current content`);
+        }
+      }
+
+      logger.log(chalk.green(`diff content retrieved: ${requestedPath}`));
+
+      res.json({
+        path: requestedPath,
+        originalContent,
+        modifiedContent: currentContent,
+        language: getLanguageFromPath(fullPath),
+      });
+    } catch (error) {
+      logger.error(`failed to get diff content for ${req.query.path}:`, error);
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   // Create directory
   router.post('/fs/mkdir', async (req: Request, res: Response) => {
     try {

@@ -13,16 +13,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { createRef, ref } from 'lit/directives/ref.js';
 import type { Session } from './session-list.js';
 import { createLogger } from '../utils/logger.js';
-import { EditorView, keymap, scrollPastEnd } from '@codemirror/view';
-import { EditorState, Extension } from '@codemirror/state';
-import { defaultKeymap } from '@codemirror/commands';
-import { oneDark } from '@codemirror/theme-one-dark';
-import { javascript } from '@codemirror/lang-javascript';
-import { html as htmlLang } from '@codemirror/lang-html';
-import { css } from '@codemirror/lang-css';
-import { json } from '@codemirror/lang-json';
-import { markdown } from '@codemirror/lang-markdown';
-import { python } from '@codemirror/lang-python';
+import './monaco-editor.js';
 
 const logger = createLogger('file-browser');
 
@@ -69,6 +60,13 @@ interface FileDiff {
   hasDiff: boolean;
 }
 
+interface FileDiffContent {
+  path: string;
+  originalContent: string;
+  modifiedContent: string;
+  language?: string;
+}
+
 @customElement('file-browser')
 export class FileBrowser extends LitElement {
   // Disable shadow DOM to use Tailwind
@@ -87,6 +85,7 @@ export class FileBrowser extends LitElement {
   @state() private selectedFile: FileInfo | null = null;
   @state() private preview: FilePreview | null = null;
   @state() private diff: FileDiff | null = null;
+  @state() private diffContent: FileDiffContent | null = null;
   @state() private gitFilter: 'all' | 'changed' = 'all';
   @state() private showHidden = false;
   @state() private gitStatus: GitStatus | null = null;
@@ -94,9 +93,7 @@ export class FileBrowser extends LitElement {
   @state() private showDiff = false;
   @state() private errorMessage = '';
 
-  private editorView: EditorView | null = null;
-  private editorContainerRef = createRef<HTMLDivElement>();
-  private lastEditorContainer: HTMLDivElement | null = null;
+  private editorRef = createRef<HTMLElement>();
 
   async connectedCallback() {
     super.connectedCallback();
@@ -117,29 +114,7 @@ export class FileBrowser extends LitElement {
       }
     }
 
-    if (this.preview?.type === 'text' && this.editorContainerRef.value) {
-      // Check if container has changed (DOM was re-rendered) or editor doesn't exist
-      const containerChanged = this.lastEditorContainer !== this.editorContainerRef.value;
-
-      if (!this.editorView || containerChanged) {
-        // Dispose old editor if it exists
-        if (this.editorView) {
-          this.editorView.destroy();
-          this.editorView = null;
-        }
-
-        this.lastEditorContainer = this.editorContainerRef.value;
-        await this.initCodeMirrorEditor();
-      } else if (this.editorView) {
-        // Update content if CodeMirror editor already exists and container is the same
-        this.updateEditorContent();
-      }
-    } else if (this.editorView && this.preview?.type !== 'text') {
-      // Clean up CodeMirror editor if we're not showing text
-      this.editorView.destroy();
-      this.editorView = null;
-      this.lastEditorContainer = null;
-    }
+    // Monaco editor will handle its own updates through properties
   }
 
   private async loadDirectory(dirPath: string) {
@@ -207,146 +182,24 @@ export class FileBrowser extends LitElement {
     this.showDiff = true;
 
     try {
-      const response = await fetch(`/api/fs/diff?path=${encodeURIComponent(file.path)}`);
-      if (response.ok) {
-        this.diff = await response.json();
+      // Load both the unified diff and the full content for Monaco
+      const [diffResponse, contentResponse] = await Promise.all([
+        fetch(`/api/fs/diff?path=${encodeURIComponent(file.path)}`),
+        fetch(`/api/fs/diff-content?path=${encodeURIComponent(file.path)}`),
+      ]);
+
+      if (diffResponse.ok) {
+        this.diff = await diffResponse.json();
+      }
+
+      if (contentResponse.ok) {
+        this.diffContent = await contentResponse.json();
       }
     } catch (error) {
       logger.error('error loading diff:', error);
     } finally {
       this.previewLoading = false;
     }
-  }
-
-  private getLanguageExtension(language: string): Extension | null {
-    switch (language) {
-      case 'javascript':
-      case 'typescript':
-        return javascript({ typescript: language === 'typescript' });
-      case 'html':
-        return htmlLang();
-      case 'css':
-        return css();
-      case 'json':
-        return json();
-      case 'markdown':
-        return markdown();
-      case 'python':
-        return python();
-      default:
-        return null;
-    }
-  }
-
-  private async initCodeMirrorEditor() {
-    if (!this.editorContainerRef.value) {
-      return;
-    }
-
-    try {
-      const extensions: Extension[] = [
-        EditorView.theme({
-          '&': {
-            fontSize: '14px',
-            height: '100%',
-          },
-          '.cm-focused': {
-            outline: 'none',
-          },
-          '.cm-editor': {
-            height: '100%',
-          },
-          '.cm-scroller': {
-            fontFamily:
-              'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-            overflow: 'auto',
-          },
-        }),
-        EditorView.domEventHandlers({
-          wheel: (event, view) => {
-            const delta = event.deltaY;
-            if (delta !== 0) {
-              view.scrollDOM.scrollTop += delta;
-              event.preventDefault();
-              return true;
-            }
-            return false;
-          },
-        }),
-        keymap.of(defaultKeymap),
-        EditorState.readOnly.of(true),
-        oneDark,
-        scrollPastEnd(),
-      ];
-
-      const languageExt = this.getLanguageExtension(this.preview?.language || '');
-      if (languageExt) {
-        extensions.push(languageExt);
-      }
-
-      const state = EditorState.create({
-        doc: this.preview?.content || '',
-        extensions,
-      });
-
-      this.editorView = new EditorView({
-        state,
-        parent: this.editorContainerRef.value,
-      });
-    } catch (error) {
-      console.error('[FileBrowser] Failed to load CodeMirror editor:', error);
-    }
-  }
-
-  private updateEditorContent() {
-    if (!this.editorView || !this.preview) return;
-
-    const extensions: Extension[] = [
-      EditorView.theme({
-        '&': {
-          fontSize: '14px',
-          height: '100%',
-        },
-        '.cm-focused': {
-          outline: 'none',
-        },
-        '.cm-editor': {
-          height: '100%',
-        },
-        '.cm-scroller': {
-          fontFamily:
-            'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-          overflow: 'auto',
-        },
-      }),
-      EditorView.domEventHandlers({
-        wheel: (event, view) => {
-          const delta = event.deltaY;
-          if (delta !== 0) {
-            view.scrollDOM.scrollTop += delta;
-            event.preventDefault();
-            return true;
-          }
-          return false;
-        },
-      }),
-      keymap.of(defaultKeymap),
-      EditorState.readOnly.of(true),
-      oneDark,
-      scrollPastEnd(),
-    ];
-
-    const languageExt = this.getLanguageExtension(this.preview.language || '');
-    if (languageExt) {
-      extensions.push(languageExt);
-    }
-
-    const newState = EditorState.create({
-      doc: this.preview.content || '',
-      extensions,
-    });
-
-    this.editorView.setState(newState);
   }
 
   private handleFileClick(file: FileInfo) {
@@ -700,10 +553,15 @@ export class FileBrowser extends LitElement {
 
       case 'text':
         return html`
-          <div
-            ${ref(this.editorContainerRef)}
-            class="editor-container h-full w-full relative overflow-hidden"
-          ></div>
+          <monaco-editor
+            ${ref(this.editorRef)}
+            .content=${this.preview.content || ''}
+            .language=${this.preview.language || ''}
+            .filename=${this.selectedFile?.name || ''}
+            .readOnly=${true}
+            mode="normal"
+            class="h-full w-full"
+          ></monaco-editor>
         `;
 
       case 'binary':
@@ -733,6 +591,24 @@ export class FileBrowser extends LitElement {
       `;
     }
 
+    // If we have diff content, show it in Monaco's diff editor
+    if (this.diffContent) {
+      return html`
+        <monaco-editor
+          ${ref(this.editorRef)}
+          .originalContent=${this.diffContent.originalContent || ''}
+          .modifiedContent=${this.diffContent.modifiedContent || ''}
+          .language=${this.diffContent.language || ''}
+          .filename=${this.selectedFile?.name || ''}
+          .readOnly=${true}
+          mode="diff"
+          .showModeToggle=${true}
+          class="h-full w-full"
+        ></monaco-editor>
+      `;
+    }
+
+    // Fallback to simple diff display
     const lines = this.diff.diff.split('\n');
     return html`
       <div class="overflow-auto h-full p-4 font-mono text-xs">
@@ -978,10 +854,6 @@ export class FileBrowser extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener('keydown', this.handleKeyDown);
-    if (this.editorView) {
-      this.editorView.destroy();
-      this.editorView = null;
-    }
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {

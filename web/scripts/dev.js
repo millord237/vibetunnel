@@ -1,5 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const esbuild = require('esbuild');
+const { devOptions } = require('./esbuild-config.js');
 
 console.log('Starting development mode...');
 
@@ -18,10 +20,6 @@ const commands = [
   ['npx', ['tailwindcss', '-i', './src/client/styles.css', '-o', './public/bundle/styles.css', '--watch']],
   // Watch assets
   ['npx', ['chokidar', 'src/client/assets/**/*', '-c', 'node scripts/copy-assets.js']],
-  // Watch client bundle
-  ['npx', ['esbuild', 'src/client/app-entry.ts', '--bundle', '--outfile=public/bundle/client-bundle.js', '--format=esm', '--sourcemap', '--watch']],
-  // Watch test bundle
-  ['npx', ['esbuild', 'src/client/test-terminals-entry.ts', '--bundle', '--outfile=public/bundle/terminal.js', '--format=esm', '--sourcemap', '--watch']]
 ];
 
 // Add server watching if not client-only
@@ -29,25 +27,55 @@ if (watchServer) {
   commands.push(['npx', ['tsx', 'watch', 'src/cli.ts']]);
 }
 
-// Start all processes
-const processes = commands.map(([cmd, args], index) => {
-  const proc = spawn(cmd, args, { 
-    stdio: 'inherit',
-    shell: process.platform === 'win32'
-  });
-  
-  proc.on('error', (err) => {
-    console.error(`Process ${index} error:`, err);
-  });
-  
-  return proc;
-});
+// Set up esbuild contexts for watching
+async function startBuilding() {
+  try {
+    // Create esbuild contexts
+    const clientContext = await esbuild.context({
+      ...devOptions,
+      entryPoints: ['src/client/app-entry.ts'],
+      outfile: 'public/bundle/client-bundle.js',
+    });
 
-// Handle exit
-process.on('SIGINT', () => {
-  console.log('\nStopping all processes...');
-  processes.forEach(proc => proc.kill());
-  process.exit(0);
-});
+    const testContext = await esbuild.context({
+      ...devOptions,
+      entryPoints: ['src/client/test-terminals-entry.ts'],
+      outfile: 'public/bundle/terminal.js',
+    });
 
-console.log(`Development mode started (${watchServer ? 'full' : 'client only'})`);
+    // Start watching
+    await clientContext.watch();
+    await testContext.watch();
+    console.log('ESBuild watching client bundles...');
+
+    // Start other processes
+    const processes = commands.map(([cmd, args], index) => {
+      const proc = spawn(cmd, args, { 
+        stdio: 'inherit',
+        shell: process.platform === 'win32'
+      });
+      
+      proc.on('error', (err) => {
+        console.error(`Process ${index} error:`, err);
+      });
+      
+      return proc;
+    });
+
+    // Handle exit
+    process.on('SIGINT', async () => {
+      console.log('\nStopping all processes...');
+      await clientContext.dispose();
+      await testContext.dispose();
+      processes.forEach(proc => proc.kill());
+      process.exit(0);
+    });
+
+    console.log(`Development mode started (${watchServer ? 'full' : 'client only'})`);
+  } catch (error) {
+    console.error('Failed to start build:', error);
+    process.exit(1);
+  }
+}
+
+startBuilding();
