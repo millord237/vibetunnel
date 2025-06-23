@@ -52,7 +52,7 @@ export class PtyManager {
   }
 
   /**
-   * Resolve executable path to absolute path using 'which' command
+   * Resolve executable path to absolute path using 'which' command and alias resolution
    */
   private resolveExecutablePath(executable: string): string {
     // If already an absolute path, return as is
@@ -71,12 +71,48 @@ export class PtyManager {
       logger.debug(`Resolved executable '${executable}' to '${resolvedPath}'`);
       return resolvedPath;
     } catch (_error) {
-      // If 'which' fails, log a warning and return the original executable
-      // This allows the spawn to fail with a proper error message
+      // If 'which' fails, try to resolve as an alias
+      logger.debug(`'which' failed for '${executable}', attempting alias resolution`);
+
+      try {
+        // Try to resolve the alias using bash
+        // We need to use an interactive shell to load aliases
+        const aliasCommand = `bash -i -c "type -p ${executable} 2>/dev/null || alias ${executable} 2>/dev/null | sed -E 's/^alias [^=]+=//'"`;
+        const aliasResult = execSync(aliasCommand, { encoding: 'utf-8' }).trim();
+
+        if (aliasResult && aliasResult !== executable) {
+          // Remove quotes if present
+          const cleanedAlias = aliasResult.replace(/^['"]|['"]$/g, '');
+
+          // If the alias contains arguments, extract just the command
+          const aliasExecutable = cleanedAlias.split(/\s+/)[0];
+
+          // Now try to resolve this to an absolute path
+          if (path.isAbsolute(aliasExecutable)) {
+            logger.log(chalk.cyan(`Resolved alias '${executable}' → '${aliasExecutable}'`));
+            return aliasExecutable;
+          } else {
+            // Try which on the resolved alias
+            try {
+              const finalPath = execSync(`which ${aliasExecutable}`, { encoding: 'utf-8' }).trim();
+              logger.log(
+                chalk.cyan(`Resolved alias '${executable}' → '${cleanedAlias}' → '${finalPath}'`)
+              );
+              return finalPath;
+            } catch (_e) {
+              logger.debug(`Failed to resolve aliased executable '${aliasExecutable}'`);
+            }
+          }
+        }
+      } catch (_aliasError) {
+        logger.debug(`Alias resolution failed for '${executable}'`);
+      }
+
+      // If all resolution attempts fail, log a warning and return the original
       logger.warn(
         chalk.yellow(
           `⚠️  Failed to resolve executable '${executable}' to absolute path. ` +
-            `The command may not exist in PATH or 'which' failed. ` +
+            `The command may not exist in PATH, is not an alias, or resolution failed. ` +
             `Proceeding with original value, but PTY spawn may fail.`
         )
       );
