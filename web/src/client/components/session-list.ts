@@ -62,31 +62,8 @@ export class SessionList extends LitElement {
   }
 
   private async handleSessionKilled(e: CustomEvent) {
-    const { sessionId, session } = e.detail;
+    const { sessionId } = e.detail;
     logger.debug(`session ${sessionId} killed, updating session list`);
-
-    // Check if this is a cleanup action (exited session) vs kill action (running session)
-    const isCleanup = session?.status === 'exited';
-
-    if (isCleanup) {
-      // Find the session card element for cleanup animation
-      const sessionCards = this.querySelectorAll('session-card');
-      let targetCard: HTMLElement | null = null;
-
-      sessionCards.forEach((card) => {
-        const sessionCard = card as HTMLElement & { session?: { id: string } };
-        if (sessionCard.session?.id === sessionId) {
-          targetCard = sessionCard;
-        }
-      });
-
-      // Apply black hole animation to the card
-      if (targetCard) {
-        (targetCard as HTMLElement).classList.add('black-hole-collapsing');
-        // Wait for animation to complete
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      }
-    }
 
     // Remove the session from the local state
     this.sessions = this.sessions.filter((session) => session.id !== sessionId);

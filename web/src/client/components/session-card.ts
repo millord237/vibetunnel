@@ -97,6 +97,9 @@ export class SessionCard extends LitElement {
       return false;
     }
 
+    // Check if this is a cleanup action (for black hole animation)
+    const isCleanup = this.session.status === 'exited';
+
     // Start killing animation
     this.killing = true;
     this.killingFrame = 0;
@@ -104,6 +107,15 @@ export class SessionCard extends LitElement {
       this.killingFrame = (this.killingFrame + 1) % 4;
       this.requestUpdate();
     }, 200);
+
+    // If cleanup, apply black hole animation FIRST and wait
+    if (isCleanup) {
+      // Apply the black hole animation class
+      (this as HTMLElement).classList.add('black-hole-collapsing');
+
+      // Wait for the animation to complete (300ms)
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
 
     // Send kill or cleanup request based on session status
     try {
@@ -279,7 +291,12 @@ export class SessionCard extends LitElement {
         </div>
 
         <!-- Terminal display (main content) -->
-        <div class="session-preview bg-dark-bg overflow-hidden" style="aspect-ratio: 640/480;">
+        <div
+          class="session-preview bg-dark-bg overflow-hidden ${this.session.status === 'exited'
+            ? 'session-exited'
+            : ''}"
+          style="aspect-ratio: 640/480;"
+        >
           ${this.killing
             ? html`
                 <div class="w-full h-full flex items-center justify-center text-status-error">
