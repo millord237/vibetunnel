@@ -233,21 +233,14 @@ export class ProcessUtils {
       // Windows shells have different syntax
       if (userShell.includes('bash')) {
         // Git Bash on Windows: Use Unix-style syntax
-        if (isCommand) {
-          // Non-interactive command execution
-          return {
-            command: userShell,
-            args: ['-c', command.join(' ')],
-            useShell: true,
-          };
-        } else {
-          // Interactive shell session
-          return {
-            command: userShell,
-            args: ['-i', '-c', command.join(' ')],
-            useShell: true,
-          };
-        }
+        // Always use -i to ensure aliases work, but append '; exit' for commands
+        const commandStr = isCommand ? `${command.join(' ')}; exit` : command.join(' ');
+
+        return {
+          command: userShell,
+          args: ['-i', '-c', commandStr],
+          useShell: true,
+        };
       } else if (userShell.includes('pwsh') || userShell.includes('powershell')) {
         // PowerShell: Use -Command for execution
         // Note: PowerShell aliases work differently than Unix aliases
@@ -266,22 +259,15 @@ export class ProcessUtils {
         };
       }
     } else {
-      // Unix shells: Choose execution mode based on command type
-      if (isCommand) {
-        // Non-interactive command execution: shell will exit after completion
-        return {
-          command: userShell,
-          args: ['-c', command.join(' ')],
-          useShell: true,
-        };
-      } else {
-        // Interactive shell session: use -i for alias support
-        return {
-          command: userShell,
-          args: ['-i', '-c', command.join(' ')],
-          useShell: true,
-        };
-      }
+      // Unix shells: Always use -i to ensure aliases work
+      // But append '; exit' for non-interactive commands to ensure shell exits
+      const commandStr = isCommand ? `${command.join(' ')}; exit` : command.join(' ');
+
+      return {
+        command: userShell,
+        args: ['-i', '-c', commandStr],
+        useShell: true,
+      };
     }
   }
 
