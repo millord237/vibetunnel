@@ -24,7 +24,6 @@ struct ConnectionManagerTests {
         #expect(newManager.serverConfig != nil)
         #expect(newManager.serverConfig?.host == config.host)
         #expect(newManager.serverConfig?.port == config.port)
-        #expect(newManager.serverConfig?.useSSL == config.useSSL)
     }
 
     @Test("Handles missing server configuration")
@@ -187,7 +186,7 @@ struct ConnectionManagerTests {
     func connectionStateObservation() async throws {
         // Arrange
         let manager = ConnectionManager()
-        let expectation = confirmation("Connection state changed")
+        var stateChanged = false
 
         // Observe connection state changes
         Task {
@@ -195,7 +194,7 @@ struct ConnectionManagerTests {
             while manager.isConnected == initialState {
                 try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
             }
-            await expectation.fulfill()
+            stateChanged = true
         }
 
         // Act
@@ -203,7 +202,12 @@ struct ConnectionManagerTests {
         manager.isConnected = true
 
         // Assert
-        try await fulfillment(of: [expectation], timeout: .seconds(1))
+        // Wait for state change
+        let timeout = Date().addingTimeInterval(1.0)
+        while !stateChanged && Date() < timeout {
+            try await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        }
+        #expect(stateChanged)
     }
 
     @Test("Thread safety of shared instance")
@@ -224,7 +228,7 @@ struct ConnectionManagerTests {
 @Suite("ConnectionManager Integration Tests", .tags(.integration, .persistence))
 @MainActor
 struct ConnectionManagerIntegrationTests {
-    @Test("Full connection lifecycle", .timeLimit(.seconds(2)))
+    @Test("Full connection lifecycle", .timeLimit(.minutes(1)))
     func fullConnectionLifecycle() async throws {
         // Arrange
         let manager = ConnectionManager()

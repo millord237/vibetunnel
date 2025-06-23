@@ -35,7 +35,7 @@
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "9B67BEFAD916B893D5F56E87"
+               BlueprintIdentifier = "04469FB37E8A42F9D06BF670"
                BuildableName = "VibeTunnelTests.xctest"
                BlueprintName = "VibeTunnelTests"
                ReferencedContainer = "container:VibeTunnel-iOS.xcodeproj">

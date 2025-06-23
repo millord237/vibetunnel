@@ -7,6 +7,11 @@ struct VibeTunnelApp: App {
     @State private var connectionManager = ConnectionManager()
     @State private var navigationManager = NavigationManager()
     @State private var networkMonitor = NetworkMonitor.shared
+    
+    init() {
+        // Configure app logging level
+        AppConfig.configureLogging()
+    }
 
     var body: some Scene {
         WindowGroup {

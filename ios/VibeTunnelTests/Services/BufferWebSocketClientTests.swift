@@ -11,6 +11,10 @@ class MockWebSocket: WebSocketProtocol {
     private(set) var isConnected = false
     private(set) var lastConnectURL: URL?
     private(set) var lastConnectHeaders: [String: String]?
+    private(set) var sentMessages: [WebSocketMessage] = []
+    private(set) var pingCount = 0
+    private(set) var disconnectCalled = false
+    private(set) var lastDisconnectCode: URLSessionWebSocketTask.CloseCode?
     
     // Control test behavior
     var shouldFailConnection = false
@@ -33,15 +37,19 @@ class MockWebSocket: WebSocketProtocol {
         guard isConnected else {
             throw WebSocketError.connectionFailed
         }
+        sentMessages.append(message)
     }
     
     func sendPing() async throws {
         guard isConnected else {
             throw WebSocketError.connectionFailed
         }
+        pingCount += 1
     }
     
     func disconnect(with code: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        disconnectCalled = true
+        lastDisconnectCode = code
         if isConnected {
             isConnected = false
             delegate?.webSocketDidDisconnect(self, closeCode: code, reason: reason)
@@ -56,6 +64,27 @@ class MockWebSocket: WebSocketProtocol {
     func simulateError(_ error: Error) {
         guard isConnected else { return }
         delegate?.webSocket(self, didFailWithError: error)
+    }
+    
+    func sentJSONMessages() -> [[String: Any]] {
+        sentMessages.compactMap { message in
+            if case .string(let text) = message,
+               let data = text.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return json
+            }
+            return nil
+        }
+    }
+    
+    func simulateDisconnection(closeCode: URLSessionWebSocketTask.CloseCode = .abnormalClosure, reason: Data? = nil) {
+        guard isConnected else { return }
+        isConnected = false
+        delegate?.webSocketDidDisconnect(self, closeCode: closeCode, reason: reason)
+    }
+    
+    func clearSentMessages() {
+        sentMessages.removeAll()
     }
 }
 
@@ -295,7 +324,7 @@ struct BufferWebSocketClientTests {
         let mockWebSocket = mockFactory.lastCreatedWebSocket
         
         // Clear sent messages
-        mockWebSocket?.sentMessages.removeAll()
+        mockWebSocket?.clearSentMessages()
         
         // Act - Unsubscribe
         client.unsubscribe(from: sessionId)

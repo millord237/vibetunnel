@@ -26,6 +26,9 @@ enum TestFixtures {
         startedAt: "2024-01-01T10:00:00Z",
         lastModified: "2024-01-01T10:05:00Z",
         pid: 12_345,
+        width: 80,
+        height: 24,
+        waiting: false,
         source: nil,
         remoteId: nil,
         remoteName: nil,
@@ -42,6 +45,9 @@ enum TestFixtures {
         startedAt: "2024-01-01T09:00:00Z",
         lastModified: "2024-01-01T09:00:05Z",
         pid: nil,
+        width: 80,
+        height: 24,
+        waiting: false,
         source: nil,
         remoteId: nil,
         remoteName: nil,
@@ -58,7 +64,10 @@ enum TestFixtures {
             "status": "running",
             "startedAt": "2024-01-01T10:00:00Z",
             "lastModified": "2024-01-01T10:05:00Z",
-            "pid": 12345
+            "pid": 12345,
+            "width": 80,
+            "height": 24,
+            "waiting": false
         },
         {
             "id": "exited-session-456",
@@ -68,7 +77,10 @@ enum TestFixtures {
             "status": "exited",
             "exitCode": 0,
             "startedAt": "2024-01-01T09:00:00Z",
-            "lastModified": "2024-01-01T09:00:05Z"
+            "lastModified": "2024-01-01T09:00:05Z",
+            "width": 80,
+            "height": 24,
+            "waiting": false
         }
     ]
     """

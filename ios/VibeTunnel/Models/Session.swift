@@ -5,16 +5,21 @@ import Foundation
 /// Session contains all information about a running or completed
 /// terminal session, including its status, process information,
 /// and terminal dimensions.
-struct Session: Codable, Identifiable, Equatable {
+struct Session: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let command: [String]  // Changed from String to [String] to match server
     let workingDir: String
-    let name: String
+    let name: String?
     let status: SessionStatus
     let exitCode: Int?
     let startedAt: String
     let lastModified: String?
     let pid: Int?
+    
+    // Terminal dimensions
+    let width: Int?
+    let height: Int?
+    let waiting: Bool?
     
     // Optional fields from HQ mode
     let source: String?
@@ -32,6 +37,9 @@ struct Session: Codable, Identifiable, Equatable {
         case startedAt
         case lastModified
         case pid
+        case width
+        case height
+        case waiting
         case source
         case remoteId
         case remoteName
@@ -42,7 +50,7 @@ struct Session: Codable, Identifiable, Equatable {
     ///
     /// Returns the custom name if not empty, otherwise the command.
     var displayName: String {
-        if !name.isEmpty {
+        if let name = name, !name.isEmpty {
             return name
         }
         return command.joined(separator: " ")

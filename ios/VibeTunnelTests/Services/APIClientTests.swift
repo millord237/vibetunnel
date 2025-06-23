@@ -16,6 +16,7 @@ struct APIClientTests {
     // MARK: - Session Management Tests
 
     @Test("Get sessions returns parsed sessions")
+    @MainActor
     func testGetSessions() async throws {
         // Arrange
         MockURLProtocol.requestHandler = { request in
@@ -39,6 +40,7 @@ struct APIClientTests {
     }
 
     @Test("Get sessions handles empty response")
+    @MainActor
     func getSessionsEmpty() async throws {
         // Arrange
         MockURLProtocol.requestHandler = { request in
@@ -55,6 +57,7 @@ struct APIClientTests {
     }
 
     @Test("Get sessions handles network error", .tags(.networking))
+    @MainActor
     func getSessionsNetworkError() async throws {
         // Arrange
         MockURLProtocol.requestHandler = { _ in
@@ -63,17 +66,21 @@ struct APIClientTests {
 
         // Act & Assert
         let client = createTestClient()
-        await #expect(throws: APIError.self) {
-            try await client.getSessions()
-        } catch: { error in
+        do {
+            _ = try await client.getSessions()
+            Issue.record("Expected network error")
+        } catch let error as APIError {
             guard case .networkError = error else {
-                Issue.record("Expected network error")
+                Issue.record("Expected network error, got \(error)")
                 return
             }
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
         }
     }
 
     @Test("Create session sends correct request")
+    @MainActor
     func testCreateSession() async throws {
         // Arrange
         let sessionData = SessionCreateData(
@@ -115,6 +122,7 @@ struct APIClientTests {
     }
 
     @Test("Kill session sends DELETE request")
+    @MainActor
     func testKillSession() async throws {
         // Arrange
         let sessionId = "test-session-123"
@@ -132,6 +140,7 @@ struct APIClientTests {
     }
 
     @Test("Send input posts correct data")
+    @MainActor
     func testSendInput() async throws {
         // Arrange
         let sessionId = "test-session-123"
@@ -158,6 +167,7 @@ struct APIClientTests {
     }
 
     @Test("Resize terminal sends correct dimensions")
+    @MainActor
     func testResizeTerminal() async throws {
         // Arrange
         let sessionId = "test-session-123"
@@ -201,15 +211,18 @@ struct APIClientTests {
 
         // Act & Assert
         let client = createTestClient()
-        await #expect(throws: APIError.self) {
-            try await client.getSession("nonexistent")
-        } catch: { error in
+        do {
+            _ = try await client.getSession("nonexistent")
+            Issue.record("Expected error to be thrown")
+        } catch let error as APIError {
             guard case .serverError(let code, let message) = error else {
-                Issue.record("Expected server error")
+                Issue.record("Expected server error, got \(error)")
                 return
             }
             #expect(code == 404)
             #expect(message == "Session not found")
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
         }
     }
 
@@ -222,18 +235,22 @@ struct APIClientTests {
 
         // Act & Assert
         let client = createTestClient()
-        await #expect(throws: APIError.self) {
-            try await client.getSessions()
-        } catch: { error in
+        do {
+            _ = try await client.getSessions()
+            Issue.record("Expected error to be thrown")
+        } catch let error as APIError {
             guard case .serverError(let code, _) = error else {
-                Issue.record("Expected server error")
+                Issue.record("Expected server error, got \(error)")
                 return
             }
             #expect(code == 401)
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
         }
     }
 
     @Test("Handles invalid JSON response")
+    @MainActor
     func handleInvalidJSON() async throws {
         // Arrange
         MockURLProtocol.requestHandler = { request in
@@ -243,17 +260,21 @@ struct APIClientTests {
 
         // Act & Assert
         let client = createTestClient()
-        await #expect(throws: APIError.self) {
-            try await client.getSessions()
-        } catch: { error in
+        do {
+            _ = try await client.getSessions()
+            Issue.record("Expected decoding error")
+        } catch let error as APIError {
             guard case .decodingError = error else {
-                Issue.record("Expected decoding error")
+                Issue.record("Expected decoding error, got \(error)")
                 return
             }
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
         }
     }
 
     @Test("Handles connection timeout")
+    @MainActor
     func connectionTimeout() async throws {
         // Arrange
         MockURLProtocol.requestHandler = { _ in
@@ -262,19 +283,23 @@ struct APIClientTests {
 
         // Act & Assert
         let client = createTestClient()
-        await #expect(throws: APIError.self) {
-            try await client.getSessions()
-        } catch: { error in
+        do {
+            _ = try await client.getSessions()
+            Issue.record("Expected network error")
+        } catch let error as APIError {
             guard case .networkError = error else {
-                Issue.record("Expected network error")
+                Issue.record("Expected network error, got \(error)")
                 return
             }
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
         }
     }
 
     // MARK: - Health Check Tests
 
     @Test("Health check returns true for 200 response")
+    @MainActor
     func healthCheckSuccess() async throws {
         // Arrange
         MockURLProtocol.requestHandler = { request in
@@ -291,6 +316,7 @@ struct APIClientTests {
     }
 
     @Test("Health check returns false for error response")
+    @MainActor
     func healthCheckFailure() async throws {
         // Arrange
         MockURLProtocol.requestHandler = { request in
@@ -307,6 +333,7 @@ struct APIClientTests {
 
     // MARK: - Helper Methods
 
+    @MainActor
     private func createTestClient() -> APIClient {
         // Create a test client with our mock session
         // Note: This requires modifying APIClient to accept a custom URLSession

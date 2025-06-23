@@ -48,6 +48,7 @@ struct XtermWebView: UIViewRepresentable {
         let parent: XtermWebView
         weak var webView: WKWebView?
         private var bufferWebSocketClient: BufferWebSocketClient?
+        private let logger = Logger(category: "XtermWebView")
         private var sseClient: SSEClient?
         
         init(_ parent: XtermWebView) {
@@ -256,7 +257,7 @@ struct XtermWebView: UIViewRepresentable {
                 
             case "terminalLog":
                 if let log = message.body as? String {
-                    print("[XtermWebView] \(log)")
+                    logger.debug(log)
                 }
                 
             default:
@@ -265,7 +266,7 @@ struct XtermWebView: UIViewRepresentable {
         }
         
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            print("[XtermWebView] Page loaded")
+            logger.info("Page loaded")
         }
         
         private func setupDataStreaming() {
@@ -330,7 +331,7 @@ struct XtermWebView: UIViewRepresentable {
             
             webView?.evaluateJavaScript("window.xtermAPI.writeToTerminal('\(escaped)')") { _, error in
                 if let error = error {
-                    print("[XtermWebView] Error writing to terminal: \(error)")
+                    self.logger.error("Error writing to terminal: \(error)")
                 }
             }
         }
@@ -375,7 +376,7 @@ extension XtermWebView.Coordinator: SSEClientDelegate {
         case .exit(let exitCode, _):
             writeToTerminal("\r\n[Process exited with code \(exitCode)]\r\n")
         case .error(let error):
-            print("[XtermWebView] SSE error: \(error)")
+            logger.error("SSE error: \(error)")
         }
         }
     }

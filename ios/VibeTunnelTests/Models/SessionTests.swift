@@ -10,7 +10,7 @@ struct SessionTests {
         let json = """
         {
             "id": "test-123",
-            "command": "/bin/bash",
+            "command": ["/bin/bash"],
             "workingDir": "/Users/test",
             "name": "Test Session",
             "status": "running",
@@ -46,7 +46,7 @@ struct SessionTests {
         let json = """
         {
             "id": "exited-456",
-            "command": "/usr/bin/echo",
+            "command": ["/usr/bin/echo"],
             "workingDir": "/tmp",
             "name": "Echo Command",
             "status": "exited",
@@ -77,7 +77,7 @@ struct SessionTests {
         let json = """
         {
             "id": "minimal",
-            "command": "ls",
+            "command": ["ls"],
             "workingDir": "/",
             "status": "running",
             "startedAt": "2024-01-01T10:00:00Z"
@@ -119,20 +119,23 @@ struct SessionTests {
         #expect(namedSession.displayName == "Test Session")
 
         // Without custom name
-        var unnamedSession = TestFixtures.validSession
-        unnamedSession = Session(
-            id: unnamedSession.id,
-            command: unnamedSession.command,
-            workingDir: unnamedSession.workingDir,
+        let unnamedSession = Session(
+            id: "unnamed-session",
+            command: ["/bin/bash"],
+            workingDir: "/Users/test",
             name: nil,
-            status: unnamedSession.status,
-            exitCode: unnamedSession.exitCode,
-            startedAt: unnamedSession.startedAt,
-            lastModified: unnamedSession.lastModified,
-            pid: unnamedSession.pid,
-            waiting: unnamedSession.waiting,
-            width: unnamedSession.width,
-            height: unnamedSession.height
+            status: .running,
+            exitCode: nil,
+            startedAt: "2024-01-01T10:00:00Z",
+            lastModified: "2024-01-01T10:05:00Z",
+            pid: 12_345,
+            width: 80,
+            height: 24,
+            waiting: false,
+            source: nil,
+            remoteId: nil,
+            remoteName: nil,
+            remoteUrl: nil
         )
         #expect(unnamedSession.displayName == "/bin/bash")
     }
@@ -191,7 +194,24 @@ struct SessionTests {
         #expect(session1 == session2)
 
         // Different ID = not equal
-        session2.id = "different-id"
+        session2 = Session(
+            id: "different-id",
+            command: session1.command,
+            workingDir: session1.workingDir,
+            name: session1.name,
+            status: session1.status,
+            exitCode: session1.exitCode,
+            startedAt: session1.startedAt,
+            lastModified: session1.lastModified,
+            pid: session1.pid,
+            width: session1.width,
+            height: session1.height,
+            waiting: session1.waiting,
+            source: session1.source,
+            remoteId: session1.remoteId,
+            remoteName: session1.remoteName,
+            remoteUrl: session1.remoteUrl
+        )
         #expect(session1 != session2)
     }
 
@@ -250,7 +270,7 @@ struct SessionCreateDataTests {
         #expect(data.cols == 120) // Default is 120, not 80
         #expect(data.rows == 30) // Default is 30, not 24
         #expect(data.command == ["ls"])
-        #expect(data.spawnTerminal == false)
+        #expect(data.spawnTerminal == true)
     }
 
     @Test("Optional name field")

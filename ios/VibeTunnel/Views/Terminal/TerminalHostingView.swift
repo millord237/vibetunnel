@@ -150,6 +150,7 @@ struct TerminalHostingView: UIViewRepresentable {
         let onResize: (Int, Int) -> Void
         let viewModel: TerminalViewModel
         weak var terminal: SwiftTerm.TerminalView?
+        private let logger = Logger(category: "Terminal")
 
         // Track previous buffer state for incremental updates
         private var previousSnapshot: BufferSnapshot?
@@ -179,7 +180,7 @@ struct TerminalHostingView: UIViewRepresentable {
         func updateBuffer(from snapshot: BufferSnapshot) {
             guard let terminal else { return }
             
-            print("[Terminal] updateBuffer called with snapshot: \(snapshot.cols)x\(snapshot.rows), cursor: (\(snapshot.cursorX),\(snapshot.cursorY))")
+            logger.verbose("updateBuffer called with snapshot: \(snapshot.cols)x\(snapshot.rows), cursor: (\(snapshot.cursorX),\(snapshot.cursorY))")
 
             // Update terminal dimensions if needed
             let currentCols = terminal.getTerminal().cols
@@ -205,11 +206,11 @@ struct TerminalHostingView: UIViewRepresentable {
                 // Full redraw needed
                 ansiData = convertBufferToOptimizedANSI(snapshot, clearScreen: isFirstUpdate)
                 isFirstUpdate = false
-                print("[Terminal] Full redraw performed")
+                logger.verbose("Full redraw performed")
             } else {
                 // Incremental update
                 ansiData = generateIncrementalUpdate(from: previousSnapshot!, to: snapshot)
-                print("[Terminal] Incremental update performed")
+                logger.verbose("Incremental update performed")
             }
 
             // Store current snapshot for next update
@@ -569,13 +570,13 @@ struct TerminalHostingView: UIViewRepresentable {
         func feedData(_ data: String) {
             Task { @MainActor in
                 guard let terminal else {
-                    print("[Terminal] No terminal instance available")
+                    logger.warning("No terminal instance available")
                     return
                 }
 
                 // Debug: Log first 100 chars of data
                 let preview = String(data.prefix(100))
-                print("[Terminal] Feeding \(data.count) bytes: \(preview)")
+                logger.verbose("Feeding \(data.count) bytes: \(preview)")
 
                 // Store current scroll position before feeding data
                 let wasAtBottom = viewModel.isAutoScrollEnabled
