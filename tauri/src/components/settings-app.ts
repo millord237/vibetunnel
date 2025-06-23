@@ -1,6 +1,7 @@
 import { html, css, TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TauriBase } from './base/tauri-base';
+import { formStyles } from './shared/styles';
 import './settings-tab';
 import './settings-checkbox';
 
@@ -38,7 +39,9 @@ type SettingChangeEvent = CustomEvent<{
 
 @customElement('settings-app')
 export class SettingsApp extends TauriBase {
-  static override styles = css`
+  static override styles = [
+    formStyles,
+    css`
     :host {
       display: flex;
       width: 100vw;
@@ -235,7 +238,8 @@ export class SettingsApp extends TauriBase {
       --accent-hover: #059669;
       --accent-glow: rgba(16, 185, 129, 0.3);
     }
-  `;
+  `
+  ];
 
   @state()
   private activeTab = 'general';
@@ -385,6 +389,28 @@ export class SettingsApp extends TauriBase {
           </div>
           
           <div class="setting-card">
+            <h3>Terminal</h3>
+            <div class="form-group">
+              <label for="terminal-select">Default Terminal</label>
+              <select 
+                id="terminal-select"
+                class="form-select"
+                @change=${(e: Event) => {
+                  const target = e.target as HTMLSelectElement;
+                  this.handleSettingChange(new CustomEvent('change', {
+                    detail: { settingKey: 'general.default_terminal', value: target.value }
+                  }) as SettingChangeEvent);
+                }}
+              >
+                <option value="terminal" ?selected=${!this.settings.general?.default_terminal || this.settings.general.default_terminal === 'terminal'}>Terminal.app</option>
+                <option value="iterm2" ?selected=${this.settings.general?.default_terminal === 'iterm2'}>iTerm2</option>
+                <option value="warp" ?selected=${this.settings.general?.default_terminal === 'warp'}>Warp</option>
+              </select>
+              <small class="form-text">Choose your preferred terminal application</small>
+            </div>
+          </div>
+          
+          <div class="setting-card">
             <h3>Appearance</h3>
             <settings-checkbox
               .checked=${this.settings.general?.show_dock_icon !== false}
@@ -393,6 +419,25 @@ export class SettingsApp extends TauriBase {
               settingKey="general.show_dock_icon"
               @change=${this.handleSettingChange}
             ></settings-checkbox>
+            
+            <div class="form-group">
+              <label for="theme-select">Theme</label>
+              <select 
+                id="theme-select"
+                class="form-select"
+                @change=${(e: Event) => {
+                  const target = e.target as HTMLSelectElement;
+                  this.handleSettingChange(new CustomEvent('change', {
+                    detail: { settingKey: 'general.theme', value: target.value }
+                  }) as SettingChangeEvent);
+                }}
+              >
+                <option value="system" ?selected=${!this.settings.general?.theme || this.settings.general.theme === 'system'}>System</option>
+                <option value="light" ?selected=${this.settings.general?.theme === 'light'}>Light</option>
+                <option value="dark" ?selected=${this.settings.general?.theme === 'dark'}>Dark</option>
+              </select>
+              <small class="form-text">Choose your preferred color scheme</small>
+            </div>
           </div>
         </div>
       </div>
