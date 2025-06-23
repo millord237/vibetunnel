@@ -225,7 +225,7 @@ export class SessionCard extends LitElement {
       <div
         class="card cursor-pointer overflow-hidden ${this.killing ? 'opacity-60' : ''} ${this
           .isActive && this.session.status === 'running'
-          ? 'shadow-[0_0_0_2px_theme(colors.accent.green)] shadow-glow-green-sm'
+          ? 'shadow-[0_0_0_2px_#00ff88] shadow-glow-green-sm'
           : ''}"
         style="view-transition-name: session-${this.session.id}"
         @click=${this.handleCardClick}
