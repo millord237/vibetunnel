@@ -3,6 +3,7 @@
 /// <reference lib="webworker" />
 
 declare const self: ServiceWorkerGlobalScope;
+export {};
 
 // Version for cache busting
 const CACHE_VERSION = 'v1';
@@ -148,11 +149,11 @@ self.addEventListener('notificationclose', (event: NotificationEvent) => {
 });
 
 // Background sync event - handle offline notifications
-self.addEventListener('sync', (event: SyncEvent) => {
+self.addEventListener('sync', ((event: ExtendableEvent & { tag: string }) => {
   if (event.tag === 'notification-sync') {
     event.waitUntil(syncOfflineNotifications());
   }
-});
+}) as EventListener);
 
 async function handlePushNotification(payload: PushNotificationPayload): Promise<void> {
   const { title, body, icon, badge, data, actions, tag, requireInteraction } = payload;
@@ -167,6 +168,7 @@ async function handlePushNotification(payload: PushNotificationPayload): Promise
       tag: tag || `${NOTIFICATION_TAG_PREFIX}${data.type}-${Date.now()}`,
       requireInteraction: requireInteraction || data.type === 'session-error',
       silent: false,
+      // @ts-ignore - renotify is a valid option but not in TypeScript types
       renotify: true,
       actions: actions || getDefaultActions(data),
       timestamp: data.timestamp,
@@ -174,6 +176,7 @@ async function handlePushNotification(payload: PushNotificationPayload): Promise
 
     // Add vibration pattern for mobile devices
     if ('vibrate' in navigator) {
+      // @ts-ignore - vibrate is a valid option but not in TypeScript types
       notificationOptions.vibrate = getVibrationPattern(data.type);
     }
 
@@ -186,8 +189,8 @@ async function handlePushNotification(payload: PushNotificationPayload): Promise
   }
 }
 
-function getDefaultActions(data: NotificationData): NotificationAction[] {
-  const baseActions: NotificationAction[] = [
+function getDefaultActions(data: NotificationData): any[] {
+  const baseActions: any[] = [
     {
       action: 'dismiss',
       title: 'Dismiss',
@@ -399,6 +402,7 @@ async function queueNotification(payload: PushNotificationPayload): Promise<void
 
   // Register for background sync
   try {
+    // @ts-ignore - sync is part of Background Sync API
     await self.registration.sync.register('notification-sync');
   } catch (error) {
     console.warn('[SW] Background sync not supported:', error);

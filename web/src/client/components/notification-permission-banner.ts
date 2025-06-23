@@ -102,7 +102,10 @@ export class NotificationPermissionBanner extends LitElement {
       logger.error('failed to enable notifications:', error);
       this.dispatchEvent(
         new CustomEvent('notification-enabled', {
-          detail: { success: false, reason: error instanceof Error ? error.message : String(error) },
+          detail: {
+            success: false,
+            reason: error instanceof Error ? error.message : String(error),
+          },
         })
       );
     } finally {
