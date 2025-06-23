@@ -9,10 +9,21 @@ import OSLog
 /// is set to hide the dock icon.
 @MainActor
 final class DockIconManager: NSObject {
-    private static let _shared = DockIconManager()
+    private static var _shared: DockIconManager!
 
-    static var shared: DockIconManager {
-        _shared
+    /// Initialize the shared instance on the main thread.
+    /// Must be called once during app startup before accessing shared.
+    @MainActor
+    static func initialize() {
+        precondition(Thread.isMainThread, "DockIconManager must be initialized on main thread")
+        precondition(_shared == nil, "DockIconManager.initialize() called multiple times")
+        _shared = DockIconManager()
+    }
+
+    /// Access the shared instance. Requires initialize() to be called first.
+    nonisolated static var shared: DockIconManager {
+        precondition(_shared != nil, "DockIconManager.initialize() must be called before accessing shared")
+        return MainActor.assumeIsolated { _shared }
     }
 
     private var windowsObservation: NSKeyValueObservation?
