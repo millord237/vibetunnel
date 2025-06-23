@@ -584,6 +584,30 @@ struct TerminalHostingView: UIViewRepresentable {
                 }
             }
         }
+        
+        func getBufferContent() -> String? {
+            guard let terminal else { return nil }
+            
+            // Get the terminal buffer content
+            let terminalInstance = terminal.getTerminal()
+            var content = ""
+            
+            // Read all lines from the terminal buffer
+            for row in 0..<terminalInstance.rows {
+                if let line = terminalInstance.getLine(row: row) {
+                    var lineText = ""
+                    for col in 0..<terminalInstance.cols {
+                        if let char = line.getChar(at: col) {
+                            lineText += String(char.getCharacter())
+                        }
+                    }
+                    // Trim trailing spaces
+                    content += lineText.trimmingCharacters(in: .whitespaces) + "\n"
+                }
+            }
+            
+            return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
 
         // MARK: - TerminalViewDelegate
 
@@ -613,6 +637,14 @@ struct TerminalHostingView: UIViewRepresentable {
             if let terminal {
                 terminal.feed(text: "\u{001b}[B")
             }
+        }
+        
+        func setMaxWidth(_ maxWidth: Int) {
+            // Store the max width preference for terminal rendering
+            // When maxWidth is 0, it means unlimited
+            // This could be used to constrain terminal rendering in the future
+            // For now, just log the preference
+            print("[Terminal] Max width set to: \(maxWidth == 0 ? "unlimited" : "\(maxWidth) columns")")
         }
 
         func setTerminalTitle(source: SwiftTerm.TerminalView, title: String) {

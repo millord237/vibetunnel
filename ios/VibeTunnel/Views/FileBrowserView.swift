@@ -23,16 +23,19 @@ struct FileBrowserView: View {
     let onSelect: (String) -> Void
     let initialPath: String
     let mode: FileBrowserMode
+    let onInsertPath: ((String, Bool) -> Void)? // Path and isDirectory
 
     enum FileBrowserMode {
         case selectDirectory
         case browseFiles
+        case insertPath  // New mode for inserting paths into terminal
     }
 
-    init(initialPath: String = "~", mode: FileBrowserMode = .selectDirectory, onSelect: @escaping (String) -> Void) {
+    init(initialPath: String = "~", mode: FileBrowserMode = .selectDirectory, onSelect: @escaping (String) -> Void, onInsertPath: ((String, Bool) -> Void)? = nil) {
         self.initialPath = initialPath
         self.mode = mode
         self.onSelect = onSelect
+        self.onInsertPath = onInsertPath
     }
 
     private var navigationHeader: some View {
@@ -161,12 +164,15 @@ struct FileBrowserView: View {
                                     modifiedTime: entry.formattedDate,
                                     gitStatus: entry.gitStatus
                                 ) {
-                                    if entry.isDir {
+                                    if entry.isDir && mode != .insertPath {
                                         viewModel.navigate(to: entry.path)
                                     } else if mode == .browseFiles {
                                         // Preview file with our custom preview
                                         previewPath = entry.path
                                         showingFilePreview = true
+                                    } else if mode == .insertPath {
+                                        // Insert the path into terminal
+                                        insertPath(entry.path, isDirectory: entry.isDir)
                                     }
                                 }
                                 .transition(.opacity)
@@ -401,6 +407,22 @@ struct FileBrowserView: View {
         .onAppear {
             viewModel.loadDirectory(path: initialPath)
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func insertPath(_ path: String, isDirectory: Bool) {
+        // Escape the path if it contains spaces
+        let escapedPath = path.contains(" ") ? "\"\(path)\"" : path
+        
+        // Call the insertion handler
+        onInsertPath?(escapedPath, isDirectory)
+        
+        // Provide haptic feedback
+        HapticFeedback.impact(.light)
+        
+        // Dismiss the file browser
+        dismiss()
     }
 }
 

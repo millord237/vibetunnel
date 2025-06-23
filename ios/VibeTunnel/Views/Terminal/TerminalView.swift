@@ -22,6 +22,10 @@ struct TerminalView: View {
     @State private var showingFileBrowser = false
     @State private var selectedRenderer = TerminalRenderer.selected
     @State private var showingDebugMenu = false
+    @State private var showingExportSheet = false
+    @State private var exportedFileURL: URL?
+    @State private var showingWidthSelector = false
+    @State private var currentTerminalWidth: TerminalWidth = .unlimited
     @FocusState private var isInputFocused: Bool
 
     init(session: Session) {
@@ -73,10 +77,16 @@ struct TerminalView: View {
         .sheet(isPresented: $showingFileBrowser) {
             FileBrowserView(
                 initialPath: session.workingDir,
-                mode: .browseFiles
-            ) { selectedPath in
-                showingFileBrowser = false
-            }
+                mode: .insertPath,
+                onSelect: { _ in
+                    showingFileBrowser = false
+                },
+                onInsertPath: { [weak viewModel] path, isDirectory in
+                    // Insert the path into the terminal
+                    viewModel?.sendInput(path)
+                    showingFileBrowser = false
+                }
+            )
         }
         .gesture(
             DragGesture()
@@ -106,6 +116,14 @@ struct TerminalView: View {
                 viewModel.resize(cols: width, rows: newHeight)
             }
         }
+        .onChange(of: currentTerminalWidth) { _, newWidth in
+            let targetWidth = newWidth.value == 0 ? nil : newWidth.value
+            if targetWidth != selectedTerminalWidth {
+                selectedTerminalWidth = targetWidth
+                viewModel.setMaxWidth(targetWidth ?? 0)
+                TerminalWidthManager.shared.defaultWidth = newWidth.value
+            }
+        }
         .onChange(of: viewModel.isAtBottom) { _, newValue in
             withAnimation(Theme.Animation.smooth) {
                 showScrollToBottom = !newValue
@@ -117,6 +135,33 @@ struct TerminalView: View {
                 return .handled
             }
             return .ignored
+        }
+        .sheet(isPresented: $showingExportSheet) {
+            if let url = exportedFileURL {
+                ShareSheet(items: [url])
+                    .onDisappear {
+                        // Clean up temporary file
+                        try? FileManager.default.removeItem(at: url)
+                        exportedFileURL = nil
+                    }
+            }
+        }
+    }
+    
+    // MARK: - Export Functions
+    
+    private func exportTerminalBuffer() {
+        guard let bufferContent = viewModel.getBufferContent() else { return }
+        
+        let fileName = "\(session.displayName)_\(Date().timeIntervalSince1970).txt"
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        
+        do {
+            try bufferContent.write(to: tempURL, atomically: true, encoding: .utf8)
+            exportedFileURL = tempURL
+            showingExportSheet = true
+        } catch {
+            print("Failed to export terminal buffer: \(error)")
         }
     }
     
@@ -148,7 +193,8 @@ struct TerminalView: View {
                 .foregroundColor(Theme.Colors.primaryAccent)
             }
             
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                widthSelectorButton
                 menuButton
             }
         }
@@ -158,6 +204,7 @@ struct TerminalView: View {
         ToolbarItemGroup(placement: .bottomBar) {
             terminalSizeIndicator
             Spacer()
+            connectionStatusIndicator
             sessionStatusIndicator
             pidIndicator
         }
@@ -172,6 +219,33 @@ struct TerminalView: View {
     }
     
     // MARK: - Toolbar Components
+    
+    private var widthSelectorButton: some View {
+        Button(action: { showingWidthSelector = true }) {
+            HStack(spacing: 2) {
+                Image(systemName: "arrow.left.and.right")
+                    .font(.system(size: 12))
+                Text(currentTerminalWidth.label)
+                    .font(Theme.Typography.terminalSystem(size: 14))
+                    .fontWeight(.medium)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Theme.Colors.cardBackground)
+            .cornerRadius(6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Theme.Colors.primaryAccent.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .foregroundColor(Theme.Colors.primaryAccent)
+        .popover(isPresented: $showingWidthSelector, arrowEdge: .top) {
+            WidthSelectorPopover(
+                currentWidth: $currentTerminalWidth,
+                isPresented: $showingWidthSelector
+            )
+        }
+    }
     
     private var menuButton: some View {
         Menu {
@@ -188,9 +262,39 @@ struct TerminalView: View {
             Label("Clear", systemImage: "clear")
         })
         
-        Button(action: { showingFontSizeSheet = true }, label: {
-            Label("Font Size", systemImage: "textformat.size")
-        })
+        Menu {
+            Button(action: { 
+                fontSize = max(8, fontSize - 1)
+                HapticFeedback.impact(.light)
+            }, label: {
+                Label("Decrease", systemImage: "minus")
+            })
+            .disabled(fontSize <= 8)
+            
+            Button(action: { 
+                fontSize = min(32, fontSize + 1)
+                HapticFeedback.impact(.light)
+            }, label: {
+                Label("Increase", systemImage: "plus")
+            })
+            .disabled(fontSize >= 32)
+            
+            Button(action: { 
+                fontSize = 14
+                HapticFeedback.impact(.light)
+            }, label: {
+                Label("Reset to Default", systemImage: "arrow.counterclockwise")
+            })
+            .disabled(fontSize == 14)
+            
+            Divider()
+            
+            Button(action: { showingFontSizeSheet = true }, label: {
+                Label("More Options...", systemImage: "slider.horizontal.3")
+            })
+        } label: {
+            Label("Font Size (\(Int(fontSize))pt)", systemImage: "textformat.size")
+        }
         
         Button(action: { showingTerminalWidthSheet = true }, label: {
             Label("Terminal Width", systemImage: "arrow.left.and.right")
@@ -209,6 +313,10 @@ struct TerminalView: View {
         
         Button(action: { viewModel.copyBuffer() }, label: {
             Label("Copy All", systemImage: "doc.on.doc")
+        })
+        
+        Button(action: { exportTerminalBuffer() }, label: {
+            Label("Export as Text", systemImage: "square.and.arrow.up")
         })
         
         Divider()
@@ -275,6 +383,24 @@ struct TerminalView: View {
                     .font(Theme.Typography.terminalSystem(size: 12))
                     .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
             }
+        }
+    }
+    
+    private var connectionStatusIndicator: some View {
+        HStack(spacing: 4) {
+            if viewModel.isConnecting {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle())
+                    .scaleEffect(0.5)
+                    .frame(width: 12, height: 12)
+            } else {
+                Image(systemName: viewModel.isConnected ? "wifi" : "wifi.slash")
+                    .font(.system(size: 10))
+                    .foregroundColor(viewModel.isConnected ? Theme.Colors.successAccent : Theme.Colors.errorAccent)
+            }
+            Text(viewModel.isConnecting ? "Connecting" : (viewModel.isConnected ? "Connected" : "Disconnected"))
+                .font(Theme.Typography.terminalSystem(size: 10))
+                .foregroundColor(viewModel.isConnected ? Theme.Colors.successAccent : Theme.Colors.errorAccent)
         }
     }
     
@@ -625,6 +751,13 @@ class TerminalViewModel {
             if castRecorder.isRecording {
                 stopRecording()
             }
+            
+            // Load final snapshot for exited session
+            Task { @MainActor in
+                // Give the server a moment to finalize the snapshot
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                await loadSnapshot()
+            }
 
         case .bufferUpdate(let snapshot):
             // Update terminal buffer directly
@@ -698,6 +831,14 @@ class TerminalViewModel {
         // Terminal copy is handled by SwiftTerm's built-in functionality
         HapticFeedback.notification(.success)
     }
+    
+    func getBufferContent() -> String? {
+        // Get the current terminal buffer content
+        if let coordinator = terminalCoordinator {
+            return coordinator.getBufferContent()
+        }
+        return nil
+    }
 
     @MainActor
     private func handleTerminalBell() {
@@ -748,5 +889,21 @@ class TerminalViewModel {
             // Resize to fit
             resize(cols: optimalCols, rows: terminalRows)
         }
+    }
+    
+    func setMaxWidth(_ maxWidth: Int) {
+        // Store the max width preference
+        // When maxWidth is 0, it means unlimited
+        let targetWidth = maxWidth == 0 ? nil : maxWidth
+        
+        if let width = targetWidth, width != terminalCols {
+            // Maintain aspect ratio when changing width
+            let aspectRatio = Double(terminalRows) / Double(terminalCols)
+            let newHeight = Int(Double(width) * aspectRatio)
+            resize(cols: width, rows: newHeight)
+        }
+        
+        // Update the terminal coordinator if using constrained width
+        terminalCoordinator?.setMaxWidth(maxWidth)
     }
 }
