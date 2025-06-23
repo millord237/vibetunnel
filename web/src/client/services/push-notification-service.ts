@@ -248,8 +248,7 @@ export class PushNotificationService {
     return (
       'serviceWorker' in navigator &&
       'PushManager' in window &&
-      'Notification' in window &&
-      this.pushNotificationsAvailable
+      'Notification' in window
     );
   }
 
