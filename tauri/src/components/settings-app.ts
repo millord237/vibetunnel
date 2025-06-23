@@ -59,6 +59,40 @@ export class SettingsApp extends TauriBase {
   
   @state()
   private passwordError = '';
+  
+  // Debug panel state
+  @state()
+  private debugLogs: Array<any> = [];
+  
+  @state()
+  private performanceMetrics: any = {};
+  
+  @state()
+  private networkRequests: Array<any> = [];
+  
+  @state()
+  private apiTestResults: Array<any> = [];
+  
+  @state()
+  private memorySnapshots: Array<any> = [];
+  
+  @state()
+  private debugStats: any = {};
+  
+  @state()
+  private debugSubTab = 'logs';
+  
+  @state()
+  private logFilter = 'all';
+  
+  @state()
+  private logSearchTerm = '';
+  
+  @state()
+  private isRunningTests = false;
+  
+  @state()
+  private diagnosticReport: any = null;
   static override styles = [
     formStyles,
     css`
@@ -469,6 +503,341 @@ export class SettingsApp extends TauriBase {
       --accent-hover: #059669;
       --accent-glow: rgba(16, 185, 129, 0.3);
     }
+
+    /* Debug panel styles */
+    .debug-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .debug-tabs {
+      display: flex;
+      gap: 2px;
+      padding: 0;
+      margin: 0 0 24px 0;
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 4px;
+    }
+
+    .debug-tab {
+      padding: 8px 16px;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .debug-tab:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .debug-tab.active {
+      background: var(--accent);
+      color: white;
+    }
+
+    .debug-content {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .logs-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .logs-toolbar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+
+    .log-filters {
+      display: flex;
+      gap: 4px;
+    }
+
+    .log-filter-btn {
+      padding: 6px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-primary);
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .log-filter-btn:first-child {
+      border-radius: 6px 0 0 6px;
+    }
+
+    .log-filter-btn:last-child {
+      border-radius: 0 6px 6px 0;
+    }
+
+    .log-filter-btn:not(:last-child) {
+      border-right: none;
+    }
+
+    .log-filter-btn.active {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    .log-search {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+    }
+
+    .log-search input {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .logs-view {
+      flex: 1;
+      background: #0e0e0e;
+      border-radius: 8px;
+      padding: 16px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .log-entry {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 4px;
+      padding: 2px 0;
+    }
+
+    .log-entry:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .log-timestamp {
+      color: #6b7280;
+      flex-shrink: 0;
+    }
+
+    .log-level {
+      font-weight: 600;
+      width: 60px;
+      flex-shrink: 0;
+    }
+
+    .log-level.trace { color: #9ca3af; }
+    .log-level.debug { color: #b5cea8; }
+    .log-level.info { color: #3794ff; }
+    .log-level.warn { color: #ce9178; }
+    .log-level.error { color: #f48771; }
+
+    .log-message {
+      flex: 1;
+      color: #d4d4d4;
+      word-break: break-word;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .metric-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .metric-unit {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+
+    .network-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .network-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .network-item:hover {
+      border-color: var(--border-secondary);
+    }
+
+    .network-method {
+      font-weight: 600;
+      color: var(--accent);
+      margin-right: 8px;
+    }
+
+    .network-url {
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .network-status {
+      float: right;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .network-status.success {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+
+    .network-status.error {
+      background: var(--error-bg);
+      color: var(--error);
+    }
+
+    .api-test-form {
+      background: var(--bg-card);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .test-results {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .test-result {
+      background: var(--bg-card);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .test-result.success {
+      border-color: var(--success);
+    }
+
+    .test-result.failure {
+      border-color: var(--error);
+    }
+
+    .memory-chart {
+      background: var(--bg-card);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      padding: 24px;
+      height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+    }
+
+    .diagnostic-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+
+    .diagnostic-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+
+    .diagnostic-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    .diagnostic-item:last-child {
+      border-bottom: none;
+    }
+
+    .diagnostic-label {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .diagnostic-value {
+      color: var(--text-primary);
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      color: var(--text-tertiary);
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
   `
   ];
 
@@ -505,6 +874,11 @@ export class SettingsApp extends TauriBase {
       
       // Get system info
       await this.loadSystemInfo();
+      
+      // Load debug data if in debug mode
+      if (this.debugMode) {
+        await this.loadDebugData();
+      }
     }
   }
 
@@ -841,7 +1215,56 @@ export class SettingsApp extends TauriBase {
     return html`
       <div class="tab-content ${this.activeTab === 'debug' ? 'active' : ''}" id="debug">
         <h2>Debug</h2>
-        <p>Debug content here...</p>
+        
+        <div class="debug-container">
+          <div class="debug-tabs">
+            <button 
+              class="debug-tab ${this.debugSubTab === 'logs' ? 'active' : ''}"
+              @click=${() => this.debugSubTab = 'logs'}
+            >
+              Logs
+            </button>
+            <button 
+              class="debug-tab ${this.debugSubTab === 'performance' ? 'active' : ''}"
+              @click=${() => this.debugSubTab = 'performance'}
+            >
+              Performance
+            </button>
+            <button 
+              class="debug-tab ${this.debugSubTab === 'network' ? 'active' : ''}"
+              @click=${() => this.debugSubTab = 'network'}
+            >
+              Network
+            </button>
+            <button 
+              class="debug-tab ${this.debugSubTab === 'api-testing' ? 'active' : ''}"
+              @click=${() => this.debugSubTab = 'api-testing'}
+            >
+              API Testing
+            </button>
+            <button 
+              class="debug-tab ${this.debugSubTab === 'memory' ? 'active' : ''}"
+              @click=${() => this.debugSubTab = 'memory'}
+            >
+              Memory
+            </button>
+            <button 
+              class="debug-tab ${this.debugSubTab === 'diagnostics' ? 'active' : ''}"
+              @click=${() => this.debugSubTab = 'diagnostics'}
+            >
+              Diagnostics
+            </button>
+          </div>
+          
+          <div class="debug-content">
+            ${this.debugSubTab === 'logs' ? this._renderLogsTab() : ''}
+            ${this.debugSubTab === 'performance' ? this._renderPerformanceTab() : ''}
+            ${this.debugSubTab === 'network' ? this._renderNetworkTab() : ''}
+            ${this.debugSubTab === 'api-testing' ? this._renderApiTestingTab() : ''}
+            ${this.debugSubTab === 'memory' ? this._renderMemoryTab() : ''}
+            ${this.debugSubTab === 'diagnostics' ? this._renderDiagnosticsTab() : ''}
+          </div>
+        </div>
       </div>
     `;
   }
@@ -956,6 +1379,535 @@ export class SettingsApp extends TauriBase {
         </div>
       </div>
     `;
+  }
+
+  private async loadDebugData(): Promise<void> {
+    try {
+      // Load debug logs
+      this.debugLogs = await this.safeInvoke('get_debug_logs', { limit: 100 }) || [];
+      
+      // Load performance metrics
+      this.performanceMetrics = await this.safeInvoke('get_performance_metrics') || {};
+      
+      // Load network requests
+      this.networkRequests = await this.safeInvoke('get_network_requests', { limit: 50 }) || [];
+      
+      // Load debug stats
+      this.debugStats = await this.safeInvoke('get_debug_stats') || {};
+    } catch (error) {
+      console.error('Failed to load debug data:', error);
+    }
+  }
+
+  private _renderLogsTab(): TemplateResult {
+    const filteredLogs = this._filterLogs(this.debugLogs);
+    
+    return html`
+      <div class="logs-container">
+        <div class="logs-toolbar">
+          <div class="log-filters">
+            <button 
+              class="log-filter-btn ${this.logFilter === 'all' ? 'active' : ''}"
+              @click=${() => { this.logFilter = 'all'; this.requestUpdate(); }}
+            >
+              All (${this.debugLogs.length})
+            </button>
+            <button 
+              class="log-filter-btn ${this.logFilter === 'error' ? 'active' : ''}"
+              @click=${() => { this.logFilter = 'error'; this.requestUpdate(); }}
+            >
+              Errors
+            </button>
+            <button 
+              class="log-filter-btn ${this.logFilter === 'warn' ? 'active' : ''}"
+              @click=${() => { this.logFilter = 'warn'; this.requestUpdate(); }}
+            >
+              Warnings
+            </button>
+            <button 
+              class="log-filter-btn ${this.logFilter === 'info' ? 'active' : ''}"
+              @click=${() => { this.logFilter = 'info'; this.requestUpdate(); }}
+            >
+              Info
+            </button>
+            <button 
+              class="log-filter-btn ${this.logFilter === 'debug' ? 'active' : ''}"
+              @click=${() => { this.logFilter = 'debug'; this.requestUpdate(); }}
+            >
+              Debug
+            </button>
+          </div>
+          
+          <div class="log-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+            <input 
+              type="text" 
+              placeholder="Search logs..."
+              .value=${this.logSearchTerm}
+              @input=${(e: Event) => {
+                const input = e.target as HTMLInputElement;
+                this.logSearchTerm = input.value;
+                this.requestUpdate();
+              }}
+            />
+          </div>
+          
+          <button class="btn btn-primary" @click=${this.refreshLogs}>Refresh</button>
+          <button class="btn" @click=${this.exportLogs}>Export</button>
+          <button class="btn" @click=${this.clearLogs}>Clear</button>
+        </div>
+        
+        <div class="logs-view">
+          ${filteredLogs.length === 0 ? html`
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              <p>No logs yet</p>
+            </div>
+          ` : filteredLogs.map(log => html`
+            <div class="log-entry">
+              <span class="log-timestamp">${this._formatTimestamp(log.timestamp)}</span>
+              <span class="log-level ${log.level.toLowerCase()}">${log.level.toUpperCase()}</span>
+              <span class="log-message">${log.message}</span>
+            </div>
+          `)}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderPerformanceTab(): TemplateResult {
+    return html`
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-label">Response Time</div>
+          <div class="metric-value">
+            ${this.performanceMetrics.avg_response_time_ms || 0}
+            <span class="metric-unit">ms</span>
+          </div>
+        </div>
+        
+        <div class="metric-card">
+          <div class="metric-label">Requests/Second</div>
+          <div class="metric-value">
+            ${this.performanceMetrics.requests_per_second || 0}
+            <span class="metric-unit">req/s</span>
+          </div>
+        </div>
+        
+        <div class="metric-card">
+          <div class="metric-label">CPU Usage</div>
+          <div class="metric-value">
+            ${this.performanceMetrics.cpu_usage_percent || 0}
+            <span class="metric-unit">%</span>
+          </div>
+        </div>
+        
+        <div class="metric-card">
+          <div class="metric-label">Memory Usage</div>
+          <div class="metric-value">
+            ${this.performanceMetrics.memory_usage_mb || 0}
+            <span class="metric-unit">MB</span>
+          </div>
+        </div>
+        
+        <div class="metric-card">
+          <div class="metric-label">Active Sessions</div>
+          <div class="metric-value">
+            ${this.performanceMetrics.active_sessions || 0}
+          </div>
+        </div>
+        
+        <div class="metric-card">
+          <div class="metric-label">Total Requests</div>
+          <div class="metric-value">
+            ${this.performanceMetrics.total_requests || 0}
+          </div>
+        </div>
+      </div>
+      
+      <div class="action-buttons">
+        <button class="btn btn-primary" @click=${this.refreshPerformance}>Refresh</button>
+        <button class="btn" @click=${this.exportPerformance}>Export Data</button>
+      </div>
+    `;
+  }
+
+  private _renderNetworkTab(): TemplateResult {
+    return html`
+      <div class="network-list">
+        ${this.networkRequests.length === 0 ? html`
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+            </svg>
+            <p>No network requests recorded</p>
+          </div>
+        ` : this.networkRequests.map(req => html`
+          <div class="network-item">
+            <div>
+              <span class="network-method">${req.method}</span>
+              <span class="network-url">${req.url}</span>
+              <span class="network-status ${req.status >= 200 && req.status < 300 ? 'success' : 'error'}">
+                ${req.status || 'Failed'}
+              </span>
+            </div>
+            <div style="margin-top: 4px; font-size: 11px; color: var(--text-tertiary);">
+              ${req.duration_ms}ms • ${this._formatTimestamp(req.timestamp)}
+            </div>
+          </div>
+        `)}
+      </div>
+      
+      <div class="action-buttons">
+        <button class="btn btn-primary" @click=${this.refreshNetwork}>Refresh</button>
+        <button class="btn" @click=${this.clearNetwork}>Clear</button>
+      </div>
+    `;
+  }
+
+  private _renderApiTestingTab(): TemplateResult {
+    return html`
+      <div class="api-test-form">
+        <h3>Quick API Test</h3>
+        <div class="form-group">
+          <label>Method</label>
+          <select class="form-input" id="api-method">
+            <option>GET</option>
+            <option>POST</option>
+            <option>PUT</option>
+            <option>DELETE</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>URL</label>
+          <input type="text" class="form-input" id="api-url" placeholder="http://localhost:4022/api/..." />
+        </div>
+        
+        <div class="form-group">
+          <label>Headers (JSON)</label>
+          <textarea class="form-input" id="api-headers" rows="3" placeholder='{"Content-Type": "application/json"}'></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label>Body (JSON)</label>
+          <textarea class="form-input" id="api-body" rows="5" placeholder='{}'></textarea>
+        </div>
+        
+        <button 
+          class="btn btn-primary" 
+          @click=${this.runApiTest}
+          ?disabled=${this.isRunningTests}
+        >
+          ${this.isRunningTests ? 'Running...' : 'Run Test'}
+        </button>
+      </div>
+      
+      <div class="test-results">
+        ${this.apiTestResults.map(result => html`
+          <div class="test-result ${result.success ? 'success' : 'failure'}">
+            <div style="display: flex; justify-content: space-between;">
+              <strong>${result.test_name || 'API Test'}</strong>
+              <span>${result.duration_ms}ms</span>
+            </div>
+            ${result.error ? html`
+              <div style="color: var(--error); margin-top: 8px;">${result.error}</div>
+            ` : html`
+              <div style="margin-top: 8px;">
+                Status: ${result.actual_status}<br>
+                Response: <code>${JSON.stringify(result.actual_body, null, 2)}</code>
+              </div>
+            `}
+          </div>
+        `)}
+      </div>
+    `;
+  }
+
+  private _renderMemoryTab(): TemplateResult {
+    const latest = this.memorySnapshots[this.memorySnapshots.length - 1];
+    
+    return html`
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-label">Heap Used</div>
+          <div class="metric-value">
+            ${latest?.heap_used_mb || 0}
+            <span class="metric-unit">MB</span>
+          </div>
+        </div>
+        
+        <div class="metric-card">
+          <div class="metric-label">Heap Total</div>
+          <div class="metric-value">
+            ${latest?.heap_total_mb || 0}
+            <span class="metric-unit">MB</span>
+          </div>
+        </div>
+        
+        <div class="metric-card">
+          <div class="metric-label">External</div>
+          <div class="metric-value">
+            ${latest?.external_mb || 0}
+            <span class="metric-unit">MB</span>
+          </div>
+        </div>
+        
+        <div class="metric-card">
+          <div class="metric-label">RSS</div>
+          <div class="metric-value">
+            ${latest?.process_rss_mb || 0}
+            <span class="metric-unit">MB</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="memory-chart">
+        Memory usage chart would go here
+      </div>
+      
+      <div class="action-buttons">
+        <button class="btn btn-primary" @click=${this.takeMemorySnapshot}>Take Snapshot</button>
+        <button class="btn" @click=${this.exportMemoryData}>Export Data</button>
+        <button class="btn" @click=${this.clearMemoryData}>Clear History</button>
+      </div>
+    `;
+  }
+
+  private _renderDiagnosticsTab(): TemplateResult {
+    return html`
+      ${this.diagnosticReport ? html`
+        <div class="diagnostic-section">
+          <h3 class="diagnostic-title">System Information</h3>
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">OS</span>
+            <span class="diagnostic-value">${this.diagnosticReport.system_info?.os}</span>
+          </div>
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">Architecture</span>
+            <span class="diagnostic-value">${this.diagnosticReport.system_info?.arch}</span>
+          </div>
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">CPU Count</span>
+            <span class="diagnostic-value">${this.diagnosticReport.system_info?.cpu_count}</span>
+          </div>
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">Total Memory</span>
+            <span class="diagnostic-value">${this.diagnosticReport.system_info?.total_memory_mb} MB</span>
+          </div>
+        </div>
+        
+        <div class="diagnostic-section">
+          <h3 class="diagnostic-title">Application Info</h3>
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">Version</span>
+            <span class="diagnostic-value">${this.diagnosticReport.app_info?.version}</span>
+          </div>
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">Uptime</span>
+            <span class="diagnostic-value">${this._formatUptime(this.diagnosticReport.app_info?.uptime_seconds)}</span>
+          </div>
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">Active Sessions</span>
+            <span class="diagnostic-value">${this.diagnosticReport.app_info?.active_sessions}</span>
+          </div>
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">Total Errors</span>
+            <span class="diagnostic-value">${this.diagnosticReport.app_info?.error_count}</span>
+          </div>
+        </div>
+        
+        ${this.diagnosticReport.recommendations?.length > 0 ? html`
+          <div class="diagnostic-section">
+            <h3 class="diagnostic-title">Recommendations</h3>
+            ${this.diagnosticReport.recommendations.map((rec: string) => html`
+              <div style="padding: 8px 0; color: var(--text-secondary);">
+                • ${rec}
+              </div>
+            `)}
+          </div>
+        ` : ''}
+      ` : html`
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <p>No diagnostic report available</p>
+        </div>
+      `}
+      
+      <div class="action-buttons">
+        <button class="btn btn-primary" @click=${this.generateDiagnosticReport}>Generate Report</button>
+        ${this.diagnosticReport ? html`
+          <button class="btn" @click=${this.exportDiagnosticReport}>Export Report</button>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  // Debug helper methods
+  private _filterLogs(logs: Array<any>): Array<any> {
+    let filtered = logs;
+    
+    if (this.logFilter !== 'all') {
+      filtered = filtered.filter(log => log.level.toLowerCase() === this.logFilter);
+    }
+    
+    if (this.logSearchTerm) {
+      const term = this.logSearchTerm.toLowerCase();
+      filtered = filtered.filter(log => 
+        log.message.toLowerCase().includes(term) ||
+        log.component?.toLowerCase().includes(term)
+      );
+    }
+    
+    return filtered;
+  }
+
+  private _formatTimestamp(timestamp: string): string {
+    return new Date(timestamp).toLocaleTimeString();
+  }
+
+  private _formatUptime(seconds?: number): string {
+    if (!seconds) return 'N/A';
+    
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    
+    if (days > 0) {
+      return `${days}d ${hours}h ${minutes}m`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
+  }
+
+  private async refreshLogs(): Promise<void> {
+    this.debugLogs = await this.safeInvoke('get_debug_logs', { limit: 100 }) || [];
+    this.requestUpdate();
+  }
+
+  private async exportLogs(): Promise<void> {
+    const logText = this.debugLogs.map(log => 
+      `[${new Date(log.timestamp).toISOString()}] [${log.level}] [${log.component}] ${log.message}`
+    ).join('\n');
+    
+    const blob = new Blob([logText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `debug-logs-${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private async clearLogs(): Promise<void> {
+    await this.safeInvoke('clear_debug_logs');
+    this.debugLogs = [];
+    this.requestUpdate();
+  }
+
+  private async refreshPerformance(): Promise<void> {
+    this.performanceMetrics = await this.safeInvoke('get_performance_metrics') || {};
+    this.requestUpdate();
+  }
+
+  private async exportPerformance(): Promise<void> {
+    const data = JSON.stringify(this.performanceMetrics, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `performance-metrics-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private async refreshNetwork(): Promise<void> {
+    this.networkRequests = await this.safeInvoke('get_network_requests', { limit: 50 }) || [];
+    this.requestUpdate();
+  }
+
+  private async clearNetwork(): Promise<void> {
+    await this.safeInvoke('clear_network_requests');
+    this.networkRequests = [];
+    this.requestUpdate();
+  }
+
+  private async runApiTest(): Promise<void> {
+    this.isRunningTests = true;
+    
+    const method = (this.shadowRoot?.querySelector('#api-method') as HTMLSelectElement)?.value;
+    const url = (this.shadowRoot?.querySelector('#api-url') as HTMLInputElement)?.value;
+    const headers = (this.shadowRoot?.querySelector('#api-headers') as HTMLTextAreaElement)?.value;
+    const body = (this.shadowRoot?.querySelector('#api-body') as HTMLTextAreaElement)?.value;
+    
+    try {
+      const test = {
+        id: Date.now().toString(),
+        name: `${method} ${url}`,
+        endpoint: url,
+        method,
+        headers: headers ? JSON.parse(headers) : {},
+        body: body ? JSON.parse(body) : null,
+        expected_status: 200,
+        timeout_ms: 10000
+      };
+      
+      const results = await this.safeInvoke('run_api_tests', { tests: [test] });
+      this.apiTestResults = [...results, ...this.apiTestResults].slice(0, 10);
+    } catch (error) {
+      console.error('API test failed:', error);
+    } finally {
+      this.isRunningTests = false;
+      this.requestUpdate();
+    }
+  }
+
+  private async takeMemorySnapshot(): Promise<void> {
+    const snapshot = await this.safeInvoke('take_memory_snapshot');
+    if (snapshot) {
+      this.memorySnapshots = [...this.memorySnapshots, snapshot].slice(-20);
+      this.requestUpdate();
+    }
+  }
+
+  private async exportMemoryData(): Promise<void> {
+    const data = JSON.stringify(this.memorySnapshots, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `memory-snapshots-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private async clearMemoryData(): Promise<void> {
+    this.memorySnapshots = [];
+    this.requestUpdate();
+  }
+
+  private async generateDiagnosticReport(): Promise<void> {
+    this.diagnosticReport = await this.safeInvoke('generate_diagnostic_report');
+    this.requestUpdate();
+  }
+
+  private async exportDiagnosticReport(): Promise<void> {
+    const data = JSON.stringify(this.diagnosticReport, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `diagnostic-report-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   override render() {
