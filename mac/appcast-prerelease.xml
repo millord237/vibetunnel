@@ -35,11 +35,11 @@
         </ul>
       ]]></description>
       <pubDate>Sun, 23 Jun 2025 04:30:00 +0000</pubDate>
-      <enclosure url="https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.3/VibeTunnel-1.0.0-beta.3.zip"
+      <enclosure url="https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.3/VibeTunnel-1.0.0-beta.3.dmg"
                  sparkle:version="110"
                  sparkle:shortVersionString="1.0.0-beta.3"
-                 sparkle:edSignature="q63H70gXW3hgqBNYGzBj1tq1dIEe/tnQTBuEszo2OUwh4E0D4ASN6qfcguSm0YH2H5Obmo85kMdA25hwO+jRBA=="
-                 length="26024831"
+                 sparkle:edSignature="kY87vo1HXpFx6aKb9LDXbe/AmQND5iH+W7a3qpf2AejmEl+i7wKch/JY3zhBHrmWIuksiKOwFIIklT4sQFMjDw=="
+                 length="20156342"
                  type="application/octet-stream" />
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
     </item>
