@@ -18,6 +18,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from './session-list.js';
 import './terminal.js';
 import './file-browser.js';
+import './clickable-path.js';
 import type { Terminal } from './terminal.js';
 import { CastConverter } from '../utils/cast-converter.js';
 import {
@@ -1075,6 +1076,9 @@ export class SessionView extends LitElement {
                 title="${this.session.name || this.session.command}"
               >
                 ${this.session.name || this.session.command}
+              </div>
+              <div class="text-xs opacity-75 mt-0.5">
+                <clickable-path .path=${this.session.workingDir} .iconSize=${12}></clickable-path>
               </div>
             </div>
           </div>
