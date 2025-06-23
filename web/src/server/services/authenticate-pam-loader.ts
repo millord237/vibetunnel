@@ -19,14 +19,16 @@ function loadNativeModule(modulePath: string): { authenticate?: AuthenticateFunc
 // Try to load authenticate_pam.node
 let authenticate: AuthenticateFunction;
 
-try {
-  // First try the standard require (for development)
-  authenticate = require('authenticate-pam');
-} catch (_error) {
-  // In SEA mode, load from next to the executable
+// Check if we're in SEA mode by looking for the native module next to the executable
+const execDir = path.dirname(process.execPath);
+const seaPamPath = path.join(execDir, 'authenticate_pam.node');
+const seaNativePamPath = path.join(execDir, 'native', 'authenticate_pam.node');
+
+if (fs.existsSync(seaPamPath) || fs.existsSync(seaNativePamPath)) {
+  // We're in SEA mode, use dlopen
   const possiblePaths = [
-    path.join(path.dirname(process.execPath), 'authenticate_pam.node'),
-    path.join(path.dirname(process.execPath), 'native', 'authenticate_pam.node'),
+    seaPamPath,
+    seaNativePamPath,
     path.join(__dirname, '..', '..', '..', 'native', 'authenticate_pam.node'),
   ];
 
@@ -49,6 +51,24 @@ try {
   }
 
   if (!loaded) {
+    console.warn(
+      'Warning: authenticate-pam native module not found. PAM authentication will not work.'
+    );
+    // Provide a stub implementation
+    authenticate = (
+      username: string,
+      password: string,
+      callback: (err: Error | null, authenticated?: boolean) => void
+    ) => {
+      callback(new Error('PAM authentication not available'));
+    };
+  }
+} else {
+  // Development mode - use regular require
+  try {
+    authenticate = require('authenticate-pam');
+  } catch (_error) {
+    // In development mode but module not found
     console.warn(
       'Warning: authenticate-pam native module not found. PAM authentication will not work.'
     );

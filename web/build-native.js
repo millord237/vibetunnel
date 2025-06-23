@@ -370,6 +370,7 @@ async function main() {
       --outfile=build/bundle.js \\
       --format=cjs \\
       --keep-names \\
+      --external:authenticate-pam \\
       --define:process.env.BUILD_DATE='"${buildDate}"' \\
       --define:process.env.BUILD_TIMESTAMP='"${buildTimestamp}"'`;
 
