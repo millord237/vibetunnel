@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "CommonJS",
-    "lib": ["ES2020", "dom"],
-    "outDir": "./dist",
+    "module": "ES2020",
+    "lib": ["ES2020", "webworker"],
+    "outDir": "./public",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
@@ -11,21 +11,18 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
-    "resolveJsonModule": true,
     "sourceMap": true,
+    "inlineSourceMap": false,
+    "inlineSources": true,
     "declaration": false,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "useDefineForClassFields": false
   },
   "include": [
-    "src/server/**/*",
-    "src/shared/**/*",
-    "src/cli.ts"
+    "src/client/sw.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    "public",
-    "src/client/**/*"
+    "dist"
   ]
 }
