@@ -19,11 +19,10 @@ interface AuthenticatedRequest extends Request {
 
 export function createAuthMiddleware(config: AuthConfig) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    // Skip auth for health check endpoint, auth endpoints, client logging, and push notifications
+    // Skip auth for health check endpoint, auth endpoints, and push notifications
     if (
       req.path === '/api/health' ||
       req.path.startsWith('/api/auth') ||
-      req.path.startsWith('/api/logs') ||
       req.path.startsWith('/api/push')
     ) {
       return next();

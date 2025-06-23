@@ -742,11 +742,15 @@ export class VibeTunnelApp extends LitElement {
         @close=${this.handleCloseSSHKeyManager}
       ></ssh-key-manager>
 
-      <!-- Version and logs link in bottom right -->
-      <div class="fixed bottom-4 right-4 text-dark-text-muted text-xs font-mono">
-        <a href="/logs" class="hover:text-dark-text transition-colors">Logs</a>
-        <span class="ml-2">v${VERSION}</span>
-      </div>
+      <!-- Version and logs link in bottom right (only show when authenticated) -->
+      ${this.currentView !== 'auth'
+        ? html`
+            <div class="fixed bottom-4 right-4 text-dark-text-muted text-xs font-mono">
+              <a href="/logs" class="hover:text-dark-text transition-colors">Logs</a>
+              <span class="ml-2">v${VERSION}</span>
+            </div>
+          `
+        : ''}
     `;
   }
 }
