@@ -10,18 +10,19 @@
  * @fires save - When save is triggered (Cmd/Ctrl+S) in edit mode (detail: { content: string })
  * @fires content-changed - When content changes in edit mode (detail: { content: string })
  */
-import { LitElement, html, css } from 'lit';
+import { LitElement, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { createRef, ref } from 'lit/directives/ref.js';
 import type { editor } from 'monaco-editor';
 import { createLogger } from '../utils/logger.js';
+import { initializeMonaco } from '../utils/monaco-loader.js';
 
 const logger = createLogger('monaco-editor');
 
 // Import Monaco Editor types
 declare global {
   interface Window {
-    monaco: typeof import('monaco-editor');
+    monaco: any;
   }
 }
 
@@ -39,52 +40,6 @@ export interface MonacoEditorOptions {
 
 @customElement('monaco-editor')
 export class MonacoEditor extends LitElement {
-  static styles = css`
-    :host {
-      display: block;
-      width: 100%;
-      height: 100%;
-      position: relative;
-    }
-
-    .editor-container {
-      width: 100%;
-      height: 100%;
-      position: relative;
-      background: #1e1e1e;
-    }
-
-    .loading {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #666;
-      font-family:
-        ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-    }
-
-    .mode-toggle {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 10;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #fff;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .mode-toggle:hover {
-      background: rgba(255, 255, 255, 0.2);
-      border-color: rgba(255, 255, 255, 0.3);
-    }
-  `;
-
   @property({ type: String }) content = '';
   @property({ type: String }) originalContent = '';
   @property({ type: String }) modifiedContent = '';
@@ -112,6 +67,12 @@ export class MonacoEditor extends LitElement {
     super.connectedCallback();
     await this.loadMonaco();
     this.setupResizeObserver();
+    // Wait for the first render to complete
+    await this.updateComplete;
+    // Create editor if container is ready
+    if (this.containerRef.value && !this.editor && !this.isLoading) {
+      await this.createEditor();
+    }
   }
 
   disconnectedCallback() {
@@ -132,9 +93,8 @@ export class MonacoEditor extends LitElement {
 
     try {
       logger.debug('Loading Monaco Editor...');
-      // Monaco will be loaded via esbuild bundling
-      // We'll need to configure the loader properly in the build process
-      await this.waitForMonaco();
+      // Initialize Monaco
+      await initializeMonaco();
       this.monacoLoaded = true;
       this.isLoading = false;
       logger.debug('Monaco Editor loaded successfully');
@@ -221,9 +181,11 @@ export class MonacoEditor extends LitElement {
       this.setupTheme();
 
       const commonOptions: editor.IEditorConstructionOptions = {
-        theme: 'vibetunnel-dark',
+        theme: 'vs-dark',
         automaticLayout: true,
         fontSize: 14,
+        fontFamily: "'Fira Code', Menlo, Monaco, 'Courier New', monospace",
+        fontLigatures: true,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         renderWhitespace: 'selection',
@@ -253,7 +215,7 @@ export class MonacoEditor extends LitElement {
           this.detectLanguage()
         );
 
-        this.editor.setModel({
+        (this.editor as editor.IStandaloneDiffEditor).setModel({
           original: originalModel,
           modified: modifiedModel,
         });
@@ -267,12 +229,15 @@ export class MonacoEditor extends LitElement {
 
         // Add save command
         if (!this.readOnly) {
-          this.editor.addCommand(window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyS, () => {
-            this.handleSave();
-          });
+          (this.editor as editor.IStandaloneCodeEditor).addCommand(
+            window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyS,
+            () => {
+              this.handleSave();
+            }
+          );
 
           // Listen for content changes
-          this.editor.onDidChangeModelContent(() => {
+          (this.editor as editor.IStandaloneCodeEditor).onDidChangeModelContent(() => {
             const content = (this.editor as editor.IStandaloneCodeEditor)?.getValue() || '';
             this.dispatchEvent(
               new CustomEvent('content-changed', {
@@ -292,26 +257,9 @@ export class MonacoEditor extends LitElement {
   }
 
   private setupTheme() {
+    // Use the default VS dark theme
     if (!window.monaco) return;
-
-    window.monaco.editor.defineTheme('vibetunnel-dark', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [],
-      colors: {
-        'editor.background': '#0a0b0d',
-        'editor.foreground': '#e0e0e0',
-        'editorLineNumber.foreground': '#666',
-        'editorLineNumber.activeForeground': '#aaa',
-        'editor.selectionBackground': '#264f78',
-        'editor.lineHighlightBackground': '#1a1b1d',
-        'editorCursor.foreground': '#10b981',
-        'editor.findMatchBackground': '#515c6a',
-        'editor.findMatchHighlightBackground': '#ea5e5e55',
-        'editorIndentGuide.background': '#333',
-        'editorIndentGuide.activeBackground': '#555',
-      },
-    });
+    window.monaco.editor.setTheme('vs-dark');
   }
 
   private detectLanguage(): string {
@@ -442,19 +390,48 @@ export class MonacoEditor extends LitElement {
 
   render() {
     return html`
-      <div class="editor-container" ${ref(this.containerRef)}>
-        ${this.isLoading ? html` <div class="loading">Loading editor...</div> ` : ''}
-        ${this.showModeToggle && this.mode === 'diff' && !this.isLoading
-          ? html`
-              <button
-                class="mode-toggle"
-                @click=${this.toggleDiffMode}
-                title="Toggle between inline and side-by-side diff"
-              >
-                ${this.diffMode === 'inline' ? 'Side by Side' : 'Inline'}
-              </button>
-            `
-          : ''}
+      <div
+        class="monaco-editor-root"
+        style="display: block; width: 100%; height: 100%; position: relative;"
+      >
+        <div
+          class="editor-container"
+          ${ref(this.containerRef)}
+          style="width: 100%; height: 100%; position: relative; background: #1e1e1e;"
+        >
+          ${this.isLoading
+            ? html`
+                <div
+                  class="loading"
+                  style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #666; font-family: ui-monospace, monospace;"
+                >
+                  Loading editor...
+                </div>
+              `
+            : ''}
+          ${this.showModeToggle && this.mode === 'diff' && !this.isLoading
+            ? html`
+                <button
+                  class="mode-toggle"
+                  style="position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;"
+                  @click=${this.toggleDiffMode}
+                  title="Toggle between inline and side-by-side diff"
+                  @mouseenter=${(e: MouseEvent) => {
+                    const btn = e.target as HTMLButtonElement;
+                    btn.style.background = 'rgba(255, 255, 255, 0.2)';
+                    btn.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                  }}
+                  @mouseleave=${(e: MouseEvent) => {
+                    const btn = e.target as HTMLButtonElement;
+                    btn.style.background = 'rgba(255, 255, 255, 0.1)';
+                    btn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                  }}
+                >
+                  ${this.diffMode === 'inline' ? 'Side by Side' : 'Inline'}
+                </button>
+              `
+            : ''}
+        </div>
       </div>
     `;
   }

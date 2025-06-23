@@ -39,8 +39,8 @@ async function startBuilding() {
 
     const testContext = await esbuild.context({
       ...devOptions,
-      entryPoints: ['src/client/test-terminals-entry.ts'],
-      outfile: 'public/bundle/terminal.js',
+      entryPoints: ['src/client/test-entry.ts'],
+      outfile: 'public/bundle/test.js',
     });
 
     // Start watching

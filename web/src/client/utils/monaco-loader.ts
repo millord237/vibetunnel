@@ -4,16 +4,74 @@
  * Handles loading and initialization of Monaco Editor for the application.
  * This module ensures Monaco is properly loaded and configured before use.
  */
-import * as monaco from 'monaco-editor';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('monaco-loader');
 
-// Re-export monaco for use in other modules
-export { monaco };
+// Declare monaco on window
+declare global {
+  interface Window {
+    monaco: any;
+    require: any;
+    MonacoEnvironment?: {
+      getWorker?: (workerId: string, label: string) => Promise<any> | any;
+      getWorkerUrl?: (moduleId: string, label: string) => string;
+    };
+  }
+}
 
 // Flag to track if Monaco has been initialized
 let isInitialized = false;
+let loadingPromise: Promise<void> | null = null;
+
+/**
+ * Load Monaco Editor using AMD loader
+ */
+async function loadMonacoEditor(): Promise<void> {
+  if (loadingPromise) return loadingPromise;
+
+  loadingPromise = new Promise((resolve, reject) => {
+    // Create script tag for loader.js
+    const loaderScript = document.createElement('script');
+    loaderScript.src = '/monaco-editor/vs/loader.js';
+
+    loaderScript.onload = () => {
+      // Configure require
+      window.require.config({
+        paths: {
+          vs: '/monaco-editor/vs',
+        },
+      });
+
+      // Configure Monaco Environment to prevent worker creation
+      window.MonacoEnvironment = {
+        // Return a fake worker that does nothing
+        // This prevents Monaco from trying to load actual worker files
+        getWorker: function () {
+          return {
+            addEventListener: function () {},
+            postMessage: function () {},
+            terminate: function () {},
+          };
+        },
+      };
+
+      // Load monaco
+      window.require(['vs/editor/editor.main'], () => {
+        logger.debug('Monaco Editor loaded via AMD');
+        resolve();
+      });
+    };
+
+    loaderScript.onerror = () => {
+      reject(new Error('Failed to load Monaco loader script'));
+    };
+
+    document.head.appendChild(loaderScript);
+  });
+
+  return loadingPromise;
+}
 
 /**
  * Initialize Monaco Editor with custom configuration
@@ -24,14 +82,17 @@ export async function initializeMonaco(): Promise<void> {
   }
 
   try {
+    logger.debug('Loading Monaco Editor...');
+
+    // Load Monaco if not already loaded
+    if (!window.monaco) {
+      await loadMonacoEditor();
+    }
+
     logger.debug('Initializing Monaco Editor...');
 
-    // Configure Monaco environment
-    // Set up worker URLs if needed (for advanced features like TypeScript support)
-    // In a bundled environment, we might need to configure worker paths
-
-    // Make Monaco available globally for the component
-    (window as Window & { monaco: typeof monaco }).monaco = monaco;
+    // Make Monaco available globally
+    const monaco = window.monaco;
 
     // Configure languages
     monaco.languages.register({ id: 'shell' });
@@ -50,25 +111,42 @@ export async function initializeMonaco(): Promise<void> {
       },
     });
 
+    monaco.editor.setTheme('vs-dark');
+
     // Add custom themes if needed
-    monaco.editor.defineTheme('vibetunnel-dark', {
+    /*monaco.editor.defineTheme('vibetunnel-dark', {
       base: 'vs-dark',
       inherit: true,
-      rules: [],
+      rules: [
+        { token: 'comment', foreground: '608b4e' },
+        { token: 'keyword', foreground: '569cd6' },
+        { token: 'string', foreground: 'ce9178' },
+        { token: 'number', foreground: 'b5cea8' },
+        { token: 'type', foreground: '4ec9b0' },
+        { token: 'class', foreground: '4ec9b0' },
+        { token: 'function', foreground: 'dcdcaa' },
+        { token: 'variable', foreground: '9cdcfe' },
+        { token: 'constant', foreground: '4fc1ff' },
+        { token: 'parameter', foreground: '9cdcfe' },
+        { token: 'property', foreground: '9cdcfe' },
+        { token: 'punctuation', foreground: 'd4d4d4' },
+        { token: 'operator', foreground: 'd4d4d4' },
+        { token: 'namespace', foreground: '4ec9b0' },
+      ],
       colors: {
-        'editor.background': '#0a0b0d',
-        'editor.foreground': '#e0e0e0',
-        'editorLineNumber.foreground': '#666',
-        'editorLineNumber.activeForeground': '#aaa',
+        'editor.background': '#1e1e1e',
+        'editor.foreground': '#d4d4d4',
+        'editorLineNumber.foreground': '#858585',
+        'editorLineNumber.activeForeground': '#c6c6c6',
         'editor.selectionBackground': '#264f78',
-        'editor.lineHighlightBackground': '#1a1b1d',
+        'editor.lineHighlightBackground': '#2a2a2a',
         'editorCursor.foreground': '#10b981',
         'editor.findMatchBackground': '#515c6a',
         'editor.findMatchHighlightBackground': '#ea5e5e55',
-        'editorIndentGuide.background': '#333',
-        'editorIndentGuide.activeBackground': '#555',
+        'editorIndentGuide.background': '#404040',
+        'editorIndentGuide.activeBackground': '#707070',
       },
-    });
+    });*/
 
     isInitialized = true;
     logger.debug('Monaco Editor initialized successfully');
@@ -81,7 +159,10 @@ export async function initializeMonaco(): Promise<void> {
 /**
  * Ensure Monaco is loaded and ready
  */
-export async function ensureMonacoLoaded(): Promise<typeof monaco> {
+export async function ensureMonacoLoaded(): Promise<any> {
   await initializeMonaco();
-  return monaco;
+  return window.monaco;
 }
+
+// Export monaco getter
+export const monaco = window.monaco;

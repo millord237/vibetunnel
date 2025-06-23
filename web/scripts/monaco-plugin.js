@@ -25,13 +25,16 @@ module.exports = {
         const vsTarget = path.join(targetPath, 'vs');
         
         copyDirectorySync(vsSource, vsTarget);
-        console.log('Monaco Editor assets copied to public/monaco-editor');
+        
+        // No need to copy worker files separately - they'll be loaded via AMD from the vs directory
+        
+        console.log('Monaco Editor assets and workers copied to public/monaco-editor');
       });
 
-      // Handle monaco-editor imports
+      // Handle monaco-editor imports - use the full main entry
       build.onResolve({ filter: /^monaco-editor$/ }, (args) => {
         return {
-          path: require.resolve('monaco-editor/esm/vs/editor/editor.api'),
+          path: require.resolve('monaco-editor/esm/vs/editor/editor.main.js'),
           external: false,
         };
       });

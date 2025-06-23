@@ -30,11 +30,11 @@ async function build() {
       outfile: 'public/bundle/client-bundle.js',
     });
 
-    // Build test terminals bundle
+    // Build test bundle
     await esbuild.build({
       ...prodOptions,
-      entryPoints: ['src/client/test-terminals-entry.ts'],
-      outfile: 'public/bundle/terminal.js',
+      entryPoints: ['src/client/test-entry.ts'],
+      outfile: 'public/bundle/test.js',
     });
 
     console.log('Client bundles built successfully');
