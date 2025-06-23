@@ -215,7 +215,6 @@ impl WelcomeManager {
                 .center()
                 .resizable(false)
                 .decorations(false)
-                .transparent(true)
                 .build()
                 .map_err(|e| e.to_string())?;
             }

@@ -24,15 +24,15 @@ export class SettingsCheckbox extends LitElement {
     }
 
     .checkbox-indicator {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       background: var(--bg-hover, rgba(255, 255, 255, 0.05));
-      border: 1.5px solid var(--border-secondary, rgba(255, 255, 255, 0.12));
-      border-radius: 4px;
+      border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.12));
+      border-radius: 3px;
       transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
       position: relative;
       flex-shrink: 0;
-      margin-right: 10px;
+      margin-right: 8px;
       margin-top: 2px;
     }
 
@@ -51,8 +51,8 @@ export class SettingsCheckbox extends LitElement {
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
       opacity: 0;
       transition: opacity 0.2s ease;
     }

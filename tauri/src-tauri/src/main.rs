@@ -215,6 +215,7 @@ fn main() {
             stop_server,
             get_server_status,
             get_app_version,
+            get_os,
             restart_server,
             show_server_console,
             show_welcome_screen,

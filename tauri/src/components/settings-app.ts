@@ -6,6 +6,7 @@ import './settings-tab';
 import './settings-checkbox';
 import './settings-select';
 import './glowing-app-icon';
+import './shared/window-header';
 
 interface SettingsData {
   general?: {
@@ -50,11 +51,20 @@ type SettingChangeEvent = CustomEvent<{
 
 @customElement('settings-app')
 export class SettingsApp extends TauriBase {
+  @state()
+  private password = '';
+  
+  @state()
+  private confirmPassword = '';
+  
+  @state()
+  private passwordError = '';
   static override styles = [
     formStyles,
     css`
     :host {
       display: flex;
+      flex-direction: column;
       width: 100vw;
       height: 100vh;
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
@@ -64,14 +74,18 @@ export class SettingsApp extends TauriBase {
       user-select: none;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      border-radius: 12px;
+      border: 1px solid var(--border-primary);
+      overflow: hidden;
     }
 
     .window {
       display: flex;
-      height: 100%;
+      flex: 1;
       width: 100%;
       background: var(--bg-primary);
       -webkit-app-region: no-drag;
+      overflow: hidden;
     }
 
     .sidebar {
@@ -228,6 +242,46 @@ export class SettingsApp extends TauriBase {
       outline: none;
       border-color: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    
+    .password-section {
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--bg-hover);
+      border-radius: 8px;
+      border: 1px solid var(--border-primary);
+    }
+    
+    .error-message {
+      color: var(--error);
+      font-size: 12px;
+      margin-top: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .btn {
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-top: 16px;
+    }
+    
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+    
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .form-input[type="number"] {
@@ -536,6 +590,48 @@ export class SettingsApp extends TauriBase {
     await this.saveSettings();
     this.requestUpdate();
   }
+  
+  private async savePassword(): Promise<void> {
+    this.passwordError = '';
+    
+    if (!this.password) {
+      this.passwordError = 'Password cannot be empty';
+      return;
+    }
+    
+    if (this.password !== this.confirmPassword) {
+      this.passwordError = 'Passwords do not match';
+      return;
+    }
+    
+    if (this.password.length < 6) {
+      this.passwordError = 'Password must be at least 6 characters';
+      return;
+    }
+    
+    try {
+      if (this.tauriAvailable) {
+        await this.safeInvoke('set_dashboard_password', { password: this.password });
+      }
+      
+      // Update local settings
+      if (!this.settings.dashboard) {
+        this.settings.dashboard = {};
+      }
+      this.settings.dashboard.password = this.password;
+      await this.saveSettings();
+      
+      // Clear password fields after successful save
+      this.password = '';
+      this.confirmPassword = '';
+      this.passwordError = '';
+      
+      // Show success message or notification
+      this.requestUpdate();
+    } catch (error) {
+      this.passwordError = error instanceof Error ? error.message : 'Failed to save password';
+    }
+  }
 
   private _switchTab(tabName: string): void {
     this.activeTab = tabName;
@@ -627,17 +723,49 @@ export class SettingsApp extends TauriBase {
             
             ${this.settings.dashboard?.password_enabled ? html`
               <div class="password-section">
-                <input
-                  type="password"
-                  placeholder="Enter password"
-                  class="form-input"
-                  @input=${(e: Event) => {
-                    const input = e.target as HTMLInputElement;
-                    this.handleSettingChange(new CustomEvent('change', {
-                      detail: { settingKey: 'dashboard.password', value: input.value }
-                    }) as SettingChangeEvent);
-                  }}
-                />
+                <div class="form-group">
+                  <label for="password">Password</label>
+                  <input
+                    id="password"
+                    type="password"
+                    placeholder="Enter password"
+                    class="form-input"
+                    .value=${this.password}
+                    @input=${(e: Event) => {
+                      const input = e.target as HTMLInputElement;
+                      this.password = input.value;
+                      this.passwordError = '';
+                    }}
+                  />
+                </div>
+                
+                <div class="form-group">
+                  <label for="confirm-password">Confirm Password</label>
+                  <input
+                    id="confirm-password"
+                    type="password"
+                    placeholder="Confirm password"
+                    class="form-input"
+                    .value=${this.confirmPassword}
+                    @input=${(e: Event) => {
+                      const input = e.target as HTMLInputElement;
+                      this.confirmPassword = input.value;
+                      this.passwordError = '';
+                    }}
+                  />
+                </div>
+                
+                ${this.passwordError ? html`
+                  <div class="error-message">${this.passwordError}</div>
+                ` : ''}
+                
+                <button 
+                  class="btn btn-primary"
+                  @click=${this.savePassword}
+                  ?disabled=${!this.password || !this.confirmPassword}
+                >
+                  Save Password
+                </button>
               </div>
             ` : ''}
           </div>
@@ -843,6 +971,7 @@ export class SettingsApp extends TauriBase {
     }
 
     return html`
+      <window-header title="VibeTunnel Settings"></window-header>
       <div class="window">
         <div class="sidebar">
           <ul class="tabs">

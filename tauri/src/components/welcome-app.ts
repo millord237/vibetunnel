@@ -239,7 +239,7 @@ export class WelcomeApp extends TauriBase {
 
     /* Theme Variables */
     :host {
-      --bg-primary: #000;
+      --bg-primary: rgba(0, 0, 0, 0.85);
       --bg-secondary: rgba(20, 20, 20, 0.95);
       --bg-hover: rgba(255, 255, 255, 0.05);
       --bg-active: rgba(16, 185, 129, 0.1);
@@ -264,7 +264,7 @@ export class WelcomeApp extends TauriBase {
 
     /* Light theme */
     :host-context(html.light) {
-      --bg-primary: #ffffff;
+      --bg-primary: rgba(255, 255, 255, 0.85);
       --bg-secondary: rgba(249, 250, 251, 0.95);
       --bg-hover: rgba(0, 0, 0, 0.05);
       --bg-active: rgba(16, 185, 129, 0.1);

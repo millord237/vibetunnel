@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Welcome to VibeTunnel</title>
+    <title>VibeTunnel Settings</title>
     <style>
       html, body {
         margin: 0;
@@ -32,9 +32,9 @@
     </style>
   </head>
   <body>
-    <welcome-app></welcome-app>
+    <settings-app></settings-app>
     <script type="module">
-      import './src/components/welcome-app.ts';
+      import './src/components/settings-app.ts';
       
       // Apply theme class to html element
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -44,6 +44,14 @@
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
         document.documentElement.classList.toggle('light', !e.matches);
       });
+      
+      // Parse URL parameters to get initial tab
+      const urlParams = new URLSearchParams(window.location.search);
+      const tab = urlParams.get('tab');
+      if (tab) {
+        // TODO: Pass initial tab to settings-app component
+        document.querySelector('settings-app')?.setAttribute('initial-tab', tab);
+      }
     </script>
   </body>
 </html>

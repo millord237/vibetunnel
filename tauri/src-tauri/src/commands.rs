@@ -298,6 +298,21 @@ pub fn get_app_version() -> String {
 }
 
 #[tauri::command]
+pub fn get_os() -> String {
+    #[cfg(target_os = "macos")]
+    return "macos".to_string();
+    
+    #[cfg(target_os = "windows")]
+    return "windows".to_string();
+    
+    #[cfg(target_os = "linux")]
+    return "linux".to_string();
+    
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    return "unknown".to_string();
+}
+
+#[tauri::command]
 pub async fn restart_server(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
