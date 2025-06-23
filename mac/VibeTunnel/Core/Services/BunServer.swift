@@ -230,15 +230,14 @@ final class BunServer {
             }
         } catch {
             // Log more detailed error information
-            let errorMessage: String
-            if let bunError = error as? BunServerError {
-                errorMessage = bunError.localizedDescription
+            let errorMessage: String = if let bunError = error as? BunServerError {
+                bunError.localizedDescription
             } else if let urlError = error as? URLError {
-                errorMessage = "Network error: \(urlError.localizedDescription) (Code: \(urlError.code.rawValue))"
+                "Network error: \(urlError.localizedDescription) (Code: \(urlError.code.rawValue))"
             } else if let posixError = error as? POSIXError {
-                errorMessage = "System error: \(posixError.localizedDescription) (Code: \(posixError.code.rawValue))"
+                "System error: \(posixError.localizedDescription) (Code: \(posixError.code.rawValue))"
             } else {
-                errorMessage = error.localizedDescription
+                error.localizedDescription
             }
 
             logger.error("Failed to start Bun server: \(errorMessage)")

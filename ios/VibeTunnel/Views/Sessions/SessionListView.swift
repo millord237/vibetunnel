@@ -388,7 +388,6 @@ struct SessionListView: View {
     }
 }
 
-
 /// View model for managing session list state and operations.
 @MainActor
 @Observable
@@ -463,8 +462,8 @@ struct SessionHeaderView: View {
     let onKillAll: () -> Void
     let onCleanupAll: () -> Void
 
-    private var runningCount: Int { sessions.count { $0.isRunning }}
-    private var exitedCount: Int { sessions.count { !$0.isRunning }}
+    private var runningCount: Int { sessions.count { $0.isRunning } }
+    private var exitedCount: Int { sessions.count { !$0.isRunning } }
 
     var body: some View {
         VStack(spacing: Theme.Spacing.medium) {

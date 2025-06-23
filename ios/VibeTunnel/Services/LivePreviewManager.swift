@@ -89,7 +89,7 @@ final class LivePreviewManager {
                         }
                     }
                     
-                case .exit(_):
+                case .exit:
                     subscription.isSessionActive = false
                     
                 default:

@@ -57,7 +57,7 @@ struct EnhancedConnectionView: View {
                     Spacer(minLength: 50)
                 }
                 .padding()
-            }
+                }
             .scrollBounceBehavior(.basedOnSize)
             }
             .toolbar(.hidden, for: .navigationBar)

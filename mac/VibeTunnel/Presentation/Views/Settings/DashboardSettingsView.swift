@@ -210,11 +210,11 @@ struct DashboardSettingsView: View {
                 } else {
                     // Just password change, no network mode switch
                     await updateServerForPasswordChange(action: .apply, logger: logger)
-                    
+
                     // Restart server to apply new password
                     logger.info("Restarting server to apply new password")
                     await serverManager.restart()
-                    
+
                     // Wait for server to be ready
                     try? await Task.sleep(for: .seconds(1))
                 }
@@ -372,11 +372,11 @@ private struct SecuritySection: View {
                                 // Go server handles authentication internally
                                 logger.info("Clearing auth cache to remove password")
                                 await serverManager.clearAuthCache()
-                                
+
                                 // Restart server to remove password protection
                                 logger.info("Restarting server to remove password protection")
                                 await serverManager.restart()
-                                
+
                                 // Wait for server to be ready
                                 try? await Task.sleep(for: .seconds(1))
                             }
@@ -685,82 +685,82 @@ private struct PortConfigurationView: View {
 
             // Port conflict warning
             if let conflict = portConflict {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                        .font(.caption)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                            .font(.caption)
 
-                    Text("Port \(conflict.port) is used by \(conflict.process.name)")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
+                        Text("Port \(conflict.port) is used by \(conflict.process.name)")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
 
-                HStack(spacing: 8) {
-                    if !conflict.alternativePorts.isEmpty {
-                        HStack(spacing: 4) {
-                            Text("Try port:")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        if !conflict.alternativePorts.isEmpty {
+                            HStack(spacing: 4) {
+                                Text("Try port:")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
 
-                            ForEach(conflict.alternativePorts.prefix(3), id: \.self) { port in
-                                Button(String(port)) {
-                                    serverPort = String(port)
-                                    portNumber = port
-                                    restartServerWithNewPort(port)
+                                ForEach(conflict.alternativePorts.prefix(3), id: \.self) { port in
+                                    Button(String(port)) {
+                                        serverPort = String(port)
+                                        portNumber = port
+                                        restartServerWithNewPort(port)
+                                    }
+                                    .buttonStyle(.link)
+                                    .font(.caption)
+                                }
+
+                                Button("Choose...") {
+                                    showPortPicker()
                                 }
                                 .buttonStyle(.link)
                                 .font(.caption)
                             }
+                        }
 
-                            Button("Choose...") {
-                                showPortPicker()
+                        Spacer()
+
+                        Button {
+                            Task {
+                                await forceQuitConflictingProcess(conflict)
                             }
-                            .buttonStyle(.link)
-                            .font(.caption)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                Text("Kill Process")
+                                    .font(.caption)
+                            }
                         }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .tint(.red)
                     }
-
-                    Spacer()
-
-                    Button {
-                        Task {
-                            await forceQuitConflictingProcess(conflict)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.caption)
-                            Text("Kill Process")
-                                .font(.caption)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(.red)
                 }
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.orange.opacity(0.1))
-            .cornerRadius(6)
-        } else if !serverManager.isRunning && serverManager.lastError != nil {
-            // Show general server error if no specific port conflict
-            HStack(spacing: 4) {
-                Image(systemName: "exclamationmark.circle.fill")
-                    .foregroundColor(.red)
-                    .font(.caption)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(6)
+            } else if !serverManager.isRunning && serverManager.lastError != nil {
+                // Show general server error if no specific port conflict
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(.red)
+                        .font(.caption)
 
-                Text("Server failed to start")
+                    Text("Server failed to start")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+            } else {
+                Text("The server will automatically restart when the port is changed.")
                     .font(.caption)
-                    .foregroundColor(.red)
-            }
-        } else {
-            Text("The server will automatically restart when the port is changed.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
             }
         }
     }

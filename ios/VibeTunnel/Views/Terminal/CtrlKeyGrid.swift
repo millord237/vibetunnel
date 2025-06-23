@@ -69,9 +69,8 @@ struct CtrlKeyGrid: View {
                         ForEach(currentKeys, id: \.0) { key, description in
                             CtrlGridKeyButton(
                                 key: key,
-                                description: description,
-                                onPress: { sendCtrlKey(key) }
-                            )
+                                description: description
+                            )                                { sendCtrlKey(key) }
                         }
                     }
                     .padding()
@@ -144,7 +143,7 @@ struct CtrlGridKeyButton: View {
     @State private var showingTooltip = false
     
     var body: some View {
-        Button(action: onPress, label: {
+        Button(action: onPress) {
             VStack(spacing: 4) {
                 Text("^" + key)
                     .font(Theme.Typography.terminalSystem(size: 20, weight: .bold))
@@ -171,7 +170,7 @@ struct CtrlGridKeyButton: View {
                 color: isPressed ? Theme.Colors.primaryAccent.opacity(0.3) : .clear,
                 radius: isPressed ? 8 : 0
             )
-        })
+        }
         .buttonStyle(PlainButtonStyle())
         .scaleEffect(isPressed ? 0.95 : 1.0)
         .animation(.easeInOut(duration: 0.1), value: isPressed)

@@ -14,7 +14,7 @@ struct TerminalBufferPreview: View {
     }
     
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             ScrollViewReader { scrollProxy in
                 ScrollView([.horizontal, .vertical], showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {

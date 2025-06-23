@@ -523,12 +523,11 @@ struct TerminalView: View {
             .focused($isInputFocused)
             .overlay(
                 ScrollToBottomButton(
-                    isVisible: showScrollToBottom,
-                    action: {
+                    isVisible: showScrollToBottom
+                )                    {
                         viewModel.scrollToBottom()
                         showScrollToBottom = false
                     }
-                )
                 .padding(.bottom, Theme.Spacing.large)
                 .padding(.leading, Theme.Spacing.large),
                 alignment: .bottomLeading

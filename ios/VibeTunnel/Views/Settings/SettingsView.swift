@@ -293,8 +293,8 @@ struct AdvancedSettingsView: View {
                             windowManager.setWindowStyle(style)
                         }
                         
-                        Text(macWindowStyle == .inline ? 
-                             "Traffic light buttons appear inline with content" : 
+                        Text(macWindowStyle == .inline ?
+                             "Traffic light buttons appear inline with content" :
                              "Standard macOS title bar with traffic lights")
                             .font(Theme.Typography.terminalSystem(size: 12))
                             .foregroundColor(Theme.Colors.terminalForeground.opacity(0.6))

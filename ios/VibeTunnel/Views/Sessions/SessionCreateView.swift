@@ -116,11 +116,10 @@ struct SessionCreateView: View {
                             // Error Message
                             if presentedError != nil {
                                 ErrorBanner(
-                                    message: presentedError?.error.localizedDescription ?? "An error occurred",
-                                    onDismiss: {
+                                    message: presentedError?.error.localizedDescription ?? "An error occurred"
+                                )                                    {
                                         presentedError = nil
                                     }
-                                )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
                                         .stroke(Theme.Colors.errorAccent.opacity(0.3), lineWidth: 1)
