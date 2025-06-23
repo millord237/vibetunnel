@@ -190,35 +190,72 @@ export class MonacoEditor extends LitElement {
         scrollBeyondLastLine: false,
         renderWhitespace: 'selection',
         readOnly: this.readOnly,
+        // Enable folding
+        folding: true,
+        foldingStrategy: 'indentation', // Use indentation-based folding instead of language-aware
+        foldingHighlight: true,
+        showFoldingControls: 'always',
+        // Ensure decorations are visible
+        renderLineHighlight: 'all',
+        renderLineHighlightOnlyWhenFocus: false,
         ...this.options,
       };
 
       if (this.mode === 'diff') {
-        // Create diff editor
+        // Create diff editor with exact options from lemmy
         const diffOptions: editor.IDiffEditorConstructionOptions = {
-          ...commonOptions,
+          readOnly: true,
+          automaticLayout: true,
+          scrollBeyondLastLine: false,
+          minimap: { enabled: false },
+          renderWhitespace: 'selection',
           renderSideBySide: this.diffMode === 'sideBySide',
           ignoreTrimWhitespace: false,
-          renderIndicators: true,
-          originalEditable: false,
         };
 
         this.editor = window.monaco.editor.createDiffEditor(this.containerRef.value, diffOptions);
 
         // Set models for diff
+        const language = this.detectLanguage();
+        const timestamp = Date.now();
+        const baseUri = `${this.filename || 'untitled'}-${timestamp}`;
+
+        // Create models exactly like lemmy
         const originalModel = window.monaco.editor.createModel(
           this.originalContent || '',
-          this.detectLanguage()
+          language,
+          window.monaco.Uri.parse(`file:///${baseUri}#original`)
         );
         const modifiedModel = window.monaco.editor.createModel(
           this.modifiedContent || '',
-          this.detectLanguage()
+          language,
+          window.monaco.Uri.parse(`file:///${baseUri}#modified`)
         );
 
-        (this.editor as editor.IStandaloneDiffEditor).setModel({
+        logger.debug('Creating diff editor');
+
+        // Set the models exactly like lemmy does
+        const diffEditor = this.editor as editor.IStandaloneDiffEditor;
+        diffEditor.setModel({
           original: originalModel,
           modified: modifiedModel,
         });
+
+        // Wait for diff computation like lemmy does
+        const restoreLayout = () => {
+          if (this.editor) {
+            this.editor.layout();
+          }
+        };
+
+        // Listen for diff computation completion
+        const disposable = diffEditor.onDidUpdateDiff(() => {
+          restoreLayout();
+          disposable.dispose();
+        });
+
+        // Also try after timeout as fallback
+        setTimeout(restoreLayout, 200);
       } else {
         // Create normal editor
         this.editor = window.monaco.editor.create(this.containerRef.value, {
@@ -378,11 +415,49 @@ export class MonacoEditor extends LitElement {
     if (this.mode !== 'diff') return;
 
     this.diffMode = this.diffMode === 'inline' ? 'sideBySide' : 'inline';
+    // Store current models to reuse
+    let originalContent = '';
+    let modifiedContent = '';
+
+    if (this.editor) {
+      const diffEditor = this.editor as editor.IStandaloneDiffEditor;
+      const model = diffEditor.getModel();
+      if (model) {
+        originalContent = model.original?.getValue() || this.originalContent || '';
+        modifiedContent = model.modified?.getValue() || this.modifiedContent || '';
+      }
+    }
+
+    // Update content before recreating
+    this.originalContent = originalContent;
+    this.modifiedContent = modifiedContent;
+
     this.recreateEditor();
   }
 
   private disposeEditor() {
     if (this.editor) {
+      // For diff editor, we need to handle model disposal carefully
+      if (this.mode === 'diff') {
+        const diffEditor = this.editor as editor.IStandaloneDiffEditor;
+
+        // Get the current model before clearing
+        const currentModel = diffEditor.getModel();
+
+        // Clear the model from the editor first to prevent disposal errors
+        diffEditor.setModel(null);
+
+        // Now safely dispose the models after they're detached
+        if (currentModel) {
+          // Small delay to ensure editor has released the models
+          setTimeout(() => {
+            currentModel.original?.dispose();
+            currentModel.modified?.dispose();
+          }, 0);
+        }
+      }
+
+      // Dispose the editor
       this.editor.dispose();
       this.editor = null;
     }

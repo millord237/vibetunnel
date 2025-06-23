@@ -8,7 +8,7 @@ export class MonacoEditorTest extends LitElement {
     return this;
   }
 
-  @state() private mode: 'normal' | 'diff' = 'normal';
+  @state() private mode: 'normal' | 'diff' = 'diff';
   @state() private readOnly = false;
   @state() private showModeToggle = true;
   @state() private language = 'typescript';
@@ -134,15 +134,15 @@ async def main():
   }
 
   private loadSampleContent() {
-    this.content =
+    const baseContent =
       this.sampleCode[this.language as keyof typeof this.sampleCode] || this.sampleCode.typescript;
 
-    // For diff mode, create some modifications
-    if (this.mode === 'diff') {
-      this.originalContent = this.content;
-      this.modifiedContent =
-        this.content + '\n\n// Modified by user\nconsole.log("Changes made!");';
-    }
+    // For normal mode
+    this.content = baseContent;
+
+    // Always set diff content so it's ready when switching modes
+    this.originalContent = baseContent;
+    this.modifiedContent = baseContent + '\n\n// Modified by user\nconsole.log("Changes made!");';
   }
 
   private handleModeChange(newMode: 'normal' | 'diff') {

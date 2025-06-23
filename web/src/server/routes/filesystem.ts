@@ -42,16 +42,23 @@ export function createFilesystemRoutes(): Router {
   }
 
   // Helper to get Git status for a directory
-  async function getGitStatus(dirPath: string): Promise<GitStatus | null> {
+  async function getGitStatus(
+    dirPath: string
+  ): Promise<{ status: GitStatus; repoRoot: string } | null> {
     try {
-      // Check if directory is a git repository
-      await execAsync('git rev-parse --git-dir', { cwd: dirPath });
+      // Check if directory is a git repository and get repo root
+      const { stdout: repoRoot } = await execAsync('git rev-parse --show-toplevel', {
+        cwd: dirPath,
+      });
+      const gitRepoRoot = repoRoot.trim();
 
       // Get current branch
       const { stdout: branch } = await execAsync('git branch --show-current', { cwd: dirPath });
 
-      // Get status
-      const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: dirPath });
+      // Get status relative to repository root
+      const { stdout: statusOutput } = await execAsync('git status --porcelain', {
+        cwd: gitRepoRoot,
+      });
 
       const status: GitStatus = {
         isGitRepo: true,
@@ -80,17 +87,22 @@ export function createFilesystemRoutes(): Router {
         }
       });
 
-      return status;
+      return { status, repoRoot: gitRepoRoot };
     } catch {
       return null;
     }
   }
 
   // Helper to get file Git status
-  function getFileGitStatus(filePath: string, gitStatus: GitStatus | null): FileInfo['gitStatus'] {
+  function getFileGitStatus(
+    filePath: string,
+    gitStatus: GitStatus | null,
+    gitRepoPath: string
+  ): FileInfo['gitStatus'] {
     if (!gitStatus) return undefined;
 
-    const relativePath = path.relative(process.cwd(), filePath);
+    // Get path relative to git repository root
+    const relativePath = path.relative(gitRepoPath, filePath);
 
     if (gitStatus.modified.includes(relativePath)) return 'modified';
     if (gitStatus.added.includes(relativePath)) return 'added';
@@ -139,43 +151,97 @@ export function createFilesystemRoutes(): Router {
 
       // Get Git status if requested
       const gitStatusStart = Date.now();
-      const gitStatus = gitFilter !== 'none' ? await getGitStatus(fullPath) : null;
+      const gitInfo = gitFilter !== 'none' ? await getGitStatus(fullPath) : null;
+      const gitStatus = gitInfo?.status || null;
+      const gitRepoRoot = gitInfo?.repoRoot || '';
       if (gitFilter !== 'none') {
         logger.debug(`git status check took ${Date.now() - gitStatusStart}ms for ${requestedPath}`);
       }
 
-      // Read directory contents
-      const entries = await fs.readdir(fullPath, { withFileTypes: true });
+      let files: FileInfo[] = [];
 
-      // Build file list
-      const files: FileInfo[] = await Promise.all(
-        entries
-          .filter((entry) => showHidden || !entry.name.startsWith('.'))
-          .map(async (entry) => {
-            const entryPath = path.join(fullPath, entry.name);
-            const stats = await fs.stat(entryPath);
-            const relativePath = path.relative(process.cwd(), entryPath);
+      // If filtering by git changes, show all changed files recursively
+      if (gitFilter === 'changed' && gitStatus) {
+        // Get all changed files from git status
+        const allChangedFiles = [
+          ...gitStatus.modified.map((f) => ({ path: f, status: 'modified' as const })),
+          ...gitStatus.added.map((f) => ({ path: f, status: 'added' as const })),
+          ...gitStatus.deleted.map((f) => ({ path: f, status: 'deleted' as const })),
+          ...gitStatus.untracked.map((f) => ({ path: f, status: 'untracked' as const })),
+        ];
+
+        // Filter to only files under the current directory
+        const currentDirRelativeToRepo = path.relative(gitRepoRoot, fullPath);
+        const relevantFiles = allChangedFiles.filter((f) => {
+          // If we're at repo root, show all files
+          if (fullPath === gitRepoRoot) return true;
+          // Otherwise, only show files under current directory
+          return f.path.startsWith(currentDirRelativeToRepo + '/');
+        });
+
+        // Convert to FileInfo objects
+        files = await Promise.all(
+          relevantFiles.map(async (changedFile) => {
+            const absolutePath = path.join(gitRepoRoot, changedFile.path);
+
+            // Check if file exists (it might be deleted)
+            let fileStats;
+            let fileType: 'file' | 'directory' = 'file';
+            try {
+              fileStats = await fs.stat(absolutePath);
+              fileType = fileStats.isDirectory() ? 'directory' : 'file';
+            } catch {
+              // File might be deleted
+              fileStats = { size: 0, mtime: new Date() };
+            }
+
+            // Get relative display name (relative to current directory)
+            const relativeToCurrentDir = path.relative(fullPath, absolutePath);
 
             const fileInfo: FileInfo = {
-              name: entry.name,
-              path: relativePath,
-              type: entry.isDirectory() ? 'directory' : 'file',
-              size: stats.size,
-              modified: stats.mtime.toISOString(),
-              permissions: stats.mode.toString(8).slice(-3),
-              isGitTracked: gitStatus?.isGitRepo || false,
-              gitStatus: getFileGitStatus(entryPath, gitStatus),
+              name: relativeToCurrentDir,
+              path: path.relative(process.cwd(), absolutePath),
+              type: fileType,
+              size: fileStats.size,
+              modified: fileStats.mtime.toISOString(),
+              permissions: fileStats.mode?.toString(8).slice(-3) || '000',
+              isGitTracked: true,
+              gitStatus: changedFile.status,
             };
 
             return fileInfo;
           })
-      );
+        );
+      } else {
+        // Normal directory listing
+        const entries = await fs.readdir(fullPath, { withFileTypes: true });
 
-      // Filter by Git status if requested
-      let filteredFiles = files;
-      if (gitFilter === 'changed' && gitStatus) {
-        filteredFiles = files.filter((file) => file.gitStatus && file.gitStatus !== 'unchanged');
+        files = await Promise.all(
+          entries
+            .filter((entry) => showHidden || !entry.name.startsWith('.'))
+            .map(async (entry) => {
+              const entryPath = path.join(fullPath, entry.name);
+              const stats = await fs.stat(entryPath);
+              const relativePath = path.relative(process.cwd(), entryPath);
+
+              const fileInfo: FileInfo = {
+                name: entry.name,
+                path: relativePath,
+                type: entry.isDirectory() ? 'directory' : 'file',
+                size: stats.size,
+                modified: stats.mtime.toISOString(),
+                permissions: stats.mode.toString(8).slice(-3),
+                isGitTracked: gitStatus?.isGitRepo || false,
+                gitStatus: getFileGitStatus(entryPath, gitStatus, gitRepoRoot),
+              };
+
+              return fileInfo;
+            })
+        );
       }
+
+      // No additional filtering needed if we already filtered by git status above
+      const filteredFiles = files;
 
       // Sort: directories first, then by name
       filteredFiles.sort((a, b) => {
@@ -423,23 +489,40 @@ export function createFilesystemRoutes(): Router {
       const fullPath = path.resolve(process.cwd(), requestedPath);
       const relativePath = path.relative(process.cwd(), fullPath);
 
+      logger.debug(`Getting diff content for: ${requestedPath}`);
+      logger.debug(`Full path: ${fullPath}`);
+      logger.debug(`CWD: ${process.cwd()}`);
+
       // Get current file content
       const currentContent = await fs.readFile(fullPath, 'utf-8');
+      logger.debug(`Current content length: ${currentContent.length}`);
 
       // Get HEAD version content
-      let originalContent = currentContent; // Default to current if not in git
+      let originalContent = ''; // Default to empty string for new files
       try {
-        const { stdout } = await execAsync(`git show HEAD:"${relativePath}"`, {
+        // Use ./ prefix as git suggests for paths relative to current directory
+        const gitPath = `./${relativePath}`;
+        logger.debug(`Getting HEAD version: git show HEAD:"${gitPath}"`);
+
+        const { stdout } = await execAsync(`git show HEAD:"${gitPath}"`, {
           cwd: process.cwd(),
         });
         originalContent = stdout;
+        logger.debug(`Got HEAD version for ${gitPath}, length: ${originalContent.length}`);
       } catch (error) {
         // File might be new (not in HEAD), use empty string
         if (error instanceof Error && error.message.includes('does not exist')) {
           originalContent = '';
+          logger.debug(`File ${requestedPath} does not exist in HEAD (new file)`);
         } else {
-          // For other errors, use current content as fallback
-          logger.debug(`could not get HEAD version of ${requestedPath}, using current content`);
+          // For other errors, log the full error
+          logger.error(`Failed to get HEAD version of ./${relativePath}:`, error);
+          // Check if it's a stderr message
+          if (error instanceof Error && 'stderr' in error) {
+            logger.error(`Git stderr: ${(error as any).stderr}`);
+          }
+          // For non-git repos, show no diff
+          originalContent = currentContent;
         }
       }
 

@@ -13,10 +13,6 @@ declare global {
   interface Window {
     monaco: any;
     require: any;
-    MonacoEnvironment?: {
-      getWorker?: (workerId: string, label: string) => Promise<any> | any;
-      getWorkerUrl?: (moduleId: string, label: string) => string;
-    };
   }
 }
 
@@ -43,16 +39,11 @@ async function loadMonacoEditor(): Promise<void> {
         },
       });
 
-      // Configure Monaco Environment to prevent worker creation
+      // Disable workers - they interfere with diff computation
+      // Monaco will fall back to synchronous mode which works fine
       window.MonacoEnvironment = {
-        // Return a fake worker that does nothing
-        // This prevents Monaco from trying to load actual worker files
-        getWorker: function () {
-          return {
-            addEventListener: function () {},
-            postMessage: function () {},
-            terminate: function () {},
-          };
+        getWorker: function (_workerId: string, _label: string) {
+          return null as any;
         },
       };
 
