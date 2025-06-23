@@ -245,11 +245,7 @@ export class PushNotificationService {
    * Check if push notifications are supported
    */
   isSupported(): boolean {
-    return (
-      'serviceWorker' in navigator &&
-      'PushManager' in window &&
-      'Notification' in window
-    );
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   }
 
   /**
