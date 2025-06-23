@@ -105,14 +105,16 @@ jobs:
             }]
           };
           
-          return JSON.stringify(message);
+          core.setOutput('message', message);
+          return message;
           
     - name: Send to Slack
       if: ${{ github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.event == 'pull_request' }}
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       run: |
+        echo '${{ toJson(steps.slack-message.outputs.message) }}' | \
         curl -X POST \
           -H 'Content-type: application/json' \
-          --data '${{ steps.slack-message.outputs.result }}' \
+          --data @- \
           "$SLACK_WEBHOOK_URL"
