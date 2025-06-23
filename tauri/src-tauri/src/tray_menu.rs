@@ -7,7 +7,7 @@ pub struct TrayMenuManager;
 
 impl TrayMenuManager {
     pub fn create_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, tauri::Error> {
-        Self::create_menu_with_state(app, false, 4020, 0, None)
+        Self::create_menu_with_state(app, false, 4022, 0, None)
     }
 
     pub fn create_menu_with_state(
@@ -229,7 +229,7 @@ impl TrayMenuManager {
             let port = if running {
                 settings.dashboard.server_port
             } else {
-                4020
+                4022
             };
             
             // Get monitored sessions for detailed info

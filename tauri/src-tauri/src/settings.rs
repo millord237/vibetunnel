@@ -205,7 +205,7 @@ impl Default for Settings {
                 prompt_move_to_applications: None,
             },
             dashboard: DashboardSettings {
-                server_port: 4020,
+                server_port: 4022,
                 enable_password: false,
                 password: String::new(),
                 access_mode: "localhost".to_string(),

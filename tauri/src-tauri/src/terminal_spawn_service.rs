@@ -111,7 +111,7 @@ impl TerminalSpawnService {
         // If no command specified, create a VibeTunnel session command
         if launch_options.command.is_none() {
             // Get server status to build the correct URL
-            let port = 4020; // Default port, should get from settings
+            let port = 4022; // Default port for Tauri development
             launch_options.command = Some(format!(
                 "vt connect localhost:{}/{}",
                 port, request.session_id

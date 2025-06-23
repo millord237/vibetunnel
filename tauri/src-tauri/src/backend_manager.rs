@@ -341,19 +341,22 @@ impl NodeJsServer {
         };
         
         // Try multiple locations for the vibetunnel executable
+        let current_exe = std::env::current_exe().ok();
         let possible_paths = vec![
-            // Next to the Tauri executable
-            std::env::current_exe()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.join(exe_name))),
             // In resources directory (common for packaged apps)
-            std::env::current_exe()
-                .ok()
+            current_exe.as_ref()
                 .and_then(|p| p.parent().map(|p| p.join("resources").join(exe_name))),
-            // Development path
-            PathBuf::from("../web/native").join(exe_name).canonicalize().ok(),
-            // Another development path
+            // Development path relative to src-tauri
+            Some(PathBuf::from("../../web/native").join(exe_name)),
+            // Development path with canonicalize
             PathBuf::from("../../web/native").join(exe_name).canonicalize().ok(),
+            // Next to the Tauri executable (but check it's not the Tauri binary itself)
+            current_exe.as_ref()
+                .and_then(|p| p.parent().map(|p| p.join(exe_name)))
+                .filter(|path| {
+                    // Make sure this isn't the Tauri executable itself
+                    current_exe.as_ref().map_or(true, |exe| path != exe)
+                }),
         ];
 
         for path_opt in possible_paths {
@@ -369,6 +372,7 @@ impl NodeJsServer {
                             let _ = std::fs::set_permissions(&path, perms);
                         }
                     }
+                    info!("Using vibetunnel executable at: {:?}", path);
                     return Ok(path);
                 }
             }

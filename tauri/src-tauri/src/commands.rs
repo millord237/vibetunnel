@@ -252,7 +252,7 @@ pub async fn stop_server(state: State<'_, AppState>, app: tauri::AppHandle) -> R
     let _ = state.ngrok_manager.stop_tunnel().await;
 
     // Update menu bar server status
-    crate::tray_menu::TrayMenuManager::update_server_status(&app, 4020, false).await;
+    crate::tray_menu::TrayMenuManager::update_server_status(&app, 4022, false).await;
 
     Ok(())
 }
@@ -1805,7 +1805,7 @@ pub async fn update_setting(section: String, key: String, value: String) -> Resu
         },
         "dashboard" => match key.as_str() {
             "server_port" => {
-                settings.dashboard.server_port = json_value.as_u64().unwrap_or(4020) as u16
+                settings.dashboard.server_port = json_value.as_u64().unwrap_or(4022) as u16
             }
             "enable_password" => {
                 settings.dashboard.enable_password = json_value.as_bool().unwrap_or(false)
@@ -2038,7 +2038,7 @@ pub async fn get_server_logs(limit: usize) -> Result<Vec<ServerLog>, String> {
         ServerLog {
             timestamp: chrono::Utc::now().to_rfc3339(),
             level: "info".to_string(),
-            message: "Server started on port 4020".to_string(),
+            message: "Server started on port 4022".to_string(),
         },
         ServerLog {
             timestamp: chrono::Utc::now().to_rfc3339(),
