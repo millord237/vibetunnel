@@ -28,14 +28,22 @@ const commonOptions = {
     compilerOptions: {
       experimentalDecorators: true,
       useDefineForClassFields: false,
+      sourceMap: true,
+      inlineSourceMap: true,
+      inlineSources: true,
     }
   }
 };
 
 const devOptions = {
   ...commonOptions,
-  sourcemap: true,
+  sourcemap: 'inline',
+  sourcesContent: true,
   minify: false,
+  define: {
+    ...commonOptions.define,
+    'process.env.NODE_ENV': '"development"',
+  },
 };
 
 const prodOptions = {

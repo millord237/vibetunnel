@@ -222,6 +222,17 @@ export class SessionView extends LitElement {
     super.disconnectedCallback();
     this.connected = false;
 
+    logger.log('SessionView disconnectedCallback called', {
+      sessionId: this.session?.id,
+      sessionStatus: this.session?.status,
+    });
+
+    // Reset terminal size for external terminals when leaving session view
+    if (this.session && this.session.status !== 'exited') {
+      logger.log('Calling resetTerminalSize for session', this.session.id);
+      this.resetTerminalSize();
+    }
+
     // Remove click outside handler
     document.removeEventListener('click', this.handleClickOutside);
 
@@ -1009,6 +1020,39 @@ export class SessionView extends LitElement {
       }
     } catch (error) {
       logger.error('error sending input', error);
+    }
+  }
+
+  private async resetTerminalSize() {
+    if (!this.session) {
+      logger.warn('resetTerminalSize called but no session available');
+      return;
+    }
+
+    logger.log('Sending reset-size request for session', this.session.id);
+
+    try {
+      const response = await fetch(`/api/sessions/${this.session.id}/reset-size`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.authClient.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        logger.error('failed to reset terminal size', {
+          status: response.status,
+          sessionId: this.session.id,
+        });
+      } else {
+        logger.log('terminal size reset successfully for session', this.session.id);
+      }
+    } catch (error) {
+      logger.error('error resetting terminal size', {
+        error,
+        sessionId: this.session.id,
+      });
     }
   }
 

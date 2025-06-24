@@ -44,6 +44,10 @@ export interface KillControlMessage extends ControlMessage {
   signal?: string | number;
 }
 
+export interface ResetSizeControlMessage extends ControlMessage {
+  cmd: 'reset-size';
+}
+
 export type AsciinemaEvent = {
   time: number;
   type: 'o' | 'i' | 'r' | 'm';

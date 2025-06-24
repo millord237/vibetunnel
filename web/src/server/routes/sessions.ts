@@ -1015,6 +1015,64 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
     }
   });
 
+  // Reset terminal size (for external terminals)
+  router.post('/sessions/:sessionId/reset-size', async (req, res) => {
+    const { sessionId } = req.params;
+
+    try {
+      // In HQ mode, forward to remote if session belongs to one
+      if (remoteRegistry) {
+        const remote = remoteRegistry.getRemoteBySessionId(sessionId);
+        if (remote) {
+          logger.debug(`forwarding reset-size to remote ${remote.id}`);
+          const response = await fetch(`${remote.url}/api/sessions/${sessionId}/reset-size`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${remote.token}`,
+            },
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            return res.status(response.status).json(error);
+          }
+
+          const result = await response.json();
+          return res.json(result);
+        }
+      }
+
+      logger.log(chalk.cyan(`resetting terminal size for session ${sessionId}`));
+
+      // Check if session exists
+      const session = ptyManager.getSession(sessionId);
+      if (!session) {
+        logger.error(`session ${sessionId} not found for reset-size`);
+        return res.status(404).json({ error: 'Session not found' });
+      }
+
+      // Check if session is running
+      if (session.status !== 'running') {
+        logger.error(`session ${sessionId} is not running (status: ${session.status})`);
+        return res.status(400).json({ error: 'Session is not running' });
+      }
+
+      // Reset the session size
+      ptyManager.resetSessionSize(sessionId);
+      logger.log(chalk.green(`session ${sessionId} size reset to terminal size`));
+
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('error resetting session size via PTY service:', error);
+      if (error instanceof PtyError) {
+        res.status(500).json({ error: 'Failed to reset session size', details: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to reset session size' });
+      }
+    }
+  });
+
   return router;
 }
 

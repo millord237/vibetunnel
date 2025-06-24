@@ -80,6 +80,11 @@ export async function startVibeTunnelForward(args: string[]) {
   logger.debug(`Control path: ${controlPath}`);
   const ptyManager = new PtyManager(controlPath);
 
+  // Store original terminal dimensions
+  const originalCols = process.stdout.columns || 80;
+  const originalRows = process.stdout.rows || 24;
+  logger.debug(`Original terminal size: ${originalCols}x${originalRows}`);
+
   try {
     // Create a human-readable session name
     const sessionName = generateSessionName(command, cwd);
@@ -94,14 +99,17 @@ export async function startVibeTunnelForward(args: string[]) {
       sessionId: finalSessionId,
       name: sessionName,
       workingDir: cwd,
-      cols: process.stdout.columns || 80,
-      rows: process.stdout.rows || 24,
+      cols: originalCols,
+      rows: originalRows,
       forwardToStdout: true,
       onExit: async (exitCode: number) => {
         // Show exit message
         logger.log(
           chalk.yellow(`\n✓ VibeTunnel session ended`) + chalk.gray(` (exit code: ${exitCode})`)
         );
+
+        // Remove resize listener
+        process.stdout.removeListener('resize', resizeHandler);
 
         // Restore terminal settings and clean up stdin
         if (process.stdin.isTTY) {
@@ -136,6 +144,23 @@ export async function startVibeTunnelForward(args: string[]) {
     logger.log(chalk.gray('Command:'), command.join(' '));
     logger.log(chalk.gray('Control directory:'), path.join(controlPath, result.sessionId));
     logger.log(chalk.gray('Build:'), `${BUILD_DATE} | Commit: ${GIT_COMMIT}`);
+
+    // Set up terminal resize handler
+    const resizeHandler = () => {
+      const cols = process.stdout.columns || 80;
+      const rows = process.stdout.rows || 24;
+      logger.debug(`Terminal resized to ${cols}x${rows}`);
+
+      // Send resize command through PTY manager
+      try {
+        ptyManager.resizeSession(result.sessionId, cols, rows);
+      } catch (error) {
+        logger.error('Failed to resize session:', error);
+      }
+    };
+
+    // Listen for terminal resize events
+    process.stdout.on('resize', resizeHandler);
 
     // Set up raw mode for terminal input
     if (process.stdin.isTTY) {

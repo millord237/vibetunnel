@@ -8,9 +8,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { AsciinemaHeader, AsciinemaEvent, PtyError } from './types.js';
-import { createLogger } from '../utils/logger.js';
-
-const logger = createLogger('AsciinemaWriter');
 
 export class AsciinemaWriter {
   private writeStream: fs.WriteStream;
@@ -165,11 +162,12 @@ export class AsciinemaWriter {
     // Force immediate disk write to trigger file watchers
     if (this.fd !== null) {
       try {
-        fs.fsync(this.fd, (err) => {
+        /*fs.fsync(this.fd, (err) => {
           if (err) {
             logger.error(`Failed to fsync asciinema file: ${err.message}`);
           }
-        });
+        });*/
+        fs.fsyncSync(this.fd);
       } catch (_e) {
         // Ignore sync errors
       }

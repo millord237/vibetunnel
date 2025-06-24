@@ -18,6 +18,7 @@ import {
   PtyError,
   ResizeControlMessage,
   KillControlMessage,
+  ResetSizeControlMessage,
 } from './types.js';
 import { AsciinemaWriter } from './asciinema-writer.js';
 import { SessionManager } from './session-manager.js';
@@ -575,6 +576,19 @@ export class PtyManager extends EventEmitter {
       } catch (error) {
         logger.warn(`Failed to kill session ${session.id} with signal ${signal}:`, error);
       }
+    } else if (message.cmd === 'reset-size') {
+      try {
+        if (session.ptyProcess) {
+          // Get current terminal size from process.stdout
+          const cols = process.stdout.columns || 80;
+          const rows = process.stdout.rows || 24;
+          session.ptyProcess.resize(cols, rows);
+          session.asciinemaWriter?.writeResize(cols, rows);
+          logger.debug(`Reset session ${session.id} size to terminal size: ${cols}x${rows}`);
+        }
+      } catch (error) {
+        logger.warn(`Failed to reset session ${session.id} size to terminal size:`, error);
+      }
     }
   }
 
@@ -661,7 +675,7 @@ export class PtyManager extends EventEmitter {
    */
   private sendControlMessage(
     sessionId: string,
-    message: ResizeControlMessage | KillControlMessage
+    message: ResizeControlMessage | KillControlMessage | ResetSizeControlMessage
   ): boolean {
     const sessionPaths = this.sessionManager.getSessionPaths(sessionId);
     if (!sessionPaths) {
@@ -744,6 +758,46 @@ export class PtyManager extends EventEmitter {
       throw new PtyError(
         `Failed to resize session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
         'RESIZE_FAILED',
+        sessionId
+      );
+    }
+  }
+
+  /**
+   * Reset session size to terminal size (for external terminals)
+   */
+  resetSessionSize(sessionId: string): void {
+    const memorySession = this.sessions.get(sessionId);
+
+    try {
+      // For in-memory sessions, we can't reset to terminal size since we don't know it
+      if (memorySession?.ptyProcess) {
+        throw new PtyError(
+          `Cannot reset size for in-memory session ${sessionId}`,
+          'INVALID_OPERATION',
+          sessionId
+        );
+      }
+
+      // For external sessions, send reset-size command via control pipe
+      const resetSizeMessage: ResetSizeControlMessage = {
+        cmd: 'reset-size',
+      };
+
+      const sent = this.sendControlMessage(sessionId, resetSizeMessage);
+      if (!sent) {
+        throw new PtyError(
+          `Failed to send reset-size command to session ${sessionId}`,
+          'CONTROL_MESSAGE_FAILED',
+          sessionId
+        );
+      }
+
+      logger.debug(`Sent reset-size command to session ${sessionId}`);
+    } catch (error) {
+      throw new PtyError(
+        `Failed to reset session size for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
+        'RESET_SIZE_FAILED',
         sessionId
       );
     }
