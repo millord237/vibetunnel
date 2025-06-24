@@ -533,20 +533,12 @@ private struct NgrokIntegrationSection: View {
                     if isStartingNgrok {
                         ProgressView()
                             .scaleEffect(0.7)
-                    } else if let status = ngrokStatus {
-                        switch status {
-                        case .connected(let url):
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Connected")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        case .disconnected:
-                            EmptyView()
-                        case .error:
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.red)
-                        }
+                    } else if ngrokStatus != nil {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("Connected")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
 
@@ -562,8 +554,8 @@ private struct NgrokIntegrationSection: View {
                 )
 
                 // Public URL display
-                if let status = ngrokStatus, case .connected(let url) = status {
-                    PublicURLView(url: url)
+                if let status = ngrokStatus {
+                    PublicURLView(url: status.publicUrl)
                 }
 
                 // Error display
@@ -650,7 +642,8 @@ private struct AuthTokenField: View {
             return
         }
 
-        if ngrokService.saveAuthToken(ngrokAuthToken) {
+        ngrokService.authToken = ngrokAuthToken
+        if ngrokService.authToken != nil {
             ngrokTokenPresent = true
             tokenSaveError = nil
             isTokenRevealed = false
@@ -713,27 +706,6 @@ private struct ErrorView: View {
                 .font(.caption)
                 .foregroundColor(.red)
                 .lineLimit(2)
-        }
-    }
-}
-
-// MARK: - Dashboard Access Mode
-
-enum DashboardAccessMode: String, CaseIterable {
-    case localhost = "localhost"
-    case network = "network"
-
-    var displayName: String {
-        switch self {
-        case .localhost: "Localhost Only"
-        case .network: "Network"
-        }
-    }
-
-    var bindAddress: String {
-        switch self {
-        case .localhost: "127.0.0.1"
-        case .network: "0.0.0.0"
         }
     }
 }
