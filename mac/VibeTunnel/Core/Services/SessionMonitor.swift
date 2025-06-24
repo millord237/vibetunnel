@@ -29,10 +29,16 @@ final class SessionMonitor {
     private var lastFetch: Date?
     private let cacheInterval: TimeInterval = 2.0
     private let serverPort: Int
+    private var localAuthToken: String?
 
     private init() {
         let port = UserDefaults.standard.integer(forKey: "serverPort")
         self.serverPort = port > 0 ? port : 4_020
+    }
+    
+    /// Set the local auth token for server requests
+    func setLocalAuthToken(_ token: String?) {
+        self.localAuthToken = token
     }
 
     /// Number of running sessions
@@ -69,7 +75,13 @@ final class SessionMonitor {
                 throw URLError(.badURL)
             }
 
-            let request = URLRequest(url: url, timeoutInterval: 3.0)
+            var request = URLRequest(url: url, timeoutInterval: 3.0)
+            
+            // Add local auth token if available
+            if let token = localAuthToken {
+                request.setValue(token, forHTTPHeaderField: "X-VibeTunnel-Local")
+            }
+            
             let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse,
