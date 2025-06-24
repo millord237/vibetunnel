@@ -182,25 +182,27 @@ export class AuthLogin extends LitElement {
             ${!this.authConfig.disallowUserPassword
               ? html`
                   <!-- Password Login Section (Primary) -->
-                  <div class="p-5">
+                  <div class="p-8">
                     ${this.userAvatar
                       ? html`
-                          <div class="flex flex-col items-center mb-3">
+                          <div class="flex flex-col items-center mb-6">
                             <img
                               src="${this.userAvatar}"
                               alt="User Avatar"
-                              class="w-16 h-16 rounded-full mb-2"
-                              style="box-shadow: 0 0 15px rgba(124, 230, 161, 0.25);"
+                              class="w-20 h-20 rounded-full mb-3 block"
+                              style="box-shadow: 0 0 20px rgba(124, 230, 161, 0.3); aspect-ratio: 1;"
+                              width="80"
+                              height="80"
                             />
-                            <p class="text-dark-text text-base font-medium">
+                            <p class="text-dark-text text-lg font-medium">
                               Welcome back, ${this.currentUserId}
                             </p>
                           </div>
                         `
                       : ''}
-                    <form @submit=${this.handlePasswordLogin} class="space-y-2">
+                    <form @submit=${this.handlePasswordLogin} class="space-y-4">
                       <div>
-                        <label class="form-label text-xs mb-1">Password</label>
+                        <label class="form-label text-xs mb-2">Password</label>
                         <input
                           type="password"
                           class="input-field"
@@ -214,7 +216,7 @@ export class AuthLogin extends LitElement {
                       </div>
                       <button
                         type="submit"
-                        class="btn-primary w-full"
+                        class="btn-primary w-full py-4 mt-2"
                         ?disabled=${this.loading || !this.loginPassword}
                       >
                         ${this.loading ? 'Authenticating...' : 'Login with Password'}
@@ -257,7 +259,7 @@ export class AuthLogin extends LitElement {
                     : ''}
 
                   <!-- SSH Key Management Section -->
-                  <div class="ssh-key-item">
+                  <div class="ssh-key-item p-8">
                     <div class="flex items-center justify-between mb-4">
                       <div class="flex items-center gap-2">
                         <div class="w-2 h-2 rounded-full bg-accent-green"></div>
