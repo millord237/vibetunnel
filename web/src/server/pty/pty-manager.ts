@@ -334,7 +334,7 @@ export class PtyManager extends EventEmitter {
     const { ptyProcess, asciinemaWriter } = session;
 
     // Handle PTY data output
-    ptyProcess?.onData((data: string) => {
+    ptyProcess?.onData(async (data: string) => {
       try {
         // Check for bell character (ASCII 7) - filter out OSC sequences
         if (data.includes('\x07')) {
@@ -366,12 +366,24 @@ export class PtyManager extends EventEmitter {
           }
         }
 
-        // Write to asciinema file (now async, non-blocking)
-        asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
+        // Execute both writes in parallel
+        const promises: Promise<void>[] = [];
 
-        // Forward to stdout if requested (for fwd.ts) with batching
+        // Write to asciinema file
+        promises.push(
+          Promise.resolve().then(() => {
+            asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
+          })
+        );
+
+        // Forward to stdout if requested
         if (forwardToStdout) {
           process.stdout.write(data);
+        }
+
+        // Wait for both operations to complete
+        if (promises.length > 0) {
+          await Promise.all(promises);
         }
       } catch (error) {
         logger.error(`Failed to write PTY data for session ${session.id}:`, error);

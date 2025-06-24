@@ -159,17 +159,19 @@ export class AsciinemaWriter {
     const eventJson = JSON.stringify(eventArray);
     this.writeStream.write(eventJson + '\n');
 
-    // Force immediate disk write to trigger file watchers
+    // Force immediate disk write to trigger file watchers asynchronously
     if (this.fd !== null) {
-      try {
-        /*fs.fsync(this.fd, (err) => {
-          if (err) {
-            logger.error(`Failed to fsync asciinema file: ${err.message}`);
-          }
-        });*/
-        fs.fsyncSync(this.fd);
-      } catch (_e) {
-        // Ignore sync errors
+      // Use setImmediate to avoid blocking the event loop
+      if (this.fd !== null) {
+        try {
+          fs.fsync(this.fd, (err) => {
+            if (err) {
+              // Ignore sync errors
+            }
+          });
+        } catch (_e) {
+          // Ignore sync errors
+        }
       }
     }
   }
