@@ -104,10 +104,8 @@ struct ProtectDashboardPageView: View {
 
 // MARK: - Preview
 
-struct ProtectDashboardPageView_Previews: PreviewProvider {
-    static var previews: some View {
-        ProtectDashboardPageView()
-            .frame(width: 640, height: 480)
-            .background(Color(NSColor.windowBackgroundColor))
-    }
+#Preview("Protect Dashboard Page") {
+    ProtectDashboardPageView()
+        .frame(width: 640, height: 480)
+        .background(Color(NSColor.windowBackgroundColor))
 }
