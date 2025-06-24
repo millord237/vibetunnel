@@ -230,13 +230,18 @@ export class ProcessUtils {
     // Not in PATH - try to resolve as an alias
     const aliasValue = ProcessUtils.getAliasValue(cmdName);
     if (aliasValue) {
-      // Just use interactive shell to run the full command with the alias
       logger.log(chalk.cyan(`Using alias '${cmdName}' → '${aliasValue}'`));
+
+      // Expand the alias and add any additional arguments
+      const expandedCommand =
+        cmdArgs.length > 0 ? `${aliasValue} ${cmdArgs.join(' ')}` : aliasValue;
+
       const userShell = ProcessUtils.getUserShell();
-      const fullCommand = cmdArgs.length > 0 ? `${cmdName} ${cmdArgs.join(' ')}` : cmdName;
+      const shellArgs = ProcessUtils.getShellExecuteArgs(userShell, expandedCommand, false);
+
       return {
         command: userShell,
-        args: ['-i', '-c', fullCommand],
+        args: shellArgs,
         useShell: true,
         isInteractive: false,
         resolvedFrom: 'alias',
@@ -245,12 +250,12 @@ export class ProcessUtils {
     }
 
     // Not an executable or alias - probably a shell builtin or function
-    // For commands not found, we need interactive shell to load aliases
-    logger.debug(`Command '${cmdName}' not found in PATH or aliases, using interactive shell`);
+    logger.debug(`Command '${cmdName}' not found in PATH or aliases, using shell`);
     const userShell = ProcessUtils.getUserShell();
+    const shellArgs = ProcessUtils.getShellExecuteArgs(userShell, command.join(' '), false);
     return {
       command: userShell,
-      args: ['-i', '-c', command.join(' ')],
+      args: shellArgs,
       useShell: true,
       isInteractive: false,
       resolvedFrom: 'builtin',
@@ -297,6 +302,15 @@ export class ProcessUtils {
    * Returns null if not an alias
    */
   private static getAliasValue(aliasName: string): string | null {
+    // Alias resolution is platform-specific
+    if (process.platform === 'win32') {
+      // Windows doesn't have Unix-style aliases
+      // PowerShell has aliases but they work differently
+      // For now, skip alias resolution on Windows
+      logger.debug(`Alias resolution not implemented for Windows`);
+      return null;
+    }
+
     try {
       // Get the user's shell to check aliases
       const userShell = process.env.SHELL || '/bin/bash';
@@ -313,11 +327,12 @@ export class ProcessUtils {
         return null;
       }
 
-      // Parse the alias output (format: alias key='value')
+      // Parse the alias output
+      // Format can be either "alias name='value'" or just "name='value'"
       const lines = aliasOutput.stdout.split('\n');
       for (const line of lines) {
-        // Match pattern: alias name='command' or alias name="command"
-        const match = line.match(/^alias\s+([^=]+)=(['"]?)(.+)\2$/);
+        // Match both formats: with or without 'alias' prefix
+        const match = line.match(/^(?:alias\s+)?([^=]+)=(['"]?)(.+)\2$/);
         if (match && match[1] === aliasName) {
           // Return the value with quotes stripped
           return match[3];
@@ -328,6 +343,36 @@ export class ProcessUtils {
     }
 
     return null;
+  }
+
+  /**
+   * Get platform-specific shell execution arguments
+   */
+  private static getShellExecuteArgs(
+    shell: string,
+    command: string,
+    needsInteractive: boolean
+  ): string[] {
+    const shellName = path.basename(shell).toLowerCase();
+
+    if (process.platform === 'win32') {
+      // Windows shells
+      if (shellName.includes('powershell') || shellName.includes('pwsh')) {
+        // PowerShell
+        return ['-NoProfile', '-Command', command];
+      } else if (shellName.includes('cmd')) {
+        // cmd.exe
+        return ['/C', command];
+      } else if (shellName.includes('bash')) {
+        // Git Bash on Windows
+        return needsInteractive ? ['-i', '-c', command] : ['-c', command];
+      }
+      // Default Windows
+      return ['/C', command];
+    } else {
+      // Unix shells - handle interactive mode for aliases
+      return needsInteractive ? ['-i', '-c', command] : ['-c', command];
+    }
   }
 
   /**
