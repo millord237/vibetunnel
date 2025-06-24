@@ -5,35 +5,34 @@
  * using the node-pty library while maintaining compatibility with tty-fwd.
  */
 
+import type { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
-import { v4 as uuidv4 } from 'uuid';
-import * as path from 'path';
+import chalk from 'chalk';
+import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as net from 'net';
-import { EventEmitter } from 'events';
-
-import {
-  PtySession,
-  SessionCreationResult,
-  PtyError,
-  ResizeControlMessage,
-  KillControlMessage,
-  ResetSizeControlMessage,
-} from './types.js';
-import { AsciinemaWriter } from './asciinema-writer.js';
-import { SessionManager } from './session-manager.js';
-import { ProcessUtils } from './process-utils.js';
-import {
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import type {
   Session,
   SessionCreateOptions,
   SessionInfo,
   SessionInput,
   SpecialKey,
 } from '../../shared/types.js';
-import { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
-import { createLogger } from '../utils/logger.js';
-import chalk from 'chalk';
 import { ProcessTreeAnalyzer } from '../services/process-tree-analyzer.js';
+import { createLogger } from '../utils/logger.js';
+import { AsciinemaWriter } from './asciinema-writer.js';
+import { ProcessUtils } from './process-utils.js';
+import { SessionManager } from './session-manager.js';
+import {
+  type KillControlMessage,
+  PtyError,
+  type PtySession,
+  type ResetSizeControlMessage,
+  type ResizeControlMessage,
+  type SessionCreationResult,
+} from './types.js';
 
 const logger = createLogger('pty-manager');
 
@@ -216,13 +215,13 @@ export class PtyManager extends EventEmitter {
         paths.stdoutPath,
         cols,
         rows,
-        resolvedCommand.join(' '),
+        command.join(' '),
         sessionName,
         this.createEnvVars(term)
       );
 
       // Create PTY process
-      let ptyProcess;
+      let ptyProcess: IPty;
       try {
         // Set up environment like Linux implementation
         const ptyEnv = {
@@ -246,16 +245,16 @@ export class PtyManager extends EventEmitter {
             ? (spawnError as NodeJS.ErrnoException).code
             : undefined;
         if (errorCode === 'ENOENT' || errorMessage.includes('ENOENT')) {
-          errorMessage = `Command not found: '${finalCommand}' (originally: '${command[0]}'). Please ensure the command exists and is in your PATH.`;
+          errorMessage = `Command not found: '${command[0]}'. Please ensure the command exists and is in your PATH.`;
         } else if (errorCode === 'EACCES' || errorMessage.includes('EACCES')) {
-          errorMessage = `Permission denied: '${finalCommand}'. The command exists but is not executable.`;
+          errorMessage = `Permission denied: '${command[0]}'. The command exists but is not executable.`;
         } else if (errorCode === 'ENXIO' || errorMessage.includes('ENXIO')) {
-          errorMessage = `Failed to allocate terminal for '${finalCommand}'. This may occur if the command doesn't exist or the system cannot create a pseudo-terminal.`;
+          errorMessage = `Failed to allocate terminal for '${command[0]}'. This may occur if the command doesn't exist or the system cannot create a pseudo-terminal.`;
         } else if (errorMessage.includes('cwd') || errorMessage.includes('working directory')) {
           errorMessage = `Working directory does not exist: '${workingDir}'`;
         }
 
-        logger.error(`Failed to spawn PTY for command '${resolvedCommand.join(' ')}':`, spawnError);
+        logger.error(`Failed to spawn PTY for command '${command.join(' ')}':`, spawnError);
         throw new PtyError(errorMessage, 'SPAWN_FAILED');
       }
 
@@ -341,12 +340,12 @@ export class PtyManager extends EventEmitter {
           logger.debug(`Bell data in session ${session.id}: ${JSON.stringify(data)}`);
 
           // Count total bells and OSC-terminated bells
-          // eslint-disable-next-line no-control-regex
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require control characters
           const totalBells = (data.match(/\x07/g) || []).length;
 
           // Count OSC sequences terminated with bell: \x1b]...\x07
-          // eslint-disable-next-line no-control-regex
-          const oscMatches = data.match(/\x1b]([^\x07\x1b]|\x1b[^]])*\x07/g) || [];
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require control characters
+          const oscMatches = data.match(/\x1b\]([^\x07\x1b]|\x1b[^\]])*\x07/g) || [];
           const oscTerminatedBells = oscMatches.length;
 
           // If there are more bells than OSC terminators, we have real bells
@@ -695,7 +694,7 @@ export class PtyManager extends EventEmitter {
     }
 
     try {
-      const messageStr = JSON.stringify(message) + '\n';
+      const messageStr = `${JSON.stringify(message)}\n`;
       fs.appendFileSync(sessionPaths.controlPipePath, messageStr);
       return true;
     } catch (error) {
@@ -827,7 +826,22 @@ export class PtyManager extends EventEmitter {
       if (memorySession?.ptyProcess) {
         // If signal is already SIGKILL, send it immediately and wait briefly
         if (signal === 'SIGKILL' || signal === 9) {
+          const pid = memorySession.ptyProcess.pid;
           memorySession.ptyProcess.kill('SIGKILL');
+
+          // Also kill the entire process group if on Unix
+          if (process.platform !== 'win32' && pid) {
+            try {
+              process.kill(-pid, 'SIGKILL');
+              logger.debug(`Sent SIGKILL to process group -${pid} for session ${sessionId}`);
+            } catch (groupKillError) {
+              logger.debug(
+                `Failed to SIGKILL process group for session ${sessionId}:`,
+                groupKillError
+              );
+            }
+          }
+
           this.sessions.delete(sessionId);
           // Wait a bit for SIGKILL to take effect
           await new Promise((resolve) => setTimeout(resolve, 100));
@@ -862,12 +876,45 @@ export class PtyManager extends EventEmitter {
 
           if (signal === 'SIGKILL' || signal === 9) {
             process.kill(diskSession.pid, 'SIGKILL');
+
+            // Also kill the entire process group if on Unix
+            if (process.platform !== 'win32') {
+              try {
+                process.kill(-diskSession.pid, 'SIGKILL');
+                logger.debug(
+                  `Sent SIGKILL to process group -${diskSession.pid} for external session ${sessionId}`
+                );
+              } catch (groupKillError) {
+                logger.debug(
+                  `Failed to SIGKILL process group for external session ${sessionId}:`,
+                  groupKillError
+                );
+              }
+            }
+
             await new Promise((resolve) => setTimeout(resolve, 100));
             return;
           }
 
           // Send SIGTERM first
           process.kill(diskSession.pid, 'SIGTERM');
+
+          // Also try to kill the entire process group if on Unix
+          if (process.platform !== 'win32') {
+            try {
+              // Kill the process group by using negative PID
+              process.kill(-diskSession.pid, 'SIGTERM');
+              logger.debug(
+                `Sent SIGTERM to process group -${diskSession.pid} for external session ${sessionId}`
+              );
+            } catch (groupKillError) {
+              // Process group might not exist or we might not have permission
+              logger.debug(
+                `Failed to kill process group for external session ${sessionId}:`,
+                groupKillError
+              );
+            }
+          }
 
           // Wait up to 3 seconds for graceful termination
           const maxWaitTime = 3000;
@@ -886,6 +933,23 @@ export class PtyManager extends EventEmitter {
           // Process didn't terminate gracefully, force kill
           logger.log(chalk.yellow(`External session ${sessionId} requires SIGKILL`));
           process.kill(diskSession.pid, 'SIGKILL');
+
+          // Also force kill the entire process group if on Unix
+          if (process.platform !== 'win32') {
+            try {
+              // Kill the process group with SIGKILL
+              process.kill(-diskSession.pid, 'SIGKILL');
+              logger.debug(
+                `Sent SIGKILL to process group -${diskSession.pid} for external session ${sessionId}`
+              );
+            } catch (groupKillError) {
+              logger.debug(
+                `Failed to SIGKILL process group for external session ${sessionId}:`,
+                groupKillError
+              );
+            }
+          }
+
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
@@ -914,6 +978,18 @@ export class PtyManager extends EventEmitter {
       // Send SIGTERM first
       session.ptyProcess.kill('SIGTERM');
 
+      // Also try to kill the entire process group if on Unix
+      if (process.platform !== 'win32' && pid) {
+        try {
+          // Kill the process group by using negative PID
+          process.kill(-pid, 'SIGTERM');
+          logger.debug(`Sent SIGTERM to process group -${pid} for session ${sessionId}`);
+        } catch (groupKillError) {
+          // Process group might not exist or we might not have permission
+          logger.debug(`Failed to kill process group for session ${sessionId}:`, groupKillError);
+        }
+      }
+
       // Wait up to 3 seconds for graceful termination (check every 500ms)
       const maxWaitTime = 3000;
       const checkInterval = 500;
@@ -939,6 +1015,21 @@ export class PtyManager extends EventEmitter {
       logger.log(chalk.yellow(`Session ${sessionId} requires SIGKILL`));
       try {
         session.ptyProcess.kill('SIGKILL');
+
+        // Also force kill the entire process group if on Unix
+        if (process.platform !== 'win32' && pid) {
+          try {
+            // Kill the process group with SIGKILL
+            process.kill(-pid, 'SIGKILL');
+            logger.debug(`Sent SIGKILL to process group -${pid} for session ${sessionId}`);
+          } catch (groupKillError) {
+            logger.debug(
+              `Failed to SIGKILL process group for session ${sessionId}:`,
+              groupKillError
+            );
+          }
+        }
+
         // Wait a bit more for SIGKILL to take effect
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (_killError) {
@@ -1123,7 +1214,19 @@ export class PtyManager extends EventEmitter {
     for (const [sessionId, session] of Array.from(this.sessions.entries())) {
       try {
         if (session.ptyProcess) {
+          const pid = session.ptyProcess.pid;
           session.ptyProcess.kill();
+
+          // Also kill the entire process group if on Unix
+          if (process.platform !== 'win32' && pid) {
+            try {
+              process.kill(-pid, 'SIGTERM');
+              logger.debug(`Sent SIGTERM to process group -${pid} during shutdown`);
+            } catch (groupKillError) {
+              // Process group might not exist
+              logger.debug(`Failed to kill process group during shutdown:`, groupKillError);
+            }
+          }
         }
         if (session.asciinemaWriter?.isOpen()) {
           await session.asciinemaWriter.close();

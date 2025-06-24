@@ -1,16 +1,12 @@
-import { Router, Request, Response } from 'express';
+import { type Request, type Response, Router } from 'express';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
-import { logFromModule } from '../utils/logger.js';
-import { createLogger } from '../utils/logger.js';
+import * as path from 'path';
+import { createLogger, logFromModule } from '../utils/logger.js';
 
 const logger = createLogger('logs');
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-interface LogRoutesConfig {
-  // Add any config if needed
-}
+type LogRoutesConfig = Record<string, never>;
 
 interface ClientLogRequest {
   level: 'log' | 'warn' | 'error' | 'debug';
@@ -49,7 +45,7 @@ export function createLogRoutes(_config?: LogRoutesConfig): Router {
       // Log to server log file via logFromModule
       logFromModule(serverLevel === 'LOG' ? 'LOG' : serverLevel, clientModule, args);
 
-      res.json({ success: true });
+      res.status(204).send();
     } catch (error) {
       logger.error('Failed to process client log:', error);
       res.status(500).json({ error: 'Failed to process log' });
@@ -57,13 +53,14 @@ export function createLogRoutes(_config?: LogRoutesConfig): Router {
   });
 
   // Get raw log file
-  router.get('/logs/raw', (req: Request, res: Response) => {
+  router.get('/logs/raw', (_req: Request, res: Response) => {
     try {
       const logPath = path.join(os.homedir(), '.vibetunnel', 'log.txt');
 
-      // Check if log file exists
+      // Check if log file exists - if not, return empty content
       if (!fs.existsSync(logPath)) {
-        return res.status(404).json({ error: 'Log file not found' });
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        return res.send('');
       }
 
       // Stream the log file
@@ -77,7 +74,7 @@ export function createLogRoutes(_config?: LogRoutesConfig): Router {
   });
 
   // Get log stats/info
-  router.get('/logs/info', (req: Request, res: Response) => {
+  router.get('/logs/info', (_req: Request, res: Response) => {
     try {
       const logPath = path.join(os.homedir(), '.vibetunnel', 'log.txt');
 
@@ -95,7 +92,7 @@ export function createLogRoutes(_config?: LogRoutesConfig): Router {
         exists: true,
         size: stats.size,
         sizeHuman: formatBytes(stats.size),
-        modified: stats.mtime,
+        lastModified: stats.mtime,
         path: logPath,
       });
     } catch (error) {
@@ -105,7 +102,7 @@ export function createLogRoutes(_config?: LogRoutesConfig): Router {
   });
 
   // Clear log file (for development/debugging)
-  router.delete('/logs/clear', (req: Request, res: Response) => {
+  router.delete('/logs/clear', (_req: Request, res: Response) => {
     try {
       const logPath = path.join(os.homedir(), '.vibetunnel', 'log.txt');
 
@@ -114,7 +111,7 @@ export function createLogRoutes(_config?: LogRoutesConfig): Router {
         logger.log('Log file cleared');
       }
 
-      res.json({ success: true });
+      res.status(204).send();
     } catch (error) {
       logger.error('Failed to clear log file:', error);
       res.status(500).json({ error: 'Failed to clear log file' });
@@ -129,5 +126,5 @@ function formatBytes(bytes: number): string {
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
 }

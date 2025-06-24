@@ -92,6 +92,20 @@ struct ConnectionView: View {
         .onAppear {
             viewModel.loadLastConnection()
         }
+        .sheet(isPresented: $viewModel.showLoginView) {
+            if let config = viewModel.pendingServerConfig,
+               let authService = connectionManager.authenticationService {
+                LoginView(
+                    isPresented: $viewModel.showLoginView,
+                    serverConfig: config,
+                    authenticationService: authService,
+                    onSuccess: {
+                        // Authentication successful, mark as connected
+                        connectionManager.isConnected = true
+                    }
+                )
+            }
+        }
     }
 
     private func connectToServer() {
@@ -103,7 +117,8 @@ struct ConnectionView: View {
         Task {
             await viewModel.testConnection { config in
                 connectionManager.saveConnection(config)
-                connectionManager.isConnected = true
+                // Show login view to authenticate
+                viewModel.showLoginView = true
             }
         }
     }
@@ -118,6 +133,8 @@ class ConnectionViewModel {
     var password: String = ""
     var isConnecting: Bool = false
     var errorMessage: String?
+    var showLoginView: Bool = false
+    var pendingServerConfig: ServerConfig?
 
     func loadLastConnection() {
         if let config = UserDefaults.standard.data(forKey: "savedServerConfig"),
@@ -126,7 +143,6 @@ class ConnectionViewModel {
             self.host = serverConfig.host
             self.port = String(serverConfig.port)
             self.name = serverConfig.name ?? ""
-            self.password = serverConfig.password ?? ""
         }
     }
 
@@ -149,28 +165,41 @@ class ConnectionViewModel {
         let config = ServerConfig(
             host: host,
             port: portNumber,
-            name: name.isEmpty ? nil : name,
-            password: password.isEmpty ? nil : password
+            name: name.isEmpty ? nil : name
         )
 
         do {
-            // Test connection by fetching sessions
-            let url = config.baseURL.appendingPathComponent("api/sessions")
-            var request = URLRequest(url: url)
-            if let authHeader = config.authorizationHeader {
-                request.setValue(authHeader, forHTTPHeaderField: "Authorization")
-            }
+            // Test basic connectivity by checking health endpoint
+            let url = config.baseURL.appendingPathComponent("api/health")
+            let request = URLRequest(url: url)
             let (_, response) = try await URLSession.shared.data(for: request)
 
             if let httpResponse = response as? HTTPURLResponse,
                httpResponse.statusCode == 200
             {
+                // Connection successful, save config and trigger authentication
+                pendingServerConfig = config
                 onSuccess(config)
             } else {
                 errorMessage = "Failed to connect to server"
             }
         } catch {
-            errorMessage = "Connection failed: \(error.localizedDescription)"
+            if let urlError = error as? URLError {
+                switch urlError.code {
+                case .notConnectedToInternet:
+                    errorMessage = "No internet connection"
+                case .cannotFindHost:
+                    errorMessage = "Cannot find server"
+                case .cannotConnectToHost:
+                    errorMessage = "Cannot connect to server"
+                case .timedOut:
+                    errorMessage = "Connection timed out"
+                default:
+                    errorMessage = "Connection failed: \(error.localizedDescription)"
+                }
+            } else {
+                errorMessage = "Connection failed: \(error.localizedDescription)"
+            }
         }
 
         isConnecting = false

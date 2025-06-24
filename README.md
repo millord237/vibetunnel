@@ -32,7 +32,7 @@ VibeTunnel lives in your menu bar. Click the icon to start the server.
 
 ```bash
 # Run any command in the browser
-vt npm run dev
+vt pnpm run dev
 
 # Monitor AI agents
 vt claude --dangerously-skip-permissions
@@ -122,13 +122,13 @@ EOF
 
 # Build the web server
 cd web
-npm install
-npm run build
+pnpm install
+pnpm run build
 
 # Optional: Build with custom Node.js for smaller binary (46% size reduction)
 # export VIBETUNNEL_USE_CUSTOM_NODE=YES
 # node build-custom-node.js  # Build optimized Node.js (one-time, ~20 min)
-# npm run build              # Will use custom Node.js automatically
+# pnpm run build              # Will use custom Node.js automatically
 
 # Build the macOS app
 cd ../mac
@@ -162,6 +162,28 @@ For development setup and contribution guidelines, see [CONTRIBUTING.md](docs/CO
 - **Web UI**: `web/src/client/` (Lit/TypeScript)
 - **iOS App**: `ios/VibeTunnel/`
 
+### Testing & Code Coverage
+
+VibeTunnel has comprehensive test suites with code coverage enabled for all projects:
+
+```bash
+# Run all tests with coverage
+./scripts/test-all-coverage.sh
+
+# macOS tests with coverage (Swift Testing)
+cd mac && swift test --enable-code-coverage
+
+# iOS tests with coverage (using xcodebuild)
+cd ios && ./scripts/test-with-coverage.sh
+
+# Web tests with coverage (Vitest)
+cd web && ./scripts/coverage-report.sh
+```
+
+**Coverage Requirements**:
+- macOS/iOS: 75% minimum (enforced in CI)
+- Web: 80% minimum for lines, functions, branches, and statements
+
 ### Debug Logging
 
 Enable debug logging for troubleshooting:
@@ -189,13 +211,17 @@ macOS is finicky when it comes to permissions. The system will only remember the
 
 Important: You need to set your Developer ID in Local.xcconfig. If apps are signed Ad-Hoc, each new signing will count as a new app for macOS and the permissions have to be (deleted and) requested again.
 
+**Debug vs Release Bundle IDs**: The Debug configuration uses a different bundle identifier (`sh.vibetunnel.vibetunnel.debug`) than Release (`sh.vibetunnel.vibetunnel`). This allows you to have both versions installed simultaneously, but macOS treats them as separate apps for permissions. You'll need to grant permissions separately for each version.
+
 If that fails, use the terminal to reset:
 
 ```
 # This removes Accessibility permission for a specific bundle ID:
 sudo tccutil reset Accessibility sh.vibetunnel.vibetunnel
+sudo tccutil reset Accessibility sh.vibetunnel.vibetunnel.debug  # For debug builds
 
 sudo tccutil reset ScreenCapture sh.vibetunnel.vibetunnel
+sudo tccutil reset ScreenCapture sh.vibetunnel.vibetunnel.debug  # For debug builds
 
 # This removes all Automation permissions system-wide (cannot target specific apps):
 sudo tccutil reset AppleEvents

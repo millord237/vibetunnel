@@ -1,6 +1,6 @@
-import { LitElement, html } from 'lit';
-import { customElement, state, property } from 'lit/decorators.js';
-import { AuthClient } from '../services/auth-client.js';
+import { html, LitElement } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import type { AuthClient } from '../services/auth-client.js';
 import './terminal-icon.js';
 
 @customElement('auth-login')
@@ -149,42 +149,52 @@ export class AuthLogin extends LitElement {
             </div>
           </div>
 
-          ${this.error
-            ? html`
+          ${
+            this.error
+              ? html`
                 <div class="bg-status-error text-dark-bg px-4 py-2 rounded mb-4 font-mono text-sm">
                   ${this.error}
                   <button
-                    @click=${() => (this.error = '')}
+                    @click=${() => {
+                      this.error = '';
+                    }}
                     class="ml-2 text-dark-bg hover:text-dark-text"
                   >
                     ✕
                   </button>
                 </div>
               `
-            : ''}
-          ${this.success
-            ? html`
+              : ''
+          }
+          ${
+            this.success
+              ? html`
                 <div
                   class="bg-status-success text-dark-bg px-4 py-2 rounded mb-4 font-mono text-sm"
                 >
                   ${this.success}
                   <button
-                    @click=${() => (this.success = '')}
+                    @click=${() => {
+                      this.success = '';
+                    }}
                     class="ml-2 text-dark-bg hover:text-dark-text"
                   >
                     ✕
                   </button>
                 </div>
               `
-            : ''}
+              : ''
+          }
 
           <div class="auth-form">
-            ${!this.authConfig.disallowUserPassword
-              ? html`
+            ${
+              !this.authConfig.disallowUserPassword
+                ? html`
                   <!-- Password Login Section (Primary) -->
                   <div class="p-8">
-                    ${this.userAvatar
-                      ? html`
+                    ${
+                      this.userAvatar
+                        ? html`
                           <div class="flex flex-col items-center mb-6">
                             <img
                               src="${this.userAvatar}"
@@ -199,7 +209,8 @@ export class AuthLogin extends LitElement {
                             </p>
                           </div>
                         `
-                      : ''}
+                        : ''
+                    }
                     <form @submit=${this.handlePasswordLogin} class="space-y-4">
                       <div>
                         <label class="form-label text-xs mb-2">Password</label>
@@ -208,8 +219,9 @@ export class AuthLogin extends LitElement {
                           class="input-field"
                           placeholder="Enter your system password"
                           .value=${this.loginPassword}
-                          @input=${(e: Event) =>
-                            (this.loginPassword = (e.target as HTMLInputElement).value)}
+                          @input=${(e: Event) => {
+                            this.loginPassword = (e.target as HTMLInputElement).value;
+                          }}
                           ?disabled=${this.loading}
                           required
                         />
@@ -224,9 +236,11 @@ export class AuthLogin extends LitElement {
                     </form>
                   </div>
                 `
-              : ''}
-            ${this.authConfig.disallowUserPassword && this.userAvatar
-              ? html`
+                : ''
+            }
+            ${
+              this.authConfig.disallowUserPassword && this.userAvatar
+                ? html`
                   <!-- Avatar for SSH-only mode -->
                   <div class="ssh-key-item">
                     <div class="flex flex-col items-center mb-6">
@@ -236,9 +250,11 @@ export class AuthLogin extends LitElement {
                         class="w-20 h-20 rounded-full border-2 border-dark-border mb-3"
                       />
                       <p class="text-dark-text text-sm">
-                        ${this.currentUserId
-                          ? `Welcome back, ${this.currentUserId}`
-                          : 'Please authenticate to continue'}
+                        ${
+                          this.currentUserId
+                            ? `Welcome back, ${this.currentUserId}`
+                            : 'Please authenticate to continue'
+                        }
                       </p>
                       <p class="text-dark-text-muted text-xs mt-2">
                         SSH key authentication required
@@ -246,17 +262,21 @@ export class AuthLogin extends LitElement {
                     </div>
                   </div>
                 `
-              : ''}
-            ${this.authConfig.enableSSHKeys === true
-              ? html`
+                : ''
+            }
+            ${
+              this.authConfig.enableSSHKeys === true
+                ? html`
                   <!-- Divider (only show if password auth is also available) -->
-                  ${!this.authConfig.disallowUserPassword
-                    ? html`
+                  ${
+                    !this.authConfig.disallowUserPassword
+                      ? html`
                         <div class="auth-divider">
                           <span>or</span>
                         </div>
                       `
-                    : ''}
+                      : ''
+                  }
 
                   <!-- SSH Key Management Section -->
                   <div class="ssh-key-item p-8">
@@ -290,7 +310,8 @@ export class AuthLogin extends LitElement {
                     </div>
                   </div>
                 `
-              : ''}
+                : ''
+            }
           </div>
         </div>
       </div>

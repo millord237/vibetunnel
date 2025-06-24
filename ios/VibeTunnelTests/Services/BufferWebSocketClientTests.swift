@@ -134,8 +134,7 @@ final class BufferWebSocketClientTests {
         TestFixtures.saveServerConfig(.init(
             host: "localhost",
             port: 8888,
-            name: nil,
-            password: nil
+            name: nil
         ))
     }
     
@@ -253,11 +252,10 @@ final class BufferWebSocketClientTests {
     func sessionSubscription() async throws {
         // Arrange
         let sessionId = "test-session-456"
-        var eventReceived = false
         
         // Act
         client.subscribe(to: sessionId) { _ in
-            eventReceived = true
+            // Event handler
         }
         
         client.connect()

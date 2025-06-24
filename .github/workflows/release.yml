@@ -20,6 +20,8 @@ jobs:
   build-mac:
     name: Build macOS App
     runs-on: macos-15
+    env:
+      GITHUB_REPO_NAME: ${{ github.repository }}
     
     steps:
     - name: Checkout code
@@ -28,12 +30,31 @@ jobs:
     - name: Select Xcode 16.3
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: '16.3'
+        xcode-version: '16.4'
     
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '24'
+    
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 9
+        run_install: false
+    
+    - name: Get pnpm store directory
+      shell: bash
+      run: |
+        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+    
+    - name: Setup pnpm cache
+      uses: useblacksmith/cache@v5
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('web/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
     
     - name: Setup Bun
       uses: oven-sh/setup-bun@v2
@@ -42,7 +63,7 @@ jobs:
     
     - name: Install web dependencies
       working-directory: web
-      run: npm ci
+      run: pnpm install --frozen-lockfile
     
     - name: Resolve Dependencies
       working-directory: mac
@@ -104,6 +125,8 @@ jobs:
   build-ios:
     name: Build iOS App
     runs-on: macos-15
+    env:
+      GITHUB_REPO_NAME: ${{ github.repository }}
     
     steps:
     - name: Checkout code
@@ -112,7 +135,7 @@ jobs:
     - name: Select Xcode 16.3
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: '16.3'
+        xcode-version: '16.4'
     
     - name: Resolve Dependencies
       working-directory: ios

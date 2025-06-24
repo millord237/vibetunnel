@@ -1,32 +1,34 @@
-import express from 'express';
-import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
 import chalk from 'chalk';
-import { PtyManager } from './pty/index.js';
-import { TerminalManager } from './services/terminal-manager.js';
-import { StreamWatcher } from './services/stream-watcher.js';
-import { RemoteRegistry } from './services/remote-registry.js';
-import { HQClient } from './services/hq-client.js';
+import type { Response as ExpressResponse } from 'express';
+import express from 'express';
+import * as fs from 'fs';
+import { createServer } from 'http';
+import * as os from 'os';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { WebSocketServer } from 'ws';
+import type { AuthenticatedRequest } from './middleware/auth.js';
 import { createAuthMiddleware } from './middleware/auth.js';
-import { createSessionRoutes } from './routes/sessions.js';
-import { createRemoteRoutes } from './routes/remotes.js';
+import { PtyManager } from './pty/index.js';
+import { createAuthRoutes } from './routes/auth.js';
 import { createFilesystemRoutes } from './routes/filesystem.js';
 import { createLogRoutes } from './routes/logs.js';
 import { createPushRoutes } from './routes/push.js';
-import { createAuthRoutes } from './routes/auth.js';
+import { createRemoteRoutes } from './routes/remotes.js';
+import { createSessionRoutes } from './routes/sessions.js';
+import { ActivityMonitor } from './services/activity-monitor.js';
 import { AuthService } from './services/auth-service.js';
-import { ControlDirWatcher } from './services/control-dir-watcher.js';
-import { VapidManager } from './utils/vapid-manager.js';
-import { PushNotificationService } from './services/push-notification-service.js';
 import { BellEventHandler } from './services/bell-event-handler.js';
 import { BufferAggregator } from './services/buffer-aggregator.js';
-import { ActivityMonitor } from './services/activity-monitor.js';
-import { v4 as uuidv4 } from 'uuid';
+import { ControlDirWatcher } from './services/control-dir-watcher.js';
+import { HQClient } from './services/hq-client.js';
+import { PushNotificationService } from './services/push-notification-service.js';
+import { RemoteRegistry } from './services/remote-registry.js';
+import { StreamWatcher } from './services/stream-watcher.js';
+import { TerminalManager } from './services/terminal-manager.js';
+import { closeLogger, createLogger, initLogger, setDebugMode } from './utils/logger.js';
+import { VapidManager } from './utils/vapid-manager.js';
 import { getVersionInfo, printVersionBanner } from './version.js';
-import { createLogger, initLogger, closeLogger, setDebugMode } from './utils/logger.js';
 
 const logger = createLogger('server');
 
@@ -166,7 +168,7 @@ function parseArgs(): Config {
   // Check for command line arguments
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--port' && i + 1 < args.length) {
-      config.port = parseInt(args[i + 1], 10);
+      config.port = Number.parseInt(args[i + 1], 10);
       i++; // Skip the port value in next iteration
     } else if (args[i] === '--bind' && i + 1 < args.length) {
       config.bind = args[i + 1];
@@ -332,7 +334,7 @@ export async function createApp(): Promise<AppInstance> {
   logger.log('Initializing VibeTunnel server components');
   const app = express();
   const server = createServer(app);
-  const wss = new WebSocketServer({ server });
+  const wss = new WebSocketServer({ noServer: true });
 
   // Add JSON body parser middleware
   app.use(express.json());
@@ -455,7 +457,7 @@ export async function createApp(): Promise<AppInstance> {
   logger.debug(`Serving static files from: ${publicPath}`);
 
   // Health check endpoint (no auth required)
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', (_req, res) => {
     const versionInfo = getVersionInfo();
     res.json({
       status: 'ok',
@@ -538,6 +540,112 @@ export async function createApp(): Promise<AppInstance> {
     logger.debug('Mounted push notification routes');
   }
 
+  // Handle WebSocket upgrade with authentication
+  server.on('upgrade', async (request, socket, head) => {
+    // Parse the URL to extract path and query parameters
+    const parsedUrl = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
+
+    // Only handle /buffers path
+    if (parsedUrl.pathname !== '/buffers') {
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    // Check authentication
+    const isAuthenticated = await new Promise<boolean>((resolve) => {
+      // Track if promise has been resolved to prevent multiple resolutions
+      let resolved = false;
+      const safeResolve = (value: boolean) => {
+        if (!resolved) {
+          resolved = true;
+          resolve(value);
+        }
+      };
+
+      // Convert URLSearchParams to plain object for query parameters
+      const query: Record<string, string> = {};
+      parsedUrl.searchParams.forEach((value, key) => {
+        query[key] = value;
+      });
+
+      // Create a mock Express request/response to use auth middleware
+      const req = {
+        ...request,
+        url: request.url,
+        path: parsedUrl.pathname,
+        userId: undefined as string | undefined,
+        authMethod: undefined as string | undefined,
+        query, // Include parsed query parameters for token-based auth
+        headers: request.headers,
+        ip: (request.socket as unknown as { remoteAddress?: string }).remoteAddress || '',
+        socket: request.socket,
+        hostname: request.headers.host?.split(':')[0] || 'localhost',
+        // Add minimal Express-like methods needed by auth middleware
+        get: (header: string) => request.headers[header.toLowerCase()],
+        header: (header: string) => request.headers[header.toLowerCase()],
+        accepts: () => false,
+        acceptsCharsets: () => false,
+        acceptsEncodings: () => false,
+        acceptsLanguages: () => false,
+      } as unknown as AuthenticatedRequest;
+
+      let authFailed = false;
+      const res = {
+        status: (code: number) => {
+          // Only consider it a failure if it's an error status code
+          if (code >= 400) {
+            authFailed = true;
+            safeResolve(false);
+          }
+          return {
+            json: () => {},
+            send: () => {},
+            end: () => {},
+          };
+        },
+        setHeader: () => {},
+        send: () => {},
+        json: () => {},
+        end: () => {},
+      } as unknown as ExpressResponse;
+
+      const next = (error?: unknown) => {
+        // Authentication succeeds if next() is called without error and no auth failure was recorded
+        safeResolve(!error && !authFailed);
+      };
+
+      // Add a timeout to prevent indefinite hanging
+      const timeoutId = setTimeout(() => {
+        logger.error('WebSocket auth timeout - auth middleware did not complete in time');
+        safeResolve(false);
+      }, 5000); // 5 second timeout
+
+      // Call authMiddleware and handle potential async errors
+      Promise.resolve(authMiddleware(req, res, next))
+        .then(() => {
+          clearTimeout(timeoutId);
+        })
+        .catch((error) => {
+          clearTimeout(timeoutId);
+          logger.error('Auth middleware error:', error);
+          safeResolve(false);
+        });
+    });
+
+    if (!isAuthenticated) {
+      logger.debug('WebSocket connection rejected: unauthorized');
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    // Handle the upgrade
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  });
+
   // WebSocket endpoint for buffer updates
   wss.on('connection', (ws, _req) => {
     if (bufferAggregator) {
@@ -549,7 +657,7 @@ export async function createApp(): Promise<AppInstance> {
   });
 
   // Serve index.html for client-side routes (but not API routes)
-  app.get('/', (req, res) => {
+  app.get('/', (_req, res) => {
     res.sendFile(path.join(publicPath, 'index.html'));
   });
 

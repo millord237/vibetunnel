@@ -1,8 +1,8 @@
-import { WebSocket } from 'ws';
 import chalk from 'chalk';
-import { RemoteRegistry } from './remote-registry.js';
-import { TerminalManager } from './terminal-manager.js';
+import { WebSocket } from 'ws';
 import { createLogger } from '../utils/logger.js';
+import type { RemoteRegistry } from './remote-registry.js';
+import type { TerminalManager } from './terminal-manager.js';
 
 const logger = createLogger('buffer-aggregator');
 
@@ -280,8 +280,8 @@ export class BufferAggregator {
     }
 
     try {
-      // Convert HTTP URL to WebSocket URL
-      const wsUrl = remote.url.replace(/^http/, 'ws');
+      // Convert HTTP URL to WebSocket URL and add /buffers path
+      const wsUrl = `${remote.url.replace(/^http/, 'ws')}/buffers`;
       const ws = new WebSocket(wsUrl, {
         headers: {
           Authorization: `Bearer ${remote.token}`,

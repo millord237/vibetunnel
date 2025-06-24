@@ -8,10 +8,15 @@ permissions:
   pull-requests: write
   issues: write
 
+# All jobs run in parallel for faster CI execution
+# Using pnpm install --frozen-lockfile for reproducible installs
+# Build already uses esbuild for fast TypeScript compilation
 jobs:
   lint:
     name: Lint TypeScript/JavaScript Code
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    env:
+      GITHUB_REPO_NAME: ${{ github.repository }}
 
     steps:
     - name: Checkout code
@@ -20,77 +25,101 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: web/package-lock.json
+        node-version: '24'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 9
+        run_install: false
+
+    - name: Get pnpm store directory
+      shell: bash
+      run: |
+        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Setup pnpm cache
+      uses: useblacksmith/cache@v5
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('web/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpam0g-dev
 
     - name: Install dependencies
       working-directory: web
-      run: npm ci
+      run: pnpm install --frozen-lockfile
 
-    - name: Check formatting with Prettier
-      id: prettier
+    - name: Check formatting with Biome
+      id: biome-format
       working-directory: web
       continue-on-error: true
       run: |
-        npm run format:check 2>&1 | tee prettier-output.txt
+        pnpm run format:check 2>&1 | tee biome-format-output.txt
         echo "result=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
-    - name: Run ESLint
-      id: eslint
+    - name: Run Biome linting
+      id: biome-lint
       working-directory: web
       continue-on-error: true
       run: |
-        npm run lint 2>&1 | tee eslint-output.txt
+        pnpm run lint:biome 2>&1 | tee biome-lint-output.txt
         echo "result=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
-    - name: Read Prettier Output
+    - name: Read Biome Format Output
       if: always()
-      id: prettier-output
+      id: biome-format-output
       working-directory: web
       run: |
-        if [ -f prettier-output.txt ]; then
+        if [ -f biome-format-output.txt ]; then
           echo 'content<<EOF' >> $GITHUB_OUTPUT
-          cat prettier-output.txt >> $GITHUB_OUTPUT
+          cat biome-format-output.txt >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
         else
           echo "content=No output" >> $GITHUB_OUTPUT
         fi
 
-    - name: Read ESLint Output
+    - name: Read Biome Lint Output
       if: always()
-      id: eslint-output
+      id: biome-lint-output
       working-directory: web
       run: |
-        if [ -f eslint-output.txt ]; then
+        if [ -f biome-lint-output.txt ]; then
           echo 'content<<EOF' >> $GITHUB_OUTPUT
-          cat eslint-output.txt >> $GITHUB_OUTPUT
+          cat biome-lint-output.txt >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
         else
           echo "content=No output" >> $GITHUB_OUTPUT
         fi
 
-    - name: Report Prettier Results
+    - name: Report Biome Format Results
       if: always()
       uses: ./.github/actions/lint-reporter
       with:
-        title: 'Node.js Prettier Formatting'
-        lint-result: ${{ steps.prettier.outputs.result == '0' && 'success' || 'failure' }}
-        lint-output: ${{ steps.prettier-output.outputs.content }}
+        title: 'Node.js Biome Formatting'
+        lint-result: ${{ steps.biome-format.outputs.result == '0' && 'success' || 'failure' }}
+        lint-output: ${{ steps.biome-format-output.outputs.content }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Report ESLint Results
+    - name: Report Biome Lint Results
       if: always()
       uses: ./.github/actions/lint-reporter
       with:
-        title: 'Node.js ESLint'
-        lint-result: ${{ steps.eslint.outputs.result == '0' && 'success' || 'failure' }}
-        lint-output: ${{ steps.eslint-output.outputs.content }}
+        title: 'Node.js Biome Linting'
+        lint-result: ${{ steps.biome-lint.outputs.result == '0' && 'success' || 'failure' }}
+        lint-output: ${{ steps.biome-lint-output.outputs.content }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
   build-and-test:
     name: Build and Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    env:
+      GITHUB_REPO_NAME: ${{ github.repository }}
 
     steps:
     - name: Checkout code
@@ -99,35 +128,110 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: web/package-lock.json
+        node-version: '24'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 9
+        run_install: false
+
+    - name: Get pnpm store directory
+      shell: bash
+      run: |
+        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Setup pnpm cache
+      uses: useblacksmith/cache@v5
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('web/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpam0g-dev
+
+    - name: Cache TypeScript build info
+      uses: useblacksmith/cache@v5
+      with:
+        path: |
+          web/dist/tsconfig.server.tsbuildinfo
+          web/public/tsconfig.client.tsbuildinfo
+          web/public/tsconfig.sw.tsbuildinfo
+        key: ${{ runner.os }}-tsbuild-${{ hashFiles('web/src/**/*.ts', 'web/tsconfig*.json') }}
+        restore-keys: |
+          ${{ runner.os }}-tsbuild-
 
     - name: Install dependencies
       working-directory: web
-      run: npm ci
+      run: pnpm install --frozen-lockfile
 
     - name: Build frontend and backend
       working-directory: web
-      run: npm run build:ci
+      run: pnpm run build:ci
 
-    - name: Run tests
+    - name: Run tests with coverage
+      id: test-coverage
       working-directory: web
-      run: npm run test:ci
+      run: |
+        pnpm run test:coverage 2>&1 | tee test-output.txt
+        echo "result=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
       env:
         CI: true
+
+    - name: Generate coverage summary
+      if: always()
+      working-directory: web
+      run: |
+        if [ -f coverage/coverage-summary.json ]; then
+          # Extract coverage percentages from the summary
+          node -e "
+            const coverage = require('./coverage/coverage-summary.json');
+            const total = coverage.total;
+            const summary = {
+              lines: { pct: total.lines.pct, covered: total.lines.covered, total: total.lines.total },
+              statements: { pct: total.statements.pct, covered: total.statements.covered, total: total.statements.total },
+              functions: { pct: total.functions.pct, covered: total.functions.covered, total: total.functions.total },
+              branches: { pct: total.branches.pct, covered: total.branches.covered, total: total.branches.total }
+            };
+            console.log(JSON.stringify(summary, null, 2));
+          " > coverage-summary-formatted.json
+          
+          # Also save the test output for the coverage report
+          if [ -f test-output.txt ]; then
+            tail -n 50 test-output.txt > coverage-output.txt
+          fi
+        else
+          echo '{"error": "No coverage data found"}' > coverage-summary-formatted.json
+        fi
+
+    - name: Upload coverage artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: node-coverage
+        path: |
+          web/coverage-summary-formatted.json
+          web/coverage-output.txt
+          web/coverage/lcov.info
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: node-build-artifacts
+        name: web-build-${{ github.sha }}
         path: |
           web/dist/
           web/public/bundle/
+        retention-days: 1
 
   type-check:
     name: TypeScript Type Checking
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    env:
+      GITHUB_REPO_NAME: ${{ github.repository }}
 
     steps:
     - name: Checkout code
@@ -136,21 +240,43 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: web/package-lock.json
+        node-version: '24'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 9
+        run_install: false
+
+    - name: Get pnpm store directory
+      shell: bash
+      run: |
+        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Setup pnpm cache
+      uses: useblacksmith/cache@v5
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('web/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpam0g-dev
 
     - name: Install dependencies
       working-directory: web
-      run: npm ci
+      run: pnpm install --frozen-lockfile
 
     - name: Check TypeScript types
       working-directory: web
-      run: npm run typecheck
+      run: pnpm run typecheck
 
   audit:
     name: Security Audit
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2204
 
     steps:
     - name: Checkout code
@@ -159,11 +285,126 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: web/package-lock.json
+        node-version: '24'
 
-    - name: Run npm audit
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 9
+        run_install: false
+
+    - name: Run pnpm audit
       working-directory: web
-      run: npm audit --audit-level=moderate || true
+      run: pnpm audit --audit-level=moderate || true
       # || true to not fail the build on vulnerabilities, but still report them
+
+  report-coverage:
+    name: Report Coverage Results
+    runs-on: blacksmith-8vcpu-ubuntu-2204
+    needs: [build-and-test]
+    if: always() && github.event_name == 'pull_request'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download coverage artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: node-coverage
+        path: web/coverage-artifacts
+
+    - name: Read coverage summary
+      id: coverage
+      working-directory: web
+      run: |
+        if [ -f coverage-artifacts/coverage-summary-formatted.json ]; then
+          # Read the coverage summary
+          COVERAGE_JSON=$(cat coverage-artifacts/coverage-summary-formatted.json)
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$COVERAGE_JSON" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          # Check if coverage meets thresholds (80% for all metrics)
+          THRESHOLD=80
+          LINES_PCT=$(echo "$COVERAGE_JSON" | jq -r '.lines.pct // 0')
+          FUNCTIONS_PCT=$(echo "$COVERAGE_JSON" | jq -r '.functions.pct // 0')
+          BRANCHES_PCT=$(echo "$COVERAGE_JSON" | jq -r '.branches.pct // 0')
+          STATEMENTS_PCT=$(echo "$COVERAGE_JSON" | jq -r '.statements.pct // 0')
+          
+          # Check if all metrics meet threshold
+          if (( $(echo "$LINES_PCT >= $THRESHOLD" | bc -l) )) && \
+             (( $(echo "$FUNCTIONS_PCT >= $THRESHOLD" | bc -l) )) && \
+             (( $(echo "$BRANCHES_PCT >= $THRESHOLD" | bc -l) )) && \
+             (( $(echo "$STATEMENTS_PCT >= $THRESHOLD" | bc -l) )); then
+            echo "result=success" >> $GITHUB_OUTPUT
+          else
+            echo "result=failure" >> $GITHUB_OUTPUT
+          fi
+          
+          # Read coverage output if available
+          if [ -f coverage-artifacts/coverage-output.txt ]; then
+            echo 'output<<EOF' >> $GITHUB_OUTPUT
+            cat coverage-artifacts/coverage-output.txt >> $GITHUB_OUTPUT
+            echo 'EOF' >> $GITHUB_OUTPUT
+          else
+            echo "output=No coverage output available" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "summary={\"error\": \"No coverage data found\"}" >> $GITHUB_OUTPUT
+          echo "result=failure" >> $GITHUB_OUTPUT
+          echo "output=Coverage data not found" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Format coverage output
+      id: format-coverage
+      if: always()
+      run: |
+        SUMMARY='${{ steps.coverage.outputs.summary }}'
+        if echo "$SUMMARY" | jq -e '.error' >/dev/null 2>&1; then
+          ERROR=$(echo "$SUMMARY" | jq -r '.error')
+          echo "output=$ERROR" >> $GITHUB_OUTPUT
+        else
+          LINES=$(echo "$SUMMARY" | jq -r '.lines.pct')
+          FUNCTIONS=$(echo "$SUMMARY" | jq -r '.functions.pct')
+          BRANCHES=$(echo "$SUMMARY" | jq -r '.branches.pct')
+          STATEMENTS=$(echo "$SUMMARY" | jq -r '.statements.pct')
+          
+          # Format with warning indicators for below-threshold metrics
+          OUTPUT=""
+          if (( $(echo "$LINES < 80" | bc -l) )); then
+            OUTPUT="${OUTPUT}• Lines: ${LINES}% ⚠️ (threshold: 80%)\n"
+          else
+            OUTPUT="${OUTPUT}• Lines: ${LINES}% (threshold: 80%)\n"
+          fi
+          
+          if (( $(echo "$FUNCTIONS < 80" | bc -l) )); then
+            OUTPUT="${OUTPUT}• Functions: ${FUNCTIONS}% ⚠️ (threshold: 80%)\n"
+          else
+            OUTPUT="${OUTPUT}• Functions: ${FUNCTIONS}% (threshold: 80%)\n"
+          fi
+          
+          if (( $(echo "$BRANCHES < 80" | bc -l) )); then
+            OUTPUT="${OUTPUT}• Branches: ${BRANCHES}% ⚠️ (threshold: 80%)\n"
+          else
+            OUTPUT="${OUTPUT}• Branches: ${BRANCHES}% (threshold: 80%)\n"
+          fi
+          
+          if (( $(echo "$STATEMENTS < 80" | bc -l) )); then
+            OUTPUT="${OUTPUT}• Statements: ${STATEMENTS}% ⚠️ (threshold: 80%)"
+          else
+            OUTPUT="${OUTPUT}• Statements: ${STATEMENTS}% (threshold: 80%)"
+          fi
+          
+          echo "output<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Report Coverage Results
+      uses: ./.github/actions/lint-reporter
+      with:
+        title: 'Node.js Test Coverage'
+        lint-result: ${{ steps.coverage.outputs.result }}
+        lint-output: ${{ steps.format-coverage.outputs.output }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -9,18 +9,15 @@ struct ServerConfig: Codable, Equatable {
     let host: String
     let port: Int
     let name: String?
-    let password: String?
 
     init(
         host: String,
         port: Int,
-        name: String? = nil,
-        password: String? = nil
+        name: String? = nil
     ) {
         self.host = host
         self.port = port
         self.name = name
-        self.password = password
     }
 
     /// Constructs the base URL for API requests.
@@ -46,25 +43,18 @@ struct ServerConfig: Codable, Equatable {
         name ?? "\(host):\(port)"
     }
 
-    /// Indicates whether the server requires authentication.
+    /// Creates a URL for an API endpoint path.
     ///
-    /// - Returns: true if a password is configured, false otherwise.
-    var requiresAuthentication: Bool {
-        if let password {
-            return !password.isEmpty
-        }
-        return false
+    /// - Parameter path: The API path (e.g., "/api/sessions")
+    /// - Returns: A complete URL for the API endpoint
+    func apiURL(path: String) -> URL {
+        baseURL.appendingPathComponent(path)
     }
-
-    /// Generates the Authorization header value if a password is configured.
+    
+    /// Unique identifier for this server configuration.
     ///
-    /// - Returns: A Basic auth header string using "admin" as username,
-    ///   or nil if no password is configured.
-    var authorizationHeader: String? {
-        guard let password, !password.isEmpty else { return nil }
-        let credentials = "admin:\(password)"
-        guard let data = credentials.data(using: .utf8) else { return nil }
-        let base64 = data.base64EncodedString()
-        return "Basic \(base64)"
+    /// Used for keychain storage and identifying server instances.
+    var id: String {
+        "\(host):\(port)"
     }
 }

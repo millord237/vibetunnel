@@ -26,17 +26,17 @@ struct VibeTunnelApp: App {
                     // Initialize network monitoring
                     _ = networkMonitor
                 }
-                #if targetEnvironment(macCatalyst)
+            #if targetEnvironment(macCatalyst)
                 .macCatalystWindowStyle(getStoredWindowStyle())
             #endif
         }
     }
 
     #if targetEnvironment(macCatalyst)
-    private func getStoredWindowStyle() -> MacWindowStyle {
-        let styleRaw = UserDefaults.standard.string(forKey: "macWindowStyle") ?? "standard"
-        return styleRaw == "inline" ? .inline : .standard
-    }
+        private func getStoredWindowStyle() -> MacWindowStyle {
+            let styleRaw = UserDefaults.standard.string(forKey: "macWindowStyle") ?? "standard"
+            return styleRaw == "inline" ? .inline : .standard
+        }
     #endif
 
     private func handleURL(_ url: URL) {
@@ -68,6 +68,7 @@ class ConnectionManager {
 
     var serverConfig: ServerConfig?
     var lastConnectionTime: Date?
+    private(set) var authenticationService: AuthenticationService?
 
     init() {
         loadSavedConnection()
@@ -108,6 +109,18 @@ class ConnectionManager {
             // Save connection timestamp
             lastConnectionTime = Date()
             UserDefaults.standard.set(lastConnectionTime, forKey: "lastConnectionTime")
+            
+            // Create and configure authentication service
+            authenticationService = AuthenticationService(
+                apiClient: APIClient.shared,
+                serverConfig: config
+            )
+            
+            // Configure API client and WebSocket client with auth service
+            if let authService = authenticationService {
+                APIClient.shared.setAuthenticationService(authService)
+                BufferWebSocketClient.shared.setAuthenticationService(authService)
+            }
         }
     }
 
@@ -115,6 +128,12 @@ class ConnectionManager {
         isConnected = false
         UserDefaults.standard.removeObject(forKey: "connectionState")
         UserDefaults.standard.removeObject(forKey: "lastConnectionTime")
+        
+        // Clean up authentication
+        Task {
+            await authenticationService?.logout()
+            authenticationService = nil
+        }
     }
 
     var currentServerConfig: ServerConfig? {

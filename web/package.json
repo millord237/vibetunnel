@@ -12,13 +12,23 @@
     "dev:client": "node scripts/dev.js --client-only",
     "build": "node scripts/build.js",
     "build:ci": "node scripts/build-ci.js",
-    "lint": "eslint 'src/**/*.{ts,tsx}'",
-    "lint:fix": "eslint 'src/**/*.{ts,tsx}' --fix",
-    "typecheck": "tsc --noEmit --project tsconfig.server.json && tsc --noEmit --project tsconfig.client.json && tsc --noEmit --project tsconfig.sw.json",
+    "lint": "concurrently -n biome,tsc-server,tsc-client,tsc-sw \"biome check src\" \"tsc --noEmit --project tsconfig.server.json\" \"tsc --noEmit --project tsconfig.client.json\" \"tsc --noEmit --project tsconfig.sw.json\"",
+    "lint:fix": "biome check src --write",
+    "lint:biome": "biome check src",
+    "typecheck": "concurrently -n server,client,sw \"tsc --noEmit --project tsconfig.server.json\" \"tsc --noEmit --project tsconfig.client.json\" \"tsc --noEmit --project tsconfig.sw.json\"",
     "test": "vitest",
     "test:ci": "vitest run --reporter=verbose",
-    "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,css,md}'",
-    "format:check": "prettier --check 'src/**/*.{ts,tsx,js,jsx,json,css,md}'"
+    "test:coverage": "vitest run --coverage",
+    "format": "biome format src --write",
+    "format:check": "biome format src"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@homebridge/node-pty-prebuilt-multiarch",
+      "authenticate-pam",
+      "esbuild",
+      "puppeteer"
+    ]
   },
   "dependencies": {
     "@codemirror/commands": "^6.6.2",
@@ -46,7 +56,8 @@
     "ws": "^8.18.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.29.0",
+    "@biomejs/biome": "^2.0.5",
+    "@open-wc/testing": "^4.0.0",
     "@testing-library/dom": "^10.4.0",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
@@ -56,8 +67,6 @@
     "@types/uuid": "^10.0.0",
     "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
-    "@typescript-eslint/eslint-plugin": "^8.34.1",
-    "@typescript-eslint/parser": "^8.34.1",
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.4.21",
@@ -65,19 +74,14 @@
     "chokidar-cli": "^3.0.0",
     "concurrently": "^9.1.2",
     "esbuild": "^0.25.5",
-    "eslint": "^9.29.0",
-    "eslint-config-prettier": "^10.1.5",
-    "eslint-plugin-prettier": "^5.5.0",
     "happy-dom": "^18.0.1",
     "node-fetch": "^3.3.2",
     "postcss": "^8.5.6",
-    "prettier": "^3.5.3",
     "puppeteer": "^24.10.2",
     "supertest": "^7.1.1",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.1",
     "uuid": "^11.1.0",
     "vitest": "^3.2.4",
     "ws-mock": "^0.1.0"

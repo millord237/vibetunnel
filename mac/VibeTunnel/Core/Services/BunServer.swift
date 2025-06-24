@@ -1,6 +1,6 @@
+import CryptoKit
 import Foundation
 import OSLog
-import CryptoKit
 
 /// Server state enumeration
 enum ServerState {
@@ -45,7 +45,7 @@ final class BunServer {
     var port: String = ""
 
     var bindAddress: String = "127.0.0.1"
-    
+
     /// Local authentication token for bypassing auth on localhost
     private let localAuthToken: String = {
         // Generate a secure random token for this session
@@ -55,7 +55,7 @@ final class BunServer {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
     }()
-    
+
     /// Get the local auth token for use in HTTP requests
     var localToken: String {
         localAuthToken
@@ -166,7 +166,7 @@ final class BunServer {
             // OS authentication is the default, no special flags needed
             break
         }
-        
+
         // Add local bypass authentication for the Mac app
         if authMode != "none" {
             // Enable local bypass with our generated token
@@ -197,7 +197,12 @@ final class BunServer {
         logger.info("Binary location: \(resourcesPath)")
 
         // Set up environment - login shell will load the rest
-        let environment = ProcessInfo.processInfo.environment
+        var environment = ProcessInfo.processInfo.environment
+        
+        // Add Node.js V8 garbage collection optimization flags
+        // These help reduce GC pauses in long-running processes
+        environment["NODE_OPTIONS"] = "--max-old-space-size=4096 --max-semi-space-size=128 --optimize-for-size"
+        
         process.environment = environment
 
         // Set up pipes for stdout and stderr

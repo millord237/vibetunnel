@@ -35,7 +35,7 @@ final class SessionMonitor {
         let port = UserDefaults.standard.integer(forKey: "serverPort")
         self.serverPort = port > 0 ? port : 4_020
     }
-    
+
     /// Set the local auth token for server requests
     func setLocalAuthToken(_ token: String?) {
         self.localAuthToken = token
@@ -71,17 +71,20 @@ final class SessionMonitor {
             let port = UserDefaults.standard.integer(forKey: "serverPort")
             let actualPort = port > 0 ? port : serverPort
 
-            guard let url = URL(string: "http://127.0.0.1:\(actualPort)/api/sessions") else {
+            guard let url = URL(string: "http://localhost:\(actualPort)/api/sessions") else {
                 throw URLError(.badURL)
             }
 
             var request = URLRequest(url: url, timeoutInterval: 3.0)
-            
+
+            // Add Host header to ensure request is recognized as local
+            request.setValue("localhost", forHTTPHeaderField: "Host")
+
             // Add local auth token if available
             if let token = localAuthToken {
                 request.setValue(token, forHTTPHeaderField: "X-VibeTunnel-Local")
             }
-            
+
             let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse,

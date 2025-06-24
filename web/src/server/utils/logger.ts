@@ -1,7 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import chalk from 'chalk';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 // Log file path
 const LOG_DIR = path.join(os.homedir(), '.vibetunnel');
@@ -14,7 +14,7 @@ let debugMode = false;
 let logFileHandle: fs.WriteStream | null = null;
 
 // ANSI color codes for stripping from file output
-// eslint-disable-next-line no-control-regex
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require control characters
 const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
 
 /**
@@ -30,8 +30,13 @@ export function initLogger(debug: boolean = false): void {
     }
 
     // Delete old log file if it exists
-    if (fs.existsSync(LOG_FILE)) {
-      fs.unlinkSync(LOG_FILE);
+    try {
+      if (fs.existsSync(LOG_FILE)) {
+        fs.unlinkSync(LOG_FILE);
+      }
+    } catch (unlinkError) {
+      // Ignore unlink errors - file might not exist or be locked
+      console.debug('Could not delete old log file:', unlinkError);
     }
 
     // Create new log file write stream
@@ -110,7 +115,7 @@ function writeToFile(message: string): void {
     try {
       // Strip ANSI color codes from message
       const cleanMessage = message.replace(ANSI_PATTERN, '');
-      logFileHandle.write(cleanMessage + '\n');
+      logFileHandle.write(`${cleanMessage}\n`);
     } catch {
       // Silently ignore file write errors
     }

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Form component for entering server connection details.
 ///
-/// Provides input fields for host, port, name, and password
+/// Provides input fields for host, port, and name
 /// with validation and recent servers functionality.
 struct ServerConfigForm: View {
     @Binding var host: String
@@ -21,7 +21,6 @@ struct ServerConfigForm: View {
         case host
         case port
         case name
-        case password
     }
 
     var body: some View {
@@ -70,21 +69,6 @@ struct ServerConfigForm: View {
                     TextField("My Mac", text: $name)
                         .textFieldStyle(TerminalTextFieldStyle())
                         .focused($focusedField, equals: .name)
-                        .submitLabel(.next)
-                        .onSubmit {
-                            focusedField = .password
-                        }
-                }
-
-                // Password Field (optional)
-                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                    Label("Password (optional)", systemImage: "lock")
-                        .font(Theme.Typography.terminalSystem(size: 12))
-                        .foregroundColor(Theme.Colors.primaryAccent)
-
-                    SecureField("Enter password", text: $password)
-                        .textFieldStyle(TerminalTextFieldStyle())
-                        .focused($focusedField, equals: .password)
                         .submitLabel(.done)
                         .onSubmit {
                             focusedField = nil
@@ -143,13 +127,13 @@ struct ServerConfigForm: View {
                 }
             })
             .foregroundColor(isConnecting || !networkMonitor.isConnected ? Theme.Colors.terminalForeground : Theme
-                                .Colors.primaryAccent
+                .Colors.primaryAccent
             )
             .padding(.vertical, Theme.Spacing.medium)
             .background(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                     .fill(isConnecting || !networkMonitor.isConnected ? Theme.Colors.cardBackground : Theme.Colors
-                            .terminalBackground
+                        .terminalBackground
                     )
             )
             .overlay(
@@ -181,7 +165,6 @@ struct ServerConfigForm: View {
                                     host = server.host
                                     port = String(server.port)
                                     name = server.name ?? ""
-                                    password = server.password ?? ""
                                     HapticFeedback.selection()
                                 }, label: {
                                     VStack(alignment: .leading, spacing: 4) {

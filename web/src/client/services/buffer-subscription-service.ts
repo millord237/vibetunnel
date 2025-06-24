@@ -1,5 +1,5 @@
-import { BufferCell } from '../utils/terminal-renderer.js';
 import { createLogger } from '../utils/logger.js';
+import type { BufferCell } from '../utils/terminal-renderer.js';
 
 const logger = createLogger('buffer-subscription-service');
 
@@ -92,7 +92,7 @@ export class BufferSubscriptionService {
   private scheduleReconnect() {
     if (this.reconnectTimer) return;
 
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 30000);
     this.reconnectAttempts++;
 
     logger.log(`reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
@@ -198,21 +198,29 @@ export class BufferSubscriptionService {
       const bufferData = data.slice(offset);
 
       // Import TerminalRenderer dynamically to avoid circular dependencies
-      import('../utils/terminal-renderer.js').then(({ TerminalRenderer }) => {
-        const snapshot = TerminalRenderer.decodeBinaryBuffer(bufferData);
+      import('../utils/terminal-renderer.js')
+        .then(({ TerminalRenderer }) => {
+          try {
+            const snapshot = TerminalRenderer.decodeBinaryBuffer(bufferData);
 
-        // Notify all handlers for this session
-        const handlers = this.subscriptions.get(sessionId);
-        if (handlers) {
-          handlers.forEach((handler) => {
-            try {
-              handler(snapshot);
-            } catch (error) {
-              logger.error('error in update handler', error);
+            // Notify all handlers for this session
+            const handlers = this.subscriptions.get(sessionId);
+            if (handlers) {
+              handlers.forEach((handler) => {
+                try {
+                  handler(snapshot);
+                } catch (error) {
+                  logger.error('error in update handler', error);
+                }
+              });
             }
-          });
-        }
-      });
+          } catch (error) {
+            logger.error('failed to decode binary buffer', error);
+          }
+        })
+        .catch((error) => {
+          logger.error('failed to import terminal renderer', error);
+        });
     } catch (error) {
       logger.error('failed to parse binary message', error);
     }

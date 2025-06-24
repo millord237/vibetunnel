@@ -45,7 +45,7 @@ async function loadMonacoEditor(): Promise<void> {
       // Disable workers - they interfere with diff computation
       // Monaco will fall back to synchronous mode which works fine
       window.MonacoEnvironment = {
-        getWorker: function (_workerId: string, _label: string): Worker {
+        getWorker: (_workerId: string, _label: string): Worker => {
           // Return a dummy worker that will never be used
           // Monaco will fall back to synchronous mode
           return new Worker('data:,');
@@ -98,7 +98,7 @@ export async function initializeMonaco(): Promise<void> {
           [/^#.*$/, 'comment'],
           [/\$\w+/, 'variable'],
           [
-            /\b(echo|cd|ls|grep|find|chmod|mkdir|rm|cp|mv|touch|cat|sed|awk|curl|wget|git|npm|yarn|docker|kubectl)\b/,
+            /\b(echo|cd|ls|grep|find|chmod|mkdir|rm|cp|mv|touch|cat|sed|awk|curl|wget|git|pnpm|npm|yarn|docker|kubectl)\b/,
             'keyword',
           ],
           [/"([^"\\]|\\.)*"/, 'string'],

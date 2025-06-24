@@ -1,4 +1,4 @@
-import { LitElement, html } from 'lit';
+import { html, LitElement } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { keyed } from 'lit/directives/keyed.js';
 
@@ -265,7 +265,7 @@ export class VibeTunnelApp extends LitElement {
     this.showCreateModal = false;
 
     // Check if this was a terminal spawn (not a web session)
-    if (message && message.includes('Terminal spawned successfully')) {
+    if (message?.includes('Terminal spawned successfully')) {
       // Don't try to switch to the session - it's running in a terminal window
       this.showSuccess('Terminal window opened successfully');
       return;
@@ -346,7 +346,7 @@ export class VibeTunnelApp extends LitElement {
 
   private cleanupSessionViewStream(): void {
     const sessionView = this.querySelector('session-view') as SessionViewElement;
-    if (sessionView && sessionView.streamConnection) {
+    if (sessionView?.streamConnection) {
       logger.log('Cleaning up stream connection');
       sessionView.streamConnection.disconnect();
       sessionView.streamConnection = null;
@@ -466,7 +466,7 @@ export class VibeTunnelApp extends LitElement {
     const sessionList = this.querySelector('session-list') as HTMLElement & {
       handleCleanupExited?: () => void;
     };
-    if (sessionList && sessionList.handleCleanupExited) {
+    if (sessionList?.handleCleanupExited) {
       sessionList.handleCleanupExited();
     }
   }
@@ -606,6 +606,10 @@ export class VibeTunnelApp extends LitElement {
     this.showNotificationSettings = false;
   };
 
+  private handleOpenFileBrowser = () => {
+    this.showFileBrowser = true;
+  };
+
   private handleNotificationEnabled = (e: CustomEvent) => {
     const { success, reason } = e.detail;
     if (success) {
@@ -618,8 +622,9 @@ export class VibeTunnelApp extends LitElement {
   render() {
     return html`
       <!-- Error notification overlay -->
-      ${this.errorMessage
-        ? html`
+      ${
+        this.errorMessage
+          ? html`
             <div class="fixed top-4 right-4 z-50">
               <div
                 class="bg-status-error text-dark-bg px-4 py-2 rounded shadow-lg font-mono text-sm"
@@ -640,9 +645,11 @@ export class VibeTunnelApp extends LitElement {
               </div>
             </div>
           `
-        : ''}
-      ${this.successMessage
-        ? html`
+          : ''
+      }
+      ${
+        this.successMessage
+          ? html`
             <div class="fixed top-4 right-4 z-50">
               <div
                 class="bg-status-success text-dark-bg px-4 py-2 rounded shadow-lg font-mono text-sm"
@@ -663,28 +670,30 @@ export class VibeTunnelApp extends LitElement {
               </div>
             </div>
           `
-        : ''}
+          : ''
+      }
 
       <!-- Main content -->
-      ${this.currentView === 'auth'
-        ? html`
+      ${
+        this.currentView === 'auth'
+          ? html`
             <auth-login
               .authClient=${this.authClient}
               @auth-success=${this.handleAuthSuccess}
               @show-ssh-key-manager=${this.handleShowSSHKeyManager}
             ></auth-login>
           `
-        : this.currentView === 'session' && this.selectedSessionId
-          ? keyed(
-              this.selectedSessionId,
-              html`
+          : this.currentView === 'session' && this.selectedSessionId
+            ? keyed(
+                this.selectedSessionId,
+                html`
                 <session-view
                   .session=${this.sessions.find((s) => s.id === this.selectedSessionId)}
                   @navigate-to-list=${this.handleNavigateToList}
                 ></session-view>
               `
-            )
-          : html`
+              )
+            : html`
               <div>
                 <app-header
                   .sessions=${this.sessions}
@@ -695,7 +704,7 @@ export class VibeTunnelApp extends LitElement {
                   @hide-exited-change=${this.handleHideExitedChange}
                   @kill-all-sessions=${this.handleKillAll}
                   @clean-exited-sessions=${this.handleCleanExited}
-                  @open-file-browser=${() => (this.showFileBrowser = true)}
+                  @open-file-browser=${this.handleOpenFileBrowser}
                   @open-notification-settings=${this.handleShowNotificationSettings}
                   @logout=${this.handleLogout}
                 ></app-header>
@@ -715,14 +724,17 @@ export class VibeTunnelApp extends LitElement {
                   @navigate-to-session=${this.handleNavigateToSession}
                 ></session-list>
               </div>
-            `}
+            `
+      }
 
       <!-- File Browser Modal -->
       <file-browser
         .visible=${this.showFileBrowser}
         .mode=${'browse'}
         .session=${null}
-        @browser-cancel=${() => (this.showFileBrowser = false)}
+        @browser-cancel=${() => {
+          this.showFileBrowser = false;
+        }}
       ></file-browser>
 
       <!-- Notification Settings Modal -->

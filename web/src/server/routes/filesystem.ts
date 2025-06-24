@@ -1,12 +1,12 @@
-import { Router, Request, Response } from 'express';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import mime from 'mime-types';
-import { createReadStream, statSync } from 'fs';
-import { createLogger } from '../utils/logger.js';
 import chalk from 'chalk';
+import { exec } from 'child_process';
+import { type Request, type Response, Router } from 'express';
+import { createReadStream, statSync } from 'fs';
+import * as fs from 'fs/promises';
+import mime from 'mime-types';
+import * as path from 'path';
+import { promisify } from 'util';
+import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('filesystem');
 
@@ -143,7 +143,7 @@ export function createFilesystemRoutes(): Router {
       const fullPath = path.resolve(requestedPath);
 
       // Check if path exists and is a directory
-      let stats;
+      let stats: Awaited<ReturnType<typeof fs.stat>>;
       try {
         stats = await fs.stat(fullPath);
       } catch (error) {
@@ -187,7 +187,7 @@ export function createFilesystemRoutes(): Router {
           // If we're at repo root, show all files
           if (fullPath === gitRepoRoot) return true;
           // Otherwise, only show files under current directory
-          return f.path.startsWith(currentDirRelativeToRepo + '/');
+          return f.path.startsWith(`${currentDirRelativeToRepo}/`);
         });
 
         // Convert to FileInfo objects
@@ -196,14 +196,14 @@ export function createFilesystemRoutes(): Router {
             const absolutePath = path.join(gitRepoRoot, changedFile.path);
 
             // Check if file exists (it might be deleted)
-            let fileStats;
+            let fileStats: Awaited<ReturnType<typeof fs.stat>> | null = null;
             let fileType: 'file' | 'directory' = 'file';
             try {
               fileStats = await fs.stat(absolutePath);
               fileType = fileStats.isDirectory() ? 'directory' : 'file';
             } catch {
               // File might be deleted
-              fileStats = { size: 0, mtime: new Date() };
+              fileStats = null;
             }
 
             // Get relative display name (relative to current directory)
@@ -213,9 +213,9 @@ export function createFilesystemRoutes(): Router {
               name: relativeToCurrentDir,
               path: path.relative(process.cwd(), absolutePath),
               type: fileType,
-              size: fileStats.size,
-              modified: fileStats.mtime.toISOString(),
-              permissions: fileStats.mode?.toString(8).slice(-3) || '000',
+              size: fileStats?.size || 0,
+              modified: fileStats?.mtime.toISOString() || new Date().toISOString(),
+              permissions: fileStats?.mode?.toString(8).slice(-3) || '000',
               isGitTracked: true,
               gitStatus: changedFile.status,
             };
@@ -689,5 +689,5 @@ function formatBytes(bytes: number, decimals = 2): string {
 
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  return `${Number.parseFloat((bytes / k ** i).toFixed(dm))} ${sizes[i]}`;
 }
