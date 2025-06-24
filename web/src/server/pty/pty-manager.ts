@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as net from 'net';
 import { EventEmitter } from 'events';
+
 import {
   PtySession,
   SessionCreationResult,
@@ -176,10 +177,30 @@ export class PtyManager extends EventEmitter {
       // Create session directory structure
       const paths = this.sessionManager.createSessionDirectory(sessionId);
 
-      // Create initial session info
+      // Resolve the command using unified resolution logic
+      const resolved = ProcessUtils.resolveCommand(command);
+      const { command: finalCommand, args: finalArgs } = resolved;
+      const resolvedCommand = [finalCommand, ...finalArgs];
+
+      // Log resolution details
+      if (resolved.resolvedFrom === 'alias') {
+        logger.log(
+          chalk.cyan(`Using alias: '${resolved.originalCommand}' → '${resolvedCommand.join(' ')}'`)
+        );
+      } else if (resolved.resolvedFrom === 'path' && resolved.originalCommand) {
+        logger.log(chalk.gray(`Resolved '${resolved.originalCommand}' → '${finalCommand}'`));
+      } else if (resolved.useShell) {
+        logger.debug(`Using shell to execute ${resolved.resolvedFrom}: ${command.join(' ')}`);
+      }
+
+      // Log the final command
+      logger.log(chalk.blue(`Creating PTY session with command: ${resolvedCommand.join(' ')}`));
+      logger.debug(`Working directory: ${workingDir}`);
+
+      // Create initial session info with resolved command
       const sessionInfo: SessionInfo = {
         id: sessionId,
-        command: command,
+        command: resolvedCommand,
         name: sessionName,
         workingDir: workingDir,
         status: 'starting',
@@ -194,7 +215,7 @@ export class PtyManager extends EventEmitter {
         paths.stdoutPath,
         cols,
         rows,
-        command.join(' '),
+        resolvedCommand.join(' '),
         sessionName,
         this.createEnvVars(term)
       );
@@ -208,14 +229,7 @@ export class PtyManager extends EventEmitter {
           TERM: term,
         };
 
-        // Resolve command to handle aliases and shell builtins
-        const resolved = ProcessUtils.resolveCommand(command);
-
-        if (resolved.useShell) {
-          logger.debug(`Using shell to execute command: ${command.join(' ')}`);
-        }
-
-        ptyProcess = pty.spawn(resolved.command, resolved.args, {
+        ptyProcess = pty.spawn(finalCommand, finalArgs, {
           name: term,
           cols,
           rows,
@@ -231,16 +245,16 @@ export class PtyManager extends EventEmitter {
             ? (spawnError as NodeJS.ErrnoException).code
             : undefined;
         if (errorCode === 'ENOENT' || errorMessage.includes('ENOENT')) {
-          errorMessage = `Command not found: '${command[0]}'. Please ensure the command exists and is in your PATH.`;
+          errorMessage = `Command not found: '${finalCommand}' (originally: '${command[0]}'). Please ensure the command exists and is in your PATH.`;
         } else if (errorCode === 'EACCES' || errorMessage.includes('EACCES')) {
-          errorMessage = `Permission denied: '${command[0]}'. The command exists but is not executable.`;
+          errorMessage = `Permission denied: '${finalCommand}'. The command exists but is not executable.`;
         } else if (errorCode === 'ENXIO' || errorMessage.includes('ENXIO')) {
-          errorMessage = `Failed to allocate terminal for '${command[0]}'. This may occur if the command doesn't exist or the system cannot create a pseudo-terminal.`;
+          errorMessage = `Failed to allocate terminal for '${finalCommand}'. This may occur if the command doesn't exist or the system cannot create a pseudo-terminal.`;
         } else if (errorMessage.includes('cwd') || errorMessage.includes('working directory')) {
           errorMessage = `Working directory does not exist: '${workingDir}'`;
         }
 
-        logger.error(`Failed to spawn PTY for command '${command.join(' ')}':`, spawnError);
+        logger.error(`Failed to spawn PTY for command '${resolvedCommand.join(' ')}':`, spawnError);
         throw new PtyError(errorMessage, 'SPAWN_FAILED');
       }
 
@@ -266,6 +280,7 @@ export class PtyManager extends EventEmitter {
       this.sessionManager.saveSessionInfo(sessionId, sessionInfo);
 
       logger.log(chalk.green(`Session ${sessionId} created successfully (PID: ${ptyProcess.pid})`));
+      logger.log(chalk.gray(`Running: ${resolvedCommand.join(' ')} in ${workingDir}`));
 
       // Setup PTY event handlers
       this.setupPtyHandlers(session, options.forwardToStdout || false, options.onExit);
