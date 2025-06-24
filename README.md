@@ -205,6 +205,7 @@ Debug logs are written to `~/.vibetunnel/log.txt`.
 - [Contributing Guide](docs/CONTRIBUTING.md) - Development setup and guidelines
 - [Architecture](docs/architecture.md) - System design overview
 - [Build System](docs/build-system.md) - Build process details
+- [Push Notifications](docs/push-notification.md) - How web push notifications work
 
 ## macOS Permissions
 
