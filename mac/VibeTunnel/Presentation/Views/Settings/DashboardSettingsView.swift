@@ -292,8 +292,7 @@ private struct SecuritySection: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        .frame(minWidth: 120, idealWidth: 150)
-                        .fixedSize()
+                        .frame(alignment: .trailing)
                         .onChange(of: authMode) { _, newValue in
                             // Save the authentication mode
                             UserDefaults.standard.set(newValue.rawValue, forKey: "authenticationMode")
@@ -305,6 +304,11 @@ private struct SecuritySection: View {
                         }
                     }
 
+                    Text(authMode.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 // Additional info based on selected mode
@@ -407,31 +411,41 @@ private struct AccessModeView: View {
     let restartServerWithNewBindAddress: () -> Void
 
     var body: some View {
-        HStack {
-            Text("Access Mode")
-                .font(.callout)
-            Spacer()
-            Picker("", selection: $accessModeString) {
-                ForEach(DashboardAccessMode.allCases, id: \.rawValue) { mode in
-                    Text(mode.displayName)
-                        .tag(mode.rawValue)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Access Mode")
+                    .font(.callout)
+                Spacer()
+                Picker("", selection: $accessModeString) {
+                    ForEach(DashboardAccessMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.displayName)
+                            .tag(mode.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .onChange(of: accessModeString) { _, _ in
+                    restartServerWithNewBindAddress()
                 }
             }
-            .labelsHidden()
-            .onChange(of: accessModeString) { _, _ in
-                restartServerWithNewBindAddress()
-            }
-        }
-
-        if accessMode == .network {
-            if let ip = localIPAddress {
-                Text("Dashboard available at http://\(ip):\(serverPort)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Fetching local IP address...")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            
+            if accessMode == .network {
+                if let ip = localIPAddress {
+                    HStack {
+                        Text("Dashboard available at")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        
+                        if let url = URL(string: "http://\(ip):\(serverPort)") {
+                            Link(url.absoluteString, destination: url)
+                                .font(.caption)
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                } else {
+                    Text("Fetching local IP address...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
