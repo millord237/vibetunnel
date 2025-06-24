@@ -129,23 +129,23 @@
 
   /* Authentication styles */
   .auth-container {
-    @apply min-h-screen bg-dark-bg flex items-center justify-center p-6;
+    @apply min-h-screen bg-dark-bg flex items-center justify-center p-4;
   }
 
   .auth-header {
-    @apply text-center mb-8;
+    @apply text-center mb-2;
   }
 
   .auth-title {
-    @apply text-3xl font-mono font-bold text-dark-text mb-2;
+    @apply text-2xl font-mono font-bold text-dark-text;
   }
 
   .auth-subtitle {
-    @apply text-dark-text-muted font-mono;
+    @apply text-dark-text-muted font-mono text-xs;
   }
 
   .auth-form {
-    @apply bg-dark-bg-secondary border border-dark-border rounded-lg p-6 w-full space-y-6;
+    @apply bg-dark-bg-secondary border border-dark-border rounded-lg p-0 w-full;
   }
 
   .auth-divider {
@@ -164,9 +164,8 @@
 
   /* SSH Key Manager styles */
   .ssh-key-item {
-    @apply bg-dark-bg border border-dark-border rounded-lg p-4;
+    @apply bg-dark-bg border-0 rounded-lg p-6;
     @apply transition-all duration-200 ease-in-out;
-    @apply hover:border-accent-green-darker;
   }
 
   .badge {

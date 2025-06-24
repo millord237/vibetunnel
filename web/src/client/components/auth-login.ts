@@ -137,13 +137,16 @@ export class AuthLogin extends LitElement {
 
     return html`
       <div class="auth-container">
-        <div class="w-full max-w-md">
+        <div class="w-full max-w-sm">
           <div class="auth-header">
-            <div class="flex items-center gap-3 justify-center mb-2">
-              <terminal-icon size="48"></terminal-icon>
+            <div class="flex flex-col items-center gap-1 mb-3">
+              <terminal-icon
+                size="40"
+                style="filter: drop-shadow(0 0 10px rgba(124, 230, 161, 0.3));"
+              ></terminal-icon>
               <h2 class="auth-title">VibeTunnel</h2>
+              <p class="auth-subtitle text-sm">Please authenticate to continue</p>
             </div>
-            <p class="auth-subtitle">Please authenticate to continue</p>
           </div>
 
           ${this.error
@@ -179,26 +182,25 @@ export class AuthLogin extends LitElement {
             ${!this.authConfig.disallowUserPassword
               ? html`
                   <!-- Password Login Section (Primary) -->
-                  <div class="ssh-key-item">
+                  <div class="p-5">
                     ${this.userAvatar
                       ? html`
-                          <div class="flex flex-col items-center mb-6">
+                          <div class="flex flex-col items-center mb-3">
                             <img
                               src="${this.userAvatar}"
                               alt="User Avatar"
-                              class="w-20 h-20 rounded-full border-2 border-dark-border mb-3"
+                              class="w-16 h-16 rounded-full mb-2"
+                              style="box-shadow: 0 0 15px rgba(124, 230, 161, 0.25);"
                             />
-                            <p class="text-dark-text text-sm">
-                              ${this.currentUserId
-                                ? `Welcome back, ${this.currentUserId}`
-                                : 'Please authenticate to continue'}
+                            <p class="text-dark-text text-base font-medium">
+                              Welcome back, ${this.currentUserId}
                             </p>
                           </div>
                         `
                       : ''}
-                    <form @submit=${this.handlePasswordLogin} class="space-y-4">
+                    <form @submit=${this.handlePasswordLogin} class="space-y-2">
                       <div>
-                        <label class="form-label">Password</label>
+                        <label class="form-label text-xs mb-1">Password</label>
                         <input
                           type="password"
                           class="input-field"
