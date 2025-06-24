@@ -82,7 +82,7 @@ struct DashboardSettingsView: View {
                 )
             }
             .formStyle(.grouped)
-            .frame(minWidth: 600)
+            .frame(minWidth: 500, idealWidth: 600)
             .navigationTitle("Dashboard")
             .onAppear {
                 onAppearSetup()
@@ -258,10 +258,10 @@ private struct SecuritySection: View {
 
         var displayName: String {
             switch self {
-            case .none: "No Authentication"
-            case .osAuth: "macOS Authentication"
-            case .sshKeys: "SSH Keys Only"
-            case .both: "macOS + SSH Keys"
+            case .none: "None"
+            case .osAuth: "macOS"
+            case .sshKeys: "SSH Keys"
+            case .both: "Both"
             }
         }
 
@@ -280,52 +280,58 @@ private struct SecuritySection: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Authentication mode picker
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Authentication Method")
-                        .font(.callout)
-                        .fontWeight(.medium)
+                    HStack {
+                        Text("Authentication Method")
+                            .font(.callout)
+                        Spacer()
+                        Picker("", selection: $authMode) {
+                            ForEach(AuthenticationMode.allCases, id: \.self) { mode in
+                                Text(mode.displayName)
+                                    .tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(minWidth: 120, idealWidth: 150)
+                        .fixedSize()
+                        .onChange(of: authMode) { _, newValue in
+                            // Save the authentication mode
+                            UserDefaults.standard.set(newValue.rawValue, forKey: "authenticationMode")
 
-                    Picker("", selection: $authMode) {
-                        ForEach(AuthenticationMode.allCases, id: \.self) { mode in
-                            Text(mode.displayName)
-                                .tag(mode)
+                            Task {
+                                logger.info("Authentication mode changed to: \(newValue.rawValue)")
+                                await serverManager.restart()
+                            }
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .onChange(of: authMode) { _, newValue in
-                        // Save the authentication mode
-                        UserDefaults.standard.set(newValue.rawValue, forKey: "authenticationMode")
 
-                        Task {
-                            logger.info("Authentication mode changed to: \(newValue.rawValue)")
-                            await serverManager.restart()
-                        }
-                    }
-
-                    Text(authMode.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
                 // Additional info based on selected mode
                 if authMode == .osAuth || authMode == .both {
-                    HStack {
+                    HStack(alignment: .center, spacing: 6) {
                         Image(systemName: "info.circle")
                             .foregroundColor(.blue)
+                            .font(.system(size: 12))
+                            .frame(width: 16, height: 16)
                         Text("Uses your macOS username: \(NSUserName())")
                             .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
                     }
                 }
 
                 if authMode == .sshKeys || authMode == .both {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "key.fill")
-                                .foregroundColor(.blue)
-                            Text("SSH keys from ~/.ssh/authorized_keys")
-                                .font(.caption)
-                        }
-
-                        Button("Open SSH Keys Folder") {
+                    HStack(alignment: .center, spacing: 6) {
+                        Image(systemName: "key.fill")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 12))
+                            .frame(width: 16, height: 16)
+                        Text("SSH keys from ~/.ssh/authorized_keys")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Open folder") {
                             let sshPath = NSHomeDirectory() + "/.ssh"
                             if FileManager.default.fileExists(atPath: sshPath) {
                                 NSWorkspace.shared.open(URL(fileURLWithPath: sshPath))
@@ -340,6 +346,7 @@ private struct SecuritySection: View {
                             }
                         }
                         .buttonStyle(.link)
+                        .font(.caption)
                     }
                 }
             }
@@ -349,8 +356,8 @@ private struct SecuritySection: View {
         } footer: {
             Text("Localhost connections are always accessible without authentication.")
                 .font(.caption)
-                .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
     }
 }
@@ -368,19 +375,21 @@ private struct ServerConfigurationSection: View {
 
     var body: some View {
         Section {
-            AccessModeView(
-                accessMode: accessMode,
-                accessModeString: $accessModeString,
-                serverPort: serverPort,
-                localIPAddress: localIPAddress,
-                restartServerWithNewBindAddress: restartServerWithNewBindAddress
-            )
+            VStack(alignment: .leading, spacing: 12) {
+                AccessModeView(
+                    accessMode: accessMode,
+                    accessModeString: $accessModeString,
+                    serverPort: serverPort,
+                    localIPAddress: localIPAddress,
+                    restartServerWithNewBindAddress: restartServerWithNewBindAddress
+                )
 
-            PortConfigurationView(
-                serverPort: $serverPort,
-                restartServerWithNewPort: restartServerWithNewPort,
-                serverManager: serverManager
-            )
+                PortConfigurationView(
+                    serverPort: $serverPort,
+                    restartServerWithNewPort: restartServerWithNewPort,
+                    serverManager: serverManager
+                )
+            }
         } header: {
             Text("Server Configuration")
                 .font(.headline)
@@ -415,17 +424,14 @@ private struct AccessModeView: View {
         }
 
         if accessMode == .network {
-            HStack {
-                Image(systemName: "info.circle")
-                    .foregroundColor(.blue)
-                if let ip = localIPAddress {
-                    Text("Dashboard available at http://\(ip):\(serverPort)")
-                        .font(.caption)
-                } else {
-                    Text("Fetching local IP address...")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+            if let ip = localIPAddress {
+                Text("Dashboard available at http://\(ip):\(serverPort)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Fetching local IP address...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -443,37 +449,68 @@ private struct PortConfigurationView: View {
     @State private var portError: String?
 
     var body: some View {
-        HStack {
-            Text("Port")
-                .font(.callout)
-            Spacer()
-            TextField("Port", text: $pendingPort)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-                .focused($isPortFieldFocused)
-                .onSubmit {
-                    validateAndUpdatePort()
-                }
-                .onAppear {
-                    pendingPort = serverPort
-                }
-                .onChange(of: pendingPort) { _, newValue in
-                    // Clear error when user types
-                    portError = nil
-                    // Limit to 5 digits
-                    if newValue.count > 5 {
-                        pendingPort = String(newValue.prefix(5))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Port")
+                    .font(.callout)
+                Spacer()
+                HStack(spacing: 4) {
+                    TextField("", text: $pendingPort)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .multilineTextAlignment(.center)
+                        .focused($isPortFieldFocused)
+                        .onSubmit {
+                            validateAndUpdatePort()
+                        }
+                        .onAppear {
+                            pendingPort = serverPort
+                        }
+                        .onChange(of: pendingPort) { _, newValue in
+                            // Clear error when user types
+                            portError = nil
+                            // Limit to 5 digits
+                            if newValue.count > 5 {
+                                pendingPort = String(newValue.prefix(5))
+                            }
+                        }
+                    
+                    VStack(spacing: 0) {
+                        Button(action: {
+                            if let port = Int(pendingPort), port < 65535 {
+                                pendingPort = String(port + 1)
+                                validateAndUpdatePort()
+                            }
+                        }) {
+                            Image(systemName: "chevron.up")
+                                .font(.system(size: 10))
+                                .frame(width: 16, height: 11)
+                        }
+                        .buttonStyle(.borderless)
+                        
+                        Button(action: {
+                            if let port = Int(pendingPort), port > 1024 {
+                                pendingPort = String(port - 1)
+                                validateAndUpdatePort()
+                            }
+                        }) {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                                .frame(width: 16, height: 11)
+                        }
+                        .buttonStyle(.borderless)
                     }
                 }
-        }
+            }
 
-        if let error = portError {
-            HStack {
-                Image(systemName: "exclamationmark.triangle")
-                    .foregroundColor(.red)
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.red)
+            if let error = portError {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundColor(.red)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
             }
         }
     }
@@ -566,8 +603,10 @@ private struct NgrokIntegrationSection: View {
                 // Link to ngrok dashboard
                 HStack {
                     Image(systemName: "link")
-                    Link("Create free ngrok account", destination: URL(string: "https://dashboard.ngrok.com/signup")!)
-                        .font(.caption)
+                    if let url = URL(string: "https://dashboard.ngrok.com/signup") {
+                        Link("Create free ngrok account", destination: url)
+                            .font(.caption)
+                    }
                 }
             }
         } header: {
@@ -576,7 +615,6 @@ private struct NgrokIntegrationSection: View {
         } footer: {
             Text("ngrok creates secure tunnels to your dashboard from anywhere.")
                 .font(.caption)
-                .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
         }
     }
@@ -683,10 +721,10 @@ private struct PublicURLView: View {
                         showCopiedFeedback = false
                     }
                 }
-            }) {
+            }, label: {
                 Image(systemName: showCopiedFeedback ? "checkmark" : "doc.on.doc")
                     .foregroundColor(showCopiedFeedback ? .green : .accentColor)
-            }
+            })
             .buttonStyle(.borderless)
             .help("Copy URL")
         }
@@ -712,9 +750,7 @@ private struct ErrorView: View {
 
 // MARK: - Previews
 
-struct DashboardSettingsView_Previews: PreviewProvider {
-    static var previews: some View {
-        DashboardSettingsView()
-            .frame(width: 600, height: 800)
-    }
+#Preview("Dashboard Settings") {
+    DashboardSettingsView()
+        .frame(width: 500, height: 800)
 }
