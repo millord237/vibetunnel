@@ -149,7 +149,9 @@ function patchNodePty() {
           npm_config_arch: process.arch,
           npm_config_target_arch: process.arch,
           npm_config_disturl: 'https://nodejs.org/dist',
-          npm_config_build_from_source: 'true'
+          npm_config_build_from_source: 'true',
+          CXXFLAGS: '-std=c++20 -stdlib=libc++ -mmacosx-version-min=14.0',
+          MACOSX_DEPLOYMENT_TARGET: '14.0'
         }
       });
       console.log('Native modules rebuilt successfully with custom Node.js');
@@ -168,7 +170,9 @@ function patchNodePty() {
             npm_config_target: customVersion.substring(1),
             npm_config_arch: process.arch,
             npm_config_target_arch: process.arch,
-            npm_config_disturl: 'https://nodejs.org/dist'
+            npm_config_disturl: 'https://nodejs.org/dist',
+            CXXFLAGS: '-std=c++20 -stdlib=libc++ -mmacosx-version-min=14.0',
+            MACOSX_DEPLOYMENT_TARGET: '14.0'
           }
         });
         console.log('Native module rebuilt from source successfully');

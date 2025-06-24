@@ -100,6 +100,11 @@ rm -rf dist public/bundle public/output.css native
 
 # Install dependencies
 echo "Installing dependencies..."
+# For Xcode builds, ensure C++20 standard for native modules
+export MACOSX_DEPLOYMENT_TARGET="14.0"
+export CXXFLAGS="-std=c++20 -stdlib=libc++ -mmacosx-version-min=14.0"
+export CXX="${CXX:-clang++}"
+export CC="${CC:-clang}"
 npm install
 
 # Determine build configuration
