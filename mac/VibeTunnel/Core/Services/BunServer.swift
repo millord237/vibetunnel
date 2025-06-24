@@ -1,6 +1,5 @@
 import Foundation
 import OSLog
-import CryptoKit
 
 /// Server state enumeration
 enum ServerState {
@@ -45,21 +44,6 @@ final class BunServer {
     var port: String = ""
 
     var bindAddress: String = "127.0.0.1"
-    
-    /// Local authentication token for bypassing auth on localhost
-    private let localAuthToken: String = {
-        // Generate a secure random token for this session
-        let randomData = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
-        return randomData.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }()
-    
-    /// Get the local auth token for use in HTTP requests
-    var localToken: String {
-        localAuthToken
-    }
 
     // MARK: - Initialization
 
@@ -169,9 +153,9 @@ final class BunServer {
         
         // Add local bypass authentication for the Mac app
         if authMode != "none" {
-            // Enable local bypass with our generated token
-            vibetunnelArgs += " --allow-local-bypass --local-auth-token \(localAuthToken)"
-            logger.info("Local authentication bypass enabled for Mac app")
+            // Enable local bypass without requiring token for browser access
+            vibetunnelArgs += " --allow-local-bypass"
+            logger.info("Local authentication bypass enabled for localhost connections")
         }
 
         // Create wrapper to run vibetunnel with a parent death signal
