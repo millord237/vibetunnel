@@ -298,105 +298,238 @@ export class LogViewer extends LitElement {
     return html`
       ${scrollbarStyles}
       <div class="flex flex-col h-full bg-dark-bg text-dark-text font-mono">
-        <!-- Header -->
-        <div class="flex items-center gap-3 p-4 bg-dark-bg-secondary border-b border-dark-border">
-          <!-- Back button -->
-          <button
-            class="px-3 py-1.5 bg-dark-bg border border-dark-border rounded text-sm text-dark-text hover:border-accent-green hover:text-accent-green transition-colors flex items-center gap-2 flex-shrink-0"
-            @click=${() => (window.location.href = '/')}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-            Back
-          </button>
+        <!-- Header - single row on desktop, two rows on mobile -->
+        <div class="bg-dark-bg-secondary border-b border-dark-border p-3 sm:p-4">
+          <!-- Mobile layout (two rows) -->
+          <div class="sm:hidden">
+            <!-- Top row with back button and title -->
+            <div class="flex items-center gap-2 mb-3">
+              <!-- Back button -->
+              <button
+                class="p-2 bg-dark-bg border border-dark-border rounded text-sm text-dark-text hover:border-accent-green hover:text-accent-green transition-colors flex items-center gap-1 flex-shrink-0"
+                @click=${() => (window.location.href = '/')}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
 
-          <h1 class="text-lg font-bold text-accent-green flex items-center gap-2 flex-shrink-0">
-            <terminal-icon size="24"></terminal-icon>
-            <span>System Logs</span>
-          </h1>
+              <h1
+                class="text-base font-bold text-accent-green flex items-center gap-2 flex-shrink-0"
+              >
+                <terminal-icon size="20"></terminal-icon>
+                <span>System Logs</span>
+              </h1>
 
-          <div class="flex-1 flex flex-wrap gap-2 items-center justify-end">
-            <!-- Search input -->
-            <input
-              type="text"
-              class="px-3 py-1.5 bg-dark-bg border border-dark-border rounded text-sm text-dark-text placeholder-dark-text-muted focus:outline-none focus:border-accent-green transition-colors flex-1 sm:flex-initial sm:w-64 md:w-80"
-              placeholder="Filter logs..."
-              .value=${this.filter}
-              @input=${(e: Event) => {
-                this.filter = (e.target as HTMLInputElement).value;
-              }}
-            />
-
-            <!-- Level filters -->
-            <div class="flex gap-1">
-              ${levels.map(
-                (level) => html`
-                  <button
-                    class="px-2 py-1 text-xs uppercase font-bold rounded transition-colors ${this.levelFilter.has(
-                      level
-                    )
-                      ? level === 'error'
-                        ? 'bg-status-error text-dark-bg'
-                        : level === 'warn'
-                          ? 'bg-status-warning text-dark-bg'
-                          : level === 'debug'
-                            ? 'bg-dark-text-muted text-dark-bg'
-                            : 'bg-dark-text text-dark-bg'
-                      : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
-                    @click=${() => this.toggleLevel(level)}
+              <!-- Auto-scroll toggle (mobile position) -->
+              <div class="ml-auto">
+                <button
+                  class="p-2 text-xs uppercase font-bold rounded transition-colors ${this.autoScroll
+                    ? 'bg-accent-green text-dark-bg'
+                    : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
+                  @click=${() => {
+                    this.autoScroll = !this.autoScroll;
+                  }}
+                  title="Auto Scroll"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
                   >
-                    ${level}
-                  </button>
-                `
-              )}
+                    <path d="M12 5v14M19 12l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
-            <!-- Client/Server toggles -->
-            <div class="flex gap-1">
-              <button
-                class="px-2 py-1 text-xs uppercase font-bold rounded transition-colors ${this
-                  .showClient
-                  ? 'bg-orange-500 text-dark-bg'
-                  : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
-                @click=${() => {
-                  this.showClient = !this.showClient;
+            <!-- Filters row -->
+            <div class="flex flex-wrap gap-2">
+              <!-- Search input -->
+              <input
+                type="text"
+                class="px-3 py-1.5 bg-dark-bg border border-dark-border rounded text-sm text-dark-text placeholder-dark-text-muted focus:outline-none focus:border-accent-green transition-colors w-full"
+                placeholder="Filter logs..."
+                .value=${this.filter}
+                @input=${(e: Event) => {
+                  this.filter = (e.target as HTMLInputElement).value;
                 }}
+              />
+
+              <!-- Filters container -->
+              <div class="flex gap-2 items-center">
+                <!-- Level filters -->
+                <div class="flex gap-1">
+                  ${levels.map(
+                    (level) => html`
+                      <button
+                        class="px-1.5 py-1 text-xs uppercase font-bold rounded transition-colors ${this.levelFilter.has(
+                          level
+                        )
+                          ? level === 'error'
+                            ? 'bg-status-error text-dark-bg'
+                            : level === 'warn'
+                              ? 'bg-status-warning text-dark-bg'
+                              : level === 'debug'
+                                ? 'bg-dark-text-muted text-dark-bg'
+                                : 'bg-dark-text text-dark-bg'
+                          : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
+                        @click=${() => this.toggleLevel(level)}
+                        title="${level} logs"
+                      >
+                        ${level === 'error'
+                          ? 'ERR'
+                          : level === 'warn'
+                            ? 'WRN'
+                            : level === 'debug'
+                              ? 'DBG'
+                              : 'LOG'}
+                      </button>
+                    `
+                  )}
+                </div>
+
+                <!-- Client/Server toggles -->
+                <div class="flex gap-1">
+                  <button
+                    class="px-1.5 py-1 text-xs uppercase font-bold rounded transition-colors ${this
+                      .showClient
+                      ? 'bg-orange-500 text-dark-bg'
+                      : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
+                    @click=${() => {
+                      this.showClient = !this.showClient;
+                    }}
+                    title="Client logs"
+                  >
+                    C
+                  </button>
+                  <button
+                    class="px-1.5 py-1 text-xs uppercase font-bold rounded transition-colors ${this
+                      .showServer
+                      ? 'bg-accent-green text-dark-bg'
+                      : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
+                    @click=${() => {
+                      this.showServer = !this.showServer;
+                    }}
+                    title="Server logs"
+                  >
+                    S
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Desktop layout (single row) -->
+          <div class="hidden sm:flex items-center gap-3">
+            <!-- Back button -->
+            <button
+              class="px-3 py-1.5 bg-dark-bg border border-dark-border rounded text-sm text-dark-text hover:border-accent-green hover:text-accent-green transition-colors flex items-center gap-2 flex-shrink-0"
+              @click=${() => (window.location.href = '/')}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
               >
-                CLIENT
-              </button>
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+              Back
+            </button>
+
+            <h1 class="text-lg font-bold text-accent-green flex items-center gap-2 flex-shrink-0">
+              <terminal-icon size="24"></terminal-icon>
+              <span>System Logs</span>
+            </h1>
+
+            <div class="flex-1 flex flex-wrap gap-2 items-center justify-end">
+              <!-- Search input -->
+              <input
+                type="text"
+                class="px-3 py-1.5 bg-dark-bg border border-dark-border rounded text-sm text-dark-text placeholder-dark-text-muted focus:outline-none focus:border-accent-green transition-colors flex-1 sm:flex-initial sm:w-64 md:w-80"
+                placeholder="Filter logs..."
+                .value=${this.filter}
+                @input=${(e: Event) => {
+                  this.filter = (e.target as HTMLInputElement).value;
+                }}
+              />
+
+              <!-- Level filters -->
+              <div class="flex gap-1">
+                ${levels.map(
+                  (level) => html`
+                    <button
+                      class="px-2 py-1 text-xs uppercase font-bold rounded transition-colors ${this.levelFilter.has(
+                        level
+                      )
+                        ? level === 'error'
+                          ? 'bg-status-error text-dark-bg'
+                          : level === 'warn'
+                            ? 'bg-status-warning text-dark-bg'
+                            : level === 'debug'
+                              ? 'bg-dark-text-muted text-dark-bg'
+                              : 'bg-dark-text text-dark-bg'
+                        : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
+                      @click=${() => this.toggleLevel(level)}
+                    >
+                      ${level}
+                    </button>
+                  `
+                )}
+              </div>
+
+              <!-- Client/Server toggles -->
+              <div class="flex gap-1">
+                <button
+                  class="px-2 py-1 text-xs uppercase font-bold rounded transition-colors ${this
+                    .showClient
+                    ? 'bg-orange-500 text-dark-bg'
+                    : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
+                  @click=${() => {
+                    this.showClient = !this.showClient;
+                  }}
+                >
+                  CLIENT
+                </button>
+                <button
+                  class="px-2 py-1 text-xs uppercase font-bold rounded transition-colors ${this
+                    .showServer
+                    ? 'bg-accent-green text-dark-bg'
+                    : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
+                  @click=${() => {
+                    this.showServer = !this.showServer;
+                  }}
+                >
+                  SERVER
+                </button>
+              </div>
+
+              <!-- Auto-scroll toggle -->
               <button
-                class="px-2 py-1 text-xs uppercase font-bold rounded transition-colors ${this
-                  .showServer
+                class="px-3 py-1 text-xs uppercase font-bold rounded transition-colors ${this
+                  .autoScroll
                   ? 'bg-accent-green text-dark-bg'
                   : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
                 @click=${() => {
-                  this.showServer = !this.showServer;
+                  this.autoScroll = !this.autoScroll;
                 }}
               >
-                SERVER
+                AUTO SCROLL
               </button>
             </div>
-
-            <!-- Auto-scroll toggle -->
-            <button
-              class="px-3 py-1 text-xs uppercase font-bold rounded transition-colors ${this
-                .autoScroll
-                ? 'bg-accent-green text-dark-bg'
-                : 'bg-dark-bg-tertiary text-dark-text-muted border border-dark-border'}"
-              @click=${() => {
-                this.autoScroll = !this.autoScroll;
-              }}
-            >
-              AUTO SCROLL
-            </button>
           </div>
         </div>
 
