@@ -701,10 +701,11 @@ export class Terminal extends LitElement {
 
       // Check if cursor is on this line (relative to viewport)
       const isCursorLine = row === cursorY;
-      // Hide cursor for exited sessions or when explicitly disabled via ANSI escape sequences
-      const shouldShowCursor =
-        isCursorLine && this.cursorVisible && this.sessionStatus !== 'exited';
-      const lineContent = this.renderLine(line, cell, shouldShowCursor ? cursorX : -1);
+      const lineContent = this.renderLine(
+        line,
+        cell,
+        isCursorLine && this.cursorVisible ? cursorX : -1
+      );
 
       html += `<div class="terminal-line"${style}>${lineContent || ''}</div>`;
     }
