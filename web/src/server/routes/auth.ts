@@ -10,7 +10,6 @@ interface AuthRoutesConfig {
   enableSSHKeys?: boolean;
   disallowUserPassword?: boolean;
   noAuth?: boolean;
-  allowLocalBypass?: boolean;
 }
 
 export function createAuthRoutes(config: AuthRoutesConfig): Router {
@@ -175,19 +174,10 @@ export function createAuthRoutes(config: AuthRoutesConfig): Router {
    */
   router.get('/config', (req, res) => {
     try {
-      // Check if this is a local request and local bypass is enabled
-      const clientIp = req.ip || req.socket.remoteAddress || '';
-      const localIPs = ['127.0.0.1', '::1', '::ffff:127.0.0.1', 'localhost'];
-      const isLocalRequest =
-        localIPs.includes(clientIp) && !req.headers['x-forwarded-for'] && !req.headers['x-real-ip'];
-
-      // If local bypass is enabled and this is a local request, report as noAuth
-      const effectiveNoAuth = config.noAuth || (config.allowLocalBypass && isLocalRequest);
-
       res.json({
         enableSSHKeys: config.enableSSHKeys || false,
         disallowUserPassword: config.disallowUserPassword || false,
-        noAuth: effectiveNoAuth,
+        noAuth: config.noAuth || false,
       });
     } catch (error) {
       console.error('Error getting auth config:', error);
