@@ -25,6 +25,15 @@ Access notification settings by clicking the notification status indicator:
 
 Note that just because you can configure something, does not mean your browser will support it.
 
+## Push and Claude
+
+Claude code by default tries auto detection for terminal bells which can cause issues.  You can force it
+to emit a bell with this command:
+
+```
+claude config set --global preferredNotifChannel terminal_bell
+```
+
 ## Troubleshooting
 
 - **Not receiving notifications**: Check that notifications are enabled both in VibeTunnel settings and your browser permissions
