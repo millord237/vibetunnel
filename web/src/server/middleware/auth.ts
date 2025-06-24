@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import chalk from 'chalk';
 import { AuthService } from '../services/auth-service.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('auth');
 
 interface AuthConfig {
   enableSSHKeys: boolean;
@@ -47,7 +49,7 @@ export function createAuthMiddleware(config: AuthConfig) {
 
       // In HQ mode, check if this is a valid HQ-to-remote bearer token
       if (config.isHQMode && config.bearerToken && token === config.bearerToken) {
-        console.log('[AUTH] ✅ Valid HQ bearer token authentication');
+        logger.debug('Valid HQ bearer token authentication');
         req.isHQRequest = true;
         req.authMethod = 'hq-bearer';
         return next();
@@ -61,29 +63,28 @@ export function createAuthMiddleware(config: AuthConfig) {
           req.authMethod = 'ssh-key'; // JWT tokens are issued for SSH key auth
           return next();
         } else {
-          console.log('[AUTH] ❌ Invalid JWT token');
+          logger.error('Invalid JWT token');
         }
       } else if (config.authService) {
         const verification = config.authService.verifyToken(token);
         if (verification.valid && verification.userId) {
-          console.log(`[AUTH] ✅ Valid JWT token for user: ${verification.userId}`);
           req.userId = verification.userId;
           req.authMethod = 'password'; // Password auth only
           return next();
         } else {
-          console.log('[AUTH] ❌ Invalid JWT token');
+          logger.error('Invalid JWT token');
         }
       }
 
       // For non-HQ mode, check if bearer token matches remote expectation
       if (!config.isHQMode && config.bearerToken && token === config.bearerToken) {
-        console.log('[AUTH] ✅ Valid remote bearer token authentication');
+        logger.debug('Valid remote bearer token authentication');
         req.authMethod = 'hq-bearer';
         return next();
       }
 
-      console.log(
-        `[AUTH] ❌ Bearer token rejected - HQ mode: ${config.isHQMode}, token matches: ${config.bearerToken === token}`
+      logger.error(
+        `Bearer token rejected - HQ mode: ${config.isHQMode}, token matches: ${config.bearerToken === token}`
       );
     }
 
@@ -91,19 +92,17 @@ export function createAuthMiddleware(config: AuthConfig) {
     if (tokenQuery && config.authService) {
       const verification = config.authService.verifyToken(tokenQuery);
       if (verification.valid && verification.userId) {
-        console.log(`[AUTH] ✅ Valid query token for user: ${verification.userId}`);
+        logger.debug(`Valid query token for user: ${verification.userId}`);
         req.userId = verification.userId;
         req.authMethod = config.enableSSHKeys ? 'ssh-key' : 'password';
         return next();
       } else {
-        console.log('[AUTH] ❌ Invalid query token');
+        logger.error('Invalid query token');
       }
     }
 
     // No valid auth provided
-    console.log(
-      chalk.red(`[AUTH] ❌ Unauthorized request to ${req.method} ${req.path} from ${req.ip}`)
-    );
+    logger.error(`Unauthorized request to ${req.method} ${req.path} from ${req.ip}`);
     res.setHeader('WWW-Authenticate', 'Bearer realm="VibeTunnel"');
     res.status(401).json({ error: 'Authentication required' });
   };

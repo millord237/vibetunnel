@@ -66,7 +66,9 @@ if (fs.existsSync(seaPamPath) || fs.existsSync(seaNativePamPath)) {
 } else {
   // Development mode - use regular require
   try {
-    authenticate = require('authenticate-pam');
+    const pamModule = require('authenticate-pam');
+    // Handle both direct export and default export cases
+    authenticate = pamModule.authenticate || pamModule.default || pamModule;
   } catch (_error) {
     // In development mode but module not found
     console.warn(
