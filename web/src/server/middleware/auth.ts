@@ -11,12 +11,40 @@ interface AuthConfig {
   isHQMode: boolean;
   bearerToken?: string; // Token that HQ must use to authenticate with this remote
   authService?: AuthService; // Enhanced auth service for JWT tokens
+  allowLocalBypass?: boolean; // Allow localhost connections to bypass auth
+  localAuthToken?: string; // Token for localhost authentication
 }
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
-  authMethod?: 'ssh-key' | 'password' | 'hq-bearer' | 'no-auth';
+  authMethod?: 'ssh-key' | 'password' | 'hq-bearer' | 'no-auth' | 'local-bypass';
   isHQRequest?: boolean;
+}
+
+// Helper function to check if request is from localhost
+function isLocalRequest(req: Request): boolean {
+  // Get the real client IP
+  const clientIp = req.ip || req.socket.remoteAddress || '';
+
+  // Check for localhost IPs
+  const localIPs = ['127.0.0.1', '::1', '::ffff:127.0.0.1', 'localhost'];
+  const ipIsLocal = localIPs.includes(clientIp);
+
+  // Additional security checks to prevent spoofing
+  const noForwardedFor = !req.headers['x-forwarded-for'];
+  const noRealIP = !req.headers['x-real-ip'];
+  const noForwardedHost = !req.headers['x-forwarded-host'];
+
+  // Check hostname
+  const hostIsLocal =
+    req.hostname === 'localhost' || req.hostname === '127.0.0.1' || req.hostname === '[::1]';
+
+  logger.debug(
+    `Local request check - IP: ${clientIp}, Host: ${req.hostname}, ` +
+      `Forwarded headers: ${!noForwardedFor || !noRealIP || !noForwardedHost}`
+  );
+
+  return ipIsLocal && noForwardedFor && noRealIP && noForwardedHost && hostIsLocal;
 }
 
 export function createAuthMiddleware(config: AuthConfig) {
@@ -35,6 +63,28 @@ export function createAuthMiddleware(config: AuthConfig) {
     if (config.noAuth) {
       req.authMethod = 'no-auth';
       return next();
+    }
+
+    // Check for local bypass if enabled
+    if (config.allowLocalBypass && isLocalRequest(req)) {
+      // If a local auth token is configured, check for it
+      if (config.localAuthToken) {
+        const providedToken = req.headers['x-vibetunnel-local'] as string;
+        if (providedToken === config.localAuthToken) {
+          logger.debug('Local request authenticated with token');
+          req.authMethod = 'local-bypass';
+          req.userId = 'local-user';
+          return next();
+        } else {
+          logger.debug('Local request missing or invalid token');
+        }
+      } else {
+        // No token required for local bypass
+        logger.debug('Local request authenticated without token');
+        req.authMethod = 'local-bypass';
+        req.userId = 'local-user';
+        return next();
+      }
     }
 
     // Only log auth requests that might be problematic (no header or failures)
