@@ -109,9 +109,14 @@ export class FileBrowser extends LitElement {
   private editorRef = createRef<HTMLElement>();
   private pathInputRef = createRef<HTMLInputElement>();
   private authClient = new AuthClient();
+  private noAuthMode = false;
 
   async connectedCallback() {
     super.connectedCallback();
+
+    // Check auth configuration
+    await this.checkAuthConfig();
+
     if (this.visible) {
       this.currentPath = this.session?.workingDir || '.';
       await this.loadDirectory(this.currentPath);
@@ -146,9 +151,9 @@ export class FileBrowser extends LitElement {
       const url = `/api/fs/browse?${params}`;
       logger.debug(`loading directory: ${dirPath}`);
       logger.debug(`fetching URL: ${url}`);
-      const response = await fetch(url, {
-        headers: { ...this.authClient.getAuthHeader() },
-      });
+
+      const headers = this.noAuthMode ? {} : { ...this.authClient.getAuthHeader() };
+      const response = await fetch(url, { headers });
       logger.debug(`response status: ${response.status}`);
 
       if (response.ok) {
@@ -192,8 +197,9 @@ export class FileBrowser extends LitElement {
       logger.debug(`loading preview for file: ${file.name}`);
       logger.debug(`file path: ${file.path}`);
 
+      const headers = this.noAuthMode ? {} : { ...this.authClient.getAuthHeader() };
       const response = await fetch(`/api/fs/preview?path=${encodeURIComponent(file.path)}`, {
-        headers: { ...this.authClient.getAuthHeader() },
+        headers,
       });
       if (response.ok) {
         this.preview = await response.json();
@@ -216,12 +222,13 @@ export class FileBrowser extends LitElement {
 
     try {
       // Load both the unified diff and the full content for Monaco
+      const headers = this.noAuthMode ? {} : { ...this.authClient.getAuthHeader() };
       const [diffResponse, contentResponse] = await Promise.all([
         fetch(`/api/fs/diff?path=${encodeURIComponent(file.path)}`, {
-          headers: { ...this.authClient.getAuthHeader() },
+          headers,
         }),
         fetch(`/api/fs/diff-content?path=${encodeURIComponent(file.path)}`, {
-          headers: { ...this.authClient.getAuthHeader() },
+          headers,
         }),
       ]);
 
@@ -785,6 +792,19 @@ export class FileBrowser extends LitElement {
     document.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('resize', this.handleResize);
     this.removeTouchHandlers();
+  }
+
+  private async checkAuthConfig() {
+    try {
+      const response = await fetch('/api/auth/config');
+      if (response.ok) {
+        const config = await response.json();
+        this.noAuthMode = config.noAuth === true;
+        logger.debug('Auth config:', config);
+      }
+    } catch (error) {
+      logger.error('Failed to fetch auth config:', error);
+    }
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
