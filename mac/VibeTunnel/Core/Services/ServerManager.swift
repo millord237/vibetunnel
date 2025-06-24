@@ -224,6 +224,9 @@ class ServerManager {
             }
 
             logger.info("Started server on port \(self.port)")
+            
+            // Pass the local auth token to SessionMonitor
+            SessionMonitor.shared.setLocalAuthToken(server.localToken)
 
             // Trigger cleanup of old sessions after server starts
             await triggerInitialCleanup()
@@ -253,6 +256,9 @@ class ServerManager {
         await server.stop()
         bunServer = nil
         isRunning = false
+        
+        // Clear the auth token from SessionMonitor
+        SessionMonitor.shared.setLocalAuthToken(nil)
 
         // Reset crash tracking when manually stopped
         consecutiveCrashes = 0
@@ -316,6 +322,11 @@ class ServerManager {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.timeoutInterval = 10
+            
+            // Add local auth token if available
+            if let server = bunServer {
+                request.setValue(server.localToken, forHTTPHeaderField: "X-VibeTunnel-Local")
+            }
 
             // Make the cleanup request
             let (data, response) = try await URLSession.shared.data(for: request)

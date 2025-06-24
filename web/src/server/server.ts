@@ -63,6 +63,7 @@ interface Config {
   bellNotificationsEnabled: boolean;
   // Local bypass configuration
   allowLocalBypass: boolean;
+  localAuthToken: string | null;
 }
 
 // Show help message
@@ -81,6 +82,7 @@ Options:
   --disallow-user-password  Disable password auth, SSH keys only (auto-enables --enable-ssh-keys)
   --no-auth             Disable authentication (auto-login as current user)
   --allow-local-bypass  Allow localhost connections to bypass authentication
+  --local-auth-token <token>  Token for localhost authentication bypass
   --debug               Enable debug logging
 
 Push Notification Options:
@@ -146,6 +148,7 @@ function parseArgs(): Config {
     bellNotificationsEnabled: true, // Enable bell notifications by default
     // Local bypass configuration
     allowLocalBypass: false,
+    localAuthToken: null as string | null,
   };
 
   // Check for help flag first
@@ -204,6 +207,9 @@ function parseArgs(): Config {
       config.generateVapidKeys = true;
     } else if (args[i] === '--allow-local-bypass') {
       config.allowLocalBypass = true;
+    } else if (args[i] === '--local-auth-token' && i + 1 < args.length) {
+      config.localAuthToken = args[i + 1];
+      i++; // Skip the token value in next iteration
     } else if (args[i].startsWith('--')) {
       // Unknown argument
       logger.error(`Unknown argument: ${args[i]}`);
@@ -436,6 +442,7 @@ export async function createApp(): Promise<AppInstance> {
     bearerToken: remoteBearerToken || undefined, // Token that HQ must use to auth with us
     authService, // Add enhanced auth service for JWT tokens
     allowLocalBypass: config.allowLocalBypass,
+    localAuthToken: config.localAuthToken || undefined,
   });
 
   // Serve static files with .html extension handling

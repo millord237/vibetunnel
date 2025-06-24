@@ -12,6 +12,7 @@ interface AuthConfig {
   bearerToken?: string; // Token that HQ must use to authenticate with this remote
   authService?: AuthService; // Enhanced auth service for JWT tokens
   allowLocalBypass?: boolean; // Allow localhost connections to bypass auth
+  localAuthToken?: string; // Token for localhost authentication
 }
 
 interface AuthenticatedRequest extends Request {
@@ -66,10 +67,24 @@ export function createAuthMiddleware(config: AuthConfig) {
 
     // Check for local bypass if enabled
     if (config.allowLocalBypass && isLocalRequest(req)) {
-      logger.debug('Local request authenticated - bypassing auth');
-      req.authMethod = 'local-bypass';
-      req.userId = 'local-user';
-      return next();
+      // If a local auth token is configured, check for it
+      if (config.localAuthToken) {
+        const providedToken = req.headers['x-vibetunnel-local'] as string;
+        if (providedToken === config.localAuthToken) {
+          logger.debug('Local request authenticated with token');
+          req.authMethod = 'local-bypass';
+          req.userId = 'local-user';
+          return next();
+        } else {
+          logger.debug('Local request missing or invalid token');
+        }
+      } else {
+        // No token required for local bypass
+        logger.debug('Local request authenticated without token');
+        req.authMethod = 'local-bypass';
+        req.userId = 'local-user';
+        return next();
+      }
     }
 
     // Only log auth requests that might be problematic (no header or failures)
