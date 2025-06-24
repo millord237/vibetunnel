@@ -241,6 +241,7 @@ Created with ❤️ by:
 - [@mitsuhiko](https://lucumr.pocoo.org/) - Armin Ronacher  
 - [@steipete](https://steipete.com/) - Peter Steinberger
 - [@hjanuschka](https://x.com/hjanuschka) - Helmut Januschka
+- [@manuelmaly](https://x.com/manuelmaly) - Manuel Maly
 
 ## License
 
