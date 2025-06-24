@@ -479,6 +479,7 @@ export async function createApp(): Promise<AppInstance> {
       enableSSHKeys: config.enableSSHKeys,
       disallowUserPassword: config.disallowUserPassword,
       noAuth: config.noAuth,
+      allowLocalBypass: config.allowLocalBypass,
     })
   );
   logger.debug('Mounted authentication routes');
