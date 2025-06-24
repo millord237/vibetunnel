@@ -300,7 +300,7 @@ export class SessionView extends LitElement {
   private async initializeTerminal() {
     const terminalElement = this.querySelector('vibe-terminal') as Terminal;
     if (!terminalElement || !this.session) {
-      logger.warn(`[${this.instanceId}] Cannot initialize terminal - missing element or session`);
+      logger.warn(`Cannot initialize terminal - missing element or session`);
       return;
     }
 
@@ -337,24 +337,24 @@ export class SessionView extends LitElement {
       if (this.connected) {
         this.connectToStream();
       } else {
-        logger.warn(`[${this.instanceId}] Component disconnected before stream connection`);
+        logger.warn(`Component disconnected before stream connection`);
       }
     }, 0);
   }
 
   private connectToStream() {
     if (!this.terminal || !this.session) {
-      logger.warn(`[${this.instanceId}] Cannot connect to stream - missing terminal or session`);
+      logger.warn(`Cannot connect to stream - missing terminal or session`);
       return;
     }
 
     // Don't connect if we're already disconnected
     if (!this.connected) {
-      logger.warn(`[${this.instanceId}] Component already disconnected, not connecting to stream`);
+      logger.warn(`Component already disconnected, not connecting to stream`);
       return;
     }
 
-    logger.log(`[${this.instanceId}] Connecting to stream for session ${this.session.id}`);
+    logger.log(`Connecting to stream for session ${this.session.id}`);
 
     // Clean up existing connection
     this.cleanupStreamConnection();

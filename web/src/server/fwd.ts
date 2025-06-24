@@ -22,27 +22,26 @@ import { generateSessionName } from './utils/session-naming.js';
 const logger = createLogger('fwd');
 
 function showUsage() {
-  logger.log('VibeTunnel Forward (fwd.ts)');
-  logger.log('');
-  logger.log('Usage:');
-  logger.log('  npx tsx src/fwd.ts [--session-id <id>] <command> [args...]');
-  logger.log('');
-  logger.log('Options:');
-  logger.log('  --session-id <id>   Use a pre-generated session ID');
-  logger.log('');
-  logger.log('Examples:');
-  logger.log('  npx tsx src/fwd.ts claude --resume');
-  logger.log('  npx tsx src/fwd.ts bash -l');
-  logger.log('  npx tsx src/fwd.ts python3 -i');
-  logger.log('  npx tsx src/fwd.ts --session-id abc123 claude');
-  logger.log('');
-  logger.log('The command will be spawned in the current working directory');
-  logger.log('and managed through the VibeTunnel PTY infrastructure.');
+  console.log(chalk.blue(`VibeTunnel Forward v${VERSION}`) + chalk.gray(` (${BUILD_DATE})`));
+  console.log('');
+  console.log('Usage:');
+  console.log('  npx tsx src/fwd.ts [--session-id <id>] <command> [args...]');
+  console.log('');
+  console.log('Options:');
+  console.log('  --session-id <id>   Use a pre-generated session ID');
+  console.log('');
+  console.log('Examples:');
+  console.log('  npx tsx src/fwd.ts claude --resume');
+  console.log('  npx tsx src/fwd.ts bash -l');
+  console.log('  npx tsx src/fwd.ts python3 -i');
+  console.log('  npx tsx src/fwd.ts --session-id abc123 claude');
+  console.log('');
+  console.log('The command will be spawned in the current working directory');
+  console.log('and managed through the VibeTunnel PTY infrastructure.');
 }
 
 export async function startVibeTunnelForward(args: string[]) {
   // Log startup with version (logger already initialized in cli.ts)
-  logger.log(chalk.blue(`VibeTunnel Forward v${VERSION}`) + chalk.gray(` (${BUILD_DATE})`));
   if (process.env.VIBETUNNEL_DEBUG === '1' || process.env.VIBETUNNEL_DEBUG === 'true') {
     logger.debug('Debug mode enabled');
   }
@@ -53,6 +52,8 @@ export async function startVibeTunnelForward(args: string[]) {
     closeLogger();
     process.exit(0);
   }
+
+  logger.log(chalk.blue(`VibeTunnel Forward v${VERSION}`) + chalk.gray(` (${BUILD_DATE})`));
 
   // Check for --session-id parameter
   let sessionId: string | undefined;

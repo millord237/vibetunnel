@@ -1,8 +1,11 @@
 {
-  "name": "vibetunnel-web",
+  "name": "@vibetunnel/vibetunnel-cli",
   "version": "1.0.0",
   "description": "Web frontend for terminal multiplexer",
   "main": "dist/server.js",
+  "bin": {
+    "vibetunnel": "./dist/vibetunnel-cli"
+  },
   "scripts": {
     "clean": "node scripts/clean.js",
     "dev": "node scripts/dev.js",

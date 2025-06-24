@@ -55,6 +55,48 @@ async function build() {
   console.log('Building server...');
   execSync('tsc', { stdio: 'inherit' });
 
+  // Bundle CLI
+  console.log('Bundling CLI...');
+  try {
+    await esbuild.build({
+      entryPoints: ['src/cli.ts'],
+      bundle: true,
+      platform: 'node',
+      target: 'node18',
+      format: 'cjs',
+      outfile: 'dist/vibetunnel-cli',
+      external: [
+        '@homebridge/node-pty-prebuilt-multiarch',
+        'authenticate-pam',
+      ],
+      minify: true,
+      sourcemap: false,
+      loader: {
+        '.ts': 'ts',
+        '.js': 'js',
+      },
+    });
+    
+    // Read the file and ensure it has exactly one shebang
+    let content = fs.readFileSync('dist/vibetunnel-cli', 'utf8');
+    
+    // Remove any existing shebangs
+    content = content.replace(/^#!.*\n/gm, '');
+    
+    // Add a single shebang at the beginning
+    content = '#!/usr/bin/env node\n' + content;
+    
+    // Write the fixed content back
+    fs.writeFileSync('dist/vibetunnel-cli', content);
+    
+    // Make the CLI executable
+    fs.chmodSync('dist/vibetunnel-cli', '755');
+    console.log('CLI bundle created successfully');
+  } catch (error) {
+    console.error('CLI bundling failed:', error);
+    process.exit(1);
+  }
+
   // Build native executable
   console.log('Building native executable...');
 
