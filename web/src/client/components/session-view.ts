@@ -260,15 +260,6 @@ export class SessionView extends LitElement {
   private cleanupStreamConnection(): void {
     if (this.streamConnection) {
       logger.log('Cleaning up stream connection');
-
-      // Remove any custom error handlers we added
-      if (this.streamConnection.errorHandler) {
-        this.streamConnection.eventSource.removeEventListener(
-          'error',
-          this.streamConnection.errorHandler
-        );
-      }
-
       this.streamConnection.disconnect();
       this.streamConnection = null;
     }
@@ -293,7 +284,7 @@ export class SessionView extends LitElement {
     }
 
     // Initialize terminal after first render when terminal element exists
-    if (!this.terminal && this.session && !this.loading) {
+    if (!this.terminal && this.session && !this.loading && this.connected) {
       const terminalElement = this.querySelector('vibe-terminal') as Terminal;
       if (terminalElement) {
         this.initializeTerminal();
@@ -308,7 +299,10 @@ export class SessionView extends LitElement {
 
   private async initializeTerminal() {
     const terminalElement = this.querySelector('vibe-terminal') as Terminal;
-    if (!terminalElement || !this.session) return;
+    if (!terminalElement || !this.session) {
+      logger.warn(`[${this.instanceId}] Cannot initialize terminal - missing element or session`);
+      return;
+    }
 
     this.terminal = terminalElement;
 
@@ -338,11 +332,29 @@ export class SessionView extends LitElement {
     );
 
     // Connect to stream directly without artificial delays
-    this.connectToStream();
+    // Use setTimeout to ensure we're still connected after all synchronous updates
+    setTimeout(() => {
+      if (this.connected) {
+        this.connectToStream();
+      } else {
+        logger.warn(`[${this.instanceId}] Component disconnected before stream connection`);
+      }
+    }, 0);
   }
 
   private connectToStream() {
-    if (!this.terminal || !this.session) return;
+    if (!this.terminal || !this.session) {
+      logger.warn(`[${this.instanceId}] Cannot connect to stream - missing terminal or session`);
+      return;
+    }
+
+    // Don't connect if we're already disconnected
+    if (!this.connected) {
+      logger.warn(`[${this.instanceId}] Component already disconnected, not connecting to stream`);
+      return;
+    }
+
+    logger.log(`[${this.instanceId}] Connecting to stream for session ${this.session.id}`);
 
     // Clean up existing connection
     this.cleanupStreamConnection();

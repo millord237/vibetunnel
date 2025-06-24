@@ -5,7 +5,7 @@
     "lib": ["ES2020", "webworker", "webworker.iterable"],
     "outDir": "./public",
     "rootDir": "./src",
-    "sourceMap": true,
+    "inlineSourceMap": true,
     "inlineSources": true,
     "declaration": true
   },

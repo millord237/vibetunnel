@@ -840,12 +840,25 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       if (res.flush) res.flush();
     }, 30000);
 
-    // Clean up on disconnect
-    req.on('close', () => {
-      logger.log(chalk.yellow(`SSE client disconnected from session ${sessionId}`));
-      streamWatcher.removeClient(sessionId, res);
-      clearInterval(heartbeat);
+    // Track if cleanup has been called to avoid duplicate calls
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (!cleanedUp) {
+        cleanedUp = true;
+        logger.log(chalk.yellow(`SSE client disconnected from session ${sessionId}`));
+        streamWatcher.removeClient(sessionId, res);
+        clearInterval(heartbeat);
+      }
+    };
+
+    // Clean up on disconnect - listen to all possible events
+    req.on('close', cleanup);
+    req.on('error', (err) => {
+      logger.error(`SSE client error for session ${sessionId}:`, err);
+      cleanup();
     });
+    res.on('close', cleanup);
+    res.on('finish', cleanup);
   });
 
   // Send input to session

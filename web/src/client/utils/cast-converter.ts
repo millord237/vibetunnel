@@ -336,11 +336,6 @@ export class CastConverter {
         flushOutputBuffer();
       }
 
-      // Remove all event listeners to prevent memory leaks
-      eventSource.onmessage = null;
-      eventSource.onerror = null;
-      eventSource.onopen = null;
-
       // Force close the connection
       if (eventSource.readyState !== EventSource.CLOSED) {
         eventSource.close();
