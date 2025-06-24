@@ -40,8 +40,11 @@ export class SessionView extends LitElement {
   @property({ type: Object }) session: Session | null = null;
   @state() private connected = false;
   @state() private terminal: Terminal | null = null;
-  @state() private streamConnection: { eventSource: EventSource; disconnect: () => void } | null =
-    null;
+  @state() private streamConnection: {
+    eventSource: EventSource;
+    disconnect: () => void;
+    errorHandler?: EventListener;
+  } | null = null;
   @state() private showMobileInput = false;
   @state() private mobileInputText = '';
   @state() private isMobile = false;
@@ -257,6 +260,15 @@ export class SessionView extends LitElement {
   private cleanupStreamConnection(): void {
     if (this.streamConnection) {
       logger.log('Cleaning up stream connection');
+
+      // Remove any custom error handlers we added
+      if (this.streamConnection.errorHandler) {
+        this.streamConnection.eventSource.removeEventListener(
+          'error',
+          this.streamConnection.errorHandler
+        );
+      }
+
       this.streamConnection.disconnect();
       this.streamConnection = null;
     }
@@ -389,7 +401,11 @@ export class SessionView extends LitElement {
     // Override the error handler
     originalEventSource.addEventListener('error', handleError);
 
-    this.streamConnection = connection;
+    // Store the connection with error handler reference
+    this.streamConnection = {
+      ...connection,
+      errorHandler: handleError as EventListener,
+    };
   }
 
   private async handleKeyboardInput(e: KeyboardEvent) {
