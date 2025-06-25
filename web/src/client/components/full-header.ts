@@ -14,7 +14,6 @@ import './notification-status.js';
 export class FullHeader extends HeaderBase {
   render() {
     const runningSessions = this.runningSessions;
-    const exitedSessions = this.exitedSessions;
 
     return html`
       <div
@@ -47,7 +46,6 @@ export class FullHeader extends HeaderBase {
                 @open-settings=${() =>
                   this.dispatchEvent(new CustomEvent('open-notification-settings'))}
               ></notification-status>
-              ${this.renderActionButtons(exitedSessions, runningSessions)}
               <button
                 class="btn-secondary font-mono text-sm px-3 sm:px-5 py-2.5"
                 @click=${() => this.dispatchEvent(new CustomEvent('open-file-browser'))}
@@ -74,35 +72,6 @@ export class FullHeader extends HeaderBase {
           </div>
         </div>
       </div>
-    `;
-  }
-
-  private renderActionButtons(_exitedSessions: Session[], runningSessions: Session[]) {
-    return html`
-      ${
-        runningSessions.length > 0 && !this.killingAll
-          ? html`
-            <button
-              class="btn-secondary font-mono text-sm px-5 py-2.5 text-status-error border-status-error hover:bg-status-error hover:text-dark-bg"
-              @click=${this.handleKillAll}
-            >
-              Kill All (${runningSessions.length})
-            </button>
-          `
-          : ''
-      }
-      ${
-        this.killingAll
-          ? html`
-            <div class="flex items-center gap-2 px-5 py-2.5">
-              <div
-                class="w-4 h-4 border-2 border-status-error border-t-transparent rounded-full animate-spin"
-              ></div>
-              <span class="text-status-error font-mono text-sm">Killing...</span>
-            </div>
-          `
-          : ''
-      }
     `;
   }
 
