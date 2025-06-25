@@ -253,7 +253,10 @@ export class SessionView extends LitElement {
     if (this.isMobile && 'virtualKeyboard' in navigator) {
       // Enable overlays-content mode so keyboard doesn't resize viewport
       try {
-        (navigator as any).virtualKeyboard.overlaysContent = true;
+        const nav = navigator as Navigator & { virtualKeyboard?: { overlaysContent: boolean } };
+        if (nav.virtualKeyboard) {
+          nav.virtualKeyboard.overlaysContent = true;
+        }
         logger.log('VirtualKeyboard API: overlaysContent enabled');
       } catch (e) {
         logger.warn('Failed to set virtualKeyboard.overlaysContent:', e);
@@ -265,14 +268,17 @@ export class SessionView extends LitElement {
     // Set up Visual Viewport API for Safari keyboard detection
     if (this.isMobile && window.visualViewport) {
       this.visualViewportHandler = () => {
-        const viewport = window.visualViewport!;
+        const viewport = window.visualViewport;
+        if (!viewport) return;
         const keyboardHeight = window.innerHeight - viewport.height;
 
         // Store keyboard height in state
         this.keyboardHeight = keyboardHeight;
 
         // Update quick keys component if it exists
-        const quickKeys = this.querySelector('terminal-quick-keys') as any;
+        const quickKeys = this.querySelector('terminal-quick-keys') as HTMLElement & {
+          keyboardHeight: number;
+        };
         if (quickKeys) {
           quickKeys.keyboardHeight = keyboardHeight;
         }
@@ -1400,7 +1406,7 @@ export class SessionView extends LitElement {
     });
 
     this.hiddenInput.addEventListener('blur', (e) => {
-      const event = e as FocusEvent;
+      const _event = e as FocusEvent;
 
       // Immediately try to recapture focus
       if (!this.disableFocusManagement && this.showQuickKeys && this.hiddenInput) {

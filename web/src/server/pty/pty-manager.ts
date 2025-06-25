@@ -378,7 +378,10 @@ export class PtyManager extends EventEmitter {
     ptyProcess?.onData(async (data: string) => {
       try {
         // Check for bell character (ASCII 7) - filter out OSC sequences
-        if (data.includes('\x07')) {
+        // Temporarily disabled. When pasthing this into nano under vt
+        // https://gist.githubusercontent.com/steipete/8148d1dcfb6e569eaad61b5afb3aeae3/raw/58739a7bbd4a538190381731304412cef6cdd1e0/gistfile1.txt
+        // It hangs all terminals (and possibly other terminals) in VS Code irrespective of whether they run vt or not)
+        /*if (data.includes('\x07')) {
           logger.debug(`Bell data in session ${session.id}: ${JSON.stringify(data)}`);
 
           // Count total bells and OSC-terminated bells
@@ -405,7 +408,7 @@ export class PtyManager extends EventEmitter {
               `Ignoring OSC sequence bells in session ${session.id}: ${oscTerminatedBells} OSC bells, ${realBells} real bells`
             );
           }
-        }
+        }*/
 
         // Execute both writes in parallel
         const promises: Promise<void>[] = [];

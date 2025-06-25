@@ -203,7 +203,7 @@ export function createMockSession(overrides: Partial<SessionData> = {}): Session
     command: overrides.cmdline,
     workingDir: overrides.cwd,
     pid: overrides.pid,
-    status: overrides.status as any,
+    status: overrides.status as 'running' | 'exited' | undefined,
     startedAt: overrides.started_at,
   });
 

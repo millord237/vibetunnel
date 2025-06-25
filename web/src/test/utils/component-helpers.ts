@@ -54,6 +54,7 @@ export async function waitForEventWithTimeout(
   const { timeout = 5000, predicate } = options;
 
   return new Promise((resolve, reject) => {
+    // biome-ignore lint/style/useConst: timeoutId is used in closure before assignment
     let timeoutId: ReturnType<typeof setTimeout>;
 
     const handler = (event: Event) => {
@@ -150,7 +151,7 @@ export function elementExists(element: HTMLElement, selector: string): boolean {
 /**
  * Waits for an event and returns its detail
  */
-export async function waitForEvent<T = any>(
+export async function waitForEvent<T = unknown>(
   element: HTMLElement,
   eventName: string,
   action: () => void | Promise<void>
@@ -220,7 +221,7 @@ export function restoreLocalStorage(): void {
   // In Node.js test environment, localStorage doesn't exist by default
   // So we just need to delete our mock
   if ('localStorage' in global) {
-    delete (global as any).localStorage;
+    delete (global as { localStorage?: Storage }).localStorage;
   }
 }
 
@@ -230,7 +231,7 @@ export function restoreLocalStorage(): void {
 export function setupFetchMock() {
   const responses = new Map<
     string,
-    { data: any; status?: number; headers?: Record<string, string> }
+    { data: unknown; status?: number; headers?: Record<string, string> }
   >();
 
   const fetchMock = vi.fn(async (url: string, _options?: RequestInit) => {
@@ -255,12 +256,12 @@ export function setupFetchMock() {
     };
   });
 
-  global.fetch = fetchMock as any;
+  global.fetch = fetchMock as typeof global.fetch;
 
   return {
     mockResponse(
       url: string,
-      data: any,
+      data: unknown,
       options?: { status?: number; headers?: Record<string, string> }
     ) {
       responses.set(url, { data, ...options });

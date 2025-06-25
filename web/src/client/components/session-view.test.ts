@@ -16,6 +16,22 @@ global.EventSource = MockEventSource as unknown as typeof EventSource;
 
 // Import component type
 import type { SessionView } from './session-view';
+import type { Terminal } from './terminal';
+
+// Test interface for SessionView private properties
+interface SessionViewTestInterface extends SessionView {
+  connected: boolean;
+  loading: boolean;
+  isMobile: boolean;
+  terminalCols: number;
+  terminalRows: number;
+  showWidthSelector: boolean;
+}
+
+// Test interface for Terminal element
+interface TerminalTestInterface extends Terminal {
+  sessionId?: string;
+}
 
 describe('SessionView', () => {
   let element: SessionView;
@@ -54,8 +70,8 @@ describe('SessionView', () => {
     it('should create component with default state', () => {
       expect(element).toBeDefined();
       expect(element.session).toBeNull();
-      expect((element as any).connected).toBe(true);
-      expect((element as any).loading).toBe(true); // Loading starts when no session
+      expect((element as SessionViewTestInterface).connected).toBe(true);
+      expect((element as SessionViewTestInterface).loading).toBe(true); // Loading starts when no session
     });
 
     it('should detect mobile environment', async () => {
@@ -72,7 +88,7 @@ describe('SessionView', () => {
       await mobileElement.updateComplete;
 
       // Component detects mobile based on user agent
-      expect((mobileElement as any).isMobile).toBe(true);
+      expect((mobileElement as SessionViewTestInterface).isMobile).toBe(true);
 
       // Restore original user agent
       Object.defineProperty(navigator, 'userAgent', {
@@ -101,7 +117,7 @@ describe('SessionView', () => {
       await element.updateComplete;
 
       // Should render terminal
-      const terminal = element.querySelector('vibe-terminal') as any;
+      const terminal = element.querySelector('vibe-terminal') as TerminalTestInterface;
       expect(terminal).toBeTruthy();
       expect(terminal?.sessionId).toBe('test-session-123');
     });
@@ -110,7 +126,7 @@ describe('SessionView', () => {
       const mockSession = createMockSession();
 
       // Set loading before session
-      (element as any).loading = true;
+      (element as SessionViewTestInterface).loading = true;
       await element.updateComplete;
 
       // Then set session
@@ -118,7 +134,7 @@ describe('SessionView', () => {
       await element.updateComplete;
 
       // Loading should be false after session is set
-      expect((element as any).loading).toBe(false);
+      expect((element as SessionViewTestInterface).loading).toBe(false);
     });
 
     it('should handle session not found error', async () => {
@@ -166,13 +182,15 @@ describe('SessionView', () => {
     it('should send keyboard input to terminal', async () => {
       // Mock fetch for sendInput
       const inputCapture = vi.fn();
-      (global.fetch as any).mockImplementation((url: string, options: any) => {
-        if (url.includes('/input')) {
-          inputCapture(JSON.parse(options.body));
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+        (url: string, options: RequestInit) => {
+          if (url.includes('/input')) {
+            inputCapture(JSON.parse(options.body));
+            return Promise.resolve({ ok: true });
+          }
           return Promise.resolve({ ok: true });
         }
-        return Promise.resolve({ ok: true });
-      });
+      );
 
       // Simulate typing
       await pressKey(element, 'a');
@@ -185,13 +203,15 @@ describe('SessionView', () => {
 
     it('should handle special keys', async () => {
       const inputCapture = vi.fn();
-      (global.fetch as any).mockImplementation((url: string, options: any) => {
-        if (url.includes('/input')) {
-          inputCapture(JSON.parse(options.body));
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+        (url: string, options: RequestInit) => {
+          if (url.includes('/input')) {
+            inputCapture(JSON.parse(options.body));
+            return Promise.resolve({ ok: true });
+          }
           return Promise.resolve({ ok: true });
         }
-        return Promise.resolve({ ok: true });
-      });
+      );
 
       // Test Enter key
       await pressKey(element, 'Enter');
@@ -209,13 +229,15 @@ describe('SessionView', () => {
 
     it('should handle paste event from terminal', async () => {
       const inputCapture = vi.fn();
-      (global.fetch as any).mockImplementation((url: string, options: any) => {
-        if (url.includes('/input')) {
-          inputCapture(JSON.parse(options.body));
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+        (url: string, options: RequestInit) => {
+          if (url.includes('/input')) {
+            inputCapture(JSON.parse(options.body));
+            return Promise.resolve({ ok: true });
+          }
           return Promise.resolve({ ok: true });
         }
-        return Promise.resolve({ ok: true });
-      });
+      );
 
       const terminal = element.querySelector('vibe-terminal');
       if (terminal) {
@@ -244,8 +266,8 @@ describe('SessionView', () => {
         await waitForAsync();
 
         // Component updates its state but doesn't send resize via input endpoint
-        expect((element as any).terminalCols).toBe(100);
-        expect((element as any).terminalRows).toBe(30);
+        expect((element as SessionViewTestInterface).terminalCols).toBe(100);
+        expect((element as SessionViewTestInterface).terminalRows).toBe(30);
       }
     });
   });
@@ -280,7 +302,7 @@ describe('SessionView', () => {
         const eventSource = MockEventSource.instances.values().next().value as MockEventSource;
 
         // Simulate terminal ready
-        const terminal = element.querySelector('vibe-terminal') as any;
+        const terminal = element.querySelector('vibe-terminal') as TerminalTestInterface;
         if (terminal) {
           terminal.dispatchEvent(new Event('terminal-ready', { bubbles: true }));
         }
@@ -291,7 +313,7 @@ describe('SessionView', () => {
         await element.updateComplete;
 
         // Connection state should update
-        expect((element as any).connected).toBe(true);
+        expect((element as SessionViewTestInterface).connected).toBe(true);
       }
     });
 
@@ -365,13 +387,15 @@ describe('SessionView', () => {
 
     it('should send mobile input text', async () => {
       const inputCapture = vi.fn();
-      (global.fetch as any).mockImplementation((url: string, options: any) => {
-        if (url.includes('/input')) {
-          inputCapture(JSON.parse(options.body));
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+        (url: string, options: RequestInit) => {
+          if (url.includes('/input')) {
+            inputCapture(JSON.parse(options.body));
+            return Promise.resolve({ ok: true });
+          }
           return Promise.resolve({ ok: true });
         }
-        return Promise.resolve({ ok: true });
-      });
+      );
 
       element.showMobileInput = true;
       await element.updateComplete;
@@ -410,13 +434,15 @@ describe('SessionView', () => {
 
     it('should handle file selection', async () => {
       const inputCapture = vi.fn();
-      (global.fetch as any).mockImplementation((url: string, options: any) => {
-        if (url.includes('/input')) {
-          inputCapture(JSON.parse(options.body));
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+        (url: string, options: RequestInit) => {
+          if (url.includes('/input')) {
+            inputCapture(JSON.parse(options.body));
+            return Promise.resolve({ ok: true });
+          }
           return Promise.resolve({ ok: true });
         }
-        return Promise.resolve({ ok: true });
-      });
+      );
 
       const mockSession = createMockSession();
       element.session = mockSession;
@@ -500,7 +526,7 @@ describe('SessionView', () => {
         (widthButton as HTMLElement).click();
         await element.updateComplete;
 
-        expect((element as any).showWidthSelector).toBe(true);
+        expect((element as SessionViewTestInterface).showWidthSelector).toBe(true);
       }
     });
 
