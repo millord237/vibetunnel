@@ -274,7 +274,7 @@ export class PtyManager extends EventEmitter {
           errorString: String(spawnError),
           errorKeys: spawnError && typeof spawnError === 'object' ? Object.keys(spawnError) : [],
         });
-        
+
         // Provide better error messages for common issues
         let errorMessage = spawnError instanceof Error ? spawnError.message : String(spawnError);
 
