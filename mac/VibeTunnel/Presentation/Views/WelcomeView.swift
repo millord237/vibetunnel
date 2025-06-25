@@ -167,10 +167,8 @@ struct WelcomeView: View {
             // Finish action - save welcome version and close window
             welcomeVersion = AppConstants.currentWelcomeVersion
 
-            // Close the window properly through the window controller
-            if let window = NSApp.windows.first(where: { $0.contentViewController is NSHostingController<Self> }) {
-                window.close()
-            }
+            // Close the window using the SwiftUI dismiss environment
+            dismiss()
 
             // Open settings after a delay to ensure the window is fully closed
             Task { @MainActor in
