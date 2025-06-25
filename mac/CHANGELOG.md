@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0-beta.4] - 2025-06-25
+
+- We replaced HTTP Basic auth with System Login or SSH Keys for better security.
+- Sessions now show exited terminals by default - no more hunting for terminated sessions
+- Reorganized sidebar with cleaner, more compact header and better button placement
+- Added user menu in sidebar for quick access to settings and logout
+- Enhanced responsive design with better adaptation to different screen sizes
+- Improved touch targets and spacing for mobile users
+- Leverages View Transitions API for smoother animations with CSS fallbacks
+- More intuitive default settings for better out-of-box experience
+
 ## [1.0.0-beta.3] - 2025-06-23
 
 There's too much to list! This is the version you've been waiting for. 
