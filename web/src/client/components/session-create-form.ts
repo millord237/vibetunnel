@@ -317,7 +317,7 @@ export class SessionCreateForm extends LitElement {
           class="modal-content font-mono text-sm w-full max-w-[calc(100vw-1rem)] sm:max-w-md lg:max-w-[576px] mx-2 sm:mx-4"
           style="view-transition-name: create-session-modal"
         >
-          <div class="p-4 pb-6 mb-6 border-b border-dark-border relative">
+          <div class="p-4 pb-4 mb-3 border-b border-dark-border relative">
             <h2 class="text-accent-green text-lg font-bold">New Session</h2>
             <button
               class="absolute top-4 right-4 text-dark-text-muted hover:text-dark-text transition-colors p-1"
@@ -342,9 +342,9 @@ export class SessionCreateForm extends LitElement {
             </button>
           </div>
 
-          <div class="px-4 pb-4 sm:p-4 lg:p-8">
+          <div class="p-3 sm:p-3 lg:p-4">
             <!-- Session Name -->
-            <div class="mb-6">
+            <div class="mb-4">
               <label class="form-label">Session Name (Optional):</label>
               <input
                 type="text"
@@ -357,7 +357,7 @@ export class SessionCreateForm extends LitElement {
             </div>
 
             <!-- Command -->
-            <div class="mb-6">
+            <div class="mb-4">
               <label class="form-label">Command:</label>
               <input
                 type="text"
@@ -370,7 +370,7 @@ export class SessionCreateForm extends LitElement {
             </div>
 
             <!-- Working Directory -->
-            <div class="mb-6">
+            <div class="mb-4">
               <label class="form-label">Working Directory:</label>
               <div class="flex gap-4">
                 <input
@@ -392,11 +392,11 @@ export class SessionCreateForm extends LitElement {
             </div>
 
             <!-- Quick Start Section -->
-            <div class="mb-6">
+            <div class="mb-4">
               <label class="form-label text-dark-text-muted uppercase text-xs tracking-wider"
                 >Quick Start</label
               >
-              <div class="grid grid-cols-2 gap-3 mt-3">
+              <div class="grid grid-cols-2 gap-3 mt-2">
                 ${this.quickStartCommands.map(
                   ({ label, command }) => html`
                     <button
@@ -418,7 +418,7 @@ export class SessionCreateForm extends LitElement {
               </div>
             </div>
 
-            <div class="flex gap-4 mt-8">
+            <div class="flex gap-4 mt-4">
               <button
                 class="btn-ghost font-mono flex-1 py-3"
                 @click=${this.handleCancel}
