@@ -157,10 +157,10 @@ describe('SessionManager', () => {
       const session1 = listedSessions.find((s) => s.id === 'session1');
       expect(session1?.name).toBe('Session 1');
       expect(session1?.status).toBe('exited'); // Process is not actually running
-      
+
       const session2 = listedSessions.find((s) => s.id === 'session2');
       expect(session2?.status).toBe('exited'); // Process is not actually running
-      
+
       const session3 = listedSessions.find((s) => s.id === 'session3');
       expect(session3?.status).toBe('exited'); // Already marked as exited
     });

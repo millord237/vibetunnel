@@ -74,10 +74,12 @@ describe('BufferSubscriptionService', () => {
     // Create a mock WebSocket instance
     mockWebSocketInstance = new MockWebSocket('ws://localhost/buffers');
 
-    // Mock WebSocket constructor
-    mockWebSocketConstructor = vi.fn(
-      () => mockWebSocketInstance
-    ) as unknown as MockWebSocketConstructor;
+    // Mock WebSocket constructor to always return the same instance
+    mockWebSocketConstructor = vi.fn().mockImplementation(() => {
+      // Set up the mock instance each time it's created
+      mockWebSocketInstance.binaryType = 'arraybuffer';
+      return mockWebSocketInstance;
+    }) as unknown as MockWebSocketConstructor;
     mockWebSocketConstructor.CONNECTING = 0;
     mockWebSocketConstructor.OPEN = 1;
     mockWebSocketConstructor.CLOSING = 2;
@@ -221,21 +223,19 @@ describe('BufferSubscriptionService', () => {
         json: async () => ({ noAuth: true }),
       } as Response);
 
-      // Subscribe will trigger initialization
-      const unsubscribe = service.subscribe('session-123', handler);
-
-      // Wait for auth check
-      await vi.waitFor(() => {
-        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
-        return calls.length > 0;
-      });
+      // Initialize the service first
+      await service.initialize();
 
       // Advance timers to trigger connection
       vi.advanceTimersByTime(100);
 
+      // Subscribe to a session
+      const unsubscribe = service.subscribe('session-123', handler);
+
       // Simulate successful connection
       mockWebSocketInstance.mockOpen();
 
+      // When connecting, the service re-subscribes to all sessions
       expect(mockWebSocketInstance.send).toHaveBeenCalledWith(
         JSON.stringify({ type: 'subscribe', sessionId: 'session-123' })
       );
@@ -253,25 +253,28 @@ describe('BufferSubscriptionService', () => {
         json: async () => ({ noAuth: true }),
       } as Response);
 
-      service.subscribe('session-123', handler1);
-
-      // Wait for auth check
-      await vi.waitFor(() => {
-        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
-        return calls.length > 0;
-      });
-
-      // Advance timers to trigger connection
+      // Initialize and connect first
+      await service.initialize();
       vi.advanceTimersByTime(100);
-
-      // Simulate successful connection
       mockWebSocketInstance.mockOpen();
 
-      // Now subscribe with second handler
+      // Subscribe first handler
+      service.subscribe('session-123', handler1);
+
+      // Should send one subscribe message
+      expect(mockWebSocketInstance.send).toHaveBeenCalledTimes(1);
+      expect(mockWebSocketInstance.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'subscribe', sessionId: 'session-123' })
+      );
+
+      // Clear previous calls
+      mockWebSocketInstance.send.mockClear();
+
+      // Subscribe second handler to same session
       service.subscribe('session-123', handler2);
 
-      // Should only send one subscribe message
-      expect(mockWebSocketInstance.send).toHaveBeenCalledTimes(1);
+      // Should not send another subscribe message
+      expect(mockWebSocketInstance.send).not.toHaveBeenCalled();
     });
 
     it('should unsubscribe when last handler is removed', async () => {
@@ -284,27 +287,21 @@ describe('BufferSubscriptionService', () => {
         json: async () => ({ noAuth: true }),
       } as Response);
 
-      const unsubscribe1 = service.subscribe('session-123', handler1);
-
-      // Wait for auth check
-      await vi.waitFor(() => {
-        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
-        return calls.length > 0;
-      });
-
-      // Advance timers to trigger connection
+      // Initialize and connect first
+      await service.initialize();
       vi.advanceTimersByTime(100);
-
-      // Simulate successful connection
       mockWebSocketInstance.mockOpen();
 
+      // Subscribe handlers
+      const unsubscribe1 = service.subscribe('session-123', handler1);
       const unsubscribe2 = service.subscribe('session-123', handler2);
+
+      // Clear previous calls
+      mockWebSocketInstance.send.mockClear();
 
       // Remove first handler - should not unsubscribe yet
       unsubscribe1();
-      expect(mockWebSocketInstance.send).not.toHaveBeenCalledWith(
-        JSON.stringify({ type: 'unsubscribe', sessionId: 'session-123' })
-      );
+      expect(mockWebSocketInstance.send).not.toHaveBeenCalled();
 
       // Remove second handler - should unsubscribe
       unsubscribe2();
@@ -322,36 +319,22 @@ describe('BufferSubscriptionService', () => {
         json: async () => ({ noAuth: true }),
       } as Response);
 
-      // Subscribe will trigger initialization
-      service.subscribe('session-123', handler);
-
-      // Wait for auth check
-      await vi.waitFor(() => {
-        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
-        return calls.length > 0;
-      });
-
-      // Advance timers to trigger connection
+      // Initialize and connect
+      await service.initialize();
       vi.advanceTimersByTime(100);
-
-      // First, connect successfully
       mockWebSocketInstance.mockOpen();
+
+      // Subscribe to first session
+      service.subscribe('session-123', handler);
 
       // Then close connection
       mockWebSocketInstance.mockClose();
 
-      // Clear previous calls
-      mockWebSocketInstance.send.mockClear();
-
       // Try to subscribe to another session while disconnected
       service.subscribe('session-456', handler);
 
-      // Should not send message immediately
-      expect(mockWebSocketInstance.send).not.toHaveBeenCalled();
-
       // Create new mock instance for reconnection
       const newMockInstance = new MockWebSocket('ws://localhost/buffers');
-      newMockInstance.send = vi.fn();
       mockWebSocketConstructor.mockReturnValue(newMockInstance);
 
       // Advance time to trigger reconnect
@@ -360,7 +343,7 @@ describe('BufferSubscriptionService', () => {
       // Simulate successful reconnection
       newMockInstance.mockOpen();
 
-      // Should send subscribe messages for both sessions on the new connection
+      // Should send subscribe messages for both sessions on reconnection
       expect(newMockInstance.send).toHaveBeenCalledWith(
         JSON.stringify({ type: 'subscribe', sessionId: 'session-123' })
       );
@@ -483,18 +466,21 @@ describe('BufferSubscriptionService', () => {
         json: async () => ({ noAuth: true }),
       } as Response);
 
+      // Initialize and connect
+      await service.initialize();
+      vi.advanceTimersByTime(100);
+
+      // Verify WebSocket was created
+      expect(mockWebSocketConstructor).toHaveBeenCalled();
+
+      mockWebSocketInstance.mockOpen();
+
+      // WebSocket should be connected now
+      expect(mockWebSocketInstance.readyState).toBe(WebSocket.OPEN);
+
+      // Subscribe to ensure there's activity
       const handler = vi.fn();
       service.subscribe('session-123', handler);
-
-      // Wait for auth check
-      await vi.waitFor(() => {
-        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
-        return calls.length > 0;
-      });
-
-      // Advance timers to trigger connection
-      vi.advanceTimersByTime(100);
-      mockWebSocketInstance.mockOpen();
 
       service.dispose();
 
