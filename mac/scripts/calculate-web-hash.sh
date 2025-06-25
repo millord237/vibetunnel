@@ -22,8 +22,8 @@ fi
 echo "Calculating web content hash..."
 cd "${WEB_DIR}"
 
-# Use tar to create a single stream of all files for fast hashing
-# This avoids spawning processes for each file
+# Hash only file contents, not metadata
+# This ensures the hash only changes when file contents change
 CONTENT_HASH=$(find . \
     -type f \
     \( -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.html" \
@@ -41,7 +41,11 @@ CONTENT_HASH=$(find . \
     -not -path "./node-build-artifacts/*" \
     -not -name "package-lock.json" | \
     sort | \
-    tar --mtime='1970-01-01' --mode=644 --owner=0 --group=0 -cf - -T - 2>/dev/null | \
+    while read file; do
+        echo "FILE:$file"
+        cat "$file" 2>/dev/null || true
+        echo ""
+    done | \
     shasum -a 256 | \
     cut -d' ' -f1)
 
