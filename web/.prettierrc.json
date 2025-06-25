@@ -7,5 +7,20 @@
   "useTabs": false,
   "bracketSpacing": true,
   "arrowParens": "always",
-  "endOfLine": "lf"
+  "endOfLine": "lf",
+  "plugins": ["@prettier/plugin-oxc"],
+  "overrides": [
+    {
+      "files": "*.js",
+      "options": {
+        "parser": "oxc"
+      }
+    },
+    {
+      "files": "*.ts",
+      "options": {
+        "parser": "oxc-ts"
+      }
+    }
+  ]
 }

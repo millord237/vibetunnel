@@ -20,7 +20,10 @@
     "test:ci": "vitest run --reporter=verbose",
     "test:coverage": "vitest run --coverage",
     "format": "biome format src --write",
-    "format:check": "biome format src"
+    "format:check": "biome format src",
+    "prettier": "prettier --write src --experimental-cli",
+    "prettier:check": "prettier --check src --experimental-cli",
+    "prettier:fast": "PRETTIER_EXPERIMENTAL_CLI=1 prettier --write src"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -58,6 +61,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.5",
     "@open-wc/testing": "^4.0.0",
+    "@prettier/plugin-oxc": "^0.0.4",
     "@testing-library/dom": "^10.4.0",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
@@ -77,6 +81,7 @@
     "happy-dom": "^18.0.1",
     "node-fetch": "^3.3.2",
     "postcss": "^8.5.6",
+    "prettier": "^3.6.1",
     "puppeteer": "^24.10.2",
     "supertest": "^7.1.1",
     "tailwindcss": "^3.4.17",
