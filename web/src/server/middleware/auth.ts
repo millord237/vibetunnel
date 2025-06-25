@@ -49,12 +49,11 @@ function isLocalRequest(req: Request): boolean {
 
 export function createAuthMiddleware(config: AuthConfig) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    // Skip auth for health check endpoint, auth endpoints, client logging, and push notifications
+    // Skip auth for auth endpoints, client logging, and push notifications
     if (
-      req.path === '/api/health' ||
-      req.path.startsWith('/api/auth') ||
-      req.path.startsWith('/api/logs') ||
-      req.path.startsWith('/api/push')
+      req.path.startsWith('/auth') ||
+      req.path.startsWith('/logs') ||
+      req.path.startsWith('/push')
     ) {
       return next();
     }
