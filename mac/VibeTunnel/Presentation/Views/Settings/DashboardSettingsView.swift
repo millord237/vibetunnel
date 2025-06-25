@@ -83,6 +83,7 @@ struct DashboardSettingsView: View {
             }
             .formStyle(.grouped)
             .frame(minWidth: 500, idealWidth: 600)
+            .scrollContentBackground(.hidden)
             .navigationTitle("Dashboard")
             .onAppear {
                 onAppearSetup()
