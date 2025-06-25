@@ -385,45 +385,67 @@ export class SessionList extends LitElement {
 
   private renderExitedControls() {
     const exitedSessions = this.sessions.filter((session) => session.status === 'exited');
+    const runningSessions = this.sessions.filter((session) => session.status === 'running');
 
-    if (exitedSessions.length === 0) return '';
+    // If no exited sessions and no running sessions, don't show controls
+    if (exitedSessions.length === 0 && runningSessions.length === 0) return '';
 
     return html`
-      <div class="flex justify-center items-center gap-4 mt-8 pb-4">
-        <button
-          class="font-mono text-sm px-6 py-2 rounded-lg border transition-all duration-200 ${
-            this.hideExited
-              ? 'border-dark-border bg-dark-bg-secondary text-dark-text-muted hover:bg-dark-bg-tertiary hover:text-dark-text'
-              : 'border-dark-border bg-dark-bg-tertiary text-dark-text hover:bg-dark-bg-secondary'
-          }"
-          @click=${() => this.dispatchEvent(new CustomEvent('hide-exited-change', { detail: !this.hideExited }))}
-        >
-          <div class="flex items-center gap-3">
-            <span>${this.hideExited ? 'Show' : 'Hide'} Exited (${exitedSessions.length})</span>
-            <div
-              class="w-8 h-4 rounded-full transition-colors duration-200 ${
-                this.hideExited ? 'bg-dark-surface' : 'bg-dark-bg'
-              }"
-            >
-              <div
-                class="w-3 h-3 rounded-full transition-transform duration-200 mt-0.5 ${
+      <div class="flex justify-center items-center gap-2 sm:gap-4 mt-8 pb-4 px-4">
+        ${
+          exitedSessions.length > 0
+            ? html`
+              <button
+                class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 ${
                   this.hideExited
-                    ? 'translate-x-0.5 bg-dark-text-muted'
-                    : 'translate-x-4 bg-accent-green'
+                    ? 'border-dark-border bg-dark-bg-secondary text-dark-text-muted hover:bg-dark-bg-tertiary hover:text-dark-text'
+                    : 'border-dark-border bg-dark-bg-tertiary text-dark-text hover:bg-dark-bg-secondary'
                 }"
-              ></div>
-            </div>
-          </div>
-        </button>
+                @click=${() => this.dispatchEvent(new CustomEvent('hide-exited-change', { detail: !this.hideExited }))}
+              >
+                <div class="flex items-center gap-2 sm:gap-3">
+                  <span class="hidden sm:inline">${this.hideExited ? 'Show' : 'Hide'} Exited (${exitedSessions.length})</span>
+                  <span class="sm:hidden">${this.hideExited ? 'Show' : 'Hide'} (${exitedSessions.length})</span>
+                  <div
+                    class="w-8 h-4 rounded-full transition-colors duration-200 ${
+                      this.hideExited ? 'bg-dark-surface' : 'bg-dark-bg'
+                    }"
+                  >
+                    <div
+                      class="w-3 h-3 rounded-full transition-transform duration-200 mt-0.5 ${
+                        this.hideExited
+                          ? 'translate-x-0.5 bg-dark-text-muted'
+                          : 'translate-x-4 bg-accent-green'
+                      }"
+                    ></div>
+                  </div>
+                </div>
+              </button>
+            `
+            : ''
+        }
+        ${
+          runningSessions.length > 0
+            ? html`
+              <button
+                class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 border-status-error bg-dark-bg-secondary text-status-error hover:bg-dark-bg-tertiary hover:border-status-error"
+                @click=${() => this.dispatchEvent(new CustomEvent('kill-all-sessions'))}
+              >
+                Kill All (${runningSessions.length})
+              </button>
+            `
+            : ''
+        }
         ${
           !this.hideExited && exitedSessions.length > 0
             ? html`
               <button
-                class="font-mono text-sm px-6 py-2 rounded-lg border transition-all duration-200 border-dark-border bg-dark-bg-secondary text-status-warning hover:bg-dark-bg-tertiary hover:border-status-warning"
+                class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 border-dark-border bg-dark-bg-secondary text-status-warning hover:bg-dark-bg-tertiary hover:border-status-warning"
                 @click=${this.handleCleanupExited}
                 ?disabled=${this.cleaningExited}
               >
-                ${this.cleaningExited ? 'Cleaning...' : `Clean Exited (${exitedSessions.length})`}
+                <span class="hidden sm:inline">${this.cleaningExited ? 'Cleaning...' : `Clean Exited (${exitedSessions.length})`}</span>
+                <span class="sm:hidden">${this.cleaningExited ? 'Cleaning...' : 'Clean'}</span>
               </button>
             `
             : ''

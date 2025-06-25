@@ -49,7 +49,7 @@ export class FullHeader extends HeaderBase {
               ></notification-status>
               ${this.renderActionButtons(exitedSessions, runningSessions)}
               <button
-                class="btn-secondary font-mono text-sm px-5 py-2.5"
+                class="btn-secondary font-mono text-sm px-3 sm:px-5 py-2.5"
                 @click=${() => this.dispatchEvent(new CustomEvent('open-file-browser'))}
                 title="Browse Files (⌘O)"
               >
@@ -59,7 +59,7 @@ export class FullHeader extends HeaderBase {
                       d="M1.75 1h5.5c.966 0 1.75.784 1.75 1.75v1h4c.966 0 1.75.784 1.75 1.75v7.75A1.75 1.75 0 0113 15H3a1.75 1.75 0 01-1.75-1.75V2.75C1.25 1.784 1.784 1 1.75 1zM2.75 2.5v10.75c0 .138.112.25.25.25h10a.25.25 0 00.25-.25V5.5a.25.25 0 00-.25-.25H8.75v-2.5a.25.25 0 00-.25-.25h-5.5a.25.25 0 00-.25.25z"
                     />
                   </svg>
-                  Browse
+                  <span class="hidden sm:inline">Browse</span>
                 </span>
               </button>
               <button
@@ -138,6 +138,13 @@ export class FullHeader extends HeaderBase {
                 >
                   ${this.authMethod || 'authenticated'}
                 </div>
+                <button
+                  class="w-full text-left px-3 py-2 text-sm font-mono text-dark-text hover:bg-dark-bg-secondary"
+                  @click=${this.handleOpenSettings}
+                >
+                  Settings
+                </button>
+                <div class="border-t border-dark-border"></div>
                 <button
                   class="w-full text-left px-3 py-2 text-sm font-mono text-status-warning hover:bg-dark-bg-secondary hover:text-status-error"
                   @click=${this.handleLogout}
