@@ -1399,7 +1399,7 @@ export class SessionView extends LitElement {
           this.session?.status === 'exited'
             ? html`
               <div
-                class="fixed inset-0 flex items-center justify-center pointer-events-none z-[100]"
+                class="fixed inset-0 flex items-center justify-center pointer-events-none z-[25]"
               >
                 <div
                   class="bg-dark-bg-secondary border border-dark-border ${this.getStatusColor()} font-medium text-sm tracking-wide px-4 py-2 rounded-lg shadow-lg"
