@@ -6,12 +6,14 @@
 import { html } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import { HeaderBase } from './header-base.js';
+import type { Session } from './session-list.js';
 import './terminal-icon.js';
 
 @customElement('sidebar-header')
 export class SidebarHeader extends HeaderBase {
   render() {
     const runningSessions = this.runningSessions;
+    const exitedSessions = this.exitedSessions;
 
     return html`
       <div
@@ -20,33 +22,184 @@ export class SidebarHeader extends HeaderBase {
       >
         <!-- Compact vertical layout for sidebar -->
         <div class="flex flex-col gap-2">
-          <!-- Title and logo -->
-          <a
-            href="/"
-            class="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
-            title="Go to home"
-          >
-            <terminal-icon size="20"></terminal-icon>
-            <div class="min-w-0">
-              <h1
-                class="text-sm font-bold text-accent-green font-mono group-hover:underline truncate"
-              >
-                VibeTunnel
-              </h1>
-              <p class="text-dark-text-muted text-xs font-mono">
-                ${runningSessions.length} ${runningSessions.length === 1 ? 'session' : 'sessions'}
-              </p>
-            </div>
-          </a>
+          <!-- Title and logo with user menu -->
+          <div class="flex items-center justify-between">
+            <a
+              href="/"
+              class="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
+              title="Go to home"
+            >
+              <terminal-icon size="20"></terminal-icon>
+              <div class="min-w-0">
+                <h1
+                  class="text-sm font-bold text-accent-green font-mono group-hover:underline truncate"
+                >
+                  VibeTunnel
+                </h1>
+                <p class="text-dark-text-muted text-xs font-mono">
+                  ${runningSessions.length} ${runningSessions.length === 1 ? 'session' : 'sessions'}
+                </p>
+              </div>
+            </a>
+            ${this.renderCompactUserMenu()}
+          </div>
 
-          <!-- Create Session button -->
-          <button
-            class="btn-primary font-mono text-xs px-3 py-1.5 vt-create-button text-center w-full"
-            @click=${this.handleCreateSession}
-          >
-            Create Session
-          </button>
+          <!-- Action buttons -->
+          <div class="flex flex-col gap-2">
+            <!-- Create Session button -->
+            <button
+              class="btn-primary font-mono text-xs px-3 py-1.5 vt-create-button text-center w-full"
+              @click=${this.handleCreateSession}
+            >
+              Create Session
+            </button>
+
+            <!-- Show Exited button -->
+            ${this.renderExitedToggleButton(exitedSessions, true)}
+
+            <!-- Kill All button -->
+            ${this.renderKillAllButton(runningSessions)}
+
+            <!-- Clean Exited button -->
+            ${
+              !this.hideExited && exitedSessions.length > 0
+                ? html`
+                  <button
+                    class="btn-ghost font-mono text-xs px-3 py-1.5 w-full text-status-warning"
+                    @click=${this.handleCleanExited}
+                  >
+                    Clean Exited (${exitedSessions.length})
+                  </button>
+                `
+                : ''
+            }
+          </div>
         </div>
+      </div>
+    `;
+  }
+
+  private renderExitedToggleButton(exitedSessions: Session[], compact: boolean) {
+    if (exitedSessions.length === 0) return '';
+
+    const buttonClass = compact
+      ? 'relative font-mono text-xs px-3 py-1.5 w-full rounded-lg border transition-all duration-200'
+      : 'relative font-mono text-xs px-4 py-2 rounded-lg border transition-all duration-200';
+
+    const stateClass = this.hideExited
+      ? 'border-dark-border bg-dark-bg-tertiary text-dark-text hover:border-accent-green-darker'
+      : 'border-accent-green bg-accent-green text-dark-bg hover:bg-accent-green-darker';
+
+    return html`
+      <button
+        class="${buttonClass} ${stateClass}"
+        @click=${this.handleHideExitedToggle}
+        title="${
+          this.hideExited
+            ? `Show ${exitedSessions.length} exited sessions`
+            : `Hide ${exitedSessions.length} exited sessions`
+        }"
+      >
+        <div class="flex items-center justify-between">
+          <span>${this.hideExited ? 'Show' : 'Hide'} Exited</span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs opacity-75">(${exitedSessions.length})</span>
+            <div
+              class="w-8 h-4 rounded-full transition-colors duration-200 ${
+                this.hideExited ? 'bg-dark-border' : 'bg-dark-bg'
+              }"
+            >
+              <div
+                class="w-3 h-3 rounded-full transition-transform duration-200 mt-0.5 ${
+                  this.hideExited
+                    ? 'translate-x-0.5 bg-dark-text-muted'
+                    : 'translate-x-4 bg-dark-bg'
+                }"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </button>
+    `;
+  }
+
+  private renderKillAllButton(runningSessions: Session[]) {
+    // Only show Kill button if there are running sessions
+    if (runningSessions.length === 0) return '';
+
+    // Matching the same style as Show Exited button for consistency
+    const buttonClass =
+      'relative font-mono text-xs px-3 py-1.5 w-full rounded-lg border transition-all duration-200';
+    const stateClass = this.killingAll
+      ? 'border-status-error bg-status-error text-dark-bg cursor-not-allowed'
+      : 'border-dark-border bg-dark-bg-tertiary text-status-error hover:border-status-error hover:bg-dark-bg-secondary';
+
+    return html`
+      <button
+        class="${buttonClass} ${stateClass}"
+        @click=${this.handleKillAll}
+        ?disabled=${this.killingAll}
+      >
+        ${
+          this.killingAll
+            ? html`
+            <div class="flex items-center justify-center gap-2">
+              <div class="w-3 h-3 border-2 border-dark-bg border-t-transparent rounded-full animate-spin"></div>
+              <span>Killing...</span>
+            </div>
+          `
+            : `Kill All (${runningSessions.length})`
+        }
+      </button>
+    `;
+  }
+
+  private renderCompactUserMenu() {
+    if (!this.currentUser) return '';
+
+    return html`
+      <div class="user-menu-container relative">
+        <button
+          class="font-mono text-xs px-2 py-1 text-dark-text-muted hover:text-dark-text rounded border border-dark-border hover:bg-dark-bg-tertiary transition-all duration-200"
+          @click=${this.toggleUserMenu}
+          title="User menu"
+        >
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 0C4.48 0 0 4.48 0 10s4.48 10 10 10 10-4.48 10-10S15.52 0 10 0zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+          </svg>
+        </button>
+        ${
+          this.showUserMenu
+            ? html`
+              <div
+                class="absolute right-0 top-full mt-1 bg-dark-surface border border-dark-border rounded-lg shadow-lg py-1 z-50 min-w-32"
+              >
+                <div
+                  class="px-3 py-1.5 text-xs text-dark-text-muted border-b border-dark-border font-mono"
+                >
+                  ${this.currentUser}
+                </div>
+                <button
+                  class="w-full text-left px-3 py-1.5 text-xs font-mono text-dark-text hover:bg-dark-bg-secondary"
+                  @click=${(e: Event) => {
+                    e.stopPropagation();
+                    console.log('🔧 Settings button clicked in sidebar header');
+                    this.handleOpenSettings();
+                  }}
+                >
+                  Settings
+                </button>
+                <div class="border-t border-dark-border"></div>
+                <button
+                  class="w-full text-left px-3 py-1.5 text-xs font-mono text-status-warning hover:bg-dark-bg-secondary hover:text-status-error"
+                  @click=${this.handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
+            `
+            : ''
+        }
       </div>
     `;
   }
