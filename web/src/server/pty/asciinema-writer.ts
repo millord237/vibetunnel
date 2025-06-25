@@ -77,7 +77,10 @@ export class AsciinemaWriter {
     if (this.headerWritten) return;
 
     const headerJson = JSON.stringify(this.header);
-    this.writeStream.write(`${headerJson}\n`);
+    const canWrite = this.writeStream.write(`${headerJson}\n`);
+    if (!canWrite) {
+      _logger.debug(`File stream buffer full while writing header to ${this.filePath}`);
+    }
     this.headerWritten = true;
   }
 
@@ -150,7 +153,10 @@ export class AsciinemaWriter {
    */
   writeRawJson(jsonValue: unknown): void {
     const jsonString = JSON.stringify(jsonValue);
-    this.writeStream.write(`${jsonString}\n`);
+    const canWrite = this.writeStream.write(`${jsonString}\n`);
+    if (!canWrite) {
+      _logger.debug(`File stream buffer full while writing raw JSON to ${this.filePath}`);
+    }
   }
 
   /**
@@ -160,7 +166,10 @@ export class AsciinemaWriter {
     // Asciinema format: [time, type, data]
     const eventArray = [event.time, event.type, event.data];
     const eventJson = JSON.stringify(eventArray);
-    this.writeStream.write(`${eventJson}\n`);
+    const canWrite = this.writeStream.write(`${eventJson}\n`);
+    if (!canWrite) {
+      _logger.debug(`File stream buffer full while writing event to ${this.filePath}`);
+    }
 
     // Force immediate disk write to trigger file watchers asynchronously
     if (this.fd !== null) {

@@ -374,42 +374,14 @@ export class PtyManager extends EventEmitter {
   ): void {
     const { ptyProcess, asciinemaWriter } = session;
 
+    if (!ptyProcess) {
+      logger.error(`No PTY process found for session ${session.id}`);
+      return;
+    }
+
     // Handle PTY data output
-    ptyProcess?.onData(async (data: string) => {
+    ptyProcess.onData(async (data: string) => {
       try {
-        // Check for bell character (ASCII 7) - filter out OSC sequences
-        // Temporarily disabled. When pasthing this into nano under vt
-        // https://gist.githubusercontent.com/steipete/8148d1dcfb6e569eaad61b5afb3aeae3/raw/58739a7bbd4a538190381731304412cef6cdd1e0/gistfile1.txt
-        // It hangs all terminals (and possibly other terminals) in VS Code irrespective of whether they run vt or not)
-        /*if (data.includes('\x07')) {
-          logger.debug(`Bell data in session ${session.id}: ${JSON.stringify(data)}`);
-
-          // Count total bells and OSC-terminated bells
-          // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require control characters
-          const totalBells = (data.match(/\x07/g) || []).length;
-
-          // Count OSC sequences terminated with bell: \x1b]...\x07
-          // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require control characters
-          const oscMatches = data.match(/\x1b\]([^\x07\x1b]|\x1b[^\]])*\x07/g) || [];
-          const oscTerminatedBells = oscMatches.length;
-
-          // If there are more bells than OSC terminators, we have real bells
-          const realBells = totalBells - oscTerminatedBells;
-
-          if (realBells > 0) {
-            logger.debug(
-              `Real bell(s) detected in session ${session.id}: ${realBells} bells (${oscTerminatedBells} OSC-terminated)`
-            );
-
-            // Capture process information for bell source identification
-            this.captureProcessInfoForBell(session, realBells);
-          } else {
-            logger.debug(
-              `Ignoring OSC sequence bells in session ${session.id}: ${oscTerminatedBells} OSC bells, ${realBells} real bells`
-            );
-          }
-        }*/
-
         // Execute both writes in parallel
         const promises: Promise<void>[] = [];
 
@@ -422,7 +394,16 @@ export class PtyManager extends EventEmitter {
 
         // Forward to stdout if requested
         if (forwardToStdout) {
-          process.stdout.write(data);
+          const canWrite = process.stdout.write(data);
+          if (!canWrite) {
+            // stdout buffer is full, pause PTY output
+            ptyProcess.pause();
+
+            // Resume when stdout drains
+            process.stdout.once('drain', () => {
+              ptyProcess.resume();
+            });
+          }
         }
 
         // Wait for both operations to complete
@@ -435,7 +416,7 @@ export class PtyManager extends EventEmitter {
     });
 
     // Handle PTY exit
-    ptyProcess?.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+    ptyProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
       try {
         // Mark session as exiting to prevent false bell notifications
         this.sessionExitTimes.set(session.id, Date.now());
@@ -484,9 +465,9 @@ export class PtyManager extends EventEmitter {
    * Monitor stdin file for input data using Unix socket for lowest latency
    */
   private monitorStdinFile(session: PtySession): void {
-    // Skip socket creation in test environments to avoid path length issues
-    if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-      logger.debug(`Skipping input socket creation for session ${session.id} in test environment`);
+    const ptyProcess = session.ptyProcess;
+    if (!ptyProcess) {
+      logger.error(`No PTY process found for session ${session.id}`);
       return;
     }
 
@@ -506,9 +487,9 @@ export class PtyManager extends EventEmitter {
         client.setNoDelay(true);
         client.on('data', (data) => {
           const text = data.toString('utf8');
-          if (session.ptyProcess) {
+          if (ptyProcess) {
             // Write input first for fastest response
-            session.ptyProcess.write(text);
+            ptyProcess.write(text);
             // Then record it (non-blocking)
             session.asciinemaWriter?.writeInput(text);
           }
@@ -707,8 +688,12 @@ export class PtyManager extends EventEmitter {
         }
 
         if (socketClient && !socketClient.destroyed) {
-          // Write and flush immediately
-          socketClient.write(dataToSend);
+          // Write and check for backpressure
+          const canWrite = socketClient.write(dataToSend);
+          if (!canWrite) {
+            // Socket buffer is full
+            logger.debug(`Socket buffer full for session ${sessionId}, data queued`);
+          }
         } else {
           throw new PtyError(
             `No socket connection available for session ${sessionId}`,
