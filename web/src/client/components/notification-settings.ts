@@ -206,6 +206,20 @@ export class NotificationSettings extends LitElement {
     }
   }
 
+  private isIOSSafari(): boolean {
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isIOS = /iphone|ipad|ipod/.test(userAgent);
+    return isIOS;
+  }
+
+  private isStandalone(): boolean {
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      ('standalone' in window.navigator &&
+        (window.navigator as Navigator & { standalone?: boolean }).standalone === true)
+    );
+  }
+
   render() {
     if (!this.visible) {
       return html``;
@@ -214,6 +228,8 @@ export class NotificationSettings extends LitElement {
     const isSupported = pushNotificationService.isSupported();
     const hasSubscription = this.subscription || pushNotificationService.isSubscribed();
     const canTest = this.permission === 'granted' && hasSubscription;
+    const isIOSSafari = this.isIOSSafari();
+    const isStandalone = this.isStandalone();
 
     return html`
       <!-- Modal backdrop -->
@@ -247,9 +263,22 @@ export class NotificationSettings extends LitElement {
                   <div
                     class="p-3 bg-status-warning bg-opacity-10 border border-status-warning rounded"
                   >
-                    <p class="text-sm text-status-warning">
-                      Push notifications are not supported in this browser.
-                    </p>
+                    ${
+                      isIOSSafari && !isStandalone
+                        ? html`
+                        <p class="text-sm text-status-warning mb-2">
+                          Push notifications require installing this app to your home screen.
+                        </p>
+                        <p class="text-xs text-status-warning opacity-80">
+                          Tap the share button in Safari and select "Add to Home Screen" to enable push notifications.
+                        </p>
+                      `
+                        : html`
+                        <p class="text-sm text-status-warning">
+                          Push notifications are not supported in this browser.
+                        </p>
+                      `
+                    }
                   </div>
                 `
                 : html`
