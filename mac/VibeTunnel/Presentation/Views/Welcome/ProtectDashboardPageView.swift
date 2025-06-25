@@ -39,22 +39,6 @@ struct ProtectDashboardPageView: View {
 
                 // Authentication info
                 VStack(spacing: 20) {
-                    // Security icon and explanation
-                    HStack(spacing: 12) {
-                        Image(systemName: "lock.shield.fill")
-                            .font(.system(size: 48))
-                            .foregroundColor(.accentColor)
-                            .symbolRenderingMode(.hierarchical)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Secure by Default")
-                                .font(.headline)
-                            Text("Access requires your macOS credentials")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: 400)
 
                     // Authentication methods
                     VStack(alignment: .leading, spacing: 12) {
