@@ -26,6 +26,7 @@ import {
   COMMON_TERMINAL_WIDTHS,
   TerminalPreferencesManager,
 } from '../utils/terminal-preferences.js';
+import { AppSettings } from './app-settings.js';
 import type { Terminal } from './terminal.js';
 
 const logger = createLogger('session-view');
@@ -68,10 +69,12 @@ export class SessionView extends LitElement {
   private preferencesManager = TerminalPreferencesManager.getInstance();
   @state() private reconnectCount = 0;
   @state() private ctrlSequence: string[] = [];
+  @state() private useDirectKeyboard = false;
 
   private loadingInterval: number | null = null;
   private keyboardListenerAdded = false;
   private touchListenersAdded = false;
+  private hiddenInput: HTMLInputElement | null = null;
   private resizeTimeout: number | null = null;
   private lastResizeWidth = 0;
   private lastResizeHeight = 0;
@@ -208,6 +211,10 @@ export class SessionView extends LitElement {
     this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       navigator.userAgent
     );
+
+    // Load direct keyboard preference
+    const preferences = AppSettings.getPreferences();
+    this.useDirectKeyboard = preferences.useDirectKeyboard;
 
     // Only add listeners if not already added
     if (!this.isMobile && !this.keyboardListenerAdded) {
@@ -686,6 +693,12 @@ export class SessionView extends LitElement {
 
   // Mobile input methods
   private handleMobileInputToggle() {
+    // If direct keyboard is enabled, focus a hidden input instead of showing overlay
+    if (this.useDirectKeyboard) {
+      this.focusHiddenInput();
+      return;
+    }
+
     this.showMobileInput = !this.showMobileInput;
     if (this.showMobileInput) {
       // Focus the textarea after ensuring it's rendered and visible
@@ -1065,6 +1078,53 @@ export class SessionView extends LitElement {
         error,
         sessionId: this.session.id,
       });
+    }
+  }
+
+  private focusHiddenInput() {
+    // Create or get hidden input
+    if (!this.hiddenInput) {
+      this.hiddenInput = document.createElement('input');
+      this.hiddenInput.type = 'text';
+      this.hiddenInput.style.position = 'absolute';
+      this.hiddenInput.style.left = '-9999px';
+      this.hiddenInput.style.top = '0';
+      this.hiddenInput.autocapitalize = 'off';
+      this.hiddenInput.autocomplete = 'off';
+      this.hiddenInput.setAttribute('autocorrect', 'off');
+
+      // Handle input events
+      this.hiddenInput.addEventListener('input', (e) => {
+        const input = e.target as HTMLInputElement;
+        if (input.value) {
+          // Send each character to terminal
+          this.sendInputText(input.value);
+          // Clear the input
+          input.value = '';
+        }
+      });
+
+      // Handle special keys
+      this.hiddenInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.sendInputText('enter');
+        } else if (e.key === 'Backspace' && !this.hiddenInput?.value) {
+          e.preventDefault();
+          this.sendInputText('backspace');
+        }
+      });
+
+      this.appendChild(this.hiddenInput);
+    }
+
+    // Focus the hidden input
+    this.hiddenInput.focus();
+  }
+
+  private handleTerminalClick() {
+    if (this.isMobile && this.useDirectKeyboard) {
+      this.focusHiddenInput();
     }
   }
 
