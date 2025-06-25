@@ -173,6 +173,12 @@ export class PtyManager extends EventEmitter {
     const cols = options.cols || 80;
     const rows = options.rows || 24;
 
+    // Verify working directory exists
+    logger.debug('Session creation parameters:', { sessionId, sessionName, workingDir, term, cols, rows });
+    if (!fs.existsSync(workingDir)) {
+      throw new PtyError(`Working directory does not exist: '${workingDir}'`, 'INVALID_WORKING_DIR');
+    }
+
     try {
       // Create session directory structure
       const paths = this.sessionManager.createSessionDirectory(sessionId);
@@ -229,6 +235,20 @@ export class PtyManager extends EventEmitter {
           TERM: term,
         };
 
+        // Debug log the spawn parameters
+        logger.debug('PTY spawn parameters:', {
+          command: finalCommand,
+          args: finalArgs,
+          options: {
+            name: term,
+            cols,
+            rows,
+            cwd: workingDir,
+            hasEnv: !!ptyEnv,
+            envKeys: Object.keys(ptyEnv).length
+          }
+        });
+
         ptyProcess = pty.spawn(finalCommand, finalArgs, {
           name: term,
           cols,
@@ -254,7 +274,16 @@ export class PtyManager extends EventEmitter {
           errorMessage = `Working directory does not exist: '${workingDir}'`;
         }
 
-        logger.error(`Failed to spawn PTY for command '${command.join(' ')}':`, spawnError);
+        // Log the error with better serialization
+        const errorDetails = spawnError instanceof Error 
+          ? { 
+              message: spawnError.message, 
+              stack: spawnError.stack,
+              code: (spawnError as NodeJS.ErrnoException).code,
+              ...spawnError 
+            }
+          : spawnError;
+        logger.error(`Failed to spawn PTY for command '${command.join(' ')}':`, errorDetails);
         throw new PtyError(errorMessage, 'SPAWN_FAILED');
       }
 
