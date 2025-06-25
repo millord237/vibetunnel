@@ -260,7 +260,10 @@ export class AuthClient {
     if (this.currentUser?.token) {
       return { Authorization: `Bearer ${this.currentUser.token}` };
     }
-    console.warn('⚠️ No token available for auth header');
+    // Suppress warning in test environment to reduce noise
+    if (typeof process === 'undefined' || process.env?.NODE_ENV !== 'test') {
+      console.warn('⚠️ No token available for auth header');
+    }
     return {};
   }
 

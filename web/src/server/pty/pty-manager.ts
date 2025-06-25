@@ -182,12 +182,6 @@ export class PtyManager extends EventEmitter {
       cols,
       rows,
     });
-    if (!fs.existsSync(workingDir)) {
-      throw new PtyError(
-        `Working directory does not exist: '${workingDir}'`,
-        'INVALID_WORKING_DIR'
-      );
-    }
 
     try {
       // Create session directory structure
