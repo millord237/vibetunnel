@@ -201,12 +201,12 @@ export class AuthLogin extends LitElement {
       <div class="auth-container">
         <div class="w-full max-w-sm">
           <div class="auth-header">
-            <div class="flex flex-col items-center gap-2 sm:gap-3 mb-4 sm:mb-8">
+            <div class="flex flex-col items-center gap-1 sm:gap-3 mb-2 sm:mb-8">
               <terminal-icon
-                size="${this.isMobile ? '48' : '56'}"
+                size="${this.isMobile ? '40' : '56'}"
                 style="filter: drop-shadow(0 0 15px rgba(124, 230, 161, 0.4));"
               ></terminal-icon>
-              <h2 class="auth-title text-2xl sm:text-3xl mt-1 sm:mt-2">VibeTunnel</h2>
+              <h2 class="auth-title text-xl sm:text-3xl mt-0 sm:mt-2">VibeTunnel</h2>
               <p class="auth-subtitle text-xs sm:text-sm">Please authenticate to continue</p>
             </div>
           </div>
@@ -214,7 +214,7 @@ export class AuthLogin extends LitElement {
           ${
             this.error
               ? html`
-                <div class="bg-status-error text-dark-bg px-4 py-2 rounded mb-4 font-mono text-sm" data-testid="error-message">
+                <div class="bg-status-error text-dark-bg px-3 py-1.5 rounded mb-3 font-mono text-xs sm:text-sm" data-testid="error-message">
                   ${this.error}
                   <button
                     @click=${() => {
@@ -233,7 +233,7 @@ export class AuthLogin extends LitElement {
             this.success
               ? html`
                 <div
-                  class="bg-status-success text-dark-bg px-4 py-2 rounded mb-4 font-mono text-sm"
+                  class="bg-status-success text-dark-bg px-3 py-1.5 rounded mb-3 font-mono text-xs sm:text-sm"
                 >
                   ${this.success}
                   <button
@@ -254,9 +254,9 @@ export class AuthLogin extends LitElement {
               !this.authConfig.disallowUserPassword
                 ? html`
                   <!-- Password Login Section (Primary) -->
-                  <div class="p-6 sm:p-8">
-                    <div class="flex flex-col items-center mb-4 sm:mb-6">
-                      <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full mb-2 sm:mb-3 overflow-hidden" style="box-shadow: 0 0 20px rgba(124, 230, 161, 0.3);">
+                  <div class="p-4 sm:p-8">
+                    <div class="flex flex-col items-center mb-3 sm:mb-6">
+                      <div class="w-14 h-14 sm:w-20 sm:h-20 rounded-full mb-2 sm:mb-3 overflow-hidden" style="box-shadow: 0 0 20px rgba(124, 230, 161, 0.3);">
                         ${
                           this.userAvatar
                             ? html`
@@ -270,18 +270,18 @@ export class AuthLogin extends LitElement {
                             `
                             : html`
                               <div class="w-full h-full bg-dark-bg-secondary flex items-center justify-center">
-                                <svg class="w-8 h-8 sm:w-10 sm:h-10 text-dark-text-muted" fill="currentColor" viewBox="0 0 20 20">
+                                <svg class="w-7 h-7 sm:w-10 sm:h-10 text-dark-text-muted" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
                                 </svg>
                               </div>
                             `
                         }
                       </div>
-                      <p class="text-dark-text text-base sm:text-lg font-medium">
+                      <p class="text-dark-text text-sm sm:text-lg font-medium">
                         Welcome back, ${this.currentUserId || '...'}
                       </p>
                     </div>
-                    <form @submit=${this.handlePasswordLogin} class="space-y-4">
+                    <form @submit=${this.handlePasswordLogin} class="space-y-3">
                       <div>
                         ${
                           this.useDirectKeyboard
@@ -334,7 +334,7 @@ export class AuthLogin extends LitElement {
                       </div>
                       <button
                         type="submit"
-                        class="btn-primary w-full py-3 sm:py-4 mt-2"
+                        class="btn-primary w-full py-2.5 sm:py-4 mt-2 text-sm sm:text-base"
                         data-testid="password-submit"
                         ?disabled=${this.loading || !this.loginPassword}
                       >
@@ -394,7 +394,7 @@ export class AuthLogin extends LitElement {
                   ${
                     !this.authConfig.disallowUserPassword
                       ? html`
-                        <div class="auth-divider">
+                        <div class="auth-divider py-2 sm:py-3">
                           <span>or</span>
                         </div>
                       `
@@ -424,7 +424,7 @@ export class AuthLogin extends LitElement {
                       </div>
 
                       <button
-                        class="btn-secondary w-full"
+                        class="btn-secondary w-full py-2.5 sm:py-3 text-sm sm:text-base"
                         data-testid="ssh-login"
                         @click=${this.handleSSHKeyAuth}
                         ?disabled=${this.loading}
