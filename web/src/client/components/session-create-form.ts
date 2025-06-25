@@ -42,6 +42,7 @@ export class SessionCreateForm extends LitElement {
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean }) visible = false;
   @property({ type: Object }) authClient!: AuthClient;
+  @property({ type: Boolean }) spawnWindow = true;
 
   @state() private isCreating = false;
   @state() private showFileBrowser = false;
@@ -58,6 +59,7 @@ export class SessionCreateForm extends LitElement {
 
   private readonly STORAGE_KEY_WORKING_DIR = 'vibetunnel_last_working_dir';
   private readonly STORAGE_KEY_COMMAND = 'vibetunnel_last_command';
+  private readonly STORAGE_KEY_SPAWN_WINDOW = 'vibetunnel_spawn_window';
 
   connectedCallback() {
     super.connectedCallback();
@@ -101,9 +103,10 @@ export class SessionCreateForm extends LitElement {
     try {
       const savedWorkingDir = localStorage.getItem(this.STORAGE_KEY_WORKING_DIR);
       const savedCommand = localStorage.getItem(this.STORAGE_KEY_COMMAND);
+      const savedSpawnWindow = localStorage.getItem(this.STORAGE_KEY_SPAWN_WINDOW);
 
       logger.debug(
-        `loading from localStorage: workingDir=${savedWorkingDir}, command=${savedCommand}`
+        `loading from localStorage: workingDir=${savedWorkingDir}, command=${savedCommand}, spawnWindow=${savedSpawnWindow}`
       );
 
       if (savedWorkingDir) {
@@ -111,6 +114,9 @@ export class SessionCreateForm extends LitElement {
       }
       if (savedCommand) {
         this.command = savedCommand;
+      }
+      if (savedSpawnWindow !== null) {
+        this.spawnWindow = savedSpawnWindow === 'true';
       }
 
       // Force re-render to update the input values
@@ -125,7 +131,9 @@ export class SessionCreateForm extends LitElement {
       const workingDir = this.workingDir.trim();
       const command = this.command.trim();
 
-      logger.debug(`saving to localStorage: workingDir=${workingDir}, command=${command}`);
+      logger.debug(
+        `saving to localStorage: workingDir=${workingDir}, command=${command}, spawnWindow=${this.spawnWindow}`
+      );
 
       // Only save non-empty values
       if (workingDir) {
@@ -134,6 +142,7 @@ export class SessionCreateForm extends LitElement {
       if (command) {
         localStorage.setItem(this.STORAGE_KEY_COMMAND, command);
       }
+      localStorage.setItem(this.STORAGE_KEY_SPAWN_WINDOW, String(this.spawnWindow));
     } catch (_error) {
       logger.warn('failed to save to localStorage');
     }
@@ -176,6 +185,10 @@ export class SessionCreateForm extends LitElement {
     this.sessionName = input.value;
   }
 
+  private handleSpawnWindowChange() {
+    this.spawnWindow = !this.spawnWindow;
+  }
+
   private handleBrowse() {
     this.showFileBrowser = true;
   }
@@ -209,7 +222,7 @@ export class SessionCreateForm extends LitElement {
     const sessionData: SessionCreateData = {
       command: this.parseCommand(this.command.trim()),
       workingDir: this.workingDir.trim(),
-      spawn_terminal: true,
+      spawn_terminal: this.spawnWindow,
       cols: terminalCols,
       rows: terminalRows,
     };
@@ -389,6 +402,31 @@ export class SessionCreateForm extends LitElement {
                   📁
                 </button>
               </div>
+            </div>
+
+            <!-- Spawn Window Toggle -->
+            <div class="mb-4 flex items-center justify-between">
+              <div class="flex-1 pr-4">
+                <span class="text-dark-text text-sm">Spawn window</span>
+                <p class="text-xs text-dark-text-muted mt-1">
+                  Opens native terminal window
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked="${this.spawnWindow}"
+                @click=${this.handleSpawnWindowChange}
+                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
+                  this.spawnWindow ? 'bg-accent-green' : 'bg-dark-border'
+                }"
+                ?disabled=${this.disabled || this.isCreating}
+              >
+                <span
+                  class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                    this.spawnWindow ? 'translate-x-5' : 'translate-x-0.5'
+                  }"
+                ></span>
+              </button>
             </div>
 
             <!-- Quick Start Section -->
