@@ -1242,10 +1242,16 @@ export class VibeTunnelApp extends LitElement {
       ></ssh-key-manager>
 
       <!-- Version and logs link in bottom right -->
-      <div class="fixed bottom-4 right-4 text-dark-text-muted text-xs font-mono z-20">
-        ${this.showLogLink ? html`<a href="/logs" class="hover:text-dark-text transition-colors">Logs</a>` : ''}
-        <span class="${this.showLogLink ? 'ml-2' : ''}">v${VERSION}</span>
-      </div>
+      ${
+        this.showLogLink
+          ? html`
+        <div class="fixed bottom-4 right-4 text-dark-text-muted text-xs font-mono z-20">
+          <a href="/logs" class="hover:text-dark-text transition-colors">Logs</a>
+          <span class="ml-2">v${VERSION}</span>
+        </div>
+      `
+          : ''
+      }
     `;
   }
 }

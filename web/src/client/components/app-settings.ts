@@ -1,6 +1,7 @@
 import { html, LitElement } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { createLogger } from '../utils/logger.js';
+import { responsiveObserver } from '../utils/responsive-utils.js';
 
 const logger = createLogger('app-settings');
 
@@ -24,10 +25,24 @@ export class AppSettings extends LitElement {
 
   @property({ type: Boolean }) open = false;
   @state() private preferences: AppPreferences = DEFAULT_PREFERENCES;
+  @state() private isMobile = false;
+  private unsubscribeResponsive?: () => void;
 
   connectedCallback() {
     super.connectedCallback();
     this.loadPreferences();
+
+    // Subscribe to responsive changes
+    this.unsubscribeResponsive = responsiveObserver.subscribe((state) => {
+      this.isMobile = state.isMobile;
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this.unsubscribeResponsive) {
+      this.unsubscribeResponsive();
+    }
   }
 
   private loadPreferences() {
@@ -109,35 +124,41 @@ export class AppSettings extends LitElement {
 
           <!-- Content -->
           <div class="p-4">
-            <!-- Direct Keyboard Setting -->
-            <div class="flex items-center justify-between py-3">
-              <div class="flex-1 pr-4">
-                <label class="text-dark-text text-sm font-medium" for="direct-keyboard-toggle">
-                  Use direct keyboard
-                </label>
-                <p class="text-dark-text-muted text-xs mt-1">
-                  Capture keyboard input directly without showing a text field (desktop-like experience)
-                </p>
-              </div>
-              <button
-                id="direct-keyboard-toggle"
-                role="switch"
-                aria-checked="${this.preferences.useDirectKeyboard}"
-                @click=${this.handleToggleDirectKeyboard}
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
-                  this.preferences.useDirectKeyboard ? 'bg-accent-green' : 'bg-dark-border'
-                }"
-              >
-                <span
-                  class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                    this.preferences.useDirectKeyboard ? 'translate-x-5' : 'translate-x-0.5'
+            <!-- Direct Keyboard Setting (Mobile Only) -->
+            ${
+              this.isMobile
+                ? html`
+              <div class="flex items-center justify-between py-3">
+                <div class="flex-1 pr-4">
+                  <label class="text-dark-text text-sm font-medium" for="direct-keyboard-toggle">
+                    Use direct keyboard
+                  </label>
+                  <p class="text-dark-text-muted text-xs mt-1">
+                    Capture keyboard input directly without showing a text field (desktop-like experience)
+                  </p>
+                </div>
+                <button
+                  id="direct-keyboard-toggle"
+                  role="switch"
+                  aria-checked="${this.preferences.useDirectKeyboard}"
+                  @click=${this.handleToggleDirectKeyboard}
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
+                    this.preferences.useDirectKeyboard ? 'bg-accent-green' : 'bg-dark-border'
                   }"
-                ></span>
-              </button>
-            </div>
+                >
+                  <span
+                    class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                      this.preferences.useDirectKeyboard ? 'translate-x-5' : 'translate-x-0.5'
+                    }"
+                  ></span>
+                </button>
+              </div>
+            `
+                : ''
+            }
 
             <!-- Show Log Link Setting -->
-            <div class="flex items-center justify-between py-3 border-t border-dark-border">
+            <div class="flex items-center justify-between py-3 ${this.isMobile ? 'border-t border-dark-border' : ''}">
               <div class="flex-1 pr-4">
                 <label class="text-dark-text text-sm font-medium" for="show-log-link-toggle">
                   Show log link
