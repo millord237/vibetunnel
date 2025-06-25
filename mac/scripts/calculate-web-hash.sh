@@ -41,7 +41,7 @@ CONTENT_HASH=$(find . \
     -not -path "./node-build-artifacts/*" \
     -not -name "package-lock.json" | \
     sort | \
-    tar -cf - -T - 2>/dev/null | \
+    tar --mtime='1970-01-01' --mode=644 --owner=0 --group=0 -cf - -T - 2>/dev/null | \
     shasum -a 256 | \
     cut -d' ' -f1)
 
