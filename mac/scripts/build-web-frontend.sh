@@ -98,30 +98,14 @@ cd "${WEB_DIR}"
 echo "Cleaning build artifacts..."
 rm -rf dist public/bundle public/output.css native
 
-# Force completely clean node modules to bypass pnpm cache issues
-echo "Force cleaning all node modules and pnpm cache..."
-rm -rf node_modules
-rm -rf .pnpm-store
-
-# Clear ALL pnpm caches to force fresh downloads
-echo "Clearing all pnpm caches..."
-pnpm store prune --force
-rm -rf ~/.pnpm-store
-rm -rf ~/Library/Caches/pnpm
-rm -rf ~/.cache/pnpm
-
-# Clear pnpm's integrity cache
-rm -rf node_modules/.pnpm/lock.yaml
-rm -rf node_modules/.modules.yaml
-
 # Install dependencies
-echo "Installing dependencies with fresh modules..."
+echo "Installing dependencies..."
 # For Xcode builds, ensure C++20 standard for native modules
 export MACOSX_DEPLOYMENT_TARGET="14.0"
 export CXXFLAGS="-std=c++20 -stdlib=libc++ -mmacosx-version-min=14.0"
 export CXX="${CXX:-clang++}"
 export CC="${CC:-clang}"
-pnpm install --frozen-lockfile --prefer-offline=false
+pnpm install --frozen-lockfile
 
 # Determine build configuration
 BUILD_CONFIG="${CONFIGURATION:-Debug}"

@@ -122,7 +122,11 @@ function patchNodePty() {
   // Always reinstall to ensure clean state
   console.log('Reinstalling node-pty to ensure clean state...');
   execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
-  execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit', { stdio: 'inherit' });
+  execSync('pnpm install @homebridge/node-pty-prebuilt-multiarch --silent', { stdio: 'inherit' });
+  
+  // Also ensure authenticate-pam is installed
+  console.log('Ensuring authenticate-pam is installed...');
+  execSync('pnpm install authenticate-pam --silent', { stdio: 'inherit' });
 
   // If using custom Node.js, rebuild native modules
   if (customNodePath) {
@@ -135,12 +139,17 @@ function patchNodePty() {
     console.log(`Custom Node.js: ${customVersion}`);
     console.log(`System Node.js: ${systemVersion}`);
 
-    // Rebuild node-pty with the custom Node using npm rebuild
+    // Rebuild node-pty with the custom Node using pnpm rebuild
     console.log('Rebuilding @homebridge/node-pty-prebuilt-multiarch with custom Node.js...');
 
     try {
-      // Use the custom Node to rebuild native modules
-      execSync(`"${customNodePath}" "$(which npm)" rebuild @homebridge/node-pty-prebuilt-multiarch authenticate-pam`, {
+      // Use system Node to run pnpm, but rebuild for custom Node version
+      // The key is to use system Node.js to run pnpm (which needs regex support),
+      // but tell node-gyp to build against the custom Node.js headers
+      console.log('Using system Node.js to run pnpm for compatibility...');
+      
+      // First rebuild node-pty which is critical
+      execSync(`pnpm rebuild @homebridge/node-pty-prebuilt-multiarch`, {
         stdio: 'inherit',
         env: {
           ...process.env,
@@ -154,15 +163,42 @@ function patchNodePty() {
           MACOSX_DEPLOYMENT_TARGET: '14.0'
         }
       });
+      console.log('node-pty rebuilt successfully');
+      
+      // Rebuild authenticate-pam (required for authentication)
+      console.log('Rebuilding authenticate-pam...');
+      execSync(`pnpm rebuild authenticate-pam`, {
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          npm_config_runtime: 'node',
+          npm_config_target: customVersion.substring(1),
+          npm_config_arch: process.arch,
+          npm_config_target_arch: process.arch,
+          npm_config_disturl: 'https://nodejs.org/dist',
+          npm_config_build_from_source: 'true',
+          CXXFLAGS: '-std=c++20 -stdlib=libc++ -mmacosx-version-min=14.0',
+          MACOSX_DEPLOYMENT_TARGET: '14.0'
+        }
+      });
+      console.log('authenticate-pam rebuilt successfully');
+      
       console.log('Native modules rebuilt successfully with custom Node.js');
     } catch (error) {
       console.error('Failed to rebuild native module:', error.message);
       console.error('Trying alternative rebuild method...');
 
-      // Alternative: Force rebuild from source
+      // Alternative: Force reinstall and rebuild
       try {
-        execSync(`rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch/build`, { stdio: 'inherit' });
-        execSync(`"${customNodePath}" "$(which npm)" install @homebridge/node-pty-prebuilt-multiarch --build-from-source`, {
+        console.log('Forcing reinstall and rebuild...');
+        execSync(`rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch`, { stdio: 'inherit' });
+        execSync(`rm -rf node_modules/authenticate-pam`, { stdio: 'inherit' });
+        
+        // First install the packages
+        execSync(`pnpm install @homebridge/node-pty-prebuilt-multiarch authenticate-pam --force`, { stdio: 'inherit' });
+        
+        // Then rebuild them with custom Node settings
+        execSync(`pnpm rebuild @homebridge/node-pty-prebuilt-multiarch authenticate-pam`, {
           stdio: 'inherit',
           env: {
             ...process.env,
@@ -363,8 +399,30 @@ async function main() {
 
     // 2. Bundle TypeScript with esbuild using custom loader
     console.log('\nBundling TypeScript with esbuild...');
-    const buildDate = new Date().toISOString();
-    const buildTimestamp = Date.now();
+    
+    // Use deterministic timestamps based on git commit or source
+    let buildDate;
+    let buildTimestamp;
+    
+    try {
+      // Try to use the last commit date for reproducible builds
+      const gitDate = execSync('git log -1 --format=%cI', { encoding: 'utf8' }).trim();
+      buildDate = gitDate;
+      buildTimestamp = new Date(gitDate).getTime();
+      console.log(`Using git commit date for reproducible build: ${buildDate}`);
+    } catch (e) {
+      // Fallback to SOURCE_DATE_EPOCH if set (for reproducible builds)
+      if (process.env.SOURCE_DATE_EPOCH) {
+        buildTimestamp = parseInt(process.env.SOURCE_DATE_EPOCH) * 1000;
+        buildDate = new Date(buildTimestamp).toISOString();
+        console.log(`Using SOURCE_DATE_EPOCH for reproducible build: ${buildDate}`);
+      } else {
+        // Only use current time as last resort
+        buildDate = new Date().toISOString();
+        buildTimestamp = Date.now();
+        console.warn('Warning: Using current time for build - output will not be reproducible');
+      }
+    }
 
     // Use esbuild directly without custom loader since we're patching node-pty
     let esbuildCmd = `npx esbuild src/cli.ts \\
@@ -377,6 +435,15 @@ async function main() {
       --external:authenticate-pam \\
       --define:process.env.BUILD_DATE='"${buildDate}"' \\
       --define:process.env.BUILD_TIMESTAMP='"${buildTimestamp}"'`;
+    
+    // Also inject git commit hash for version tracking
+    try {
+      const gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+      esbuildCmd += ` \\\n      --define:process.env.GIT_COMMIT='"${gitCommit}"'`;
+    } catch (e) {
+      // Not in a git repo or git not available
+      esbuildCmd += ` \\\n      --define:process.env.GIT_COMMIT='"unknown"'`;
+    }
 
     if (includeSourcemaps) {
       esbuildCmd += ' \\\n      --sourcemap=inline \\\n      --source-root=/';
@@ -480,13 +547,14 @@ async function main() {
       fs.copyFileSync(authPamPath, 'native/authenticate_pam.node');
       console.log('  - Copied authenticate_pam.node');
     } else {
-      console.warn('Warning: authenticate_pam.node not found. PAM authentication may not work.');
+      console.error('Error: authenticate_pam.node not found. PAM authentication is required.');
+      process.exit(1);
     }
 
     // 9. Restore original node-pty (AFTER copying the custom-built version)
     console.log('\nRestoring original node-pty for development...');
     execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
-    execSync('npm install @homebridge/node-pty-prebuilt-multiarch --silent --no-fund --no-audit', { stdio: 'inherit' });
+    execSync('pnpm install @homebridge/node-pty-prebuilt-multiarch --silent', { stdio: 'inherit' });
 
     console.log('\n✅ Build complete!');
     console.log(`\nPortable executable created in native/ directory:`);
