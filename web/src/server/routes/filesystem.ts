@@ -21,6 +21,7 @@ interface FileInfo {
   permissions?: string;
   isGitTracked?: boolean;
   gitStatus?: 'modified' | 'added' | 'deleted' | 'untracked' | 'unchanged';
+  isSymlink?: boolean;
 }
 
 interface GitStatus {
@@ -232,21 +233,46 @@ export function createFilesystemRoutes(): Router {
             .filter((entry) => showHidden || !entry.name.startsWith('.'))
             .map(async (entry) => {
               const entryPath = path.join(fullPath, entry.name);
-              const stats = await fs.stat(entryPath);
-              const relativePath = path.relative(process.cwd(), entryPath);
 
-              const fileInfo: FileInfo = {
-                name: entry.name,
-                path: relativePath,
-                type: entry.isDirectory() ? 'directory' : 'file',
-                size: stats.size,
-                modified: stats.mtime.toISOString(),
-                permissions: stats.mode.toString(8).slice(-3),
-                isGitTracked: gitStatus?.isGitRepo || false,
-                gitStatus: getFileGitStatus(entryPath, gitStatus, gitRepoRoot),
-              };
+              try {
+                // Use fs.stat() which follows symlinks, instead of entry.isDirectory()
+                const stats = await fs.stat(entryPath);
+                const relativePath = path.relative(process.cwd(), entryPath);
 
-              return fileInfo;
+                // Check if this is a symlink
+                const isSymlink = entry.isSymbolicLink();
+
+                const fileInfo: FileInfo = {
+                  name: entry.name,
+                  path: relativePath,
+                  type: stats.isDirectory() ? 'directory' : 'file',
+                  size: stats.size,
+                  modified: stats.mtime.toISOString(),
+                  permissions: stats.mode.toString(8).slice(-3),
+                  isGitTracked: gitStatus?.isGitRepo || false,
+                  gitStatus: getFileGitStatus(entryPath, gitStatus, gitRepoRoot),
+                  isSymlink,
+                };
+
+                return fileInfo;
+              } catch (error) {
+                // Handle broken symlinks or permission errors
+                logger.warn(`failed to stat ${entryPath}:`, error);
+
+                // For broken symlinks, we'll still show them but as files
+                const fileInfo: FileInfo = {
+                  name: entry.name,
+                  path: path.relative(process.cwd(), entryPath),
+                  type: 'file',
+                  size: 0,
+                  modified: new Date().toISOString(),
+                  permissions: '000',
+                  isGitTracked: false,
+                  gitStatus: undefined,
+                };
+
+                return fileInfo;
+              }
             })
         );
       }
