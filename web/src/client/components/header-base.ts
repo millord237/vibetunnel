@@ -75,6 +75,7 @@ export abstract class HeaderBase extends LitElement {
   }
 
   protected handleOpenSettings() {
+    console.log('🔧 HeaderBase: handleOpenSettings called');
     this.showUserMenu = false;
     this.dispatchEvent(new CustomEvent('open-settings'));
   }

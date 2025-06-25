@@ -39,7 +39,7 @@ export class FullHeader extends HeaderBase {
             </a>
           </div>
 
-          <div class="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
             <div class="flex gap-2 items-center">
               <notification-status
                 @open-settings=${() =>
@@ -65,8 +65,8 @@ export class FullHeader extends HeaderBase {
               >
                 Create Session
               </button>
-              ${this.renderUserMenu()}
             </div>
+            ${this.renderUserMenu()}
           </div>
         </div>
       </div>
