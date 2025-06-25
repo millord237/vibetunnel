@@ -43,6 +43,7 @@ export class SessionView extends LitElement {
   @property({ type: Boolean }) showBackButton = true;
   @property({ type: Boolean }) showSidebarToggle = false;
   @property({ type: Boolean }) sidebarCollapsed = false;
+  @property({ type: Boolean }) disableFocusManagement = false;
   @state() private connected = false;
   @state() private terminal: Terminal | null = null;
   @state() private streamConnection: {
@@ -222,7 +223,11 @@ export class SessionView extends LitElement {
 
     // Make session-view focusable
     this.tabIndex = 0;
-    this.addEventListener('click', () => this.focus());
+    this.addEventListener('click', () => {
+      if (!this.disableFocusManagement) {
+        this.focus();
+      }
+    });
 
     // Add click outside handler for width selector
     document.addEventListener('click', this.handleClickOutside);
@@ -965,9 +970,9 @@ export class SessionView extends LitElement {
       this.showMobileInput = false;
 
       // Refocus the hidden input to restore keyboard functionality
-      if (this.hiddenInput && this.showQuickKeys) {
+      if (!this.disableFocusManagement && this.hiddenInput && this.showQuickKeys) {
         setTimeout(() => {
-          if (this.hiddenInput) {
+          if (!this.disableFocusManagement && this.hiddenInput) {
             this.hiddenInput.focus();
           }
         }, 100);
@@ -1006,9 +1011,9 @@ export class SessionView extends LitElement {
       this.showMobileInput = false;
 
       // Refocus the hidden input to restore keyboard functionality
-      if (this.hiddenInput && this.showQuickKeys) {
+      if (!this.disableFocusManagement && this.hiddenInput && this.showQuickKeys) {
         setTimeout(() => {
-          if (this.hiddenInput) {
+          if (!this.disableFocusManagement && this.hiddenInput) {
             this.hiddenInput.focus();
           }
         }, 100);
@@ -1381,6 +1386,7 @@ export class SessionView extends LitElement {
 
       this.focusRetentionInterval = setInterval(() => {
         if (
+          !this.disableFocusManagement &&
           this.showQuickKeys &&
           this.hiddenInput &&
           document.activeElement !== this.hiddenInput &&
@@ -1397,10 +1403,11 @@ export class SessionView extends LitElement {
       const event = e as FocusEvent;
 
       // Immediately try to recapture focus
-      if (this.showQuickKeys && this.hiddenInput) {
+      if (!this.disableFocusManagement && this.showQuickKeys && this.hiddenInput) {
         // Use a very short timeout to allow any legitimate focus changes to complete
         setTimeout(() => {
           if (
+            !this.disableFocusManagement &&
             this.showQuickKeys &&
             this.hiddenInput &&
             document.activeElement !== this.hiddenInput
@@ -1472,10 +1479,11 @@ export class SessionView extends LitElement {
         this.mobileInputText = '';
 
         // Restart focus retention when closing mobile input
-        if (this.hiddenInput && this.showQuickKeys) {
+        if (!this.disableFocusManagement && this.hiddenInput && this.showQuickKeys) {
           // Restart focus retention
           this.focusRetentionInterval = setInterval(() => {
             if (
+              !this.disableFocusManagement &&
               this.showQuickKeys &&
               this.hiddenInput &&
               document.activeElement !== this.hiddenInput &&
@@ -1488,7 +1496,7 @@ export class SessionView extends LitElement {
           }, 300) as unknown as number;
 
           setTimeout(() => {
-            if (this.hiddenInput) {
+            if (!this.disableFocusManagement && this.hiddenInput) {
               this.hiddenInput.focus();
             }
           }, 100);
@@ -1519,10 +1527,11 @@ export class SessionView extends LitElement {
         this.ctrlSequence = [];
 
         // Restart focus retention when closing Ctrl overlay
-        if (this.hiddenInput && this.showQuickKeys) {
+        if (!this.disableFocusManagement && this.hiddenInput && this.showQuickKeys) {
           // Restart focus retention
           this.focusRetentionInterval = setInterval(() => {
             if (
+              !this.disableFocusManagement &&
               this.showQuickKeys &&
               this.hiddenInput &&
               document.activeElement !== this.hiddenInput &&
@@ -1535,7 +1544,7 @@ export class SessionView extends LitElement {
           }, 300) as unknown as number;
 
           setTimeout(() => {
-            if (this.hiddenInput) {
+            if (!this.disableFocusManagement && this.hiddenInput) {
               this.hiddenInput.focus();
             }
           }, 100);
@@ -1620,7 +1629,7 @@ export class SessionView extends LitElement {
     // Always keep focus on hidden input after any key press (except Done)
     // Use requestAnimationFrame to ensure DOM has updated
     requestAnimationFrame(() => {
-      if (this.hiddenInput && this.showQuickKeys) {
+      if (!this.disableFocusManagement && this.hiddenInput && this.showQuickKeys) {
         this.hiddenInput.focus();
       }
     });
@@ -2053,9 +2062,9 @@ export class SessionView extends LitElement {
                   if (e.target === e.currentTarget) {
                     this.showMobileInput = false;
                     // Refocus the hidden input
-                    if (this.hiddenInput && this.showQuickKeys) {
+                    if (!this.disableFocusManagement && this.hiddenInput && this.showQuickKeys) {
                       setTimeout(() => {
-                        if (this.hiddenInput) {
+                        if (!this.disableFocusManagement && this.hiddenInput) {
                           this.hiddenInput.focus();
                         }
                       }, 100);
@@ -2103,9 +2112,14 @@ export class SessionView extends LitElement {
                           // Clear the text
                           this.mobileInputText = '';
                           // Restart focus retention
-                          if (this.hiddenInput && this.showQuickKeys) {
+                          if (
+                            !this.disableFocusManagement &&
+                            this.hiddenInput &&
+                            this.showQuickKeys
+                          ) {
                             this.focusRetentionInterval = setInterval(() => {
                               if (
+                                !this.disableFocusManagement &&
                                 this.showQuickKeys &&
                                 this.hiddenInput &&
                                 document.activeElement !== this.hiddenInput &&
@@ -2118,7 +2132,7 @@ export class SessionView extends LitElement {
                             }, 300) as unknown as number;
 
                             setTimeout(() => {
-                              if (this.hiddenInput) {
+                              if (!this.disableFocusManagement && this.hiddenInput) {
                                 this.hiddenInput.focus();
                               }
                             }, 100);
@@ -2142,9 +2156,14 @@ export class SessionView extends LitElement {
                         // Clear the text
                         this.mobileInputText = '';
                         // Restart focus retention
-                        if (this.hiddenInput && this.showQuickKeys) {
+                        if (
+                          !this.disableFocusManagement &&
+                          this.hiddenInput &&
+                          this.showQuickKeys
+                        ) {
                           this.focusRetentionInterval = setInterval(() => {
                             if (
+                              !this.disableFocusManagement &&
                               this.showQuickKeys &&
                               this.hiddenInput &&
                               document.activeElement !== this.hiddenInput &&
@@ -2157,7 +2176,7 @@ export class SessionView extends LitElement {
                           }, 300) as unknown as number;
 
                           setTimeout(() => {
-                            if (this.hiddenInput) {
+                            if (!this.disableFocusManagement && this.hiddenInput) {
                               this.hiddenInput.focus();
                             }
                           }, 100);

@@ -68,6 +68,7 @@ export class VibeTunnelApp extends LitElement {
   @state() private isResizing = false;
   @state() private mediaState: MediaQueryState = responsiveObserver.getCurrentState();
   @state() private showLogLink = false;
+  @state() private hasActiveOverlay = false;
   private initialLoadComplete = false;
   private responsiveObserverInitialized = false;
   private initialRenderComplete = false;
@@ -95,6 +96,24 @@ export class VibeTunnelApp extends LitElement {
     Promise.resolve().then(() => {
       this.initialRenderComplete = true;
     });
+  }
+
+  willUpdate(changedProperties: Map<string, unknown>) {
+    // Update hasActiveOverlay whenever any overlay state changes
+    if (
+      changedProperties.has('showFileBrowser') ||
+      changedProperties.has('showCreateModal') ||
+      changedProperties.has('showNotificationSettings') ||
+      changedProperties.has('showSSHKeyManager') ||
+      changedProperties.has('showSettings')
+    ) {
+      this.hasActiveOverlay =
+        this.showFileBrowser ||
+        this.showCreateModal ||
+        this.showNotificationSettings ||
+        this.showSSHKeyManager ||
+        this.showSettings;
+    }
   }
 
   disconnectedCallback() {
@@ -1100,6 +1119,7 @@ export class VibeTunnelApp extends LitElement {
               .authClient=${authClient}
               @auth-success=${this.handleAuthSuccess}
               @show-ssh-key-manager=${this.handleShowSSHKeyManager}
+              @open-settings=${this.handleOpenSettings}
             ></auth-login>
           `
           : html`
@@ -1195,6 +1215,7 @@ export class VibeTunnelApp extends LitElement {
                       .showBackButton=${false}
                       .showSidebarToggle=${true}
                       .sidebarCollapsed=${this.sidebarCollapsed}
+                      .disableFocusManagement=${this.hasActiveOverlay}
                       @navigate-to-list=${this.handleNavigateToList}
                       @toggle-sidebar=${this.handleToggleSidebar}
                     ></session-view>

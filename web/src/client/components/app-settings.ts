@@ -1,4 +1,4 @@
-import { html, LitElement } from 'lit';
+import { html, LitElement, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { createLogger } from '../utils/logger.js';
 import { responsiveObserver } from '../utils/responsive-utils.js';
@@ -42,6 +42,17 @@ export class AppSettings extends LitElement {
     super.disconnectedCallback();
     if (this.unsubscribeResponsive) {
       this.unsubscribeResponsive();
+    }
+  }
+
+  protected willUpdate(changedProperties: PropertyValues) {
+    if (changedProperties.has('open')) {
+      console.log(
+        '🔧 AppSettings open property changed:',
+        changedProperties.get('open'),
+        '->',
+        this.open
+      );
     }
   }
 
@@ -94,11 +105,13 @@ export class AppSettings extends LitElement {
   }
 
   render() {
+    console.log('🔧 AppSettings render called, open:', this.open);
     if (!this.open) return '';
 
     return html`
       <!-- Modal backdrop -->
-      <div class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+        @click=${this.handleClose}>
         <div
           class="bg-dark-bg border border-dark-border rounded-lg max-w-md w-full"
           @click=${(e: Event) => e.stopPropagation()}
