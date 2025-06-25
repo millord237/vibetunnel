@@ -1451,6 +1451,7 @@ export class SessionView extends LitElement {
             .fitHorizontally=${false}
             .maxCols=${this.terminalMaxCols}
             class="w-full h-full p-0 m-0"
+            @click=${this.handleTerminalClick}
           ></vibe-terminal>
         </div>
 
