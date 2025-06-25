@@ -139,12 +139,12 @@ export class AuthLogin extends LitElement {
       <div class="auth-container">
         <div class="w-full max-w-sm">
           <div class="auth-header">
-            <div class="flex flex-col items-center gap-1 mb-3">
+            <div class="flex flex-col items-center gap-3 mb-8">
               <terminal-icon
-                size="40"
-                style="filter: drop-shadow(0 0 10px rgba(124, 230, 161, 0.3));"
+                size="56"
+                style="filter: drop-shadow(0 0 15px rgba(124, 230, 161, 0.4));"
               ></terminal-icon>
-              <h2 class="auth-title">VibeTunnel</h2>
+              <h2 class="auth-title text-3xl mt-2">VibeTunnel</h2>
               <p class="auth-subtitle text-sm">Please authenticate to continue</p>
             </div>
           </div>
@@ -221,12 +221,11 @@ export class AuthLogin extends LitElement {
                     </div>
                     <form @submit=${this.handlePasswordLogin} class="space-y-4">
                       <div>
-                        <label class="form-label text-xs mb-2">Password</label>
                         <input
                           type="password"
                           class="input-field"
                           data-testid="password-input"
-                          placeholder="Enter your system password"
+                          placeholder="System Password"
                           .value=${this.loginPassword}
                           @input=${(e: Event) => {
                             this.loginPassword = (e.target as HTMLInputElement).value;

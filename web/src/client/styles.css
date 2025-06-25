@@ -71,7 +71,7 @@
 
   /* Input fields with glow effect */
   .input-field {
-    @apply bg-dark-bg-secondary border border-dark-border rounded-lg px-4 py-3 text-dark-text w-full;
+    @apply bg-[#121212] border border-dark-border rounded-lg px-4 py-3 text-dark-text w-full;
     @apply transition-all duration-200 ease-in-out;
     @apply hover:border-accent-green-darker focus:border-accent-green;
     @apply focus:shadow-glow-green-sm;
