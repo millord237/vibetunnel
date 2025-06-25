@@ -26,6 +26,7 @@ import './components/notification-status.js';
 import './components/auth-login.js';
 import './components/ssh-key-manager.js';
 import './components/app-settings.js';
+import { AppSettings } from './components/app-settings.js';
 
 import type { SessionCard } from './components/session-card.js';
 import { authClient } from './services/auth-client.js';
@@ -66,6 +67,7 @@ export class VibeTunnelApp extends LitElement {
   @state() private userInitiatedSessionChange = false;
   @state() private isResizing = false;
   @state() private mediaState: MediaQueryState = responsiveObserver.getCurrentState();
+  @state() private showLogLink = false;
   private initialLoadComplete = false;
   private responsiveObserverInitialized = false;
   private initialRenderComplete = false;
@@ -83,6 +85,7 @@ export class VibeTunnelApp extends LitElement {
     this.setupKeyboardShortcuts();
     this.setupNotificationHandlers();
     this.setupResponsiveObserver();
+    this.setupPreferences();
     // Initialize authentication and routing together
     this.initializeApp();
   }
@@ -918,6 +921,18 @@ export class VibeTunnelApp extends LitElement {
     this.addEventListener('show-notification-settings', this.handleShowNotificationSettings);
   }
 
+  private setupPreferences() {
+    // Load initial preferences
+    const preferences = AppSettings.getPreferences();
+    this.showLogLink = preferences.showLogLink;
+
+    // Listen for preference changes
+    window.addEventListener('app-preferences-changed', (e: Event) => {
+      const event = e as CustomEvent;
+      this.showLogLink = event.detail.showLogLink;
+    });
+  }
+
   private handleShowNotificationSettings = () => {
     this.showNotificationSettings = true;
   };
@@ -1228,8 +1243,8 @@ export class VibeTunnelApp extends LitElement {
 
       <!-- Version and logs link in bottom right -->
       <div class="fixed bottom-4 right-4 text-dark-text-muted text-xs font-mono z-20">
-        <a href="/logs" class="hover:text-dark-text transition-colors">Logs</a>
-        <span class="ml-2">v${VERSION}</span>
+        ${this.showLogLink ? html`<a href="/logs" class="hover:text-dark-text transition-colors">Logs</a>` : ''}
+        <span class="${this.showLogLink ? 'ml-2' : ''}">v${VERSION}</span>
       </div>
     `;
   }

@@ -6,10 +6,12 @@ const logger = createLogger('app-settings');
 
 export interface AppPreferences {
   useDirectKeyboard: boolean;
+  showLogLink: boolean;
 }
 
 const DEFAULT_PREFERENCES: AppPreferences = {
   useDirectKeyboard: false, // Default to text input field
+  showLogLink: false, // Default to not showing log link
 };
 
 const STORAGE_KEY = 'vibetunnel_app_preferences';
@@ -62,6 +64,15 @@ export class AppSettings extends LitElement {
     this.preferences = {
       ...this.preferences,
       useDirectKeyboard: !this.preferences.useDirectKeyboard,
+    };
+    this.savePreferences();
+    this.requestUpdate();
+  }
+
+  private handleToggleShowLogLink() {
+    this.preferences = {
+      ...this.preferences,
+      showLogLink: !this.preferences.showLogLink,
     };
     this.savePreferences();
     this.requestUpdate();
@@ -120,6 +131,33 @@ export class AppSettings extends LitElement {
                 <span
                   class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
                     this.preferences.useDirectKeyboard ? 'translate-x-5' : 'translate-x-0.5'
+                  }"
+                ></span>
+              </button>
+            </div>
+
+            <!-- Show Log Link Setting -->
+            <div class="flex items-center justify-between py-3 border-t border-dark-border">
+              <div class="flex-1 pr-4">
+                <label class="text-dark-text text-sm font-medium" for="show-log-link-toggle">
+                  Show log link
+                </label>
+                <p class="text-dark-text-muted text-xs mt-1">
+                  Display the logs link at the bottom right corner of the screen
+                </p>
+              </div>
+              <button
+                id="show-log-link-toggle"
+                role="switch"
+                aria-checked="${this.preferences.showLogLink}"
+                @click=${this.handleToggleShowLogLink}
+                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
+                  this.preferences.showLogLink ? 'bg-accent-green' : 'bg-dark-border'
+                }"
+              >
+                <span
+                  class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                    this.preferences.showLogLink ? 'translate-x-5' : 'translate-x-0.5'
                   }"
                 ></span>
               </button>
