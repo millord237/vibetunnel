@@ -38,6 +38,7 @@ CONTENT_HASH=$(find . \
     -not -path "./.node-builds/*" \
     -not -path "./build/*" \
     -not -path "./native/*" \
+    -not -path "./node-build-artifacts/*" \
     -not -name "package-lock.json" | \
     sort | \
     tar -cf - -T - 2>/dev/null | \
