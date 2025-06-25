@@ -221,9 +221,20 @@ function patchNodePty() {
 
   console.log('Patching node-pty for SEA build...');
 
+  // Marker to detect if files have been patched
+  const PATCH_MARKER = '/* VIBETUNNEL_SEA_PATCHED */';
+
+  // Helper function to check if file is already patched
+  function isFilePatched(filePath) {
+    if (!fs.existsSync(filePath)) return false;
+    const content = fs.readFileSync(filePath, 'utf8');
+    return content.includes(PATCH_MARKER);
+  }
+
   // Patch prebuild-loader.js to use process.dlopen instead of require
   const prebuildLoaderFile = path.join(__dirname, 'node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/prebuild-loader.js');
   const prebuildLoaderContent = `"use strict";
+${PATCH_MARKER}
 Object.defineProperty(exports, "__esModule", { value: true });
 var path = require("path");
 var fs = require("fs");
@@ -273,39 +284,63 @@ try {
 exports.default = pty;
 //# sourceMappingURL=prebuild-loader.js.map`;
 
-  fs.writeFileSync(prebuildLoaderFile, prebuildLoaderContent);
+  if (isFilePatched(prebuildLoaderFile)) {
+    console.log('prebuild-loader.js is already patched, skipping...');
+  } else {
+    fs.writeFileSync(prebuildLoaderFile, prebuildLoaderContent.trimEnd() + '\n');
+    console.log('Patched prebuild-loader.js');
+  }
 
   // Also patch windowsPtyAgent.js if it exists
   const windowsPtyAgentFile = path.join(__dirname, 'node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/windowsPtyAgent.js');
   if (fs.existsSync(windowsPtyAgentFile)) {
-    let content = fs.readFileSync(windowsPtyAgentFile, 'utf8');
-    // Replace direct require of .node files with our loader
-    content = content.replace(
-      /require\(['"]\.\.\/build\/Release\/pty\.node['"]\)/g,
-      "require('./prebuild-loader').default"
-    );
-    fs.writeFileSync(windowsPtyAgentFile, content);
+    if (isFilePatched(windowsPtyAgentFile)) {
+      console.log('windowsPtyAgent.js is already patched, skipping...');
+    } else {
+      let content = fs.readFileSync(windowsPtyAgentFile, 'utf8');
+      // Add patch marker at the beginning
+      content = `${PATCH_MARKER}\n` + content;
+      // Replace direct require of .node files with our loader
+      content = content.replace(
+        /require\(['"]\.\.\/build\/Release\/pty\.node['"]\)/g,
+        "require('./prebuild-loader').default"
+      );
+      fs.writeFileSync(windowsPtyAgentFile, content.trimEnd() + '\n');
+      console.log('Patched windowsPtyAgent.js');
+    }
   }
 
   // Patch index.js exports.native line
   const indexFile = path.join(__dirname, 'node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/index.js');
   if (fs.existsSync(indexFile)) {
-    let content = fs.readFileSync(indexFile, 'utf8');
-    // Replace the exports.native line that directly requires .node
-    content = content.replace(
-      /exports\.native = \(process\.platform !== 'win32' \? require\(prebuild_file_path_1\.ptyPath \|\| '\.\.\/build\/Release\/pty\.node'\) : null\);/,
-      "exports.native = (process.platform !== 'win32' ? require('./prebuild-loader').default : null);"
-    );
-    fs.writeFileSync(indexFile, content);
+    if (isFilePatched(indexFile)) {
+      console.log('index.js is already patched, skipping...');
+    } else {
+      let content = fs.readFileSync(indexFile, 'utf8');
+      // Add patch marker at the beginning
+      content = `${PATCH_MARKER}\n` + content;
+      // Replace the exports.native line that directly requires .node
+      content = content.replace(
+        /exports\.native = \(process\.platform !== 'win32' \? require\(prebuild_file_path_1\.ptyPath \|\| '\.\.\/build\/Release\/pty\.node'\) : null\);/,
+        "exports.native = (process.platform !== 'win32' ? require('./prebuild-loader').default : null);"
+      );
+      fs.writeFileSync(indexFile, content.trimEnd() + '\n');
+      console.log('Patched index.js');
+    }
   }
 
   // Patch unixTerminal.js to fix spawn-helper path resolution
   const unixTerminalFile = path.join(__dirname, 'node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/unixTerminal.js');
   if (fs.existsSync(unixTerminalFile)) {
-    let content = fs.readFileSync(unixTerminalFile, 'utf8');
+    if (isFilePatched(unixTerminalFile)) {
+      console.log('unixTerminal.js is already patched, skipping...');
+    } else {
+      let content = fs.readFileSync(unixTerminalFile, 'utf8');
+      // Add patch marker at the beginning
+      content = `${PATCH_MARKER}\n` + content;
 
-    // Replace the helperPath resolution logic
-    const helperPathPatch = `var helperPath;
+      // Replace the helperPath resolution logic
+      const helperPathPatch = `var helperPath;
 // For SEA, use spawn-helper from environment or next to executable
 if (process.env.NODE_PTY_SPAWN_HELPER_PATH) {
   helperPath = process.env.NODE_PTY_SPAWN_HELPER_PATH;
@@ -324,16 +359,54 @@ if (process.env.NODE_PTY_SPAWN_HELPER_PATH) {
   }
 }`;
 
-    // Find and replace the helperPath section
-    content = content.replace(
-      /var helperPath;[\s\S]*?helperPath = helperPath\.replace\('node_modules\.asar', 'node_modules\.asar\.unpacked'\);/m,
-      helperPathPatch
-    );
+      // Find and replace the helperPath section
+      content = content.replace(
+        /var helperPath;[\s\S]*?helperPath = helperPath\.replace\('node_modules\.asar', 'node_modules\.asar\.unpacked'\);/m,
+        helperPathPatch
+      );
 
-    fs.writeFileSync(unixTerminalFile, content);
+      fs.writeFileSync(unixTerminalFile, content.trimEnd() + '\n');
+      console.log('Patched unixTerminal.js');
+    }
   }
 
-  console.log('Patched node-pty to use process.dlopen() instead of require().');
+  console.log('node-pty patching complete.');
+}
+
+// Function to clean patches from node-pty
+function cleanPatches() {
+  console.log('Cleaning patches from node-pty...');
+  
+  const filesToClean = [
+    'node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/prebuild-loader.js',
+    'node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/windowsPtyAgent.js',
+    'node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/index.js',
+    'node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/unixTerminal.js'
+  ];
+  
+  filesToClean.forEach(file => {
+    const filePath = path.join(__dirname, file);
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+        console.log(`Removed patched file: ${file}`);
+      } catch (err) {
+        console.error(`Failed to remove ${file}:`, err.message);
+      }
+    }
+  });
+  
+  // Run npm install to restore original files
+  console.log('Running npm install to restore original files...');
+  try {
+    execSync('npm install --no-save @homebridge/node-pty-prebuilt-multiarch', {
+      cwd: __dirname,
+      stdio: 'inherit'
+    });
+    console.log('Original files restored.');
+  } catch (err) {
+    console.error('Failed to restore original files:', err.message);
+  }
 }
 
 // Cleanup function
@@ -357,6 +430,30 @@ process.on('SIGTERM', () => {
 
 async function main() {
   try {
+    // Handle command line arguments
+    if (process.argv.includes('--help')) {
+      console.log('VibeTunnel Native Build Script\n');
+      console.log('Usage: node build-native.js [options]\n');
+      console.log('Options:');
+      console.log('  --help          Show this help message');
+      console.log('  --clean-patches Remove all patches from node-pty and restore original files');
+      console.log('  --force-patch   Force re-patching even if files are already patched');
+      console.log('  --keep-build    Keep the build directory after completion');
+      console.log('  --node <path>   Use a custom Node.js binary for SEA\n');
+      process.exit(0);
+    }
+    
+    if (process.argv.includes('--clean-patches')) {
+      cleanPatches();
+      process.exit(0);
+    }
+    
+    const forcePatching = process.argv.includes('--force-patch');
+    if (forcePatching) {
+      console.log('Force patching enabled - will re-patch even if already patched');
+      cleanPatches();
+    }
+    
     // Create build directory
     if (!fs.existsSync('build')) {
       fs.mkdirSync('build');

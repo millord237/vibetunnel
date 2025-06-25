@@ -266,6 +266,22 @@ export function resolveCommand(command: string[]): {
     if (result.status === 0 && result.stdout && result.stdout.trim()) {
       // Command found in PATH
       logger.debug(`Command '${cmdName}' found at: ${result.stdout.trim()}`);
+
+      // Check if this is an interactive shell command
+      if (isInteractiveShellCommand(cmdName, cmdArgs)) {
+        logger.debug(`Command '${cmdName}' is an interactive shell, adding -i and -l flags`);
+        // Add both -i (interactive) and -l (login) flags for proper shell initialization
+        // This ensures shell RC files are sourced and the environment is properly set up
+        return {
+          command: cmdName,
+          args: ['-i', '-l', ...cmdArgs],
+          useShell: false,
+          resolvedFrom: 'path',
+          originalCommand: cmdName,
+          isInteractive: true,
+        };
+      }
+
       return {
         command: cmdName,
         args: cmdArgs,
@@ -349,10 +365,10 @@ export function resolveCommand(command: string[]): {
         resolvedFrom: 'shell',
       };
     } else {
-      // Interactive shell session: use -i for alias support
+      // Interactive shell session: use -i and -l for proper initialization
       return {
         command: userShell,
-        args: ['-i', '-c', command.join(' ')],
+        args: ['-i', '-l', '-c', command.join(' ')],
         useShell: true,
         resolvedFrom: 'shell',
         isInteractive: true,
