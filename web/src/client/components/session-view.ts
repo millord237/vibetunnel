@@ -19,6 +19,7 @@ import type { Session } from './session-list.js';
 import './terminal.js';
 import './file-browser.js';
 import './clickable-path.js';
+import './terminal-quick-keys.js';
 import { authClient } from '../services/auth-client.js';
 import { CastConverter } from '../utils/cast-converter.js';
 import { createLogger } from '../utils/logger.js';
@@ -26,7 +27,7 @@ import {
   COMMON_TERMINAL_WIDTHS,
   TerminalPreferencesManager,
 } from '../utils/terminal-preferences.js';
-import { AppSettings } from './app-settings.js';
+import { type AppPreferences, AppSettings } from './app-settings.js';
 import type { Terminal } from './terminal.js';
 
 const logger = createLogger('session-view');
@@ -70,6 +71,8 @@ export class SessionView extends LitElement {
   @state() private reconnectCount = 0;
   @state() private ctrlSequence: string[] = [];
   @state() private useDirectKeyboard = false;
+  @state() private showQuickKeys = false;
+  @state() private keyboardHeight = 0;
 
   private loadingInterval: number | null = null;
   private keyboardListenerAdded = false;
@@ -79,6 +82,28 @@ export class SessionView extends LitElement {
   private lastResizeWidth = 0;
   private lastResizeHeight = 0;
   private instanceId = `session-view-${Math.random().toString(36).substr(2, 9)}`;
+  private focusRetentionInterval: number | null = null;
+  private visualViewportHandler: (() => void) | null = null;
+
+  private handlePreferencesChanged = (e: Event) => {
+    const event = e as CustomEvent;
+    const preferences = event.detail as AppPreferences;
+    this.useDirectKeyboard = preferences.useDirectKeyboard;
+
+    // Update hidden input based on preference
+    if (this.isMobile && this.useDirectKeyboard && !this.hiddenInput) {
+      this.createHiddenInput();
+    } else if (!this.useDirectKeyboard && this.hiddenInput) {
+      // Remove hidden input when direct keyboard is disabled
+      this.hiddenInput.remove();
+      this.hiddenInput = null;
+      this.showQuickKeys = false;
+      if (this.focusRetentionInterval) {
+        clearInterval(this.focusRetentionInterval);
+        this.focusRetentionInterval = null;
+      }
+    }
+  };
 
   private keyboardHandler = (e: KeyboardEvent) => {
     // Check if we're typing in an input field
@@ -216,6 +241,44 @@ export class SessionView extends LitElement {
     const preferences = AppSettings.getPreferences();
     this.useDirectKeyboard = preferences.useDirectKeyboard;
 
+    // Listen for preference changes
+    window.addEventListener('app-preferences-changed', this.handlePreferencesChanged);
+
+    // Set up VirtualKeyboard API if available and on mobile
+    if (this.isMobile && 'virtualKeyboard' in navigator) {
+      // Enable overlays-content mode so keyboard doesn't resize viewport
+      try {
+        (navigator as any).virtualKeyboard.overlaysContent = true;
+        logger.log('VirtualKeyboard API: overlaysContent enabled');
+      } catch (e) {
+        logger.warn('Failed to set virtualKeyboard.overlaysContent:', e);
+      }
+    } else if (this.isMobile) {
+      logger.log('VirtualKeyboard API not available on this device');
+    }
+
+    // Set up Visual Viewport API for Safari keyboard detection
+    if (this.isMobile && window.visualViewport) {
+      this.visualViewportHandler = () => {
+        const viewport = window.visualViewport!;
+        const keyboardHeight = window.innerHeight - viewport.height;
+
+        // Store keyboard height in state
+        this.keyboardHeight = keyboardHeight;
+
+        // Update quick keys component if it exists
+        const quickKeys = this.querySelector('terminal-quick-keys') as any;
+        if (quickKeys) {
+          quickKeys.keyboardHeight = keyboardHeight;
+        }
+
+        logger.log(`Visual Viewport keyboard height: ${keyboardHeight}px`);
+      };
+
+      window.visualViewport.addEventListener('resize', this.visualViewportHandler);
+      window.visualViewport.addEventListener('scroll', this.visualViewportHandler);
+    }
+
     // Only add listeners if not already added
     if (!this.isMobile && !this.keyboardListenerAdded) {
       document.addEventListener('keydown', this.keyboardHandler);
@@ -258,6 +321,28 @@ export class SessionView extends LitElement {
       document.removeEventListener('touchstart', this.touchStartHandler);
       document.removeEventListener('touchend', this.touchEndHandler);
       this.touchListenersAdded = false;
+    }
+
+    // Clear focus retention interval
+    if (this.focusRetentionInterval) {
+      clearInterval(this.focusRetentionInterval);
+      this.focusRetentionInterval = null;
+    }
+
+    // Clean up Visual Viewport listener
+    if (this.visualViewportHandler && window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', this.visualViewportHandler);
+      window.visualViewport.removeEventListener('scroll', this.visualViewportHandler);
+      this.visualViewportHandler = null;
+    }
+
+    // Remove preference change listener
+    window.removeEventListener('app-preferences-changed', this.handlePreferencesChanged);
+
+    // Remove hidden input if it exists
+    if (this.hiddenInput) {
+      this.hiddenInput.remove();
+      this.hiddenInput = null;
     }
 
     // Stop loading animation
@@ -310,6 +395,22 @@ export class SessionView extends LitElement {
       if (terminalElement) {
         this.initializeTerminal();
       }
+    }
+
+    // Create hidden input if direct keyboard is enabled on mobile
+    if (
+      this.isMobile &&
+      this.useDirectKeyboard &&
+      !this.hiddenInput &&
+      this.session &&
+      !this.loading
+    ) {
+      // Delay creation to ensure terminal is rendered
+      setTimeout(() => {
+        if (this.isMobile && this.useDirectKeyboard && !this.hiddenInput) {
+          this.createHiddenInput();
+        }
+      }, 100);
     }
   }
 
@@ -544,6 +645,8 @@ export class SessionView extends LitElement {
         'arrow_right',
         'ctrl_enter',
         'shift_enter',
+        'backspace',
+        'tab',
       ].includes(inputText)
         ? { key: inputText }
         : { text: inputText };
@@ -816,6 +919,26 @@ export class SessionView extends LitElement {
   private handleMobileInputChange(e: Event) {
     const textarea = e.target as HTMLTextAreaElement;
     this.mobileInputText = textarea.value;
+    // Force update to ensure button states update
+    this.requestUpdate();
+  }
+
+  private focusMobileTextarea() {
+    const textarea = this.querySelector('#mobile-input-textarea') as HTMLTextAreaElement;
+    if (!textarea) return;
+
+    // Multiple attempts to ensure focus on mobile
+    textarea.focus();
+
+    // iOS hack to show keyboard
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.focus();
+    setTimeout(() => {
+      textarea.removeAttribute('readonly');
+      textarea.focus();
+      // Ensure cursor is at end
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }, 100);
   }
 
   private async handleMobileInputSendOnly() {
@@ -840,6 +963,15 @@ export class SessionView extends LitElement {
 
       // Hide the input overlay after sending
       this.showMobileInput = false;
+
+      // Refocus the hidden input to restore keyboard functionality
+      if (this.hiddenInput && this.showQuickKeys) {
+        setTimeout(() => {
+          if (this.hiddenInput) {
+            this.hiddenInput.focus();
+          }
+        }, 100);
+      }
 
       // Refresh terminal scroll position after closing mobile input
       this.refreshTerminalAfterMobileInput();
@@ -873,6 +1005,15 @@ export class SessionView extends LitElement {
       // Hide the input overlay after sending
       this.showMobileInput = false;
 
+      // Refocus the hidden input to restore keyboard functionality
+      if (this.hiddenInput && this.showQuickKeys) {
+        setTimeout(() => {
+          if (this.hiddenInput) {
+            this.hiddenInput.focus();
+          }
+        }, 100);
+      }
+
       // Refresh terminal scroll position after closing mobile input
       this.refreshTerminalAfterMobileInput();
     } catch (error) {
@@ -905,6 +1046,15 @@ export class SessionView extends LitElement {
     this.ctrlSequence = [];
     this.showCtrlAlpha = false;
     this.requestUpdate();
+
+    // Refocus the hidden input
+    if (this.hiddenInput && this.showQuickKeys) {
+      setTimeout(() => {
+        if (this.hiddenInput) {
+          this.hiddenInput.focus();
+        }
+      }, 100);
+    }
   }
 
   private handleClearCtrlSequence() {
@@ -917,6 +1067,15 @@ export class SessionView extends LitElement {
       this.showCtrlAlpha = false;
       this.ctrlSequence = [];
       this.requestUpdate();
+
+      // Refocus the hidden input
+      if (this.hiddenInput && this.showQuickKeys) {
+        setTimeout(() => {
+          if (this.hiddenInput) {
+            this.hiddenInput.focus();
+          }
+        }, 100);
+      }
     }
   }
 
@@ -1021,12 +1180,31 @@ export class SessionView extends LitElement {
       const body = [
         'enter',
         'escape',
+        'backspace',
+        'tab',
         'arrow_up',
         'arrow_down',
         'arrow_left',
         'arrow_right',
         'ctrl_enter',
         'shift_enter',
+        'page_up',
+        'page_down',
+        'home',
+        'end',
+        'delete',
+        'f1',
+        'f2',
+        'f3',
+        'f4',
+        'f5',
+        'f6',
+        'f7',
+        'f8',
+        'f9',
+        'f10',
+        'f11',
+        'f12',
       ].includes(text)
         ? { key: text }
         : { text };
@@ -1082,51 +1260,371 @@ export class SessionView extends LitElement {
   }
 
   private focusHiddenInput() {
-    // Create or get hidden input
-    if (!this.hiddenInput) {
-      this.hiddenInput = document.createElement('input');
-      this.hiddenInput.type = 'text';
-      this.hiddenInput.style.position = 'absolute';
-      this.hiddenInput.style.left = '-9999px';
-      this.hiddenInput.style.top = '0';
-      this.hiddenInput.autocapitalize = 'off';
-      this.hiddenInput.autocomplete = 'off';
-      this.hiddenInput.setAttribute('autocorrect', 'off');
+    // Just delegate to the new method
+    this.ensureHiddenInputVisible();
+  }
 
-      // Handle input events
-      this.hiddenInput.addEventListener('input', (e) => {
-        const input = e.target as HTMLInputElement;
-        if (input.value) {
+  private handleTerminalClick(e: Event) {
+    if (this.isMobile && this.useDirectKeyboard) {
+      // Prevent the event from bubbling and default action
+      e.stopPropagation();
+      e.preventDefault();
+
+      // Don't do anything - the hidden input should handle all interactions
+      // The click on the terminal is actually a click on the hidden input overlay
+      return;
+    }
+  }
+
+  private ensureHiddenInputVisible() {
+    if (!this.hiddenInput) {
+      this.createHiddenInput();
+    }
+
+    // Show quick keys
+    this.showQuickKeys = true;
+
+    // The input should already be covering the terminal and be focusable
+    // The user's tap on the terminal is actually a tap on the input
+  }
+
+  private createHiddenInput() {
+    this.hiddenInput = document.createElement('input');
+    this.hiddenInput.type = 'text';
+    this.hiddenInput.style.position = 'absolute';
+    this.hiddenInput.style.top = '0';
+    this.hiddenInput.style.left = '0';
+    this.hiddenInput.style.width = '100%';
+    this.hiddenInput.style.height = '100%';
+    this.hiddenInput.style.opacity = '0'; // Completely transparent
+    this.hiddenInput.style.fontSize = '16px'; // Prevent zoom on iOS
+    this.hiddenInput.style.zIndex = '10'; // Above terminal content
+    this.hiddenInput.style.border = 'none';
+    this.hiddenInput.style.outline = 'none';
+    this.hiddenInput.style.background = 'transparent';
+    this.hiddenInput.style.color = 'transparent';
+    this.hiddenInput.style.caretColor = 'transparent'; // Hide the cursor
+    this.hiddenInput.style.cursor = 'default'; // Normal cursor
+    this.hiddenInput.autocapitalize = 'off';
+    this.hiddenInput.autocomplete = 'off';
+    this.hiddenInput.setAttribute('autocorrect', 'off');
+    this.hiddenInput.setAttribute('spellcheck', 'false');
+    this.hiddenInput.setAttribute('aria-hidden', 'true');
+
+    // Make it visible for debugging (comment out in production)
+    // this.hiddenInput.style.opacity = '0.1';
+    // this.hiddenInput.style.background = 'rgba(255,0,0,0.1)';
+
+    // Prevent click events from propagating to terminal
+    this.hiddenInput.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+    });
+
+    // Also handle touchstart to ensure mobile taps don't propagate
+    this.hiddenInput.addEventListener('touchstart', (e) => {
+      e.stopPropagation();
+    });
+
+    // Handle input events
+    this.hiddenInput.addEventListener('input', (e) => {
+      const input = e.target as HTMLInputElement;
+      if (input.value) {
+        // Don't send input to terminal if mobile input overlay or Ctrl overlay is visible
+        if (!this.showMobileInput && !this.showCtrlAlpha) {
           // Send each character to terminal
           this.sendInputText(input.value);
-          // Clear the input
-          input.value = '';
         }
-      });
+        // Always clear the input to prevent buffer buildup
+        input.value = '';
+      }
+    });
 
-      // Handle special keys
-      this.hiddenInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          this.sendInputText('enter');
-        } else if (e.key === 'Backspace' && !this.hiddenInput?.value) {
-          e.preventDefault();
-          this.sendInputText('backspace');
+    // Handle special keys
+    this.hiddenInput.addEventListener('keydown', (e) => {
+      // Don't process special keys if mobile input overlay or Ctrl overlay is visible
+      if (this.showMobileInput || this.showCtrlAlpha) {
+        return;
+      }
+
+      // Prevent default for all keys to stop browser shortcuts
+      if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key)) {
+        e.preventDefault();
+      }
+
+      if (e.key === 'Enter') {
+        this.sendInputText('enter');
+      } else if (e.key === 'Backspace') {
+        // Always send backspace to terminal
+        this.sendInputText('backspace');
+      } else if (e.key === 'Tab') {
+        this.sendInputText('tab');
+      } else if (e.key === 'Escape') {
+        this.sendInputText('escape');
+      }
+    });
+
+    // Handle focus/blur for quick keys visibility
+    this.hiddenInput.addEventListener('focus', () => {
+      this.showQuickKeys = true;
+      logger.log('Hidden input focused, showing quick keys');
+
+      // Trigger initial keyboard height calculation
+      if (this.visualViewportHandler) {
+        this.visualViewportHandler();
+      }
+
+      // Start focus retention
+      if (this.focusRetentionInterval) {
+        clearInterval(this.focusRetentionInterval);
+      }
+
+      this.focusRetentionInterval = setInterval(() => {
+        if (
+          this.showQuickKeys &&
+          this.hiddenInput &&
+          document.activeElement !== this.hiddenInput &&
+          !this.showMobileInput &&
+          !this.showCtrlAlpha
+        ) {
+          logger.log('Refocusing hidden input to maintain keyboard');
+          this.hiddenInput.focus();
         }
-      });
+      }, 300) as unknown as number;
+    });
 
-      this.appendChild(this.hiddenInput);
+    this.hiddenInput.addEventListener('blur', (e) => {
+      const event = e as FocusEvent;
+
+      // Immediately try to recapture focus
+      if (this.showQuickKeys && this.hiddenInput) {
+        // Use a very short timeout to allow any legitimate focus changes to complete
+        setTimeout(() => {
+          if (
+            this.showQuickKeys &&
+            this.hiddenInput &&
+            document.activeElement !== this.hiddenInput
+          ) {
+            // Check if focus went to a quick key or somewhere else in our component
+            const activeElement = document.activeElement;
+            const isWithinComponent = this.contains(activeElement);
+
+            if (isWithinComponent || !activeElement || activeElement === document.body) {
+              // Focus was lost to nowhere specific or within our component - recapture it
+              logger.log('Recapturing focus on hidden input');
+              this.hiddenInput.focus();
+            } else {
+              // Focus went somewhere legitimate outside our component
+              // Wait a bit longer before hiding quick keys
+              setTimeout(() => {
+                if (document.activeElement !== this.hiddenInput) {
+                  this.showQuickKeys = false;
+                  logger.log('Hidden input blurred, hiding quick keys');
+
+                  // Clear focus retention interval
+                  if (this.focusRetentionInterval) {
+                    clearInterval(this.focusRetentionInterval);
+                    this.focusRetentionInterval = null;
+                  }
+                }
+              }, 500);
+            }
+          }
+        }, 10);
+      }
+    });
+
+    // Add to the terminal container to overlay it
+    const terminalContainer = this.querySelector('#terminal-container');
+    if (terminalContainer) {
+      terminalContainer.appendChild(this.hiddenInput);
     }
-
-    // Focus the hidden input
-    this.hiddenInput.focus();
   }
 
-  private handleTerminalClick() {
-    if (this.isMobile && this.useDirectKeyboard) {
-      this.focusHiddenInput();
+  private handleQuickKeyPress = (key: string, isModifier?: boolean, isSpecial?: boolean) => {
+    if (isSpecial && key === 'ABC') {
+      // Toggle the mobile input overlay
+      this.showMobileInput = !this.showMobileInput;
+
+      if (this.showMobileInput) {
+        // Stop focus retention when showing mobile input
+        if (this.focusRetentionInterval) {
+          clearInterval(this.focusRetentionInterval);
+          this.focusRetentionInterval = null;
+        }
+
+        // Blur the hidden input to prevent it from capturing input
+        if (this.hiddenInput) {
+          this.hiddenInput.blur();
+        }
+
+        // Force update to render the textarea
+        this.requestUpdate();
+
+        // Focus the textarea after render completes
+        this.updateComplete.then(() => {
+          setTimeout(() => {
+            this.focusMobileTextarea();
+          }, 100);
+        });
+      } else {
+        // Clear the text when closing
+        this.mobileInputText = '';
+
+        // Restart focus retention when closing mobile input
+        if (this.hiddenInput && this.showQuickKeys) {
+          // Restart focus retention
+          this.focusRetentionInterval = setInterval(() => {
+            if (
+              this.showQuickKeys &&
+              this.hiddenInput &&
+              document.activeElement !== this.hiddenInput &&
+              !this.showMobileInput &&
+              !this.showCtrlAlpha
+            ) {
+              logger.log('Refocusing hidden input to maintain keyboard');
+              this.hiddenInput.focus();
+            }
+          }, 300) as unknown as number;
+
+          setTimeout(() => {
+            if (this.hiddenInput) {
+              this.hiddenInput.focus();
+            }
+          }, 100);
+        }
+      }
+      return;
+    } else if (isModifier && key === 'Control') {
+      // Just send Ctrl modifier - don't show the overlay
+      // This allows using Ctrl as a modifier with physical keyboard
+      return;
+    } else if (key === 'CtrlFull') {
+      // Toggle the full Ctrl+Alpha overlay
+      this.showCtrlAlpha = !this.showCtrlAlpha;
+
+      if (this.showCtrlAlpha) {
+        // Stop focus retention when showing Ctrl overlay
+        if (this.focusRetentionInterval) {
+          clearInterval(this.focusRetentionInterval);
+          this.focusRetentionInterval = null;
+        }
+
+        // Blur the hidden input to prevent it from capturing input
+        if (this.hiddenInput) {
+          this.hiddenInput.blur();
+        }
+      } else {
+        // Clear the Ctrl sequence when closing
+        this.ctrlSequence = [];
+
+        // Restart focus retention when closing Ctrl overlay
+        if (this.hiddenInput && this.showQuickKeys) {
+          // Restart focus retention
+          this.focusRetentionInterval = setInterval(() => {
+            if (
+              this.showQuickKeys &&
+              this.hiddenInput &&
+              document.activeElement !== this.hiddenInput &&
+              !this.showMobileInput &&
+              !this.showCtrlAlpha
+            ) {
+              logger.log('Refocusing hidden input to maintain keyboard');
+              this.hiddenInput.focus();
+            }
+          }, 300) as unknown as number;
+
+          setTimeout(() => {
+            if (this.hiddenInput) {
+              this.hiddenInput.focus();
+            }
+          }, 100);
+        }
+      }
+      return;
+    } else if (key === 'Ctrl+A') {
+      // Send Ctrl+A (start of line)
+      this.sendInputText('\x01');
+    } else if (key === 'Ctrl+C') {
+      // Send Ctrl+C (interrupt signal)
+      this.sendInputText('\x03');
+    } else if (key === 'Ctrl+D') {
+      // Send Ctrl+D (EOF)
+      this.sendInputText('\x04');
+    } else if (key === 'Ctrl+E') {
+      // Send Ctrl+E (end of line)
+      this.sendInputText('\x05');
+    } else if (key === 'Ctrl+K') {
+      // Send Ctrl+K (kill to end of line)
+      this.sendInputText('\x0b');
+    } else if (key === 'Ctrl+L') {
+      // Send Ctrl+L (clear screen)
+      this.sendInputText('\x0c');
+    } else if (key === 'Ctrl+R') {
+      // Send Ctrl+R (reverse search)
+      this.sendInputText('\x12');
+    } else if (key === 'Ctrl+U') {
+      // Send Ctrl+U (clear line)
+      this.sendInputText('\x15');
+    } else if (key === 'Ctrl+W') {
+      // Send Ctrl+W (delete word)
+      this.sendInputText('\x17');
+    } else if (key === 'Ctrl+Z') {
+      // Send Ctrl+Z (suspend signal)
+      this.sendInputText('\x1a');
+    } else if (key === 'Option') {
+      // Send ESC prefix for Option/Alt key
+      this.sendInputText('\x1b');
+    } else if (key === 'Command') {
+      // Command key doesn't have a direct terminal equivalent
+      // Could potentially show a message or ignore
+      return;
+    } else if (key === 'Delete') {
+      // Send delete key
+      this.sendInputText('delete');
+    } else if (key.startsWith('F')) {
+      // Handle function keys F1-F12
+      const fNum = Number.parseInt(key.substring(1));
+      if (fNum >= 1 && fNum <= 12) {
+        this.sendInputText(`f${fNum}`);
+      }
+    } else {
+      // Map key names to proper values
+      let keyToSend = key;
+      if (key === 'Tab') {
+        keyToSend = 'tab';
+      } else if (key === 'Escape') {
+        keyToSend = 'escape';
+      } else if (key === 'ArrowUp') {
+        keyToSend = 'arrow_up';
+      } else if (key === 'ArrowDown') {
+        keyToSend = 'arrow_down';
+      } else if (key === 'ArrowLeft') {
+        keyToSend = 'arrow_left';
+      } else if (key === 'ArrowRight') {
+        keyToSend = 'arrow_right';
+      } else if (key === 'PageUp') {
+        keyToSend = 'page_up';
+      } else if (key === 'PageDown') {
+        keyToSend = 'page_down';
+      } else if (key === 'Home') {
+        keyToSend = 'home';
+      } else if (key === 'End') {
+        keyToSend = 'end';
+      }
+
+      // Send the key to terminal
+      this.sendInputText(keyToSend.toLowerCase());
     }
-  }
+
+    // Always keep focus on hidden input after any key press (except Done)
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+      if (this.hiddenInput && this.showQuickKeys) {
+        this.hiddenInput.focus();
+      }
+    });
+  };
 
   private refreshTerminalAfterMobileInput() {
     // After closing mobile input, the viewport changes and the terminal
@@ -1450,6 +1948,7 @@ export class SessionView extends LitElement {
             .fontSize=${this.terminalFontSize}
             .fitHorizontally=${false}
             .maxCols=${this.terminalMaxCols}
+            .disableClick=${this.isMobile && this.useDirectKeyboard}
             class="w-full h-full p-0 m-0"
             @click=${this.handleTerminalClick}
           ></vibe-terminal>
@@ -1472,9 +1971,9 @@ export class SessionView extends LitElement {
             : ''
         }
 
-        <!-- Mobile Input Controls -->
+        <!-- Mobile Input Controls (only show when direct keyboard is disabled) -->
         ${
-          this.isMobile && !this.showMobileInput
+          this.isMobile && !this.showMobileInput && !this.useDirectKeyboard
             ? html`
               <div class="flex-shrink-0 p-4" style="background: black;">
                 <!-- First row: Arrow keys -->
@@ -1548,11 +2047,19 @@ export class SessionView extends LitElement {
           this.isMobile && this.showMobileInput
             ? html`
               <div
-                class="fixed inset-0 z-50 flex flex-col"
+                class="fixed inset-0 z-40 flex flex-col"
                 style="background: rgba(0, 0, 0, 0.8);"
                 @click=${(e: Event) => {
                   if (e.target === e.currentTarget) {
                     this.showMobileInput = false;
+                    // Refocus the hidden input
+                    if (this.hiddenInput && this.showQuickKeys) {
+                      setTimeout(() => {
+                        if (this.hiddenInput) {
+                          this.hiddenInput.focus();
+                        }
+                      }, 100);
+                    }
                   }
                 }}
                 @touchstart=${this.touchStartHandler}
@@ -1562,9 +2069,13 @@ export class SessionView extends LitElement {
                 <div class="flex-1"></div>
 
                 <div
-                  class="font-mono text-sm mx-4 mb-4 flex flex-col"
-                  style="background: black; border: 1px solid #569cd6; border-radius: 8px; transform: translateY(-120px);"
-                  @click=${(e: Event) => e.stopPropagation()}
+                  class="mobile-input-container font-mono text-sm mx-4 flex flex-col"
+                  style="background: black; border: 1px solid #569cd6; border-radius: 8px; margin-bottom: ${this.keyboardHeight > 0 ? `${this.keyboardHeight + 180}px` : 'calc(env(keyboard-inset-height, 0px) + 180px)'};/* 180px = estimated quick keyboard height (3 rows) */"
+                  @click=${(e: Event) => {
+                    e.stopPropagation();
+                    // Focus textarea when clicking anywhere in the container
+                    this.focusMobileTextarea();
+                  }}
                 >
                   <!-- Input Area -->
                   <div class="p-4 flex flex-col">
@@ -1574,11 +2085,13 @@ export class SessionView extends LitElement {
                       placeholder="Type your command here..."
                       .value=${this.mobileInputText}
                       @input=${this.handleMobileInputChange}
-                      @click=${(e: Event) => {
-                        const textarea = e.target as HTMLTextAreaElement;
-                        setTimeout(() => {
-                          textarea.focus();
-                        }, 10);
+                      @focus=${(e: FocusEvent) => {
+                        e.stopPropagation();
+                        logger.log('Mobile input textarea focused');
+                      }}
+                      @blur=${(e: FocusEvent) => {
+                        e.stopPropagation();
+                        logger.log('Mobile input textarea blurred');
                       }}
                       @keydown=${(e: KeyboardEvent) => {
                         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -1587,9 +2100,36 @@ export class SessionView extends LitElement {
                         } else if (e.key === 'Escape') {
                           e.preventDefault();
                           this.showMobileInput = false;
+                          // Clear the text
+                          this.mobileInputText = '';
+                          // Restart focus retention
+                          if (this.hiddenInput && this.showQuickKeys) {
+                            this.focusRetentionInterval = setInterval(() => {
+                              if (
+                                this.showQuickKeys &&
+                                this.hiddenInput &&
+                                document.activeElement !== this.hiddenInput &&
+                                !this.showMobileInput &&
+                                !this.showCtrlAlpha
+                              ) {
+                                logger.log('Refocusing hidden input to maintain keyboard');
+                                this.hiddenInput.focus();
+                              }
+                            }, 300) as unknown as number;
+
+                            setTimeout(() => {
+                              if (this.hiddenInput) {
+                                this.hiddenInput.focus();
+                              }
+                            }, 100);
+                          }
                         }
                       }}
                       style="height: 120px; background: black; color: #d4d4d4; border: none; padding: 12px;"
+                      autocomplete="off"
+                      autocorrect="off"
+                      autocapitalize="off"
+                      spellcheck="false"
                     ></textarea>
                   </div>
 
@@ -1599,6 +2139,29 @@ export class SessionView extends LitElement {
                       class="font-mono px-3 py-2 text-xs transition-colors btn-ghost"
                       @click=${() => {
                         this.showMobileInput = false;
+                        // Clear the text
+                        this.mobileInputText = '';
+                        // Restart focus retention
+                        if (this.hiddenInput && this.showQuickKeys) {
+                          this.focusRetentionInterval = setInterval(() => {
+                            if (
+                              this.showQuickKeys &&
+                              this.hiddenInput &&
+                              document.activeElement !== this.hiddenInput &&
+                              !this.showMobileInput &&
+                              !this.showCtrlAlpha
+                            ) {
+                              logger.log('Refocusing hidden input to maintain keyboard');
+                              this.hiddenInput.focus();
+                            }
+                          }, 300) as unknown as number;
+
+                          setTimeout(() => {
+                            if (this.hiddenInput) {
+                              this.hiddenInput.focus();
+                            }
+                          }, 100);
+                        }
                       }}
                     >
                       CANCEL
@@ -1629,13 +2192,16 @@ export class SessionView extends LitElement {
           this.isMobile && this.showCtrlAlpha
             ? html`
               <div
-                class="fixed inset-0 z-50 flex items-center justify-center"
+                class="fixed inset-0 z-50 flex flex-col"
                 style="background: rgba(0, 0, 0, 0.8);"
                 @click=${this.handleCtrlAlphaBackdrop}
               >
+                <!-- Spacer to push content up above keyboard -->
+                <div class="flex-1"></div>
+                
                 <div
-                  class="font-mono text-sm m-4 max-w-sm w-full"
-                  style="background: black; border: 1px solid #569cd6; border-radius: 8px; padding: 20px;"
+                  class="font-mono text-sm mx-4 max-w-sm w-full self-center"
+                  style="background: black; border: 1px solid #569cd6; border-radius: 8px; padding: 10px; margin-bottom: ${this.keyboardHeight > 0 ? `${this.keyboardHeight + 180}px` : 'calc(env(keyboard-inset-height, 0px) + 180px)'};/* 180px = estimated quick keyboard height (3 rows) */"
                   @click=${(e: Event) => e.stopPropagation()}
                 >
                   <div class="text-vs-user text-center mb-2 font-bold">Ctrl + Key</div>
@@ -1660,7 +2226,7 @@ export class SessionView extends LitElement {
                   }
 
                   <!-- Grid of A-Z buttons -->
-                  <div class="grid grid-cols-6 gap-2 mb-4">
+                  <div class="grid grid-cols-6 gap-1 mb-3">
                     ${[
                       'A',
                       'B',
@@ -1691,7 +2257,7 @@ export class SessionView extends LitElement {
                     ].map(
                       (letter) => html`
                         <button
-                          class="font-mono text-xs transition-all cursor-pointer aspect-square flex items-center justify-center quick-start-btn"
+                          class="font-mono text-xs transition-all cursor-pointer aspect-square flex items-center justify-center quick-start-btn py-2"
                           @click=${() => this.handleCtrlKey(letter)}
                         >
                           ${letter}
@@ -1701,7 +2267,7 @@ export class SessionView extends LitElement {
                   </div>
 
                   <!-- Common shortcuts info -->
-                  <div class="text-xs text-vs-muted text-center mb-4">
+                  <div class="text-xs text-vs-muted text-center mb-3">
                     <div>Common: C=interrupt, X=exit, O=save, W=search</div>
                   </div>
 
@@ -1739,6 +2305,12 @@ export class SessionView extends LitElement {
             `
             : ''
         }
+
+        <!-- Terminal Quick Keys (for direct keyboard mode) -->
+        <terminal-quick-keys
+          .visible=${this.isMobile && this.useDirectKeyboard && this.showQuickKeys}
+          .onKeyPress=${this.handleQuickKeyPress}
+        ></terminal-quick-keys>
 
         <!-- File Browser Modal -->
         <file-browser

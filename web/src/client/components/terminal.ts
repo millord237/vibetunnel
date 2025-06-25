@@ -32,6 +32,7 @@ export class Terminal extends LitElement {
   @property({ type: Number }) fontSize = 14;
   @property({ type: Boolean }) fitHorizontally = false;
   @property({ type: Number }) maxCols = 0; // 0 means no limit
+  @property({ type: Boolean }) disableClick = false; // Disable click handling (for mobile direct keyboard)
 
   private originalFontSize: number = 14;
 
@@ -1226,6 +1227,11 @@ export class Terminal extends LitElement {
   };
 
   private handleClick = () => {
+    // Don't handle clicks if disabled (e.g., for mobile direct keyboard mode)
+    if (this.disableClick) {
+      return;
+    }
+
     // Focus the terminal container so it can receive paste events
     if (this.container) {
       this.container.focus();

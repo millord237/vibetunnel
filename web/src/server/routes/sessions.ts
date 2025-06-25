@@ -229,7 +229,16 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       }
 
       // Create local session
-      const cwd = resolvePath(workingDir, process.cwd());
+      let cwd = resolvePath(workingDir, process.cwd());
+
+      // Check if the working directory exists, fall back to process.cwd() if not
+      if (!fs.existsSync(cwd)) {
+        logger.warn(
+          `Working directory '${cwd}' does not exist, using current directory as fallback`
+        );
+        cwd = process.cwd();
+      }
+
       const sessionName = name || generateSessionName(command, cwd);
 
       logger.log(chalk.blue(`creating session: ${command.join(' ')} in ${cwd}`));

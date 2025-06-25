@@ -76,7 +76,26 @@ export type SpecialKey =
   | 'escape'
   | 'enter'
   | 'ctrl_enter'
-  | 'shift_enter';
+  | 'shift_enter'
+  | 'backspace'
+  | 'tab'
+  | 'page_up'
+  | 'page_down'
+  | 'home'
+  | 'end'
+  | 'delete'
+  | 'f1'
+  | 'f2'
+  | 'f3'
+  | 'f4'
+  | 'f5'
+  | 'f6'
+  | 'f7'
+  | 'f8'
+  | 'f9'
+  | 'f10'
+  | 'f11'
+  | 'f12';
 
 /**
  * Push notification subscription
