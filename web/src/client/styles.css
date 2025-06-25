@@ -23,7 +23,7 @@
   /* Z-index layers */
   --vt-z-mobile-overlay: 20;
   --vt-z-sidebar-mobile: 30;
-  --vt-z-session-exited-overlay: 100;
+  --vt-z-session-exited-overlay: 25;
 
   /* Terminal */
   --vt-terminal-min-height: 200px;
