@@ -74,6 +74,11 @@ export abstract class HeaderBase extends LitElement {
     this.dispatchEvent(new CustomEvent('open-notification-settings'));
   }
 
+  protected handleOpenSettings() {
+    this.showUserMenu = false;
+    this.dispatchEvent(new CustomEvent('open-settings'));
+  }
+
   protected handleLogout() {
     this.showUserMenu = false;
     this.dispatchEvent(new CustomEvent('logout'));

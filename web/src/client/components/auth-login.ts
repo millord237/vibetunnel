@@ -1,7 +1,10 @@
 import { html, LitElement } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { AuthClient } from '../services/auth-client.js';
+import { responsiveObserver } from '../utils/responsive-utils.js';
+import { AppSettings } from './app-settings.js';
 import './terminal-icon.js';
+import './auth-quick-keys.js';
 
 @customElement('auth-login')
 export class AuthLogin extends LitElement {
@@ -22,12 +25,42 @@ export class AuthLogin extends LitElement {
     disallowUserPassword: false,
     noAuth: false,
   };
+  @state() private useDirectKeyboard = false;
+  @state() private isMobile = false;
+  @state() private isKeyboardFocused = false;
+  private unsubscribeResponsive?: () => void;
 
   async connectedCallback() {
     super.connectedCallback();
     console.log('🔌 Auth login component connected');
+
+    // Load preferences
+    const preferences = AppSettings.getPreferences();
+    this.useDirectKeyboard = preferences.useDirectKeyboard;
+
+    // Subscribe to responsive changes
+    this.unsubscribeResponsive = responsiveObserver.subscribe((state) => {
+      this.isMobile = state.isMobile;
+    });
+
+    // Listen for preference changes
+    window.addEventListener('app-preferences-changed', this.handlePreferencesChanged);
+
     await this.loadUserInfo();
   }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this.unsubscribeResponsive) {
+      this.unsubscribeResponsive();
+    }
+    window.removeEventListener('app-preferences-changed', this.handlePreferencesChanged);
+  }
+
+  private handlePreferencesChanged = (e: Event) => {
+    const event = e as CustomEvent;
+    this.useDirectKeyboard = event.detail.useDirectKeyboard;
+  };
 
   private async loadUserInfo() {
     try {
@@ -126,6 +159,35 @@ export class AuthLogin extends LitElement {
     this.dispatchEvent(new CustomEvent('show-ssh-key-manager'));
   }
 
+  private handleKeyCapture = (e: KeyboardEvent) => {
+    if (this.loading) return;
+
+    e.preventDefault();
+
+    if (e.key === 'Enter') {
+      this.handlePasswordLogin(e);
+    } else if (e.key === 'Backspace') {
+      this.loginPassword = this.loginPassword.slice(0, -1);
+    } else if (e.key === 'Escape') {
+      this.loginPassword = '';
+    } else if (e.key.length === 1) {
+      this.loginPassword += e.key;
+    }
+  };
+
+  private handleQuickKey = (key: string) => {
+    if (this.loading) return;
+    this.loginPassword += key;
+  };
+
+  private handleFocus = () => {
+    this.isKeyboardFocused = true;
+  };
+
+  private handleBlur = () => {
+    this.isKeyboardFocused = false;
+  };
+
   render() {
     console.log(
       '🔍 Rendering auth login',
@@ -221,18 +283,54 @@ export class AuthLogin extends LitElement {
                     </div>
                     <form @submit=${this.handlePasswordLogin} class="space-y-4">
                       <div>
-                        <input
-                          type="password"
-                          class="input-field"
-                          data-testid="password-input"
-                          placeholder="System Password"
-                          .value=${this.loginPassword}
-                          @input=${(e: Event) => {
-                            this.loginPassword = (e.target as HTMLInputElement).value;
-                          }}
-                          ?disabled=${this.loading}
-                          required
-                        />
+                        ${
+                          this.useDirectKeyboard
+                            ? html`
+                            <!-- Direct keyboard capture -->
+                            <div
+                              class="password-capture-area bg-[#121212] border ${this.isKeyboardFocused ? 'border-accent-green shadow-glow-green-sm' : 'border-dark-border'} rounded-lg px-4 py-3 text-dark-text w-full transition-all duration-200 ease-in-out hover:border-accent-green-darker cursor-text min-h-[48px] flex items-center"
+                              tabindex="0"
+                              @keydown=${this.handleKeyCapture}
+                              @focus=${this.handleFocus}
+                              @blur=${this.handleBlur}
+                              data-testid="password-capture"
+                            >
+                              <span class="${this.loginPassword ? 'text-dark-text' : 'text-dark-text-muted'} text-sm">
+                                ${
+                                  this.loginPassword
+                                    ? '•'.repeat(this.loginPassword.length)
+                                    : this.isKeyboardFocused
+                                      ? 'Type your password...'
+                                      : 'Click to enter password'
+                                }
+                              </span>
+                            </div>
+                            ${
+                              this.isMobile
+                                ? html`
+                                <div class="mt-2">
+                                  <auth-quick-keys .onKeyPress=${this.handleQuickKey}></auth-quick-keys>
+                                </div>
+                              `
+                                : ''
+                            }
+                          `
+                            : html`
+                            <!-- Traditional input field -->
+                            <input
+                              type="password"
+                              class="input-field"
+                              data-testid="password-input"
+                              placeholder="System Password"
+                              .value=${this.loginPassword}
+                              @input=${(e: Event) => {
+                                this.loginPassword = (e.target as HTMLInputElement).value;
+                              }}
+                              ?disabled=${this.loading}
+                              required
+                            />
+                          `
+                        }
                       </div>
                       <button
                         type="submit"

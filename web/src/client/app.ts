@@ -25,6 +25,7 @@ import './components/notification-settings.js';
 import './components/notification-status.js';
 import './components/auth-login.js';
 import './components/ssh-key-manager.js';
+import './components/app-settings.js';
 
 import type { SessionCard } from './components/session-card.js';
 import { authClient } from './services/auth-client.js';
@@ -58,6 +59,7 @@ export class VibeTunnelApp extends LitElement {
   @state() private showFileBrowser = false;
   @state() private showNotificationSettings = false;
   @state() private showSSHKeyManager = false;
+  @state() private showSettings = false;
   @state() private isAuthenticated = false;
   @state() private sidebarCollapsed = this.loadSidebarState();
   @state() private sidebarWidth = this.loadSidebarWidth();
@@ -872,6 +874,14 @@ export class VibeTunnelApp extends LitElement {
     this.showNotificationSettings = false;
   };
 
+  private handleOpenSettings = () => {
+    this.showSettings = true;
+  };
+
+  private handleCloseSettings = () => {
+    this.showSettings = false;
+  };
+
   private handleOpenFileBrowser = () => {
     this.showFileBrowser = true;
   };
@@ -1061,6 +1071,7 @@ export class VibeTunnelApp extends LitElement {
             @clean-exited-sessions=${this.handleCleanExited}
             @open-file-browser=${this.handleOpenFileBrowser}
             @open-notification-settings=${this.handleShowNotificationSettings}
+            @open-settings=${this.handleOpenSettings}
             @logout=${this.handleLogout}
           ></app-header>
           <div class="${this.showSplitView ? 'flex-1 overflow-y-auto' : 'flex-1'} bg-dark-bg-secondary">
@@ -1148,6 +1159,12 @@ export class VibeTunnelApp extends LitElement {
         @success=${(e: CustomEvent) => this.showSuccess(e.detail)}
         @error=${(e: CustomEvent) => this.showError(e.detail)}
       ></notification-settings>
+
+      <!-- App Settings Modal -->
+      <app-settings
+        .open=${this.showSettings}
+        @close=${this.handleCloseSettings}
+      ></app-settings>
 
       <!-- SSH Key Manager Modal -->
       <ssh-key-manager
