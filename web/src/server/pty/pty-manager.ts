@@ -267,6 +267,14 @@ export class PtyManager extends EventEmitter {
           env: ptyEnv,
         });
       } catch (spawnError) {
+        // Debug log the raw error first
+        logger.debug('Raw spawn error:', {
+          type: typeof spawnError,
+          isError: spawnError instanceof Error,
+          errorString: String(spawnError),
+          errorKeys: spawnError && typeof spawnError === 'object' ? Object.keys(spawnError) : [],
+        });
+        
         // Provide better error messages for common issues
         let errorMessage = spawnError instanceof Error ? spawnError.message : String(spawnError);
 
