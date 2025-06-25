@@ -126,9 +126,9 @@ describe('SessionManager', () => {
     it('should list all sessions', () => {
       // Create multiple sessions
       const sessions = [
-        { id: 'session1', name: 'Session 1', status: 'running' as const },
-        { id: 'session2', name: 'Session 2', status: 'running' as const },
-        { id: 'session3', name: 'Session 3', status: 'exited' as const, exitCode: 0 },
+        { id: 'session1', name: 'Session 1', status: 'running' as const, pid: 999999 }, // Non-existent PID
+        { id: 'session2', name: 'Session 2', status: 'running' as const, pid: 999998 }, // Non-existent PID
+        { id: 'session3', name: 'Session 3', status: 'exited' as const, exitCode: 0, pid: 999997 },
       ];
 
       for (const session of sessions) {
@@ -136,7 +136,7 @@ describe('SessionManager', () => {
           cmdline: ['echo', session.name],
           name: session.name,
           cwd: testDir,
-          pid: Math.floor(Math.random() * 10000),
+          pid: session.pid,
           status: session.status,
           exitCode: session.exitCode,
           started_at: new Date().toISOString(),
@@ -153,10 +153,16 @@ describe('SessionManager', () => {
       expect(listedSessions).toHaveLength(3);
       expect(listedSessions.map((s) => s.id).sort()).toEqual(['session1', 'session2', 'session3']);
 
-      // Verify session data
+      // Verify session data - sessions with non-existent PIDs should be marked as exited
       const session1 = listedSessions.find((s) => s.id === 'session1');
       expect(session1?.name).toBe('Session 1');
       expect(session1?.status).toBe('exited'); // Process is not actually running
+      
+      const session2 = listedSessions.find((s) => s.id === 'session2');
+      expect(session2?.status).toBe('exited'); // Process is not actually running
+      
+      const session3 = listedSessions.find((s) => s.id === 'session3');
+      expect(session3?.status).toBe('exited'); // Already marked as exited
     });
 
     it('should handle empty directory', () => {

@@ -99,15 +99,35 @@ describe('BufferSubscriptionService', () => {
   });
 
   describe('connection management', () => {
-    it('should connect to WebSocket on initialization', () => {
+    it('should connect to WebSocket on initialization', async () => {
       service = new BufferSubscriptionService();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
+      await service.initialize();
+
+      // Advance timers to trigger connection after delay
+      vi.advanceTimersByTime(100);
 
       expect(mockWebSocketConstructor).toHaveBeenCalledWith('ws://localhost/buffers');
       expect(mockWebSocketInstance.binaryType).toBe('arraybuffer');
     });
 
-    it('should handle successful connection', () => {
+    it('should handle successful connection', async () => {
       service = new BufferSubscriptionService();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
+      await service.initialize();
+      vi.advanceTimersByTime(100);
 
       // Simulate successful connection
       mockWebSocketInstance.mockOpen();
@@ -115,8 +135,17 @@ describe('BufferSubscriptionService', () => {
       expect(mockWebSocketInstance.readyState).toBe(WebSocket.OPEN);
     });
 
-    it('should handle connection errors', () => {
+    it('should handle connection errors', async () => {
       service = new BufferSubscriptionService();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
+      await service.initialize();
+      vi.advanceTimersByTime(100);
 
       // Simulate connection error followed by close
       mockWebSocketInstance.mockError();
@@ -126,8 +155,17 @@ describe('BufferSubscriptionService', () => {
       expect(setTimeout).toHaveBeenCalled();
     });
 
-    it('should reconnect with exponential backoff', () => {
+    it('should reconnect with exponential backoff', async () => {
       service = new BufferSubscriptionService();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
+      await service.initialize();
+      vi.advanceTimersByTime(100);
 
       // First reconnect - 1 second
       mockWebSocketInstance.mockClose();
@@ -146,8 +184,17 @@ describe('BufferSubscriptionService', () => {
       expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 4000);
     });
 
-    it('should cap reconnect delay at 30 seconds', () => {
+    it('should cap reconnect delay at 30 seconds', async () => {
       service = new BufferSubscriptionService();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
+      await service.initialize();
+      vi.advanceTimersByTime(100);
 
       // Trigger many failed connections
       for (let i = 0; i < 10; i++) {
@@ -161,14 +208,33 @@ describe('BufferSubscriptionService', () => {
   });
 
   describe('subscription management', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       service = new BufferSubscriptionService();
-      mockWebSocketInstance.mockOpen();
     });
 
-    it('should subscribe to a session', () => {
+    it('should subscribe to a session', async () => {
       const handler = vi.fn();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
+      // Subscribe will trigger initialization
       const unsubscribe = service.subscribe('session-123', handler);
+
+      // Wait for auth check
+      await vi.waitFor(() => {
+        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+        return calls.length > 0;
+      });
+
+      // Advance timers to trigger connection
+      vi.advanceTimersByTime(100);
+
+      // Simulate successful connection
+      mockWebSocketInstance.mockOpen();
 
       expect(mockWebSocketInstance.send).toHaveBeenCalledWith(
         JSON.stringify({ type: 'subscribe', sessionId: 'session-123' })
@@ -177,22 +243,61 @@ describe('BufferSubscriptionService', () => {
       expect(typeof unsubscribe).toBe('function');
     });
 
-    it('should not send duplicate subscribe messages for same session', () => {
+    it('should not send duplicate subscribe messages for same session', async () => {
       const handler1 = vi.fn();
       const handler2 = vi.fn();
 
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
       service.subscribe('session-123', handler1);
+
+      // Wait for auth check
+      await vi.waitFor(() => {
+        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+        return calls.length > 0;
+      });
+
+      // Advance timers to trigger connection
+      vi.advanceTimersByTime(100);
+
+      // Simulate successful connection
+      mockWebSocketInstance.mockOpen();
+
+      // Now subscribe with second handler
       service.subscribe('session-123', handler2);
 
       // Should only send one subscribe message
       expect(mockWebSocketInstance.send).toHaveBeenCalledTimes(1);
     });
 
-    it('should unsubscribe when last handler is removed', () => {
+    it('should unsubscribe when last handler is removed', async () => {
       const handler1 = vi.fn();
       const handler2 = vi.fn();
 
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
       const unsubscribe1 = service.subscribe('session-123', handler1);
+
+      // Wait for auth check
+      await vi.waitFor(() => {
+        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+        return calls.length > 0;
+      });
+
+      // Advance timers to trigger connection
+      vi.advanceTimersByTime(100);
+
+      // Simulate successful connection
+      mockWebSocketInstance.mockOpen();
+
       const unsubscribe2 = service.subscribe('session-123', handler2);
 
       // Remove first handler - should not unsubscribe yet
@@ -208,9 +313,26 @@ describe('BufferSubscriptionService', () => {
       );
     });
 
-    it('should queue subscribe messages when disconnected', () => {
+    it('should queue subscribe messages when disconnected', async () => {
       const handler = vi.fn();
-      service = new BufferSubscriptionService();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
+      // Subscribe will trigger initialization
+      service.subscribe('session-123', handler);
+
+      // Wait for auth check
+      await vi.waitFor(() => {
+        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+        return calls.length > 0;
+      });
+
+      // Advance timers to trigger connection
+      vi.advanceTimersByTime(100);
 
       // First, connect successfully
       mockWebSocketInstance.mockOpen();
@@ -218,14 +340,18 @@ describe('BufferSubscriptionService', () => {
       // Then close connection
       mockWebSocketInstance.mockClose();
 
-      // Try to subscribe while disconnected
-      service.subscribe('session-123', handler);
+      // Clear previous calls
+      mockWebSocketInstance.send.mockClear();
+
+      // Try to subscribe to another session while disconnected
+      service.subscribe('session-456', handler);
 
       // Should not send message immediately
       expect(mockWebSocketInstance.send).not.toHaveBeenCalled();
 
       // Create new mock instance for reconnection
       const newMockInstance = new MockWebSocket('ws://localhost/buffers');
+      newMockInstance.send = vi.fn();
       mockWebSocketConstructor.mockReturnValue(newMockInstance);
 
       // Advance time to trigger reconnect
@@ -234,16 +360,28 @@ describe('BufferSubscriptionService', () => {
       // Simulate successful reconnection
       newMockInstance.mockOpen();
 
-      // Should send queued subscribe message on the new connection
+      // Should send subscribe messages for both sessions on the new connection
       expect(newMockInstance.send).toHaveBeenCalledWith(
         JSON.stringify({ type: 'subscribe', sessionId: 'session-123' })
+      );
+      expect(newMockInstance.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'subscribe', sessionId: 'session-456' })
       );
     });
   });
 
   describe('message handling', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       service = new BufferSubscriptionService();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
+
+      await service.initialize();
+      vi.advanceTimersByTime(100);
       mockWebSocketInstance.mockOpen();
     });
 
@@ -336,12 +474,27 @@ describe('BufferSubscriptionService', () => {
   });
 
   describe('cleanup', () => {
-    it('should clean up resources on dispose', () => {
+    it('should clean up resources on dispose', async () => {
       service = new BufferSubscriptionService();
-      mockWebSocketInstance.mockOpen();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
 
       const handler = vi.fn();
       service.subscribe('session-123', handler);
+
+      // Wait for auth check
+      await vi.waitFor(() => {
+        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+        return calls.length > 0;
+      });
+
+      // Advance timers to trigger connection
+      vi.advanceTimersByTime(100);
+      mockWebSocketInstance.mockOpen();
 
       service.dispose();
 
@@ -350,14 +503,30 @@ describe('BufferSubscriptionService', () => {
       expect(clearInterval).toHaveBeenCalled();
     });
 
-    it('should clear all subscriptions on dispose', () => {
+    it('should clear all subscriptions on dispose', async () => {
       service = new BufferSubscriptionService();
-      mockWebSocketInstance.mockOpen();
+
+      // Mock fetch for auth config check
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ noAuth: true }),
+      } as Response);
 
       const handler1 = vi.fn();
       const handler2 = vi.fn();
 
       service.subscribe('session-1', handler1);
+
+      // Wait for auth check
+      await vi.waitFor(() => {
+        const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+        return calls.length > 0;
+      });
+
+      // Advance timers to trigger connection
+      vi.advanceTimersByTime(100);
+      mockWebSocketInstance.mockOpen();
+
       service.subscribe('session-2', handler2);
 
       service.dispose();
