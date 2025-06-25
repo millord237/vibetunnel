@@ -201,13 +201,13 @@ export class AuthLogin extends LitElement {
       <div class="auth-container">
         <div class="w-full max-w-sm">
           <div class="auth-header">
-            <div class="flex flex-col items-center gap-3 mb-8">
+            <div class="flex flex-col items-center gap-2 sm:gap-3 mb-4 sm:mb-8">
               <terminal-icon
-                size="56"
+                size="${this.isMobile ? '48' : '56'}"
                 style="filter: drop-shadow(0 0 15px rgba(124, 230, 161, 0.4));"
               ></terminal-icon>
-              <h2 class="auth-title text-3xl mt-2">VibeTunnel</h2>
-              <p class="auth-subtitle text-sm">Please authenticate to continue</p>
+              <h2 class="auth-title text-2xl sm:text-3xl mt-1 sm:mt-2">VibeTunnel</h2>
+              <p class="auth-subtitle text-xs sm:text-sm">Please authenticate to continue</p>
             </div>
           </div>
 
@@ -254,9 +254,9 @@ export class AuthLogin extends LitElement {
               !this.authConfig.disallowUserPassword
                 ? html`
                   <!-- Password Login Section (Primary) -->
-                  <div class="p-8">
-                    <div class="flex flex-col items-center mb-6">
-                      <div class="w-20 h-20 rounded-full mb-3 overflow-hidden" style="box-shadow: 0 0 20px rgba(124, 230, 161, 0.3);">
+                  <div class="p-6 sm:p-8">
+                    <div class="flex flex-col items-center mb-4 sm:mb-6">
+                      <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full mb-2 sm:mb-3 overflow-hidden" style="box-shadow: 0 0 20px rgba(124, 230, 161, 0.3);">
                         ${
                           this.userAvatar
                             ? html`
@@ -270,14 +270,14 @@ export class AuthLogin extends LitElement {
                             `
                             : html`
                               <div class="w-full h-full bg-dark-bg-secondary flex items-center justify-center">
-                                <svg class="w-10 h-10 text-dark-text-muted" fill="currentColor" viewBox="0 0 20 20">
+                                <svg class="w-8 h-8 sm:w-10 sm:h-10 text-dark-text-muted" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
                                 </svg>
                               </div>
                             `
                         }
                       </div>
-                      <p class="text-dark-text text-lg font-medium">
+                      <p class="text-dark-text text-base sm:text-lg font-medium">
                         Welcome back, ${this.currentUserId || '...'}
                       </p>
                     </div>
@@ -334,7 +334,7 @@ export class AuthLogin extends LitElement {
                       </div>
                       <button
                         type="submit"
-                        class="btn-primary w-full py-4 mt-2"
+                        class="btn-primary w-full py-3 sm:py-4 mt-2"
                         data-testid="password-submit"
                         ?disabled=${this.loading || !this.loginPassword}
                       >
@@ -349,9 +349,9 @@ export class AuthLogin extends LitElement {
               this.authConfig.disallowUserPassword
                 ? html`
                   <!-- Avatar for SSH-only mode -->
-                  <div class="ssh-key-item">
-                    <div class="flex flex-col items-center mb-6">
-                      <div class="w-20 h-20 rounded-full mb-3 overflow-hidden border-2 border-dark-border">
+                  <div class="ssh-key-item p-6 sm:p-8">
+                    <div class="flex flex-col items-center mb-4 sm:mb-6">
+                      <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full mb-2 sm:mb-3 overflow-hidden border-2 border-dark-border">
                         ${
                           this.userAvatar
                             ? html`
@@ -365,21 +365,21 @@ export class AuthLogin extends LitElement {
                             `
                             : html`
                               <div class="w-full h-full bg-dark-bg-secondary flex items-center justify-center">
-                                <svg class="w-10 h-10 text-dark-text-muted" fill="currentColor" viewBox="0 0 20 20">
+                                <svg class="w-8 h-8 sm:w-10 sm:h-10 text-dark-text-muted" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
                                 </svg>
                               </div>
                             `
                         }
                       </div>
-                      <p class="text-dark-text text-sm">
+                      <p class="text-dark-text text-xs sm:text-sm">
                         ${
                           this.currentUserId
                             ? `Welcome back, ${this.currentUserId}`
                             : 'Please authenticate to continue'
                         }
                       </p>
-                      <p class="text-dark-text-muted text-xs mt-2">
+                      <p class="text-dark-text-muted text-xs mt-1 sm:mt-2">
                         SSH key authentication required
                       </p>
                     </div>
@@ -402,11 +402,11 @@ export class AuthLogin extends LitElement {
                   }
 
                   <!-- SSH Key Management Section -->
-                  <div class="ssh-key-item p-8">
-                    <div class="flex items-center justify-between mb-4">
+                  <div class="ssh-key-item p-6 sm:p-8">
+                    <div class="flex items-center justify-between mb-3 sm:mb-4">
                       <div class="flex items-center gap-2">
                         <div class="w-2 h-2 rounded-full bg-accent-green"></div>
-                        <span class="font-mono text-sm">SSH Key Management</span>
+                        <span class="font-mono text-xs sm:text-sm">SSH Key Management</span>
                       </div>
                       <button class="btn-ghost text-xs" data-testid="manage-keys" @click=${this.handleShowSSHKeyManager}>
                         Manage Keys
