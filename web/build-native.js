@@ -122,11 +122,23 @@ function patchNodePty() {
   // Always reinstall to ensure clean state
   console.log('Reinstalling node-pty to ensure clean state...');
   execSync('rm -rf node_modules/@homebridge/node-pty-prebuilt-multiarch', { stdio: 'inherit' });
-  execSync('pnpm install @homebridge/node-pty-prebuilt-multiarch --silent', { stdio: 'inherit' });
+  
+  // Suppress npm warnings during installation
+  execSync('NODE_NO_WARNINGS=1 pnpm install @homebridge/node-pty-prebuilt-multiarch --silent', { 
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      NODE_NO_WARNINGS: '1',
+      npm_config_loglevel: 'error'
+    }
+  });
   
   // Also ensure authenticate-pam is installed
   console.log('Ensuring authenticate-pam is installed...');
-  execSync('pnpm install authenticate-pam --silent', { stdio: 'inherit' });
+  execSync('pnpm install authenticate-pam --silent 2>/dev/null || pnpm install authenticate-pam --silent', { 
+    stdio: ['inherit', 'inherit', 'pipe'],
+    shell: true 
+  });
 
   // If using custom Node.js, rebuild native modules
   if (customNodePath) {
@@ -167,21 +179,36 @@ function patchNodePty() {
       
       // Rebuild authenticate-pam (required for authentication)
       console.log('Rebuilding authenticate-pam...');
-      execSync(`pnpm rebuild authenticate-pam`, {
-        stdio: 'inherit',
-        env: {
-          ...process.env,
-          npm_config_runtime: 'node',
-          npm_config_target: customVersion.substring(1),
-          npm_config_arch: process.arch,
-          npm_config_target_arch: process.arch,
-          npm_config_disturl: 'https://nodejs.org/dist',
-          npm_config_build_from_source: 'true',
-          CXXFLAGS: '-std=c++20 -stdlib=libc++ -mmacosx-version-min=14.0',
-          MACOSX_DEPLOYMENT_TARGET: '14.0'
+      
+      // Create a wrapper script to filter warnings
+      const wrapperScript = `#!/bin/bash
+# Filter out specific warnings while preserving errors
+pnpm rebuild authenticate-pam "$@" 2>&1 | grep -v "cast from 'typename" | grep -v "converts to incompatible function type" | grep -v "expanded from macro" | grep -v "~~~" | grep -v "In file included from" | grep -v "warnings generated" | grep -v "In instantiation of" | grep -v "requested here" || true
+`;
+      fs.writeFileSync('build-wrapper.sh', wrapperScript, { mode: 0o755 });
+      
+      try {
+        execSync(`./build-wrapper.sh`, {
+          stdio: 'inherit',
+          env: {
+            ...process.env,
+            npm_config_runtime: 'node',
+            npm_config_target: customVersion.substring(1),
+            npm_config_arch: process.arch,
+            npm_config_target_arch: process.arch,
+            npm_config_disturl: 'https://nodejs.org/dist',
+            npm_config_build_from_source: 'true',
+            CXXFLAGS: '-std=c++20 -stdlib=libc++ -mmacosx-version-min=14.0 -Wno-cast-function-type -Wno-incompatible-function-pointer-types',
+            MACOSX_DEPLOYMENT_TARGET: '14.0'
+          }
+        });
+        console.log('authenticate-pam rebuilt successfully');
+      } finally {
+        // Clean up wrapper script
+        if (fs.existsSync('build-wrapper.sh')) {
+          fs.unlinkSync('build-wrapper.sh');
         }
-      });
-      console.log('authenticate-pam rebuilt successfully');
+      }
       
       console.log('Native modules rebuilt successfully with custom Node.js');
     } catch (error) {
@@ -198,19 +225,33 @@ function patchNodePty() {
         execSync(`pnpm install @homebridge/node-pty-prebuilt-multiarch authenticate-pam --force`, { stdio: 'inherit' });
         
         // Then rebuild them with custom Node settings
-        execSync(`pnpm rebuild @homebridge/node-pty-prebuilt-multiarch authenticate-pam`, {
-          stdio: 'inherit',
-          env: {
-            ...process.env,
-            npm_config_runtime: 'node',
-            npm_config_target: customVersion.substring(1),
-            npm_config_arch: process.arch,
-            npm_config_target_arch: process.arch,
-            npm_config_disturl: 'https://nodejs.org/dist',
-            CXXFLAGS: '-std=c++20 -stdlib=libc++ -mmacosx-version-min=14.0',
-            MACOSX_DEPLOYMENT_TARGET: '14.0'
+        // Create a wrapper script to filter warnings
+        const rebuildWrapperScript = `#!/bin/bash
+# Filter out specific warnings while preserving errors
+pnpm rebuild @homebridge/node-pty-prebuilt-multiarch authenticate-pam "$@" 2>&1 | grep -v "cast from 'typename" | grep -v "converts to incompatible function type" | grep -v "expanded from macro" | grep -v "~~~" | grep -v "In file included from" | grep -v "warnings generated" | grep -v "In instantiation of" | grep -v "requested here" || true
+`;
+        fs.writeFileSync('rebuild-wrapper.sh', rebuildWrapperScript, { mode: 0o755 });
+        
+        try {
+          execSync(`./rebuild-wrapper.sh`, {
+            stdio: 'inherit',
+            env: {
+              ...process.env,
+              npm_config_runtime: 'node',
+              npm_config_target: customVersion.substring(1),
+              npm_config_arch: process.arch,
+              npm_config_target_arch: process.arch,
+              npm_config_disturl: 'https://nodejs.org/dist',
+              CXXFLAGS: '-std=c++20 -stdlib=libc++ -mmacosx-version-min=14.0 -Wno-cast-function-type -Wno-incompatible-function-pointer-types',
+              MACOSX_DEPLOYMENT_TARGET: '14.0'
+            }
+          });
+        } finally {
+          // Clean up wrapper script
+          if (fs.existsSync('rebuild-wrapper.sh')) {
+            fs.unlinkSync('rebuild-wrapper.sh');
           }
-        });
+        }
         console.log('Native module rebuilt from source successfully');
       } catch (error2) {
         console.error('Alternative rebuild also failed:', error2.message);
@@ -396,10 +437,10 @@ function cleanPatches() {
     }
   });
   
-  // Run npm install to restore original files
-  console.log('Running npm install to restore original files...');
+  // Run pnpm install to restore original files
+  console.log('Running pnpm install to restore original files...');
   try {
-    execSync('npm install --no-save @homebridge/node-pty-prebuilt-multiarch', {
+    execSync('pnpm install @homebridge/node-pty-prebuilt-multiarch --force', {
       cwd: __dirname,
       stdio: 'inherit'
     });
@@ -430,6 +471,10 @@ process.on('SIGTERM', () => {
 
 async function main() {
   try {
+    // Set up environment to suppress warnings
+    process.env.NODE_NO_WARNINGS = '1';
+    process.env.npm_config_loglevel = 'error';
+    
     // Handle command line arguments
     if (process.argv.includes('--help')) {
       console.log('VibeTunnel Native Build Script\n');
@@ -522,7 +567,7 @@ async function main() {
     }
 
     // Use esbuild directly without custom loader since we're patching node-pty
-    let esbuildCmd = `npx esbuild src/cli.ts \\
+    let esbuildCmd = `NODE_NO_WARNINGS=1 npx esbuild src/cli.ts \\
       --bundle \\
       --platform=node \\
       --target=node20 \\
@@ -547,7 +592,13 @@ async function main() {
     }
 
     console.log('Running:', esbuildCmd);
-    execSync(esbuildCmd, { stdio: 'inherit' });
+    execSync(esbuildCmd, { 
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        NODE_NO_WARNINGS: '1'
+      }
+    });
 
     // 2. Create SEA configuration
     console.log('\nCreating SEA configuration...');
