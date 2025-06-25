@@ -56,6 +56,7 @@ export class AppHeader extends LitElement {
         @hide-exited-change=${this.forwardEvent}
         @kill-all-sessions=${this.forwardEvent}
         @clean-exited-sessions=${this.forwardEvent}
+        @open-settings=${this.forwardEvent}
         @logout=${this.forwardEvent}
       ></sidebar-header>
     `;
@@ -74,6 +75,7 @@ export class AppHeader extends LitElement {
         @clean-exited-sessions=${this.forwardEvent}
         @open-file-browser=${this.forwardEvent}
         @open-notification-settings=${this.forwardEvent}
+        @open-settings=${this.forwardEvent}
         @logout=${this.forwardEvent}
       ></full-header>
     `;
