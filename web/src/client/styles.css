@@ -168,12 +168,11 @@
   
   @media (max-width: 768px) {
     .auth-container {
-      @apply py-8; /* Add vertical padding on mobile */
+      @apply py-4; /* Reduced vertical padding on mobile */
       min-height: 100vh;
       min-height: 100dvh;
-      /* Allow natural scrolling if content exceeds viewport */
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
+      /* Prevent scrolling - content should fit */
+      overflow: hidden;
     }
   }
 
