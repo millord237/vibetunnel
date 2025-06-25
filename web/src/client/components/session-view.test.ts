@@ -38,9 +38,7 @@ describe('SessionView', () => {
     fetchMock = setupFetchMock();
 
     // Create component
-    element = await fixture<SessionView>(html`
-      <session-view></session-view>
-    `);
+    element = await fixture<SessionView>(html` <session-view></session-view> `);
 
     await element.updateComplete;
   });
@@ -69,9 +67,7 @@ describe('SessionView', () => {
         configurable: true,
       });
 
-      const mobileElement = await fixture<SessionView>(html`
-        <session-view></session-view>
-      `);
+      const mobileElement = await fixture<SessionView>(html` <session-view></session-view> `);
 
       await mobileElement.updateComplete;
 

@@ -110,10 +110,7 @@ describe('AuthLogin', () => {
 
       const authHandler = vi.fn();
       const noAuthElement = await fixture<AuthLogin>(html`
-        <auth-login 
-          .authClient=${mockAuthClient}
-          @auth-success=${authHandler}>
-        </auth-login>
+        <auth-login .authClient=${mockAuthClient} @auth-success=${authHandler}> </auth-login>
       `);
 
       // Wait for auto-login

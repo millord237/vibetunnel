@@ -143,11 +143,13 @@ export class SidebarHeader extends HeaderBase {
         ${
           this.killingAll
             ? html`
-            <div class="flex items-center justify-center gap-2">
-              <div class="w-3 h-3 border-2 border-dark-bg border-t-transparent rounded-full animate-spin"></div>
-              <span>Killing...</span>
-            </div>
-          `
+              <div class="flex items-center justify-center gap-2">
+                <div
+                  class="w-3 h-3 border-2 border-dark-bg border-t-transparent rounded-full animate-spin"
+                ></div>
+                <span>Killing...</span>
+              </div>
+            `
             : `Kill All (${runningSessions.length})`
         }
       </button>
@@ -165,7 +167,9 @@ export class SidebarHeader extends HeaderBase {
           title="User menu"
         >
           <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10 0C4.48 0 0 4.48 0 10s4.48 10 10 10 10-4.48 10-10S15.52 0 10 0zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+            <path
+              d="M10 0C4.48 0 0 4.48 0 10s4.48 10 10 10 10-4.48 10-10S15.52 0 10 0zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"
+            />
           </svg>
         </button>
         ${

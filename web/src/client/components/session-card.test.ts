@@ -46,10 +46,7 @@ describe('SessionCard', () => {
 
     // Create component
     element = await fixture<SessionCard>(html`
-      <session-card 
-        .session=${mockSession}
-        .authClient=${mockAuthClient}
-      ></session-card>
+      <session-card .session=${mockSession} .authClient=${mockAuthClient}></session-card>
     `);
 
     await element.updateComplete;

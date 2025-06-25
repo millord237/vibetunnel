@@ -281,9 +281,19 @@ export class SessionList extends LitElement {
                             <div class="flex-1 min-w-0">
                               <div
                                 class="text-sm font-mono text-accent-green truncate"
-                                title="${session.name || (Array.isArray(session.command) ? session.command.join(' ') : session.command)}"
+                                title="${
+                                  session.name ||
+                                  (Array.isArray(session.command)
+                                    ? session.command.join(' ')
+                                    : session.command)
+                                }"
                               >
-                                ${session.name || (Array.isArray(session.command) ? session.command.join(' ') : session.command)}
+                                ${
+                                  session.name ||
+                                  (Array.isArray(session.command)
+                                    ? session.command.join(' ')
+                                    : session.command)
+                                }
                               </div>
                               <div class="text-xs text-dark-text-muted truncate">
                                 ${formatPathForDisplay(session.workingDir)}
@@ -401,11 +411,18 @@ export class SessionList extends LitElement {
                     ? 'border-dark-border bg-dark-bg-secondary text-dark-text-muted hover:bg-dark-bg-tertiary hover:text-dark-text'
                     : 'border-dark-border bg-dark-bg-tertiary text-dark-text hover:bg-dark-bg-secondary'
                 }"
-                @click=${() => this.dispatchEvent(new CustomEvent('hide-exited-change', { detail: !this.hideExited }))}
+                @click=${() =>
+                  this.dispatchEvent(
+                    new CustomEvent('hide-exited-change', { detail: !this.hideExited })
+                  )}
               >
                 <div class="flex items-center gap-2 sm:gap-3">
-                  <span class="hidden sm:inline">${this.hideExited ? 'Show' : 'Hide'} Exited (${exitedSessions.length})</span>
-                  <span class="sm:hidden">${this.hideExited ? 'Show' : 'Hide'} (${exitedSessions.length})</span>
+                  <span class="hidden sm:inline"
+                    >${this.hideExited ? 'Show' : 'Hide'} Exited (${exitedSessions.length})</span
+                  >
+                  <span class="sm:hidden"
+                    >${this.hideExited ? 'Show' : 'Hide'} (${exitedSessions.length})</span
+                  >
                   <div
                     class="w-8 h-4 rounded-full transition-colors duration-200 ${
                       this.hideExited ? 'bg-dark-surface' : 'bg-dark-bg'
@@ -444,7 +461,11 @@ export class SessionList extends LitElement {
                 @click=${this.handleCleanupExited}
                 ?disabled=${this.cleaningExited}
               >
-                <span class="hidden sm:inline">${this.cleaningExited ? 'Cleaning...' : `Clean Exited (${exitedSessions.length})`}</span>
+                <span class="hidden sm:inline"
+                  >${
+                    this.cleaningExited ? 'Cleaning...' : `Clean Exited (${exitedSessions.length})`
+                  }</span
+                >
                 <span class="sm:hidden">${this.cleaningExited ? 'Cleaning...' : 'Clean'}</span>
               </button>
             `

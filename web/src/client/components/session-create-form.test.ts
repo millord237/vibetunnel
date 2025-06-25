@@ -48,10 +48,7 @@ describe('SessionCreateForm', () => {
 
     // Create component
     element = await fixture<SessionCreateForm>(html`
-      <session-create-form 
-        .authClient=${mockAuthClient}
-        .visible=${true}
-      ></session-create-form>
+      <session-create-form .authClient=${mockAuthClient} .visible=${true}></session-create-form>
     `);
 
     await element.updateComplete;
@@ -81,10 +78,7 @@ describe('SessionCreateForm', () => {
       });
 
       const newElement = await fixture<SessionCreateForm>(html`
-        <session-create-form 
-          .authClient=${mockAuthClient}
-          .visible=${true}
-        ></session-create-form>
+        <session-create-form .authClient=${mockAuthClient} .visible=${true}></session-create-form>
       `);
 
       expect(newElement.workingDir).toBe('/home/user/projects');

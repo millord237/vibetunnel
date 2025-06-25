@@ -168,7 +168,10 @@ export class AuthLogin extends LitElement {
           ${
             this.error
               ? html`
-                <div class="bg-status-error text-dark-bg px-3 py-1.5 rounded mb-3 font-mono text-xs sm:text-sm" data-testid="error-message">
+                <div
+                  class="bg-status-error text-dark-bg px-3 py-1.5 rounded mb-3 font-mono text-xs sm:text-sm"
+                  data-testid="error-message"
+                >
                   ${this.error}
                   <button
                     @click=${() => {
@@ -210,7 +213,10 @@ export class AuthLogin extends LitElement {
                   <!-- Password Login Section (Primary) -->
                   <div class="p-5 sm:p-8">
                     <div class="flex flex-col items-center mb-4 sm:mb-6">
-                      <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-full mb-3 sm:mb-4 overflow-hidden" style="box-shadow: 0 0 25px rgba(124, 230, 161, 0.3);">
+                      <div
+                        class="w-24 h-24 sm:w-28 sm:h-28 rounded-full mb-3 sm:mb-4 overflow-hidden"
+                        style="box-shadow: 0 0 25px rgba(124, 230, 161, 0.3);"
+                      >
                         ${
                           this.userAvatar
                             ? html`
@@ -223,8 +229,14 @@ export class AuthLogin extends LitElement {
                               />
                             `
                             : html`
-                              <div class="w-full h-full bg-dark-bg-secondary flex items-center justify-center">
-                                <svg class="w-12 h-12 sm:w-14 sm:h-14 text-dark-text-muted" fill="currentColor" viewBox="0 0 20 20">
+                              <div
+                                class="w-full h-full bg-dark-bg-secondary flex items-center justify-center"
+                              >
+                                <svg
+                                  class="w-12 h-12 sm:w-14 sm:h-14 text-dark-text-muted"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
                                   <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
                                 </svg>
                               </div>
@@ -269,7 +281,9 @@ export class AuthLogin extends LitElement {
                   <!-- Avatar for SSH-only mode -->
                   <div class="ssh-key-item p-6 sm:p-8">
                     <div class="flex flex-col items-center mb-4 sm:mb-6">
-                      <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full mb-2 sm:mb-3 overflow-hidden border-2 border-dark-border">
+                      <div
+                        class="w-16 h-16 sm:w-20 sm:h-20 rounded-full mb-2 sm:mb-3 overflow-hidden border-2 border-dark-border"
+                      >
                         ${
                           this.userAvatar
                             ? html`
@@ -282,8 +296,14 @@ export class AuthLogin extends LitElement {
                               />
                             `
                             : html`
-                              <div class="w-full h-full bg-dark-bg-secondary flex items-center justify-center">
-                                <svg class="w-8 h-8 sm:w-10 sm:h-10 text-dark-text-muted" fill="currentColor" viewBox="0 0 20 20">
+                              <div
+                                class="w-full h-full bg-dark-bg-secondary flex items-center justify-center"
+                              >
+                                <svg
+                                  class="w-8 h-8 sm:w-10 sm:h-10 text-dark-text-muted"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
                                   <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
                                 </svg>
                               </div>
@@ -326,7 +346,11 @@ export class AuthLogin extends LitElement {
                         <div class="w-2 h-2 rounded-full bg-accent-green"></div>
                         <span class="font-mono text-xs sm:text-sm">SSH Key Management</span>
                       </div>
-                      <button class="btn-ghost text-xs" data-testid="manage-keys" @click=${this.handleShowSSHKeyManager}>
+                      <button
+                        class="btn-ghost text-xs"
+                        data-testid="manage-keys"
+                        @click=${this.handleShowSSHKeyManager}
+                      >
                         Manage Keys
                       </button>
                     </div>

@@ -67,7 +67,6 @@ export class FullHeader extends HeaderBase {
               </button>
               ${this.renderUserMenu()}
             </div>
-
           </div>
         </div>
       </div>
@@ -101,9 +100,7 @@ export class FullHeader extends HeaderBase {
               <div
                 class="absolute right-0 top-full mt-1 bg-dark-surface border border-dark-border rounded-lg shadow-lg py-1 z-50 min-w-36"
               >
-                <div
-                  class="px-3 py-2 text-sm text-dark-text-muted border-b border-dark-border"
-                >
+                <div class="px-3 py-2 text-sm text-dark-text-muted border-b border-dark-border">
                   ${this.authMethod || 'authenticated'}
                 </div>
                 <button

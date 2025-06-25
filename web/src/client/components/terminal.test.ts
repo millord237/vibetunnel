@@ -82,12 +82,7 @@ describe('Terminal', () => {
 
     it('should handle custom dimensions', async () => {
       const customElement = await fixture<Terminal>(html`
-        <vibe-terminal 
-          session-id="test-789"
-          cols="120"
-          rows="40"
-          font-size="16">
-        </vibe-terminal>
+        <vibe-terminal session-id="test-789" cols="120" rows="40" font-size="16"> </vibe-terminal>
       `);
 
       await customElement.updateComplete;

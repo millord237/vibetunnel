@@ -408,9 +408,7 @@ export class SessionCreateForm extends LitElement {
             <div class="mb-4 flex items-center justify-between">
               <div class="flex-1 pr-4">
                 <span class="text-dark-text text-sm">Spawn window</span>
-                <p class="text-xs text-dark-text-muted mt-1">
-                  Opens native terminal window
-                </p>
+                <p class="text-xs text-dark-text-muted mt-1">Opens native terminal window</p>
               </div>
               <button
                 role="switch"
