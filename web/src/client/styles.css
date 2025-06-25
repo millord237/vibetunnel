@@ -161,7 +161,20 @@
 
   /* Authentication styles */
   .auth-container {
-    @apply min-h-screen bg-dark-bg flex items-center justify-center p-4;
+    @apply bg-dark-bg flex items-center justify-center p-4;
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
+  }
+  
+  @media (max-width: 768px) {
+    .auth-container {
+      @apply py-8; /* Add vertical padding on mobile */
+      min-height: 100vh;
+      min-height: 100dvh;
+      /* Allow natural scrolling if content exceeds viewport */
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
   }
 
   .auth-header {
@@ -363,6 +376,55 @@ body.sessions-showing .space-y-2 > div:nth-child(n+9) { animation-delay: 0.4s; }
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* Initial session load animation */
+@keyframes initialLoad {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Apply fade animation to session cards during initial load */
+body.initial-session-load .session-flex-responsive > session-card {
+  animation: initialLoad 0.4s ease-out backwards;
+}
+
+/* Stagger animation for initial load */
+body.initial-session-load .session-flex-responsive > session-card:nth-child(1) { animation-delay: 0s; }
+body.initial-session-load .session-flex-responsive > session-card:nth-child(2) { animation-delay: 0.05s; }
+body.initial-session-load .session-flex-responsive > session-card:nth-child(3) { animation-delay: 0.1s; }
+body.initial-session-load .session-flex-responsive > session-card:nth-child(4) { animation-delay: 0.15s; }
+body.initial-session-load .session-flex-responsive > session-card:nth-child(5) { animation-delay: 0.2s; }
+body.initial-session-load .session-flex-responsive > session-card:nth-child(6) { animation-delay: 0.25s; }
+body.initial-session-load .session-flex-responsive > session-card:nth-child(7) { animation-delay: 0.3s; }
+body.initial-session-load .session-flex-responsive > session-card:nth-child(8) { animation-delay: 0.35s; }
+body.initial-session-load .session-flex-responsive > session-card:nth-child(n+9) { animation-delay: 0.4s; }
+
+/* View transition specific styles for initial load */
+::view-transition-old(root) {
+  animation: 90ms ease-out fade-out;
+}
+
+::view-transition-new(root) {
+  animation: 210ms ease-in fade-in;
+}
+
+body.initial-session-load ::view-transition-new(root) {
+  animation-duration: 400ms;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 /* View transition names for smoother morphing */

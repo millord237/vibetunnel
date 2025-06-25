@@ -6,7 +6,6 @@
 import { html } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import { HeaderBase } from './header-base.js';
-import type { Session } from './session-list.js';
 import './terminal-icon.js';
 import './notification-status.js';
 

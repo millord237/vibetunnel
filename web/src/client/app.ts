@@ -288,25 +288,77 @@ export class VibeTunnelApp extends LitElement {
     if (!this.initialLoadComplete) {
       this.loading = true;
     }
-    try {
-      const headers = authClient.getAuthHeader();
-      const response = await fetch('/api/sessions', { headers });
-      if (response.ok) {
-        this.sessions = (await response.json()) as Session[];
-        this.clearError();
-      } else if (response.status === 401) {
-        // Authentication failed, redirect to login
-        this.handleLogout();
-        return;
-      } else {
+
+    const performLoad = async () => {
+      try {
+        const headers = authClient.getAuthHeader();
+        const response = await fetch('/api/sessions', { headers });
+        if (response.ok) {
+          this.sessions = (await response.json()) as Session[];
+          this.clearError();
+        } else if (response.status === 401) {
+          // Authentication failed, redirect to login
+          this.handleLogout();
+          return;
+        } else {
+          this.showError('Failed to load sessions');
+        }
+      } catch (error) {
+        logger.error('error loading sessions:', error);
         this.showError('Failed to load sessions');
+      } finally {
+        this.loading = false;
+        this.initialLoadComplete = true;
       }
-    } catch (error) {
-      logger.error('error loading sessions:', error);
-      this.showError('Failed to load sessions');
-    } finally {
-      this.loading = false;
-      this.initialLoadComplete = true;
+    };
+
+    // Use view transition for initial load with fade effect
+    if (
+      !this.initialLoadComplete &&
+      'startViewTransition' in document &&
+      typeof document.startViewTransition === 'function'
+    ) {
+      logger.log('🎨 Using View Transition API for initial session load');
+      // Add initial-load class for specific CSS handling
+      document.body.classList.add('initial-session-load');
+
+      const transition = document.startViewTransition(async () => {
+        await performLoad();
+        await this.updateComplete;
+      });
+
+      // Log when transition is ready
+      transition.ready
+        .then(() => {
+          logger.log('✨ Initial load view transition ready');
+        })
+        .catch((err) => {
+          logger.error('❌ Initial load view transition failed:', err);
+        });
+
+      // Clean up the class after transition completes
+      transition.finished
+        .finally(() => {
+          logger.log('✅ Initial load view transition finished');
+          document.body.classList.remove('initial-session-load');
+        })
+        .catch(() => {
+          // Ignore errors, just make sure we clean up
+          document.body.classList.remove('initial-session-load');
+        });
+    } else {
+      // Regular load without transition
+      if (!this.initialLoadComplete) {
+        logger.log('🎨 Using CSS animation fallback for initial load');
+        document.body.classList.add('initial-session-load');
+        await performLoad();
+        // Remove class after animation completes
+        setTimeout(() => {
+          document.body.classList.remove('initial-session-load');
+        }, 600);
+      } else {
+        await performLoad();
+      }
     }
   }
 
@@ -875,6 +927,7 @@ export class VibeTunnelApp extends LitElement {
   };
 
   private handleOpenSettings = () => {
+    console.log('🎯 handleOpenSettings called in app.ts');
     this.showSettings = true;
   };
 
