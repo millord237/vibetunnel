@@ -168,7 +168,7 @@
   
   @media (max-width: 768px) {
     .auth-container {
-      @apply py-4; /* Reduced vertical padding on mobile */
+      @apply py-6; /* Comfortable vertical padding on mobile */
       min-height: 100vh;
       min-height: 100dvh;
       /* Prevent scrolling - content should fit */
