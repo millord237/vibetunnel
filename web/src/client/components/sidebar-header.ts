@@ -42,6 +42,11 @@ export class SidebarHeader extends HeaderBase {
           
           <!-- Action buttons group -->
           <div class="flex items-center gap-1">
+            <!-- Notification button -->
+            <notification-status
+              @open-settings=${() => this.dispatchEvent(new CustomEvent('open-settings'))}
+            ></notification-status>
+            
             <!-- Create Session button -->
             <button
               class="p-2 text-accent-green border border-accent-green hover:bg-accent-green hover:text-dark-bg rounded-lg transition-all duration-200 flex-shrink-0"
@@ -52,11 +57,6 @@ export class SidebarHeader extends HeaderBase {
                 <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"/>
               </svg>
             </button>
-            
-            <!-- Notification button -->
-            <notification-status
-              @open-settings=${() => this.dispatchEvent(new CustomEvent('open-settings'))}
-            ></notification-status>
             
             <!-- User menu -->
             ${this.renderCompactUserMenu()}
