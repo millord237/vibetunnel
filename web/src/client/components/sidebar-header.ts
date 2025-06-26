@@ -13,7 +13,6 @@ import './terminal-icon.js';
 export class SidebarHeader extends HeaderBase {
   render() {
     const runningSessions = this.runningSessions;
-    const exitedSessions = this.exitedSessions;
 
     return html`
       <div
@@ -53,26 +52,6 @@ export class SidebarHeader extends HeaderBase {
             >
               Create Session
             </button>
-
-            <!-- Show Exited button -->
-            ${this.renderExitedToggleButton(exitedSessions, true)}
-
-            <!-- Kill All button -->
-            ${this.renderKillAllButton(runningSessions)}
-
-            <!-- Clean Exited button -->
-            ${
-              !this.hideExited && exitedSessions.length > 0
-                ? html`
-                  <button
-                    class="btn-ghost font-mono text-xs px-3 py-1.5 w-full text-status-warning"
-                    @click=${this.handleCleanExited}
-                  >
-                    Clean Exited (${exitedSessions.length})
-                  </button>
-                `
-                : ''
-            }
           </div>
         </div>
       </div>

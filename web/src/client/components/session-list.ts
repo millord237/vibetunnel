@@ -401,7 +401,8 @@ export class SessionList extends LitElement {
     if (exitedSessions.length === 0 && runningSessions.length === 0) return '';
 
     return html`
-      <div class="flex justify-center items-center gap-2 sm:gap-4 mt-8 pb-4 px-4">
+      <div class="flex flex-col items-center gap-2 mt-8 pb-4 px-4">
+        <!-- First row: Show/Hide Exited -->
         ${
           exitedSessions.length > 0
             ? html`
@@ -441,36 +442,42 @@ export class SessionList extends LitElement {
             `
             : ''
         }
-        ${
-          runningSessions.length > 0
-            ? html`
-              <button
-                class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 border-status-error bg-dark-bg-secondary text-status-error hover:bg-dark-bg-tertiary hover:border-status-error"
-                @click=${() => this.dispatchEvent(new CustomEvent('kill-all-sessions'))}
-              >
-                Kill All (${runningSessions.length})
-              </button>
-            `
-            : ''
-        }
-        ${
-          !this.hideExited && exitedSessions.length > 0
-            ? html`
-              <button
-                class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 border-dark-border bg-dark-bg-secondary text-status-warning hover:bg-dark-bg-tertiary hover:border-status-warning"
-                @click=${this.handleCleanupExited}
-                ?disabled=${this.cleaningExited}
-              >
-                <span class="hidden sm:inline"
-                  >${
-                    this.cleaningExited ? 'Cleaning...' : `Clean Exited (${exitedSessions.length})`
-                  }</span
+        
+        <!-- Second row: Kill All and Clean Exited (when visible) -->
+        <div class="flex justify-center items-center gap-2 sm:gap-4">
+          ${
+            runningSessions.length > 0
+              ? html`
+                <button
+                  class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 border-status-error bg-dark-bg-secondary text-status-error hover:bg-dark-bg-tertiary hover:border-status-error"
+                  @click=${() => this.dispatchEvent(new CustomEvent('kill-all-sessions'))}
                 >
-                <span class="sm:hidden">${this.cleaningExited ? 'Cleaning...' : 'Clean'}</span>
-              </button>
-            `
-            : ''
-        }
+                  Kill All (${runningSessions.length})
+                </button>
+              `
+              : ''
+          }
+          ${
+            !this.hideExited && exitedSessions.length > 0
+              ? html`
+                <button
+                  class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 border-dark-border bg-dark-bg-secondary text-status-warning hover:bg-dark-bg-tertiary hover:border-status-warning"
+                  @click=${this.handleCleanupExited}
+                  ?disabled=${this.cleaningExited}
+                >
+                  <span class="hidden sm:inline"
+                    >${
+                      this.cleaningExited
+                        ? 'Cleaning...'
+                        : `Clean Exited (${exitedSessions.length})`
+                    }</span
+                  >
+                  <span class="sm:hidden">${this.cleaningExited ? 'Cleaning...' : 'Clean'}</span>
+                </button>
+              `
+              : ''
+          }
+        </div>
       </div>
     `;
   }
