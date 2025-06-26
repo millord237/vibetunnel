@@ -19,48 +19,47 @@ export class SidebarHeader extends HeaderBase {
         class="app-header sidebar-header bg-dark-bg-secondary border-b border-dark-border p-3"
         style="padding-top: max(0.75rem, calc(0.75rem + env(safe-area-inset-top)));"
       >
-        <!-- Compact vertical layout for sidebar -->
-        <div class="flex flex-col gap-2">
-          <!-- Title and logo with user menu -->
-          <div class="flex items-center justify-between">
-            <button
-              class="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
-              title="Go to home"
-              @click=${this.handleHomeClick}
-            >
-              <terminal-icon size="20"></terminal-icon>
-              <div class="min-w-0">
-                <h1
-                  class="text-sm font-bold text-accent-green font-mono group-hover:underline truncate"
-                >
-                  VibeTunnel
-                </h1>
-                <p class="text-dark-text-muted text-xs font-mono">
-                  ${runningSessions.length} ${runningSessions.length === 1 ? 'session' : 'sessions'}
-                </p>
-              </div>
-            </button>
-            <div class="flex items-center gap-2">
-              <notification-status
-                @open-settings=${() => this.dispatchEvent(new CustomEvent('open-settings'))}
-              ></notification-status>
-              ${this.renderCompactUserMenu()}
+        <!-- Compact layout for sidebar -->
+        <div class="flex items-center justify-between">
+          <!-- Title and logo -->
+          <button
+            class="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
+            title="Go to home"
+            @click=${this.handleHomeClick}
+          >
+            <terminal-icon size="20"></terminal-icon>
+            <div class="min-w-0">
+              <h1
+                class="text-sm font-bold text-accent-green font-mono group-hover:underline truncate"
+              >
+                VibeTunnel
+              </h1>
+              <p class="text-dark-text-muted text-xs font-mono">
+                ${runningSessions.length} ${runningSessions.length === 1 ? 'session' : 'sessions'}
+              </p>
             </div>
-          </div>
-
-          <!-- Action buttons -->
-          <div class="flex flex-col gap-2">
+          </button>
+          
+          <!-- Action buttons group -->
+          <div class="flex items-center gap-1">
             <!-- Create Session button -->
             <button
-              class="btn-primary font-mono text-xs px-3 py-1.5 vt-create-button text-center w-full flex items-center justify-center gap-1"
+              class="p-2 text-accent-green border border-accent-green hover:bg-accent-green hover:text-dark-bg rounded-lg transition-all duration-200 flex-shrink-0"
               @click=${this.handleCreateSession}
               title="Create New Session"
             >
               <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"/>
               </svg>
-              <span>New</span>
             </button>
+            
+            <!-- Notification button -->
+            <notification-status
+              @open-settings=${() => this.dispatchEvent(new CustomEvent('open-settings'))}
+            ></notification-status>
+            
+            <!-- User menu -->
+            ${this.renderCompactUserMenu()}
           </div>
         </div>
       </div>
