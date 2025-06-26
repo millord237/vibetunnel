@@ -715,6 +715,15 @@ export class VibeTunnelApp extends LitElement {
     this.saveSidebarState(this.sidebarCollapsed);
   }
 
+  private handleMobileOverlayClick = (e: Event) => {
+    if (this.isInSidebarDismissMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleToggleSidebar();
+    }
+    // In landscape/ample space mode, let the click through for scrolling
+  };
+
   // State persistence methods
   private loadHideExitedState(): boolean {
     try {
@@ -1070,6 +1079,14 @@ export class VibeTunnelApp extends LitElement {
     return /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window);
   }
 
+  private get isInSidebarDismissMode(): boolean {
+    if (!this.mediaState.isMobile || !this.shouldShowMobileOverlay) return false;
+
+    // Use orientation-based detection for simplicity and reliability
+    const isPortrait = window.innerHeight > window.innerWidth;
+    return isPortrait;
+  }
+
   render() {
     const showSplitView = this.showSplitView;
     const selectedSession = this.selectedSession;
@@ -1147,9 +1164,13 @@ export class VibeTunnelApp extends LitElement {
             ? html`
               <!-- Translucent overlay over session content -->
               <div
-                class="absolute inset-0 bg-black bg-opacity-10 sm:hidden transition-opacity"
+                class="absolute inset-0 sm:hidden transition-all ${
+                  this.isInSidebarDismissMode
+                    ? 'bg-black bg-opacity-50 backdrop-blur-sm'
+                    : 'bg-black bg-opacity-10'
+                }"
                 style="left: calc(100vw - ${SIDEBAR.MOBILE_RIGHT_MARGIN}px); transition-duration: ${TRANSITIONS.MOBILE_SLIDE}ms;"
-                @click=${this.handleToggleSidebar}
+                @click=${this.handleMobileOverlayClick}
               ></div>
               <!-- Clickable area behind sidebar -->
               <div
