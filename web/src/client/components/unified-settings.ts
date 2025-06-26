@@ -236,6 +236,47 @@ export class UnifiedSettings extends LitElement {
     );
   }
 
+  private renderSubscriptionStatus() {
+    const hasSubscription = this.subscription || pushNotificationService.isSubscribed();
+
+    if (hasSubscription) {
+      return html`
+        <div class="flex items-center space-x-2">
+          <span class="text-status-success font-mono">✓</span>
+          <span class="text-sm text-dark-text">Active</span>
+        </div>
+      `;
+    } else if (this.permission === 'granted') {
+      return html`
+        <div class="flex items-center space-x-2">
+          <span class="text-status-warning font-mono">!</span>
+          <span class="text-sm text-dark-text">Not subscribed</span>
+        </div>
+      `;
+    } else {
+      return html`
+        <div class="flex items-center space-x-2">
+          <span class="text-status-error font-mono">✗</span>
+          <span class="text-sm text-dark-text">Disabled</span>
+        </div>
+      `;
+    }
+  }
+
+  private isIOSSafari(): boolean {
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isIOS = /iphone|ipad|ipod/.test(userAgent);
+    return isIOS;
+  }
+
+  private isStandalone(): boolean {
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      ('standalone' in window.navigator &&
+        (window.navigator as Navigator & { standalone?: boolean }).standalone === true)
+    );
+  }
+
   render() {
     if (!this.visible) return html``;
 
@@ -271,17 +312,37 @@ export class UnifiedSettings extends LitElement {
   }
 
   private renderNotificationSettings() {
+    const isIOSSafari = this.isIOSSafari();
+    const isStandalone = this.isStandalone();
+    const canTest = this.permission === 'granted' && this.subscription;
+
     return html`
       <div class="space-y-4">
-        <h3 class="text-md font-bold text-dark-text mb-3">Notifications</h3>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-md font-bold text-dark-text">Notifications</h3>
+          ${this.renderSubscriptionStatus()}
+        </div>
         
         ${
           !this.isNotificationsSupported
             ? html`
-              <div class="p-4 bg-dark-bg-tertiary rounded-lg border border-dark-border">
-                <p class="text-dark-text-muted text-sm">
-                  Push notifications are not supported in your browser.
-                </p>
+              <div class="p-4 bg-status-warning bg-opacity-10 border border-status-warning rounded-lg">
+                ${
+                  isIOSSafari && !isStandalone
+                    ? html`
+                      <p class="text-sm text-status-warning mb-2">
+                        Push notifications require installing this app to your home screen.
+                      </p>
+                      <p class="text-xs text-status-warning opacity-80">
+                        Tap the share button in Safari and select "Add to Home Screen" to enable push notifications.
+                      </p>
+                    `
+                    : html`
+                      <p class="text-sm text-status-warning">
+                        Push notifications are not supported in this browser.
+                      </p>
+                    `
+                }
               </div>
             `
             : html`
@@ -294,12 +355,19 @@ export class UnifiedSettings extends LitElement {
                   </p>
                 </div>
                 <button
-                  class="toggle-switch ${this.isNotificationsEnabled ? 'active' : ''}"
+                  role="switch"
+                  aria-checked="${this.isNotificationsEnabled}"
                   @click=${this.handleToggleNotifications}
                   ?disabled=${this.isLoading}
-                  aria-label="Toggle notifications"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
+                    this.isNotificationsEnabled ? 'bg-accent-green' : 'bg-dark-border'
+                  }"
                 >
-                  <span class="toggle-slider"></span>
+                  <span
+                    class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                      this.isNotificationsEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                    }"
+                  ></span>
                 </button>
               </div>
 
@@ -307,25 +375,35 @@ export class UnifiedSettings extends LitElement {
                 this.isNotificationsEnabled
                   ? html`
                     <!-- Notification types -->
-                    <div class="space-y-2 pl-4">
-                      ${this.renderNotificationToggle('sessionExit', 'Session Exit', 'When a session terminates')}
-                      ${this.renderNotificationToggle('sessionStart', 'Session Start', 'When a new session starts')}
-                      ${this.renderNotificationToggle('sessionError', 'Session Errors', 'When errors occur in sessions')}
-                      ${this.renderNotificationToggle('systemAlerts', 'System Alerts', 'Important system notifications')}
-                    </div>
+                    <div class="mt-4 space-y-4">
+                      <div>
+                        <h4 class="text-sm font-medium text-dark-text-muted mb-3">Notification Types</h4>
+                        <div class="space-y-2 bg-dark-bg rounded-lg p-3">
+                          ${this.renderNotificationToggle('sessionExit', 'Session Exit', 'When a session terminates')}
+                          ${this.renderNotificationToggle('sessionStart', 'Session Start', 'When a new session starts')}
+                          ${this.renderNotificationToggle('sessionError', 'Session Errors', 'When errors occur in sessions')}
+                          ${this.renderNotificationToggle('systemAlerts', 'System Alerts', 'Important system notifications')}
+                        </div>
+                      </div>
 
-                    <!-- Sound and vibration -->
-                    <div class="space-y-2 pl-4 pt-2 border-t border-dark-border">
-                      ${this.renderNotificationToggle('soundEnabled', 'Sound', 'Play sound with notifications')}
-                      ${this.renderNotificationToggle('vibrationEnabled', 'Vibration', 'Vibrate device with notifications')}
+                      <!-- Sound and vibration -->
+                      <div>
+                        <h4 class="text-sm font-medium text-dark-text-muted mb-3">Notification Behavior</h4>
+                        <div class="space-y-2 bg-dark-bg rounded-lg p-3">
+                          ${this.renderNotificationToggle('soundEnabled', 'Sound', 'Play sound with notifications')}
+                          ${this.renderNotificationToggle('vibrationEnabled', 'Vibration', 'Vibrate device with notifications')}
+                        </div>
+                      </div>
                     </div>
 
                     <!-- Test button -->
-                    <div class="flex justify-end pt-2">
+                    <div class="flex items-center justify-between pt-3 mt-3 border-t border-dark-border">
+                      <p class="text-xs text-dark-text-muted">Test your notification settings</p>
                       <button
                         class="btn-secondary text-xs px-3 py-1.5"
                         @click=${this.handleTestNotification}
-                        ?disabled=${this.testingNotification}
+                        ?disabled=${!canTest || this.testingNotification}
+                        title=${!canTest ? 'Enable notifications first' : 'Send test notification'}
                       >
                         ${this.testingNotification ? 'Sending...' : 'Test Notification'}
                       </button>
@@ -346,16 +424,23 @@ export class UnifiedSettings extends LitElement {
   ) {
     return html`
       <div class="flex items-center justify-between py-2">
-        <div class="flex-1">
-          <label class="text-dark-text text-sm">${label}</label>
+        <div class="flex-1 pr-4">
+          <label class="text-dark-text text-sm font-medium">${label}</label>
           <p class="text-dark-text-muted text-xs">${description}</p>
         </div>
         <button
-          class="toggle-switch small ${this.notificationPreferences[key] ? 'active' : ''}"
+          role="switch"
+          aria-checked="${this.notificationPreferences[key]}"
           @click=${() => this.handleNotificationPreferenceChange(key, !this.notificationPreferences[key])}
-          aria-label="Toggle ${label}"
+          class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
+            this.notificationPreferences[key] ? 'bg-accent-green' : 'bg-dark-border'
+          }"
         >
-          <span class="toggle-slider"></span>
+          <span
+            class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              this.notificationPreferences[key] ? 'translate-x-4' : 'translate-x-0.5'
+            }"
+          ></span>
         </button>
       </div>
     `;
@@ -382,12 +467,19 @@ export class UnifiedSettings extends LitElement {
             </p>
           </div>
           <button
-            class="toggle-switch ${this.appPreferences.useDirectKeyboard ? 'active' : ''}"
+            role="switch"
+            aria-checked="${this.appPreferences.useDirectKeyboard}"
             @click=${() => this.handleAppPreferenceChange('useDirectKeyboard', !this.appPreferences.useDirectKeyboard)}
             ?disabled=${this.mediaState.isMobile}
-            aria-label="Toggle direct keyboard input"
+            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
+              this.appPreferences.useDirectKeyboard ? 'bg-accent-green' : 'bg-dark-border'
+            } ${this.mediaState.isMobile ? 'opacity-50 cursor-not-allowed' : ''}"
           >
-            <span class="toggle-slider"></span>
+            <span
+              class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                this.appPreferences.useDirectKeyboard ? 'translate-x-5' : 'translate-x-0.5'
+              }"
+            ></span>
           </button>
         </div>
 
@@ -400,11 +492,18 @@ export class UnifiedSettings extends LitElement {
             </p>
           </div>
           <button
-            class="toggle-switch ${this.appPreferences.showLogLink ? 'active' : ''}"
+            role="switch"
+            aria-checked="${this.appPreferences.showLogLink}"
             @click=${() => this.handleAppPreferenceChange('showLogLink', !this.appPreferences.showLogLink)}
-            aria-label="Toggle log link"
+            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
+              this.appPreferences.showLogLink ? 'bg-accent-green' : 'bg-dark-border'
+            }"
           >
-            <span class="toggle-slider"></span>
+            <span
+              class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                this.appPreferences.showLogLink ? 'translate-x-5' : 'translate-x-0.5'
+              }"
+            ></span>
           </button>
         </div>
       </div>
