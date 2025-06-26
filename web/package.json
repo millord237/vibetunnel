@@ -8,10 +8,11 @@
   },
   "scripts": {
     "clean": "node scripts/clean.js",
-    "dev": "npm run build && node scripts/dev.js",
+    "dev": "node scripts/dev.js",
     "dev:client": "node scripts/dev.js --client-only",
     "build": "node scripts/build.js",
     "build:ci": "node scripts/build-ci.js",
+    "postinstall": "node scripts/ensure-native-modules.js",
     "lint": "concurrently -n biome,tsc-server,tsc-client,tsc-sw \"biome check src\" \"tsc --noEmit --project tsconfig.server.json\" \"tsc --noEmit --project tsconfig.client.json\" \"tsc --noEmit --project tsconfig.sw.json\"",
     "lint:fix": "biome check src --write",
     "lint:biome": "biome check src",
