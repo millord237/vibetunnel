@@ -7,6 +7,7 @@ import { html } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import { HeaderBase } from './header-base.js';
 import './terminal-icon.js';
+import './notification-status.js';
 
 @customElement('sidebar-header')
 export class SidebarHeader extends HeaderBase {
@@ -22,10 +23,10 @@ export class SidebarHeader extends HeaderBase {
         <div class="flex flex-col gap-2">
           <!-- Title and logo with user menu -->
           <div class="flex items-center justify-between">
-            <a
-              href="/"
+            <button
               class="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
               title="Go to home"
+              @click=${this.handleHomeClick}
             >
               <terminal-icon size="20"></terminal-icon>
               <div class="min-w-0">
@@ -38,8 +39,13 @@ export class SidebarHeader extends HeaderBase {
                   ${runningSessions.length} ${runningSessions.length === 1 ? 'session' : 'sessions'}
                 </p>
               </div>
-            </a>
-            ${this.renderCompactUserMenu()}
+            </button>
+            <div class="flex items-center gap-2">
+              <notification-status
+                @open-settings=${() => this.dispatchEvent(new CustomEvent('open-settings'))}
+              ></notification-status>
+              ${this.renderCompactUserMenu()}
+            </div>
           </div>
 
           <!-- Action buttons -->
@@ -58,19 +64,9 @@ export class SidebarHeader extends HeaderBase {
   }
 
   private renderCompactUserMenu() {
-    // When no user (no-auth mode), show just a settings icon
+    // When no user, don't show anything (settings accessible via notification bell)
     if (!this.currentUser) {
-      return html`
-        <button
-          class="font-mono text-xs px-2 py-1 text-dark-text-muted hover:text-dark-text rounded border border-dark-border hover:bg-dark-bg-tertiary transition-all duration-200"
-          @click=${this.handleOpenSettings}
-          title="Settings"
-        >
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-          </svg>
-        </button>
-      `;
+      return html``;
     }
 
     return html`
@@ -97,16 +93,6 @@ export class SidebarHeader extends HeaderBase {
                 >
                   ${this.currentUser}
                 </div>
-                <button
-                  class="w-full text-left px-3 py-1.5 text-xs font-mono text-dark-text hover:bg-dark-bg-secondary"
-                  @click=${(e: Event) => {
-                    e.stopPropagation();
-                    this.handleOpenSettings();
-                  }}
-                >
-                  Settings
-                </button>
-                <div class="border-t border-dark-border"></div>
                 <button
                   class="w-full text-left px-3 py-1.5 text-xs font-mono text-status-warning hover:bg-dark-bg-secondary hover:text-status-error"
                   @click=${this.handleLogout}

@@ -29,7 +29,6 @@ import {
   COMMON_TERMINAL_WIDTHS,
   TerminalPreferencesManager,
 } from '../utils/terminal-preferences.js';
-import { AppSettings } from './app-settings.js';
 import { ConnectionManager } from './session-view/connection-manager.js';
 import {
   type DirectKeyboardCallbacks,
@@ -311,8 +310,18 @@ export class SessionView extends LitElement {
     this.lifecycleEventManager.setSession(this.session);
 
     // Load direct keyboard preference (needed before lifecycle setup)
-    const preferences = AppSettings.getPreferences();
-    this.useDirectKeyboard = preferences.useDirectKeyboard;
+    try {
+      const stored = localStorage.getItem('vibetunnel_app_preferences');
+      if (stored) {
+        const preferences = JSON.parse(stored);
+        this.useDirectKeyboard = preferences.useDirectKeyboard ?? true; // Default to true for new users
+      } else {
+        this.useDirectKeyboard = true; // Default to true when no settings exist
+      }
+    } catch (error) {
+      console.error('Failed to load app preferences', error);
+      this.useDirectKeyboard = true; // Default to true on error
+    }
 
     // Set up lifecycle (replaces the extracted lifecycle logic)
     this.lifecycleEventManager.setupLifecycle();
@@ -923,23 +932,13 @@ export class SessionView extends LitElement {
         ${
           this.isMobile && this.useDirectKeyboard && !this.showQuickKeys
             ? html`
-              <button
-                class="fixed bottom-4 right-4 w-14 h-14 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-full shadow-lg flex items-center justify-center transition-all transform active:scale-95 z-20"
+              <div
+                class="keyboard-button"
                 @click=${() => this.handleKeyboardButtonClick()}
-                aria-label="Show keyboard"
+                title="Show keyboard"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="2" y="6" width="20" height="12" rx="2" ry="2"/>
-                  <line x1="6" y1="10" x2="6" y2="10"/>
-                  <line x1="10" y1="10" x2="10" y2="10"/>
-                  <line x1="14" y1="10" x2="14" y2="10"/>
-                  <line x1="18" y1="10" x2="18" y2="10"/>
-                  <line x1="8" y1="14" x2="8" y2="14"/>
-                  <line x1="12" y1="14" x2="12" y2="14"/>
-                  <line x1="16" y1="14" x2="16" y2="14"/>
-                  <rect x="8" y="18" width="8" height="0" rx="0" ry="0"/>
-                </svg>
-              </button>
+                ⌨
+              </div>
             `
             : ''
         }

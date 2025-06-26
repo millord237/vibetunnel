@@ -5,9 +5,13 @@
  * overall event coordination for the session view component.
  */
 import { createLogger } from '../../utils/logger.js';
-import type { AppPreferences } from '../app-settings.js';
 import type { Session } from '../session-list.js';
 import { type LifecycleEventManagerCallbacks, ManagerEventEmitter } from './interfaces.js';
+
+interface AppPreferences {
+  useDirectKeyboard: boolean;
+  showLogLink: boolean;
+}
 
 const logger = createLogger('lifecycle-event-manager');
 

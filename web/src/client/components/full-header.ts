@@ -21,10 +21,10 @@ export class FullHeader extends HeaderBase {
       >
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div class="flex items-center gap-4">
-            <a
-              href="/"
+            <button
               class="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer group"
               title="Go to home"
+              @click=${this.handleHomeClick}
             >
               <terminal-icon size="32"></terminal-icon>
               <div>
@@ -36,14 +36,13 @@ export class FullHeader extends HeaderBase {
                   running
                 </p>
               </div>
-            </a>
+            </button>
           </div>
 
-          <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-            <div class="flex gap-2 items-center">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex gap-2 items-center flex-1">
               <notification-status
-                @open-settings=${() =>
-                  this.dispatchEvent(new CustomEvent('open-notification-settings'))}
+                @open-settings=${() => this.dispatchEvent(new CustomEvent('open-settings'))}
               ></notification-status>
               <button
                 class="btn-secondary font-mono text-sm px-3 sm:px-5 py-2.5"
@@ -74,29 +73,28 @@ export class FullHeader extends HeaderBase {
   }
 
   private renderUserMenu() {
-    // When no user (no-auth mode), show just a settings icon
+    // When no user, don't show anything (settings accessible via notification bell)
     if (!this.currentUser) {
-      return html`
-        <button
-          class="font-mono text-sm px-5 py-2.5 text-dark-text border border-dark-border hover:bg-dark-bg-tertiary hover:text-dark-text rounded-lg transition-all duration-200"
-          @click=${this.handleOpenSettings}
-          title="Settings"
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-          </svg>
-        </button>
-      `;
+      return html``;
     }
 
     return html`
-      <div class="user-menu-container relative">
+      <div class="user-menu-container relative flex-shrink-0">
         <button
-          class="font-mono text-sm px-5 py-2.5 text-dark-text border border-dark-border hover:bg-dark-bg-tertiary hover:text-dark-text rounded-lg transition-all duration-200 flex items-center gap-2"
+          class="font-mono text-sm px-3 sm:px-5 py-2.5 text-dark-text border border-dark-border hover:bg-dark-bg-tertiary hover:text-dark-text rounded-lg transition-all duration-200 flex items-center gap-2"
           @click=${this.toggleUserMenu}
           title="User menu"
         >
-          <span>${this.currentUser}</span>
+          <span class="hidden sm:inline">${this.currentUser}</span>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            class="sm:hidden"
+          >
+            <path d="M10 9a3 3 0 100-6 3 3 0 000 6zM3 18a7 7 0 1114 0H3z" />
+          </svg>
           <svg
             width="10"
             height="10"
@@ -116,13 +114,6 @@ export class FullHeader extends HeaderBase {
                 <div class="px-3 py-2 text-sm text-dark-text-muted border-b border-dark-border">
                   ${this.authMethod || 'authenticated'}
                 </div>
-                <button
-                  class="w-full text-left px-3 py-2 text-sm font-mono text-dark-text hover:bg-dark-bg-secondary"
-                  @click=${this.handleOpenSettings}
-                >
-                  Settings
-                </button>
-                <div class="border-t border-dark-border"></div>
                 <button
                   class="w-full text-left px-3 py-2 text-sm font-mono text-status-warning hover:bg-dark-bg-secondary hover:text-status-error"
                   @click=${this.handleLogout}

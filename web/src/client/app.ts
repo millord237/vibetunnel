@@ -21,12 +21,10 @@ import './components/session-view.js';
 import './components/session-card.js';
 import './components/file-browser.js';
 import './components/log-viewer.js';
-import './components/notification-settings.js';
+import './components/unified-settings.js';
 import './components/notification-status.js';
 import './components/auth-login.js';
 import './components/ssh-key-manager.js';
-import './components/app-settings.js';
-import { AppSettings } from './components/app-settings.js';
 
 import type { SessionCard } from './components/session-card.js';
 import { authClient } from './services/auth-client.js';
@@ -58,7 +56,6 @@ export class VibeTunnelApp extends LitElement {
   @state() private hideExited = this.loadHideExitedState();
   @state() private showCreateModal = false;
   @state() private showFileBrowser = false;
-  @state() private showNotificationSettings = false;
   @state() private showSSHKeyManager = false;
   @state() private showSettings = false;
   @state() private isAuthenticated = false;
@@ -103,16 +100,11 @@ export class VibeTunnelApp extends LitElement {
     if (
       changedProperties.has('showFileBrowser') ||
       changedProperties.has('showCreateModal') ||
-      changedProperties.has('showNotificationSettings') ||
       changedProperties.has('showSSHKeyManager') ||
       changedProperties.has('showSettings')
     ) {
       this.hasActiveOverlay =
-        this.showFileBrowser ||
-        this.showCreateModal ||
-        this.showNotificationSettings ||
-        this.showSSHKeyManager ||
-        this.showSettings;
+        this.showFileBrowser || this.showCreateModal || this.showSSHKeyManager || this.showSettings;
     }
   }
 
@@ -963,13 +955,19 @@ export class VibeTunnelApp extends LitElement {
 
   private setupNotificationHandlers() {
     // Listen for notification settings events
-    this.addEventListener('show-notification-settings', this.handleShowNotificationSettings);
   }
 
   private setupPreferences() {
-    // Load initial preferences
-    const preferences = AppSettings.getPreferences();
-    this.showLogLink = preferences.showLogLink;
+    // Load preferences from localStorage
+    try {
+      const stored = localStorage.getItem('vibetunnel_app_preferences');
+      if (stored) {
+        const preferences = JSON.parse(stored);
+        this.showLogLink = preferences.showLogLink || false;
+      }
+    } catch (error) {
+      console.error('Failed to load app preferences', error);
+    }
 
     // Listen for preference changes
     window.addEventListener('app-preferences-changed', (e: Event) => {
@@ -977,14 +975,6 @@ export class VibeTunnelApp extends LitElement {
       this.showLogLink = event.detail.showLogLink;
     });
   }
-
-  private handleShowNotificationSettings = () => {
-    this.showNotificationSettings = true;
-  };
-
-  private handleCloseNotificationSettings = () => {
-    this.showNotificationSettings = false;
-  };
 
   private handleOpenSettings = () => {
     console.log('🎯 handleOpenSettings called in app.ts');
@@ -1184,9 +1174,9 @@ export class VibeTunnelApp extends LitElement {
             @kill-all-sessions=${this.handleKillAll}
             @clean-exited-sessions=${this.handleCleanExited}
             @open-file-browser=${this.handleOpenFileBrowser}
-            @open-notification-settings=${this.handleShowNotificationSettings}
             @open-settings=${this.handleOpenSettings}
             @logout=${this.handleLogout}
+            @navigate-to-list=${this.handleNavigateToList}
           ></app-header>
           <div class="${this.showSplitView ? 'flex-1 overflow-y-auto' : 'flex-1'} bg-dark-bg-secondary">
             <session-list
@@ -1265,21 +1255,15 @@ export class VibeTunnelApp extends LitElement {
         }}
       ></file-browser>
 
-      <!-- Notification Settings Modal -->
-      <notification-settings
-        .visible=${this.showNotificationSettings}
-        @close=${this.handleCloseNotificationSettings}
+      <!-- Unified Settings Modal -->
+      <unified-settings
+        .visible=${this.showSettings}
+        @close=${this.handleCloseSettings}
         @notifications-enabled=${() => this.showSuccess('Notifications enabled')}
         @notifications-disabled=${() => this.showSuccess('Notifications disabled')}
         @success=${(e: CustomEvent) => this.showSuccess(e.detail)}
         @error=${(e: CustomEvent) => this.showError(e.detail)}
-      ></notification-settings>
-
-      <!-- App Settings Modal -->
-      <app-settings
-        .open=${this.showSettings}
-        @close=${this.handleCloseSettings}
-      ></app-settings>
+      ></unified-settings>
 
       <!-- SSH Key Manager Modal -->
       <ssh-key-manager

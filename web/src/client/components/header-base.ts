@@ -70,10 +70,6 @@ export abstract class HeaderBase extends LitElement {
     this.dispatchEvent(new CustomEvent('open-file-browser'));
   }
 
-  protected handleOpenNotificationSettings() {
-    this.dispatchEvent(new CustomEvent('open-notification-settings'));
-  }
-
   protected handleOpenSettings() {
     console.log('🔧 HeaderBase: handleOpenSettings called');
     this.showUserMenu = false;
@@ -87,6 +83,10 @@ export abstract class HeaderBase extends LitElement {
 
   protected toggleUserMenu() {
     this.showUserMenu = !this.showUserMenu;
+  }
+
+  protected handleHomeClick() {
+    this.dispatchEvent(new CustomEvent('navigate-to-list'));
   }
 
   protected handleClickOutside = (e: Event) => {
