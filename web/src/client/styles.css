@@ -1006,6 +1006,8 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
   transition: all 0.2s ease;
   user-select: none;
   z-index: 10;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .scroll-to-bottom:hover {
@@ -1017,6 +1019,41 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
 }
 
 .scroll-to-bottom:active {
+  transform: translateY(0px);
+}
+
+/* Keyboard button - matches scroll-to-bottom styling */
+.keyboard-button {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  width: 48px;
+  height: 48px;
+  background: rgba(26, 26, 26, 0.9);
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #e4e4e4;
+  font-size: 24px;
+  transition: all 0.2s ease;
+  user-select: none;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.keyboard-button:hover {
+  background: rgba(26, 26, 26, 1);
+  border-color: #00ff88;
+  color: #00ff88;
+  transform: translateY(-1px);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+}
+
+.keyboard-button:active {
   transform: translateY(0px);
 }
 
