@@ -250,6 +250,8 @@ export class SessionView extends LitElement {
       updateShowQuickKeys: (value: boolean) => {
         this.showQuickKeys = value;
         this.requestUpdate();
+        // Update terminal transform when quick keys visibility changes
+        this.updateTerminalTransform();
       },
       toggleMobileInput: () => {
         this.showMobileInput = !this.showMobileInput;
@@ -604,15 +606,18 @@ export class SessionView extends LitElement {
   }
 
   private handleKeyboardButtonClick() {
-    // Use a small delay to ensure the button click has fully processed
-    // This prevents the button click from interfering with focus
-    setTimeout(() => {
-      // Focus the hidden input to show the keyboard
-      this.directKeyboardManager.focusHiddenInput();
+    // Show quick keys immediately for visual feedback
+    this.showQuickKeys = true;
 
-      // The keyboard visibility will be detected by the visual viewport handler
-      // which will automatically show the quick keys when the keyboard appears
-    }, 50);
+    // Update terminal transform immediately
+    this.updateTerminalTransform();
+
+    // Focus the hidden input synchronously - critical for iOS Safari
+    // Must be called directly in the click handler without any delays
+    this.directKeyboardManager.focusHiddenInput();
+
+    // Request update after all synchronous operations
+    this.requestUpdate();
   }
 
   private handleTerminalFitToggle() {
@@ -727,6 +732,11 @@ export class SessionView extends LitElement {
 
     // Apply transform with smooth transition
     this.terminalTransformY = totalHeight;
+
+    // Log for debugging
+    logger.log(
+      `Terminal transform updated: quickKeys=${this.showQuickKeys}, keyboardHeight=${this.keyboardHeight}, totalHeight=${totalHeight}`
+    );
 
     // If terminal is transformed, try to keep cursor visible
     if (totalHeight > 0) {

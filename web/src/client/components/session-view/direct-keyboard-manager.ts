@@ -141,29 +141,8 @@ export class DirectKeyboardManager {
     }
     this.startFocusRetention();
 
-    // Ensure input is ready and focus it
+    // Ensure input is ready and focus it synchronously
     this.ensureHiddenInputVisible();
-
-    // Set a timeout to keep trying to focus for a bit
-    if (this.keyboardActivationTimeout) {
-      clearTimeout(this.keyboardActivationTimeout);
-    }
-
-    let attempts = 0;
-    const tryFocus = () => {
-      if (this.hiddenInput && this.keyboardMode) {
-        logger.log(`Attempting to focus hidden input (attempt ${attempts + 1})`);
-        this.hiddenInput.focus();
-
-        // Keep trying for up to 1 second
-        if (++attempts < 10) {
-          this.keyboardActivationTimeout = setTimeout(tryFocus, 100) as unknown as number;
-        }
-      }
-    };
-
-    // Start trying to focus
-    setTimeout(tryFocus, 50);
   }
 
   ensureHiddenInputVisible(): void {
@@ -171,28 +150,28 @@ export class DirectKeyboardManager {
       this.createHiddenInput();
     }
 
-    // Don't automatically show quick keys - wait for keyboard to actually appear
-    // The keyboard visibility will be detected by the visual viewport handler
-    const keyboardHeight = this.callbacks?.getKeyboardHeight() ?? 0;
-    if (keyboardHeight > 50 && this.hiddenInputFocused) {
+    // Show quick keys immediately when entering keyboard mode
+    // Don't wait for keyboard to appear - this provides immediate visual feedback
+    if (this.keyboardMode && !this.showQuickKeys) {
       this.showQuickKeys = true;
       if (this.callbacks) {
         this.callbacks.updateShowQuickKeys(true);
+        logger.log('Showing quick keys immediately in keyboard mode');
       }
     }
 
-    // Now that we're in keyboard mode, focus the input
+    // Now that we're in keyboard mode, focus the input synchronously
     if (this.hiddenInput && this.keyboardMode) {
+      // Make sure input is visible and ready
+      this.hiddenInput.style.display = 'block';
+      this.hiddenInput.style.visibility = 'visible';
+
+      // Focus synchronously - critical for iOS Safari
       this.hiddenInput.focus();
 
-      // Simulate click to trigger system keyboard on mobile
-      // This helps Safari show the keyboard immediately
-      setTimeout(() => {
-        if (this.hiddenInput && this.keyboardMode) {
-          this.hiddenInput.click();
-          logger.log('Simulated click on hidden input to trigger system keyboard');
-        }
-      }, 100);
+      // Also click synchronously to help trigger keyboard
+      this.hiddenInput.click();
+      logger.log('Focused and clicked hidden input synchronously');
     }
   }
 
@@ -200,7 +179,7 @@ export class DirectKeyboardManager {
     this.hiddenInput = document.createElement('input');
     this.hiddenInput.type = 'text';
     this.hiddenInput.style.position = 'absolute';
-    this.hiddenInput.style.opacity = '0';
+    this.hiddenInput.style.opacity = '0.01'; // iOS needs non-zero opacity
     this.hiddenInput.style.fontSize = '16px'; // Prevent zoom on iOS
     this.hiddenInput.style.border = 'none';
     this.hiddenInput.style.outline = 'none';
@@ -209,6 +188,7 @@ export class DirectKeyboardManager {
     this.hiddenInput.style.caretColor = 'transparent';
     this.hiddenInput.style.cursor = 'default';
     this.hiddenInput.style.pointerEvents = 'none'; // Start with pointer events disabled
+    this.hiddenInput.style.webkitUserSelect = 'text'; // iOS specific
     this.hiddenInput.autocapitalize = 'off';
     this.hiddenInput.autocomplete = 'off';
     this.hiddenInput.setAttribute('autocorrect', 'off');
@@ -276,6 +256,11 @@ export class DirectKeyboardManager {
         if (this.callbacks) {
           this.callbacks.updateShowQuickKeys(true);
           logger.log('Showing quick keys due to keyboard mode');
+        }
+
+        // iOS specific: Set selection to trigger keyboard
+        if (this.hiddenInput) {
+          this.hiddenInput.setSelectionRange(0, 0);
         }
       } else {
         // Only show quick keys if keyboard is actually visible
