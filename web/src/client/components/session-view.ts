@@ -75,6 +75,7 @@ export class SessionView extends LitElement {
   @state() private customWidth = '';
   @state() private showFileBrowser = false;
   @state() private terminalFontSize = 14;
+  @state() private terminalContainerHeight = '100%';
 
   private preferencesManager = TerminalPreferencesManager.getInstance();
   private connectionManager!: ConnectionManager;
@@ -88,7 +89,6 @@ export class SessionView extends LitElement {
   @state() private useDirectKeyboard = false;
   @state() private showQuickKeys = false;
   @state() private keyboardHeight = 0;
-  @state() private terminalTransformY = 0;
 
   private instanceId = `session-view-${Math.random().toString(36).substr(2, 9)}`;
   private createHiddenInputTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -246,6 +246,7 @@ export class SessionView extends LitElement {
       setKeyboardHeight: (height: number) => {
         this.keyboardHeight = height;
         this.updateTerminalTransform();
+        this.requestUpdate();
       },
       updateShowQuickKeys: (value: boolean) => {
         this.showQuickKeys = value;
@@ -717,34 +718,46 @@ export class SessionView extends LitElement {
   }
 
   private updateTerminalTransform(): void {
-    // Calculate total height to move terminal up
-    let totalHeight = 0;
+    // Calculate height reduction for keyboard and quick keys
+    let heightReduction = 0;
 
     if (this.showQuickKeys && this.isMobile) {
       // Quick keys height (approximately 140px based on CSS)
       const quickKeysHeight = 140;
-      totalHeight += quickKeysHeight;
+      heightReduction += quickKeysHeight;
     }
 
     if (this.keyboardHeight > 0) {
-      totalHeight += this.keyboardHeight;
+      heightReduction += this.keyboardHeight;
     }
 
-    // Apply transform with smooth transition
-    this.terminalTransformY = totalHeight;
+    // Calculate terminal container height
+    if (heightReduction > 0) {
+      // Use calc to subtract from full height (accounting for header)
+      this.terminalContainerHeight = `calc(100% - ${heightReduction}px)`;
+    } else {
+      this.terminalContainerHeight = '100%';
+    }
 
     // Log for debugging
     logger.log(
-      `Terminal transform updated: quickKeys=${this.showQuickKeys}, keyboardHeight=${this.keyboardHeight}, totalHeight=${totalHeight}`
+      `Terminal height updated: quickKeys=${this.showQuickKeys}, keyboardHeight=${this.keyboardHeight}, reduction=${heightReduction}px`
     );
 
-    // If terminal is transformed, try to keep cursor visible
-    if (totalHeight > 0) {
-      // Request terminal to scroll to cursor
+    // If terminal height changed, notify terminal to resize
+    if (heightReduction > 0) {
+      // Request terminal to resize and scroll to cursor
       const terminal = this.querySelector('vibe-terminal') as Terminal;
       if (terminal) {
-        // Scroll to bottom to keep cursor visible
+        // Trigger resize after DOM update
         setTimeout(() => {
+          // Notify terminal of size change
+          const terminalElement = terminal as unknown as { fitTerminal?: () => void };
+          if (typeof terminalElement.fitTerminal === 'function') {
+            terminalElement.fitTerminal();
+          }
+
+          // Scroll to bottom to keep cursor visible
           terminal.scrollToBottom();
         }, 100);
       }
@@ -833,11 +846,7 @@ export class SessionView extends LitElement {
             this.session?.status === 'exited' ? 'session-exited' : ''
           }"
           id="terminal-container"
-          style="${
-            this.terminalTransformY > 0
-              ? `transform: translateY(-${this.terminalTransformY}px); transition: transform 0.3s ease-out;`
-              : ''
-          }"
+          style="height: ${this.terminalContainerHeight}; transition: height 0.3s ease-out;"
         >
           ${
             this.loadingAnimationManager.isLoading()
