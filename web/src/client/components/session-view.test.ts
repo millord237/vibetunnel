@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { fixture, html } from '@open-wc/testing';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -21,7 +22,11 @@ import type { Terminal } from './terminal';
 // Test interface for SessionView private properties
 interface SessionViewTestInterface extends SessionView {
   connected: boolean;
-  loading: boolean;
+  loadingAnimationManager: {
+    isLoading: () => boolean;
+    startLoading: () => void;
+    stopLoading: () => void;
+  };
   isMobile: boolean;
   terminalCols: number;
   terminalRows: number;
@@ -71,7 +76,7 @@ describe('SessionView', () => {
       expect(element).toBeDefined();
       expect(element.session).toBeNull();
       expect((element as SessionViewTestInterface).connected).toBe(true);
-      expect((element as SessionViewTestInterface).loading).toBe(true); // Loading starts when no session
+      expect((element as SessionViewTestInterface).loadingAnimationManager.isLoading()).toBe(true); // Loading starts when no session
     });
 
     it('should detect mobile environment', async () => {
@@ -125,16 +130,19 @@ describe('SessionView', () => {
     it('should show loading state while connecting', async () => {
       const mockSession = createMockSession();
 
-      // Set loading before session
-      (element as SessionViewTestInterface).loading = true;
+      // Start loading before session
+      (element as SessionViewTestInterface).loadingAnimationManager.startLoading();
       await element.updateComplete;
+
+      // Verify loading is active
+      expect((element as SessionViewTestInterface).loadingAnimationManager.isLoading()).toBe(true);
 
       // Then set session
       element.session = mockSession;
       await element.updateComplete;
 
-      // Loading should be false after session is set
-      expect((element as SessionViewTestInterface).loading).toBe(false);
+      // Loading should be false after session is set and firstUpdated is called
+      expect((element as SessionViewTestInterface).loadingAnimationManager.isLoading()).toBe(false);
     });
 
     it('should handle session not found error', async () => {
