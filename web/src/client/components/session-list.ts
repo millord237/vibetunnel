@@ -21,7 +21,6 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import type { Session } from '../../shared/types.js';
 import type { AuthClient } from '../services/auth-client.js';
-import './session-create-form.js';
 import './session-card.js';
 import { createLogger } from '../utils/logger.js';
 import { formatPathForDisplay } from '../utils/path-utils.js';
@@ -41,7 +40,6 @@ export class SessionList extends LitElement {
   @property({ type: Array }) sessions: Session[] = [];
   @property({ type: Boolean }) loading = false;
   @property({ type: Boolean }) hideExited = true;
-  @property({ type: Boolean }) showCreateModal = false;
   @property({ type: Object }) authClient!: AuthClient;
   @property({ type: String }) selectedSessionId: string | null = null;
   @property({ type: Boolean }) compactMode = false;
@@ -377,16 +375,6 @@ export class SessionList extends LitElement {
               </div>
             `
         }
-
-        <session-create-form
-          .visible=${this.showCreateModal}
-          .authClient=${this.authClient}
-          @session-created=${(e: CustomEvent) =>
-            this.dispatchEvent(new CustomEvent('session-created', { detail: e.detail }))}
-          @cancel=${() => this.dispatchEvent(new CustomEvent('create-modal-close'))}
-          @error=${(e: CustomEvent) =>
-            this.dispatchEvent(new CustomEvent('error', { detail: e.detail }))}
-        ></session-create-form>
 
         ${this.renderExitedControls()}
       </div>
