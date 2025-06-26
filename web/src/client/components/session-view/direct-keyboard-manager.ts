@@ -32,6 +32,8 @@ export class DirectKeyboardManager {
   private showQuickKeys = false;
   private hiddenInputFocused = false;
   private keyboardMode = false; // Track whether we're in keyboard mode
+  private keyboardModeTimestamp = 0; // Track when we entered keyboard mode
+  private keyboardActivationTimeout: number | null = null;
 
   constructor(instanceId: string) {
     this.instanceId = instanceId;
@@ -65,11 +67,10 @@ export class DirectKeyboardManager {
         this.focusRetentionInterval = null;
       }
 
-      // Blur the hidden input and exit keyboard mode
+      // Blur the hidden input but don't exit keyboard mode immediately
+      // Let the blur handler deal with exiting keyboard mode after checks
       if (this.hiddenInput) {
         this.hiddenInput.blur();
-        this.keyboardMode = false;
-        this.updateHiddenInputPosition();
       }
 
       logger.log('Quick keys force hidden by external trigger');
@@ -77,10 +78,41 @@ export class DirectKeyboardManager {
   }
 
   focusHiddenInput(): void {
+    logger.log('Entering keyboard mode');
     // Enter keyboard mode
     this.keyboardMode = true;
+    this.keyboardModeTimestamp = Date.now();
     this.updateHiddenInputPosition();
+
+    // Start focus retention immediately
+    if (this.focusRetentionInterval) {
+      clearInterval(this.focusRetentionInterval);
+    }
+    this.startFocusRetention();
+
+    // Ensure input is ready and focus it
     this.ensureHiddenInputVisible();
+
+    // Set a timeout to keep trying to focus for a bit
+    if (this.keyboardActivationTimeout) {
+      clearTimeout(this.keyboardActivationTimeout);
+    }
+
+    let attempts = 0;
+    const tryFocus = () => {
+      if (this.hiddenInput && this.keyboardMode) {
+        logger.log(`Attempting to focus hidden input (attempt ${attempts + 1})`);
+        this.hiddenInput.focus();
+
+        // Keep trying for up to 1 second
+        if (++attempts < 10) {
+          this.keyboardActivationTimeout = setTimeout(tryFocus, 100) as unknown as number;
+        }
+      }
+    };
+
+    // Start trying to focus
+    setTimeout(tryFocus, 50);
   }
 
   ensureHiddenInputVisible(): void {
@@ -171,22 +203,30 @@ export class DirectKeyboardManager {
     // Handle focus/blur for quick keys visibility
     this.hiddenInput.addEventListener('focus', () => {
       this.hiddenInputFocused = true;
+      logger.log(`Hidden input focused. Keyboard mode: ${this.keyboardMode}`);
+
       // Enable pointer events while focused
       if (this.hiddenInput && this.keyboardMode) {
         this.hiddenInput.style.pointerEvents = 'auto';
       }
 
-      // Only show quick keys if keyboard is actually visible
-      const keyboardHeight = this.callbacks?.getKeyboardHeight() ?? 0;
-      if (keyboardHeight > 50) {
+      // If we're in keyboard mode, show quick keys immediately
+      if (this.keyboardMode) {
         this.showQuickKeys = true;
         if (this.callbacks) {
           this.callbacks.updateShowQuickKeys(true);
+          logger.log('Showing quick keys due to keyboard mode');
+        }
+      } else {
+        // Only show quick keys if keyboard is actually visible
+        const keyboardHeight = this.callbacks?.getKeyboardHeight() ?? 0;
+        if (keyboardHeight > 50) {
+          this.showQuickKeys = true;
+          if (this.callbacks) {
+            this.callbacks.updateShowQuickKeys(true);
+          }
         }
       }
-      logger.log(
-        `Hidden input focused, keyboard height: ${keyboardHeight}, showQuickKeys: ${this.showQuickKeys}`
-      );
 
       // Trigger initial keyboard height calculation
       const visualViewportHandler = this.callbacks?.getVisualViewportHandler();
@@ -194,40 +234,51 @@ export class DirectKeyboardManager {
         visualViewportHandler();
       }
 
-      // Start focus retention
-      if (this.focusRetentionInterval) {
-        clearInterval(this.focusRetentionInterval);
+      // Start focus retention if not already running
+      if (!this.focusRetentionInterval) {
+        this.startFocusRetention();
       }
-
-      this.focusRetentionInterval = setInterval(() => {
-        const disableFocusManagement = this.callbacks?.getDisableFocusManagement() ?? false;
-        const showMobileInput = this.callbacks?.getShowMobileInput() ?? false;
-        const showCtrlAlpha = this.callbacks?.getShowCtrlAlpha() ?? false;
-        if (
-          !disableFocusManagement &&
-          this.showQuickKeys &&
-          this.hiddenInput &&
-          document.activeElement !== this.hiddenInput &&
-          !showMobileInput &&
-          !showCtrlAlpha
-        ) {
-          logger.log('Refocusing hidden input to maintain keyboard');
-          this.hiddenInput.focus();
-        }
-      }, 300) as unknown as number;
     });
 
     this.hiddenInput.addEventListener('blur', (e) => {
       const _event = e as FocusEvent;
+      const timeSinceKeyboardMode = Date.now() - this.keyboardModeTimestamp;
+
+      logger.log(`Hidden input blurred. Time since keyboard mode: ${timeSinceKeyboardMode}ms`);
+      logger.log(
+        `Active element: ${document.activeElement?.tagName}, class: ${document.activeElement?.className}`
+      );
+
+      // If we just entered keyboard mode, be more aggressive about keeping focus
+      if (this.keyboardMode && timeSinceKeyboardMode < 2000) {
+        logger.log('Recently entered keyboard mode, fighting to keep focus');
+
+        // Very short delay to refocus
+        setTimeout(() => {
+          if (
+            this.keyboardMode &&
+            this.hiddenInput &&
+            document.activeElement !== this.hiddenInput
+          ) {
+            logger.log('Refocusing hidden input during keyboard activation');
+            this.hiddenInput.focus();
+          }
+        }, 10);
+        return;
+      }
 
       // Immediately try to recapture focus
       const disableFocusManagement = this.callbacks?.getDisableFocusManagement() ?? false;
-      if (!disableFocusManagement && this.showQuickKeys && this.hiddenInput) {
+      if (
+        !disableFocusManagement &&
+        (this.showQuickKeys || this.keyboardMode) &&
+        this.hiddenInput
+      ) {
         // Use a very short timeout to allow any legitimate focus changes to complete
         setTimeout(() => {
           if (
             !disableFocusManagement &&
-            this.showQuickKeys &&
+            (this.showQuickKeys || this.keyboardMode) &&
             this.hiddenInput &&
             document.activeElement !== this.hiddenInput
           ) {
@@ -264,11 +315,9 @@ export class DirectKeyboardManager {
             }
           }
         }, 10);
-      } else {
-        // If not retaining focus, exit keyboard mode
+      } else if (!this.keyboardMode) {
+        // If not in keyboard mode, just mark as not focused
         this.hiddenInputFocused = false;
-        this.keyboardMode = false;
-        this.updateHiddenInputPosition();
       }
     });
 
@@ -440,7 +489,7 @@ export class DirectKeyboardManager {
       const showCtrlAlpha = this.callbacks?.getShowCtrlAlpha() ?? false;
       if (
         !disableFocusManagement &&
-        this.showQuickKeys &&
+        (this.showQuickKeys || this.keyboardMode) &&
         this.hiddenInput &&
         document.activeElement !== this.hiddenInput &&
         !showMobileInput &&
@@ -508,10 +557,14 @@ export class DirectKeyboardManager {
   }
 
   cleanup(): void {
-    // Clear focus retention interval
+    // Clear timers
     if (this.focusRetentionInterval) {
       clearInterval(this.focusRetentionInterval);
       this.focusRetentionInterval = null;
+    }
+    if (this.keyboardActivationTimeout) {
+      clearTimeout(this.keyboardActivationTimeout);
+      this.keyboardActivationTimeout = null;
     }
 
     // Remove hidden input if it exists
