@@ -535,18 +535,6 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
   animation-delay: 0.4s;
 }
 
-/* View transition specific styles for initial load */
-::view-transition-old(root) {
-  animation: 90ms ease-out fade-out;
-}
-
-::view-transition-new(root) {
-  animation: 210ms ease-in fade-in;
-}
-
-body.initial-session-load ::view-transition-new(root) {
-  animation-duration: 400ms;
-}
 
 @keyframes fade-in {
   from {
