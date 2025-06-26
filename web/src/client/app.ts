@@ -5,7 +5,7 @@ import { keyed } from 'lit/directives/keyed.js';
 // Import shared types
 import type { Session } from '../shared/types.js';
 // Import utilities
-import { BREAKPOINTS, SIDEBAR, TIMING, TRANSITIONS } from './utils/constants.js';
+import { BREAKPOINTS, SIDEBAR, TIMING, TRANSITIONS, Z_INDEX } from './utils/constants.js';
 // Import logger
 import { createLogger } from './utils/logger.js';
 import { type MediaQueryState, responsiveObserver } from './utils/responsive-utils.js';
@@ -716,12 +716,14 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private handleMobileOverlayClick = (e: Event) => {
+    // In portrait mode, dismiss the sidebar
     if (this.isInSidebarDismissMode) {
       e.preventDefault();
       e.stopPropagation();
       this.handleToggleSidebar();
     }
-    // In landscape/ample space mode, let the click through for scrolling
+    // In landscape mode, the overlay is transparent and pointer-events-none,
+    // so this handler won't be called
   };
 
   // State persistence methods
@@ -1162,21 +1164,14 @@ export class VibeTunnelApp extends LitElement {
         ${
           this.shouldShowMobileOverlay
             ? html`
-              <!-- Translucent overlay over session content -->
               <div
-                class="absolute inset-0 sm:hidden transition-all ${
+                class="fixed inset-0 sm:hidden transition-all ${
                   this.isInSidebarDismissMode
                     ? 'bg-black bg-opacity-50 backdrop-blur-sm'
-                    : 'bg-black bg-opacity-10'
+                    : 'bg-transparent pointer-events-none'
                 }"
-                style="left: calc(100vw - ${SIDEBAR.MOBILE_RIGHT_MARGIN}px); transition-duration: ${TRANSITIONS.MOBILE_SLIDE}ms;"
+                style="z-index: ${Z_INDEX.MOBILE_OVERLAY}; transition-duration: ${TRANSITIONS.MOBILE_SLIDE}ms;"
                 @click=${this.handleMobileOverlayClick}
-              ></div>
-              <!-- Clickable area behind sidebar -->
-              <div
-                class="absolute inset-0 bg-black bg-opacity-50 sm:hidden transition-opacity"
-                style="right: ${SIDEBAR.MOBILE_RIGHT_MARGIN}px; transition-duration: ${TRANSITIONS.MOBILE_SLIDE}ms;"
-                @click=${this.handleToggleSidebar}
               ></div>
             `
             : ''
@@ -1204,13 +1199,10 @@ export class VibeTunnelApp extends LitElement {
               .sessions=${this.sessions}
               .loading=${this.loading}
               .hideExited=${this.hideExited}
-              .showCreateModal=${this.showCreateModal}
               .selectedSessionId=${this.selectedSessionId}
               .compactMode=${showSplitView}
               .authClient=${authClient}
               @session-killed=${this.handleSessionKilled}
-              @session-created=${this.handleSessionCreated}
-              @create-modal-close=${this.handleCreateModalClose}
               @refresh=${this.handleRefresh}
               @error=${this.handleError}
               @hide-exited-change=${this.handleHideExitedChange}
@@ -1292,6 +1284,15 @@ export class VibeTunnelApp extends LitElement {
         .sshAgent=${authClient.getSSHAgent()}
         @close=${this.handleCloseSSHKeyManager}
       ></ssh-key-manager>
+
+      <!-- Session Create Modal -->
+      <session-create-form
+        .visible=${this.showCreateModal}
+        .authClient=${authClient}
+        @session-created=${this.handleSessionCreated}
+        @cancel=${this.handleCreateModalClose}
+        @error=${this.handleError}
+      ></session-create-form>
 
       <!-- Version and logs link in bottom right -->
       ${
