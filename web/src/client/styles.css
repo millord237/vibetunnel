@@ -1265,23 +1265,6 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
     opacity: 0 !important;
   }
 
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  @keyframes fade-out {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 0;
-    }
-  }
 
   /* Black hole collapse animation for session removal */
   @keyframes black-hole-collapse {
@@ -1446,23 +1429,6 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
   animation-name: fade-in;
 }
 
-@keyframes fade-out {
-  0% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes fade-in {
-  0% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
 
 /* Disable morphing animations for sidebar elements */
 .sidebar-header {
