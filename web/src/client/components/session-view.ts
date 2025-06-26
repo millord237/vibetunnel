@@ -587,6 +587,14 @@ export class SessionView extends LitElement {
     }
   }
 
+  private handleKeyboardButtonClick() {
+    // Focus the hidden input to show the keyboard
+    this.directKeyboardManager.focusHiddenInput();
+
+    // The keyboard visibility will be detected by the visual viewport handler
+    // which will automatically show the quick keys when the keyboard appears
+  }
+
   private handleTerminalFitToggle() {
     this.terminalFitHorizontally = !this.terminalFitHorizontally;
     // Find the terminal component and call its handleFitToggle method
@@ -910,6 +918,31 @@ export class SessionView extends LitElement {
           .onClearSequence=${() => this.handleClearCtrlSequence()}
           .onCancel=${() => this.handleCtrlAlphaCancel()}
         ></ctrl-alpha-overlay>
+
+        <!-- Floating Keyboard Button (for direct keyboard mode on mobile) -->
+        ${
+          this.isMobile && this.useDirectKeyboard && !this.showQuickKeys
+            ? html`
+              <button
+                class="fixed bottom-4 right-4 w-14 h-14 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-full shadow-lg flex items-center justify-center transition-all transform active:scale-95 z-20"
+                @click=${() => this.handleKeyboardButtonClick()}
+                aria-label="Show keyboard"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="6" width="20" height="12" rx="2" ry="2"/>
+                  <line x1="6" y1="10" x2="6" y2="10"/>
+                  <line x1="10" y1="10" x2="10" y2="10"/>
+                  <line x1="14" y1="10" x2="14" y2="10"/>
+                  <line x1="18" y1="10" x2="18" y2="10"/>
+                  <line x1="8" y1="14" x2="8" y2="14"/>
+                  <line x1="12" y1="14" x2="12" y2="14"/>
+                  <line x1="16" y1="14" x2="16" y2="14"/>
+                  <rect x="8" y="18" width="8" height="0" rx="0" ry="0"/>
+                </svg>
+              </button>
+            `
+            : ''
+        }
 
         <!-- Terminal Quick Keys (for direct keyboard mode) -->
         <terminal-quick-keys

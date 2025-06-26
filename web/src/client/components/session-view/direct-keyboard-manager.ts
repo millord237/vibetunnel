@@ -100,40 +100,22 @@ export class DirectKeyboardManager {
   private createHiddenInput(): void {
     this.hiddenInput = document.createElement('input');
     this.hiddenInput.type = 'text';
-    this.hiddenInput.style.position = 'absolute';
-    this.hiddenInput.style.top = '0';
-    this.hiddenInput.style.left = '0';
-    this.hiddenInput.style.width = '100%';
-    this.hiddenInput.style.height = '100%';
-    this.hiddenInput.style.opacity = '0'; // Completely transparent
+    this.hiddenInput.style.position = 'fixed';
+    this.hiddenInput.style.left = '-9999px'; // Position off-screen
+    this.hiddenInput.style.top = '-9999px';
+    this.hiddenInput.style.width = '1px';
+    this.hiddenInput.style.height = '1px';
+    this.hiddenInput.style.opacity = '0';
     this.hiddenInput.style.fontSize = '16px'; // Prevent zoom on iOS
-    this.hiddenInput.style.zIndex = '10'; // Above terminal content
     this.hiddenInput.style.border = 'none';
     this.hiddenInput.style.outline = 'none';
-    this.hiddenInput.style.background = 'transparent';
-    this.hiddenInput.style.color = 'transparent';
-    this.hiddenInput.style.caretColor = 'transparent'; // Hide the cursor
-    this.hiddenInput.style.cursor = 'default'; // Normal cursor
+    this.hiddenInput.style.padding = '0';
+    this.hiddenInput.style.margin = '0';
     this.hiddenInput.autocapitalize = 'off';
     this.hiddenInput.autocomplete = 'off';
     this.hiddenInput.setAttribute('autocorrect', 'off');
     this.hiddenInput.setAttribute('spellcheck', 'false');
     this.hiddenInput.setAttribute('aria-hidden', 'true');
-
-    // Make it visible for debugging (comment out in production)
-    // this.hiddenInput.style.opacity = '0.1';
-    // this.hiddenInput.style.background = 'rgba(255,0,0,0.1)';
-
-    // Prevent click events from propagating to terminal
-    this.hiddenInput.addEventListener('click', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-    });
-
-    // Also handle touchstart to ensure mobile taps don't propagate
-    this.hiddenInput.addEventListener('touchstart', (e) => {
-      e.stopPropagation();
-    });
 
     // Handle input events
     this.hiddenInput.addEventListener('input', (e) => {
@@ -180,6 +162,8 @@ export class DirectKeyboardManager {
     // Handle focus/blur for quick keys visibility
     this.hiddenInput.addEventListener('focus', () => {
       this.hiddenInputFocused = true;
+      // No need to manipulate pointer events - they're always enabled
+
       // Only show quick keys if keyboard is actually visible
       const keyboardHeight = this.callbacks?.getKeyboardHeight() ?? 0;
       if (keyboardHeight > 50) {
@@ -250,6 +234,7 @@ export class DirectKeyboardManager {
                 if (document.activeElement !== this.hiddenInput) {
                   this.hiddenInputFocused = false;
                   this.showQuickKeys = false;
+                  // No need to disable pointer events - they're always enabled
                   if (this.callbacks) {
                     this.callbacks.updateShowQuickKeys(false);
                   }
@@ -265,14 +250,14 @@ export class DirectKeyboardManager {
             }
           }
         }, 10);
+      } else {
+        // If not retaining focus, just mark as not focused
+        this.hiddenInputFocused = false;
       }
     });
 
-    // Add to the terminal container to overlay it
-    const terminalContainer = this.sessionViewElement?.querySelector('#terminal-container');
-    if (terminalContainer) {
-      terminalContainer.appendChild(this.hiddenInput);
-    }
+    // Add to the document body instead of terminal container
+    document.body.appendChild(this.hiddenInput);
   }
 
   handleQuickKeyPress = (key: string, isModifier?: boolean, isSpecial?: boolean): void => {
