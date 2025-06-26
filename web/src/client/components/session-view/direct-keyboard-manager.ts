@@ -31,6 +31,7 @@ export class DirectKeyboardManager {
   private callbacks: DirectKeyboardCallbacks | null = null;
   private showQuickKeys = false;
   private hiddenInputFocused = false;
+  private keyboardMode = false; // Track whether we're in keyboard mode
 
   constructor(instanceId: string) {
     this.instanceId = instanceId;
@@ -64,9 +65,11 @@ export class DirectKeyboardManager {
         this.focusRetentionInterval = null;
       }
 
-      // Blur the hidden input
+      // Blur the hidden input and exit keyboard mode
       if (this.hiddenInput) {
         this.hiddenInput.blur();
+        this.keyboardMode = false;
+        this.updateHiddenInputPosition();
       }
 
       logger.log('Quick keys force hidden by external trigger');
@@ -74,7 +77,9 @@ export class DirectKeyboardManager {
   }
 
   focusHiddenInput(): void {
-    // Just delegate to the new method
+    // Enter keyboard mode
+    this.keyboardMode = true;
+    this.updateHiddenInputPosition();
     this.ensureHiddenInputVisible();
   }
 
@@ -93,29 +98,33 @@ export class DirectKeyboardManager {
       }
     }
 
-    // The input should already be covering the terminal and be focusable
-    // The user's tap on the terminal is actually a tap on the input
+    // Now that we're in keyboard mode, focus the input
+    if (this.hiddenInput && this.keyboardMode) {
+      this.hiddenInput.focus();
+    }
   }
 
   private createHiddenInput(): void {
     this.hiddenInput = document.createElement('input');
     this.hiddenInput.type = 'text';
-    this.hiddenInput.style.position = 'fixed';
-    this.hiddenInput.style.left = '-9999px'; // Position off-screen
-    this.hiddenInput.style.top = '-9999px';
-    this.hiddenInput.style.width = '1px';
-    this.hiddenInput.style.height = '1px';
+    this.hiddenInput.style.position = 'absolute';
     this.hiddenInput.style.opacity = '0';
     this.hiddenInput.style.fontSize = '16px'; // Prevent zoom on iOS
     this.hiddenInput.style.border = 'none';
     this.hiddenInput.style.outline = 'none';
-    this.hiddenInput.style.padding = '0';
-    this.hiddenInput.style.margin = '0';
+    this.hiddenInput.style.background = 'transparent';
+    this.hiddenInput.style.color = 'transparent';
+    this.hiddenInput.style.caretColor = 'transparent';
+    this.hiddenInput.style.cursor = 'default';
+    this.hiddenInput.style.pointerEvents = 'none'; // Start with pointer events disabled
     this.hiddenInput.autocapitalize = 'off';
     this.hiddenInput.autocomplete = 'off';
     this.hiddenInput.setAttribute('autocorrect', 'off');
     this.hiddenInput.setAttribute('spellcheck', 'false');
     this.hiddenInput.setAttribute('aria-hidden', 'true');
+
+    // Set initial position based on mode
+    this.updateHiddenInputPosition();
 
     // Handle input events
     this.hiddenInput.addEventListener('input', (e) => {
@@ -162,7 +171,10 @@ export class DirectKeyboardManager {
     // Handle focus/blur for quick keys visibility
     this.hiddenInput.addEventListener('focus', () => {
       this.hiddenInputFocused = true;
-      // No need to manipulate pointer events - they're always enabled
+      // Enable pointer events while focused
+      if (this.hiddenInput && this.keyboardMode) {
+        this.hiddenInput.style.pointerEvents = 'auto';
+      }
 
       // Only show quick keys if keyboard is actually visible
       const keyboardHeight = this.callbacks?.getKeyboardHeight() ?? 0;
@@ -234,7 +246,9 @@ export class DirectKeyboardManager {
                 if (document.activeElement !== this.hiddenInput) {
                   this.hiddenInputFocused = false;
                   this.showQuickKeys = false;
-                  // No need to disable pointer events - they're always enabled
+                  // Exit keyboard mode and update position
+                  this.keyboardMode = false;
+                  this.updateHiddenInputPosition();
                   if (this.callbacks) {
                     this.callbacks.updateShowQuickKeys(false);
                   }
@@ -251,13 +265,18 @@ export class DirectKeyboardManager {
           }
         }, 10);
       } else {
-        // If not retaining focus, just mark as not focused
+        // If not retaining focus, exit keyboard mode
         this.hiddenInputFocused = false;
+        this.keyboardMode = false;
+        this.updateHiddenInputPosition();
       }
     });
 
-    // Add to the document body instead of terminal container
-    document.body.appendChild(this.hiddenInput);
+    // Add to the terminal container
+    const terminalContainer = this.sessionViewElement?.querySelector('#terminal-container');
+    if (terminalContainer) {
+      terminalContainer.appendChild(this.hiddenInput);
+    }
   }
 
   handleQuickKeyPress = (key: string, isModifier?: boolean, isSpecial?: boolean): void => {
@@ -462,6 +481,30 @@ export class DirectKeyboardManager {
 
   delayedRefocusHiddenInputPublic(): void {
     this.delayedRefocusHiddenInput();
+  }
+
+  private updateHiddenInputPosition(): void {
+    if (!this.hiddenInput) return;
+
+    if (this.keyboardMode) {
+      // In keyboard mode: cover the terminal to receive input
+      this.hiddenInput.style.position = 'absolute';
+      this.hiddenInput.style.top = '0';
+      this.hiddenInput.style.left = '0';
+      this.hiddenInput.style.width = '100%';
+      this.hiddenInput.style.height = '100%';
+      this.hiddenInput.style.zIndex = '10';
+      this.hiddenInput.style.pointerEvents = 'auto';
+    } else {
+      // In scroll mode: position off-screen
+      this.hiddenInput.style.position = 'fixed';
+      this.hiddenInput.style.left = '-9999px';
+      this.hiddenInput.style.top = '-9999px';
+      this.hiddenInput.style.width = '1px';
+      this.hiddenInput.style.height = '1px';
+      this.hiddenInput.style.zIndex = '-1';
+      this.hiddenInput.style.pointerEvents = 'none';
+    }
   }
 
   cleanup(): void {
