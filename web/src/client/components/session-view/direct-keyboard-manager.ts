@@ -95,8 +95,11 @@ export class DirectKeyboardManager {
           // Allow clicks on:
           // 1. Quick keys container (Done button, etc)
           // 2. Session header (back button, sidebar toggle, etc)
-          // 3. Settings/notification buttons
-          // 4. Any modal overlays
+          // 3. App header
+          // 4. Settings/notification buttons
+          // 5. Any modal overlays
+          // 6. Sidebar
+          // 7. Any buttons or interactive elements outside terminal
           if (
             target.closest('.terminal-quick-keys-container') ||
             target.closest('session-header') ||
@@ -105,7 +108,12 @@ export class DirectKeyboardManager {
             target.closest('.modal-content') ||
             target.closest('.sidebar') ||
             target.closest('unified-settings') ||
-            target.closest('notification-status')
+            target.closest('notification-status') ||
+            target.closest('button') ||
+            target.closest('a') ||
+            target.closest('[role="button"]') ||
+            target.closest('.settings-button') ||
+            target.closest('.notification-button')
           ) {
             return;
           }
