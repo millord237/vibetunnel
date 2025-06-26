@@ -402,7 +402,14 @@ export class VibeTunnelApp extends LitElement {
       return;
     }
 
+    // Add class to prevent flicker when closing modal
+    document.body.classList.add('modal-closing');
     this.showCreateModal = false;
+
+    // Remove the class after a short delay
+    setTimeout(() => {
+      document.body.classList.remove('modal-closing');
+    }, 300);
 
     // Check if this was a terminal spawn (not a web session)
     if (message?.includes('Terminal spawned successfully')) {
@@ -461,54 +468,65 @@ export class VibeTunnelApp extends LitElement {
     console.log('handleHideExitedChange', {
       currentHideExited: this.hideExited,
       newHideExited: e.detail,
-      hasViewTransitions: 'startViewTransition' in document,
     });
 
-    // Use View Transitions API if available
-    if ('startViewTransition' in document && typeof document.startViewTransition === 'function') {
-      console.log('Using View Transitions API');
-      await document.startViewTransition(() => {
-        this.hideExited = e.detail;
-        this.saveHideExitedState(this.hideExited);
-      });
-    } else {
-      console.log('Using CSS animations fallback');
-      // For browsers without View Transitions, add a class before the change
-      const wasHidingExited = this.hideExited;
+    // Don't use View Transitions for hide/show exited toggle
+    // as it causes the entire UI to fade. Use CSS animations instead.
+    const wasHidingExited = this.hideExited;
 
-      // Add pre-animation class
-      document.body.classList.add('sessions-animating');
-      console.log('Added sessions-animating class');
+    // Capture current scroll position and check if we're near the bottom
+    const scrollTop = window.scrollY;
+    const scrollHeight = document.documentElement.scrollHeight;
+    const clientHeight = window.innerHeight;
+    const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100; // Within 100px of bottom
 
-      // Update state
-      this.hideExited = e.detail;
-      this.saveHideExitedState(this.hideExited);
+    // Add pre-animation class
+    document.body.classList.add('sessions-animating');
+    console.log('Added sessions-animating class');
 
-      // Wait for render and trigger animations
-      await this.updateComplete;
-      console.log('Update complete, scheduling animation');
+    // Update state
+    this.hideExited = e.detail;
+    this.saveHideExitedState(this.hideExited);
 
-      requestAnimationFrame(() => {
-        // Add specific animation direction
-        const animationClass = wasHidingExited ? 'sessions-showing' : 'sessions-hiding';
-        document.body.classList.add(animationClass);
-        console.log('Added animation class:', animationClass);
+    // Wait for render and trigger animations
+    await this.updateComplete;
+    console.log('Update complete, scheduling animation');
 
-        // Check what elements will be animated
-        const cards = document.querySelectorAll('.session-flex-responsive > session-card');
-        console.log('Found session cards to animate:', cards.length);
+    requestAnimationFrame(() => {
+      // Add specific animation direction
+      const animationClass = wasHidingExited ? 'sessions-showing' : 'sessions-hiding';
+      document.body.classList.add(animationClass);
+      console.log('Added animation class:', animationClass);
 
-        // Clean up after animation
-        setTimeout(() => {
-          document.body.classList.remove(
-            'sessions-animating',
-            'sessions-showing',
-            'sessions-hiding'
-          );
-          console.log('Cleaned up animation classes');
-        }, 600);
-      });
-    }
+      // Check what elements will be animated
+      const cards = document.querySelectorAll('.session-flex-responsive > session-card');
+      console.log('Found session cards to animate:', cards.length);
+
+      // If we were near the bottom, maintain that position
+      if (isNearBottom) {
+        // Use a small delay to ensure DOM has updated
+        requestAnimationFrame(() => {
+          window.scrollTo({
+            top: document.documentElement.scrollHeight - clientHeight,
+            behavior: 'instant',
+          });
+        });
+      }
+
+      // Clean up after animation
+      setTimeout(() => {
+        document.body.classList.remove('sessions-animating', 'sessions-showing', 'sessions-hiding');
+        console.log('Cleaned up animation classes');
+
+        // Final scroll adjustment after animation completes
+        if (isNearBottom) {
+          window.scrollTo({
+            top: document.documentElement.scrollHeight - clientHeight,
+            behavior: 'instant',
+          });
+        }
+      }, 300);
+    });
   }
 
   private handleCreateSession() {
@@ -525,8 +543,16 @@ export class VibeTunnelApp extends LitElement {
   private handleCreateModalClose() {
     // Check if View Transitions API is supported
     if ('startViewTransition' in document && typeof document.startViewTransition === 'function') {
-      document.startViewTransition(() => {
+      // Add a class to prevent flicker during transition
+      document.body.classList.add('modal-closing');
+
+      const transition = document.startViewTransition(() => {
         this.showCreateModal = false;
+      });
+
+      // Clean up the class after transition
+      transition.finished.finally(() => {
+        document.body.classList.remove('modal-closing');
       });
     } else {
       this.showCreateModal = false;
