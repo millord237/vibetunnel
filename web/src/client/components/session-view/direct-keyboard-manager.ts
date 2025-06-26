@@ -15,6 +15,7 @@ export interface DirectKeyboardCallbacks {
   getDisableFocusManagement(): boolean;
   getVisualViewportHandler(): (() => void) | null;
   getKeyboardHeight(): number;
+  setKeyboardHeight(height: number): void;
   updateShowQuickKeys(value: boolean): void;
   toggleMobileInput(): void;
   clearMobileInputText(): void;
@@ -34,6 +35,7 @@ export class DirectKeyboardManager {
   private keyboardMode = false; // Track whether we're in keyboard mode
   private keyboardModeTimestamp = 0; // Track when we entered keyboard mode
   private keyboardActivationTimeout: number | null = null;
+  private captureClickHandler: ((e: Event) => void) | null = null;
 
   constructor(instanceId: string) {
     this.instanceId = instanceId;
@@ -84,6 +86,47 @@ export class DirectKeyboardManager {
     this.keyboardModeTimestamp = Date.now();
     this.updateHiddenInputPosition();
 
+    // Add capture phase click handler to prevent any clicks from stealing focus
+    if (!this.captureClickHandler) {
+      this.captureClickHandler = (e: Event) => {
+        if (this.keyboardMode) {
+          const target = e.target as HTMLElement;
+
+          // Allow clicks on:
+          // 1. Quick keys container (Done button, etc)
+          // 2. Session header (back button, sidebar toggle, etc)
+          // 3. Settings/notification buttons
+          // 4. Any modal overlays
+          if (
+            target.closest('.terminal-quick-keys-container') ||
+            target.closest('session-header') ||
+            target.closest('app-header') ||
+            target.closest('.modal-backdrop') ||
+            target.closest('.modal-content') ||
+            target.closest('.sidebar') ||
+            target.closest('unified-settings') ||
+            target.closest('notification-status')
+          ) {
+            return;
+          }
+
+          // Only prevent clicks on the terminal area itself
+          // This keeps focus on the hidden input when tapping the terminal
+          if (target.closest('#terminal-container') || target.closest('vibe-terminal')) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (this.hiddenInput) {
+              this.hiddenInput.focus();
+            }
+          }
+        }
+      };
+      // Use capture phase to intercept clicks before they reach other elements
+      document.addEventListener('click', this.captureClickHandler, true);
+      document.addEventListener('pointerdown', this.captureClickHandler, true);
+    }
+
     // Start focus retention immediately
     if (this.focusRetentionInterval) {
       clearInterval(this.focusRetentionInterval);
@@ -133,6 +176,15 @@ export class DirectKeyboardManager {
     // Now that we're in keyboard mode, focus the input
     if (this.hiddenInput && this.keyboardMode) {
       this.hiddenInput.focus();
+
+      // Simulate click to trigger system keyboard on mobile
+      // This helps Safari show the keyboard immediately
+      setTimeout(() => {
+        if (this.hiddenInput && this.keyboardMode) {
+          this.hiddenInput.click();
+          logger.log('Simulated click on hidden input to trigger system keyboard');
+        }
+      }, 100);
     }
   }
 
@@ -242,81 +294,59 @@ export class DirectKeyboardManager {
 
     this.hiddenInput.addEventListener('blur', (e) => {
       const _event = e as FocusEvent;
-      const timeSinceKeyboardMode = Date.now() - this.keyboardModeTimestamp;
 
-      logger.log(`Hidden input blurred. Time since keyboard mode: ${timeSinceKeyboardMode}ms`);
+      logger.log(`Hidden input blurred. Keyboard mode: ${this.keyboardMode}`);
       logger.log(
         `Active element: ${document.activeElement?.tagName}, class: ${document.activeElement?.className}`
       );
 
-      // If we just entered keyboard mode, be more aggressive about keeping focus
-      if (this.keyboardMode && timeSinceKeyboardMode < 2000) {
-        logger.log('Recently entered keyboard mode, fighting to keep focus');
+      // If we're in keyboard mode, ALWAYS try to maintain focus
+      // Only the Done button should exit keyboard mode
+      if (this.keyboardMode) {
+        logger.log('In keyboard mode - maintaining focus');
 
-        // Very short delay to refocus
+        // Immediately try to refocus
         setTimeout(() => {
           if (
             this.keyboardMode &&
             this.hiddenInput &&
             document.activeElement !== this.hiddenInput
           ) {
-            logger.log('Refocusing hidden input during keyboard activation');
+            logger.log('Refocusing hidden input to maintain keyboard');
             this.hiddenInput.focus();
           }
-        }, 10);
+        }, 0);
+
+        // Don't exit keyboard mode or hide quick keys
         return;
       }
 
-      // Immediately try to recapture focus
+      // Only handle blur normally when NOT in keyboard mode
       const disableFocusManagement = this.callbacks?.getDisableFocusManagement() ?? false;
-      if (
-        !disableFocusManagement &&
-        (this.showQuickKeys || this.keyboardMode) &&
-        this.hiddenInput
-      ) {
-        // Use a very short timeout to allow any legitimate focus changes to complete
+      if (!disableFocusManagement && this.showQuickKeys && this.hiddenInput) {
+        // Check if focus went somewhere legitimate
         setTimeout(() => {
-          if (
-            !disableFocusManagement &&
-            (this.showQuickKeys || this.keyboardMode) &&
-            this.hiddenInput &&
-            document.activeElement !== this.hiddenInput
-          ) {
-            // Check if focus went to a quick key or somewhere else in our component
-            const activeElement = document.activeElement;
-            const isWithinComponent = this.sessionViewElement?.contains(activeElement) ?? false;
+          const activeElement = document.activeElement;
+          const isWithinComponent = this.sessionViewElement?.contains(activeElement) ?? false;
 
-            if (isWithinComponent || !activeElement || activeElement === document.body) {
-              // Focus was lost to nowhere specific or within our component - recapture it
-              logger.log('Recapturing focus on hidden input');
-              this.hiddenInput.focus();
-            } else {
-              // Focus went somewhere legitimate outside our component
-              // Wait a bit longer before hiding quick keys
-              setTimeout(() => {
-                if (document.activeElement !== this.hiddenInput) {
-                  this.hiddenInputFocused = false;
-                  this.showQuickKeys = false;
-                  // Exit keyboard mode and update position
-                  this.keyboardMode = false;
-                  this.updateHiddenInputPosition();
-                  if (this.callbacks) {
-                    this.callbacks.updateShowQuickKeys(false);
-                  }
-                  logger.log('Hidden input blurred, hiding quick keys');
+          if (!isWithinComponent && activeElement && activeElement !== document.body) {
+            // Focus went somewhere outside our component
+            this.hiddenInputFocused = false;
+            this.showQuickKeys = false;
+            if (this.callbacks) {
+              this.callbacks.updateShowQuickKeys(false);
+            }
+            logger.log('Focus left component, hiding quick keys');
 
-                  // Clear focus retention interval
-                  if (this.focusRetentionInterval) {
-                    clearInterval(this.focusRetentionInterval);
-                    this.focusRetentionInterval = null;
-                  }
-                }
-              }, 500);
+            // Clear focus retention interval
+            if (this.focusRetentionInterval) {
+              clearInterval(this.focusRetentionInterval);
+              this.focusRetentionInterval = null;
             }
           }
-        }, 10);
-      } else if (!this.keyboardMode) {
-        // If not in keyboard mode, just mark as not focused
+        }, 100);
+      } else {
+        // Not in keyboard mode and not showing quick keys
         this.hiddenInputFocused = false;
       }
     });
@@ -460,9 +490,18 @@ export class DirectKeyboardManager {
       const disableFocusManagement = this.callbacks?.getDisableFocusManagement() ?? false;
       const showMobileInput = this.callbacks?.getShowMobileInput() ?? false;
       const showCtrlAlpha = this.callbacks?.getShowCtrlAlpha() ?? false;
+
+      // In keyboard mode, always maintain focus regardless of other conditions
+      if (this.keyboardMode && this.hiddenInput && document.activeElement !== this.hiddenInput) {
+        logger.log('Keyboard mode: forcing focus on hidden input');
+        this.hiddenInput.focus();
+        return;
+      }
+
+      // Normal focus retention for quick keys
       if (
         !disableFocusManagement &&
-        (this.showQuickKeys || this.keyboardMode) &&
+        this.showQuickKeys &&
         this.hiddenInput &&
         document.activeElement !== this.hiddenInput &&
         !showMobileInput &&
@@ -471,7 +510,7 @@ export class DirectKeyboardManager {
         logger.log('Refocusing hidden input to maintain keyboard');
         this.hiddenInput.focus();
       }
-    }, 300) as unknown as number;
+    }, 100) as unknown as number; // More frequent checks (100ms instead of 300ms)
   }
 
   private delayedRefocusHiddenInput(): void {
@@ -534,10 +573,19 @@ export class DirectKeyboardManager {
     this.keyboardMode = false;
     this.keyboardModeTimestamp = 0;
 
+    // Remove capture click handler
+    if (this.captureClickHandler) {
+      document.removeEventListener('click', this.captureClickHandler, true);
+      document.removeEventListener('pointerdown', this.captureClickHandler, true);
+      this.captureClickHandler = null;
+    }
+
     // Hide quick keys
     this.showQuickKeys = false;
     if (this.callbacks) {
       this.callbacks.updateShowQuickKeys(false);
+      // Reset keyboard height when dismissing
+      this.callbacks.setKeyboardHeight(0);
     }
 
     // Stop focus retention
@@ -571,6 +619,13 @@ export class DirectKeyboardManager {
     if (this.keyboardActivationTimeout) {
       clearTimeout(this.keyboardActivationTimeout);
       this.keyboardActivationTimeout = null;
+    }
+
+    // Remove capture click handler
+    if (this.captureClickHandler) {
+      document.removeEventListener('click', this.captureClickHandler, true);
+      document.removeEventListener('pointerdown', this.captureClickHandler, true);
+      this.captureClickHandler = null;
     }
 
     // Remove hidden input if it exists

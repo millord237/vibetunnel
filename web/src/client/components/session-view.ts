@@ -88,6 +88,7 @@ export class SessionView extends LitElement {
   @state() private useDirectKeyboard = false;
   @state() private showQuickKeys = false;
   @state() private keyboardHeight = 0;
+  @state() private terminalTransformY = 0;
 
   private instanceId = `session-view-${Math.random().toString(36).substr(2, 9)}`;
   private createHiddenInputTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -120,6 +121,7 @@ export class SessionView extends LitElement {
       }),
       setShowQuickKeys: (value: boolean) => {
         this.showQuickKeys = value;
+        this.updateTerminalTransform();
       },
       setShowFileBrowser: (value: boolean) => {
         this.showFileBrowser = value;
@@ -146,6 +148,7 @@ export class SessionView extends LitElement {
       stopLoading: () => this.loadingAnimationManager.stopLoading(),
       setKeyboardHeight: (value: number) => {
         this.keyboardHeight = value;
+        this.updateTerminalTransform();
       },
       getTerminalLifecycleManager: () =>
         this.terminalLifecycleManager
@@ -240,6 +243,10 @@ export class SessionView extends LitElement {
         return null;
       },
       getKeyboardHeight: () => this.keyboardHeight,
+      setKeyboardHeight: (height: number) => {
+        this.keyboardHeight = height;
+        this.updateTerminalTransform();
+      },
       updateShowQuickKeys: (value: boolean) => {
         this.showQuickKeys = value;
         this.requestUpdate();
@@ -597,11 +604,15 @@ export class SessionView extends LitElement {
   }
 
   private handleKeyboardButtonClick() {
-    // Focus the hidden input to show the keyboard
-    this.directKeyboardManager.focusHiddenInput();
+    // Use a small delay to ensure the button click has fully processed
+    // This prevents the button click from interfering with focus
+    setTimeout(() => {
+      // Focus the hidden input to show the keyboard
+      this.directKeyboardManager.focusHiddenInput();
 
-    // The keyboard visibility will be detected by the visual viewport handler
-    // which will automatically show the quick keys when the keyboard appears
+      // The keyboard visibility will be detected by the visual viewport handler
+      // which will automatically show the quick keys when the keyboard appears
+    }, 50);
   }
 
   private handleTerminalFitToggle() {
@@ -700,6 +711,36 @@ export class SessionView extends LitElement {
     }
   }
 
+  private updateTerminalTransform(): void {
+    // Calculate total height to move terminal up
+    let totalHeight = 0;
+
+    if (this.showQuickKeys && this.isMobile) {
+      // Quick keys height (approximately 140px based on CSS)
+      const quickKeysHeight = 140;
+      totalHeight += quickKeysHeight;
+    }
+
+    if (this.keyboardHeight > 0) {
+      totalHeight += this.keyboardHeight;
+    }
+
+    // Apply transform with smooth transition
+    this.terminalTransformY = totalHeight;
+
+    // If terminal is transformed, try to keep cursor visible
+    if (totalHeight > 0) {
+      // Request terminal to scroll to cursor
+      const terminal = this.querySelector('vibe-terminal') as Terminal;
+      if (terminal) {
+        // Scroll to bottom to keep cursor visible
+        setTimeout(() => {
+          terminal.scrollToBottom();
+        }, 100);
+      }
+    }
+  }
+
   refreshTerminalAfterMobileInput() {
     // After closing mobile input, the viewport changes and the terminal
     // needs to recalculate its scroll position to avoid getting stuck
@@ -782,6 +823,11 @@ export class SessionView extends LitElement {
             this.session?.status === 'exited' ? 'session-exited' : ''
           }"
           id="terminal-container"
+          style="${
+            this.terminalTransformY > 0
+              ? `transform: translateY(-${this.terminalTransformY}px); transition: transform 0.3s ease-out;`
+              : ''
+          }"
         >
           ${
             this.loadingAnimationManager.isLoading()
@@ -934,7 +980,15 @@ export class SessionView extends LitElement {
             ? html`
               <div
                 class="keyboard-button"
-                @click=${() => this.handleKeyboardButtonClick()}
+                @pointerdown=${(e: PointerEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                @click=${(e: MouseEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  this.handleKeyboardButtonClick();
+                }}
                 title="Show keyboard"
               >
                 ⌨
