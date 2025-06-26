@@ -451,37 +451,37 @@ export class UnifiedSettings extends LitElement {
       <div class="space-y-4">
         <h3 class="text-md font-bold text-dark-text mb-3">Application</h3>
         
-        <!-- Direct keyboard input -->
-        <div class="flex items-center justify-between p-4 bg-dark-bg-tertiary rounded-lg border border-dark-border">
-          <div class="flex-1">
-            <label class="text-dark-text font-medium">
-              Direct Keyboard Input
-              ${this.mediaState.isMobile ? html`<span class="text-status-warning text-xs ml-1">(Desktop only)</span>` : ''}
-            </label>
-            <p class="text-dark-text-muted text-xs mt-1">
-              ${
-                this.mediaState.isMobile
-                  ? 'Not available on mobile devices'
-                  : 'Send keyboard input directly without text field'
-              }
-            </p>
-          </div>
-          <button
-            role="switch"
-            aria-checked="${this.appPreferences.useDirectKeyboard}"
-            @click=${() => this.handleAppPreferenceChange('useDirectKeyboard', !this.appPreferences.useDirectKeyboard)}
-            ?disabled=${this.mediaState.isMobile}
-            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
-              this.appPreferences.useDirectKeyboard ? 'bg-accent-green' : 'bg-dark-border'
-            } ${this.mediaState.isMobile ? 'opacity-50 cursor-not-allowed' : ''}"
-          >
-            <span
-              class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                this.appPreferences.useDirectKeyboard ? 'translate-x-5' : 'translate-x-0.5'
-              }"
-            ></span>
-          </button>
-        </div>
+        <!-- Direct keyboard input (Mobile only) -->
+        ${
+          this.mediaState.isMobile
+            ? html`
+              <div class="flex items-center justify-between p-4 bg-dark-bg-tertiary rounded-lg border border-dark-border">
+                <div class="flex-1">
+                  <label class="text-dark-text font-medium">
+                    Use Direct Keyboard
+                  </label>
+                  <p class="text-dark-text-muted text-xs mt-1">
+                    Capture keyboard input directly without showing a text field (desktop-like experience)
+                  </p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked="${this.appPreferences.useDirectKeyboard}"
+                  @click=${() => this.handleAppPreferenceChange('useDirectKeyboard', !this.appPreferences.useDirectKeyboard)}
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
+                    this.appPreferences.useDirectKeyboard ? 'bg-accent-green' : 'bg-dark-border'
+                  }"
+                >
+                  <span
+                    class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                      this.appPreferences.useDirectKeyboard ? 'translate-x-5' : 'translate-x-0.5'
+                    }"
+                  ></span>
+                </button>
+              </div>
+            `
+            : ''
+        }
 
         <!-- Show log link -->
         <div class="flex items-center justify-between p-4 bg-dark-bg-tertiary rounded-lg border border-dark-border">
