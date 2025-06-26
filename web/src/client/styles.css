@@ -337,7 +337,7 @@ body {
 
 /* Session grid flow animations */
 body.sessions-showing .session-flex-responsive > session-card {
-  animation: sessionFlow 0.4s ease-out backwards;
+  animation: sessionFlow 0.2s ease-out backwards;
 }
 
 /* Stagger animation when showing exited sessions */
@@ -345,61 +345,128 @@ body.sessions-showing .session-flex-responsive > session-card:nth-child(1) {
   animation-delay: 0s;
 }
 body.sessions-showing .session-flex-responsive > session-card:nth-child(2) {
-  animation-delay: 0.05s;
+  animation-delay: 0.025s;
 }
 body.sessions-showing .session-flex-responsive > session-card:nth-child(3) {
-  animation-delay: 0.1s;
+  animation-delay: 0.05s;
 }
 body.sessions-showing .session-flex-responsive > session-card:nth-child(4) {
-  animation-delay: 0.15s;
+  animation-delay: 0.075s;
 }
 body.sessions-showing .session-flex-responsive > session-card:nth-child(5) {
-  animation-delay: 0.2s;
+  animation-delay: 0.1s;
 }
 body.sessions-showing .session-flex-responsive > session-card:nth-child(6) {
-  animation-delay: 0.25s;
+  animation-delay: 0.125s;
 }
 body.sessions-showing .session-flex-responsive > session-card:nth-child(7) {
-  animation-delay: 0.3s;
+  animation-delay: 0.15s;
 }
 body.sessions-showing .session-flex-responsive > session-card:nth-child(8) {
-  animation-delay: 0.35s;
+  animation-delay: 0.175s;
 }
 body.sessions-showing .session-flex-responsive > session-card:nth-child(n + 9) {
-  animation-delay: 0.4s;
+  animation-delay: 0.2s;
 }
 
 /* Compact mode animations */
 body.sessions-showing .space-y-2 > div {
-  animation: sessionFlow 0.4s ease-out backwards;
+  animation: sessionFlow 0.2s ease-out backwards;
 }
 
 body.sessions-showing .space-y-2 > div:nth-child(1) {
   animation-delay: 0s;
 }
 body.sessions-showing .space-y-2 > div:nth-child(2) {
-  animation-delay: 0.05s;
+  animation-delay: 0.025s;
 }
 body.sessions-showing .space-y-2 > div:nth-child(3) {
-  animation-delay: 0.1s;
+  animation-delay: 0.05s;
 }
 body.sessions-showing .space-y-2 > div:nth-child(4) {
-  animation-delay: 0.15s;
+  animation-delay: 0.075s;
 }
 body.sessions-showing .space-y-2 > div:nth-child(5) {
-  animation-delay: 0.2s;
+  animation-delay: 0.1s;
 }
 body.sessions-showing .space-y-2 > div:nth-child(6) {
-  animation-delay: 0.25s;
+  animation-delay: 0.125s;
 }
 body.sessions-showing .space-y-2 > div:nth-child(7) {
-  animation-delay: 0.3s;
+  animation-delay: 0.15s;
 }
 body.sessions-showing .space-y-2 > div:nth-child(8) {
-  animation-delay: 0.35s;
+  animation-delay: 0.175s;
 }
 body.sessions-showing .space-y-2 > div:nth-child(n + 9) {
-  animation-delay: 0.4s;
+  animation-delay: 0.2s;
+}
+
+/* Session grid hide animations */
+body.sessions-hiding .session-flex-responsive > session-card {
+  animation: sessionHide 0.2s ease-in forwards;
+}
+
+/* Stagger animation when hiding sessions */
+body.sessions-hiding .session-flex-responsive > session-card:nth-child(1) {
+  animation-delay: 0s;
+}
+body.sessions-hiding .session-flex-responsive > session-card:nth-child(2) {
+  animation-delay: 0.025s;
+}
+body.sessions-hiding .session-flex-responsive > session-card:nth-child(3) {
+  animation-delay: 0.05s;
+}
+body.sessions-hiding .session-flex-responsive > session-card:nth-child(4) {
+  animation-delay: 0.075s;
+}
+body.sessions-hiding .session-flex-responsive > session-card:nth-child(5) {
+  animation-delay: 0.1s;
+}
+body.sessions-hiding .session-flex-responsive > session-card:nth-child(6) {
+  animation-delay: 0.125s;
+}
+body.sessions-hiding .session-flex-responsive > session-card:nth-child(7) {
+  animation-delay: 0.15s;
+}
+body.sessions-hiding .session-flex-responsive > session-card:nth-child(8) {
+  animation-delay: 0.175s;
+}
+body.sessions-hiding .session-flex-responsive > session-card:nth-child(n + 9) {
+  animation-delay: 0.2s;
+}
+
+/* Compact mode hide animations */
+body.sessions-hiding .space-y-2 > div {
+  animation: sessionHide 0.2s ease-in forwards;
+}
+
+body.sessions-hiding .space-y-2 > div:nth-child(1) {
+  animation-delay: 0s;
+}
+body.sessions-hiding .space-y-2 > div:nth-child(2) {
+  animation-delay: 0.025s;
+}
+body.sessions-hiding .space-y-2 > div:nth-child(3) {
+  animation-delay: 0.05s;
+}
+body.sessions-hiding .space-y-2 > div:nth-child(4) {
+  animation-delay: 0.075s;
+}
+body.sessions-hiding .space-y-2 > div:nth-child(5) {
+  animation-delay: 0.1s;
+}
+body.sessions-hiding .space-y-2 > div:nth-child(6) {
+  animation-delay: 0.125s;
+}
+body.sessions-hiding .space-y-2 > div:nth-child(7) {
+  animation-delay: 0.15s;
+}
+body.sessions-hiding .space-y-2 > div:nth-child(8) {
+  animation-delay: 0.175s;
+}
+body.sessions-hiding .space-y-2 > div:nth-child(n + 9) {
+  animation-delay: 0.2s;
 }
 
 @keyframes sessionFlow {
@@ -410,6 +477,17 @@ body.sessions-showing .space-y-2 > div:nth-child(n + 9) {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sessionHide {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
   }
 }
 
@@ -1150,6 +1228,16 @@ body.initial-session-load ::view-transition-new(root) {
   /* During close transition, fade backdrop out faster */
   ::view-transition-old(create-session-modal) ~ .modal-backdrop {
     animation: fade-out 0.25s ease-out;
+  }
+  
+  /* Prevent flicker during modal close on mobile Safari */
+  body.modal-closing .modal-content {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+  
+  body.modal-closing .modal-backdrop {
+    opacity: 0 !important;
   }
 
   @keyframes fade-in {
