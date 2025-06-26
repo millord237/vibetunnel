@@ -987,74 +987,43 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
   background-color: rgba(79, 195, 247, 0.2);
 }
 
-/* Scroll to bottom button */
-.scroll-to-bottom {
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  width: 48px;
-  height: 48px;
-  background: rgba(26, 26, 26, 0.9);
-  border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #e4e4e4;
-  font-size: 24px;
-  transition: all 0.2s ease;
-  user-select: none;
-  z-index: 10;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-.scroll-to-bottom:hover {
-  background: rgba(26, 26, 26, 1);
-  border-color: #00ff88;
-  color: #00ff88;
-  transform: translateY(-1px);
-  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
-}
-
-.scroll-to-bottom:active {
-  transform: translateY(0px);
-}
-
-/* Keyboard button - matches scroll-to-bottom styling */
+/* Floating action buttons with backdrop blur */
+.scroll-to-bottom,
 .keyboard-button {
-  position: fixed;
-  bottom: 12px;
-  right: 12px;
-  width: 48px;
-  height: 48px;
-  background: rgba(26, 26, 26, 0.9);
-  border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #e4e4e4;
-  font-size: 24px;
-  transition: all 0.2s ease;
-  user-select: none;
-  z-index: 20;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  @apply absolute flex items-center justify-center;
+  @apply w-12 h-12 rounded-md;
+  @apply bg-dark-bg/20 border border-dark-border/50;
+  @apply text-dark-text text-2xl;
+  @apply cursor-pointer select-none;
+  @apply transition-all duration-200;
+  backdrop-filter: blur(12px) saturate(1.5);
+  -webkit-backdrop-filter: blur(12px) saturate(1.5);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* Position scroll button */
+.scroll-to-bottom {
+  @apply bottom-3 left-3 z-10;
+}
+
+/* Position keyboard button */
+.keyboard-button {
+  @apply fixed bottom-3 right-3 z-20;
+}
+
+/* Hover state for both buttons */
+.scroll-to-bottom:hover,
 .keyboard-button:hover {
-  background: rgba(26, 26, 26, 1);
-  border-color: #00ff88;
-  color: #00ff88;
-  transform: translateY(-1px);
-  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+  @apply bg-dark-bg/40 border-accent-green text-accent-green;
+  @apply -translate-y-0.5 shadow-glow-green-sm;
+  backdrop-filter: blur(16px) saturate(1.8);
+  -webkit-backdrop-filter: blur(16px) saturate(1.8);
 }
 
+/* Active state for both buttons */
+.scroll-to-bottom:active,
 .keyboard-button:active {
-  transform: translateY(0px);
+  @apply translate-y-0;
 }
 
 /* Debug overlay */
