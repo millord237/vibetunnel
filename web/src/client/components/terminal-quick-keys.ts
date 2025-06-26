@@ -25,7 +25,7 @@ const TERMINAL_QUICK_KEYS = [
   { key: '/', label: '/', row: 2 },
   { key: '\\', label: '\\', row: 2 },
   { key: '-', label: '-', row: 2 },
-  { key: 'ABC', label: 'ABC', special: true, row: 2 },
+  { key: 'Done', label: 'Done', special: true, row: 2 },
   // Third row - additional special characters
   { key: 'Option', label: '⌥', modifier: true, row: 3 },
   { key: 'Command', label: '⌘', modifier: true, row: 3 },

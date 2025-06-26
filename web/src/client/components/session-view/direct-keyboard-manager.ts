@@ -329,37 +329,10 @@ export class DirectKeyboardManager {
   }
 
   handleQuickKeyPress = (key: string, isModifier?: boolean, isSpecial?: boolean): void => {
-    if (isSpecial && key === 'ABC') {
-      // Toggle the mobile input overlay
-      if (this.callbacks) {
-        this.callbacks.toggleMobileInput();
-      }
-
-      const showMobileInput = this.callbacks?.getShowMobileInput() ?? false;
-      if (showMobileInput) {
-        // Stop focus retention when showing mobile input
-        if (this.focusRetentionInterval) {
-          clearInterval(this.focusRetentionInterval);
-          this.focusRetentionInterval = null;
-        }
-
-        // Blur the hidden input to prevent it from capturing input
-        if (this.hiddenInput) {
-          this.hiddenInput.blur();
-        }
-      } else {
-        // Clear the text when closing
-        if (this.callbacks) {
-          this.callbacks.clearMobileInputText();
-        }
-
-        // Restart focus retention when closing mobile input
-        const disableFocusManagement = this.callbacks?.getDisableFocusManagement() ?? false;
-        if (!disableFocusManagement && this.hiddenInput && this.showQuickKeys) {
-          this.startFocusRetention();
-          this.delayedRefocusHiddenInput();
-        }
-      }
+    if (isSpecial && key === 'Done') {
+      // Dismiss the keyboard
+      logger.log('Done button pressed - dismissing keyboard');
+      this.dismissKeyboard();
       return;
     } else if (isModifier && key === 'Control') {
       // Just send Ctrl modifier - don't show the overlay
@@ -554,6 +527,39 @@ export class DirectKeyboardManager {
       this.hiddenInput.style.zIndex = '-1';
       this.hiddenInput.style.pointerEvents = 'none';
     }
+  }
+
+  private dismissKeyboard(): void {
+    // Exit keyboard mode
+    this.keyboardMode = false;
+    this.keyboardModeTimestamp = 0;
+
+    // Hide quick keys
+    this.showQuickKeys = false;
+    if (this.callbacks) {
+      this.callbacks.updateShowQuickKeys(false);
+    }
+
+    // Stop focus retention
+    if (this.focusRetentionInterval) {
+      clearInterval(this.focusRetentionInterval);
+      this.focusRetentionInterval = null;
+    }
+
+    // Stop any keyboard activation attempts
+    if (this.keyboardActivationTimeout) {
+      clearTimeout(this.keyboardActivationTimeout);
+      this.keyboardActivationTimeout = null;
+    }
+
+    // Blur the hidden input and move it off-screen
+    if (this.hiddenInput) {
+      this.hiddenInput.blur();
+      this.hiddenInputFocused = false;
+      this.updateHiddenInputPosition();
+    }
+
+    logger.log('Keyboard dismissed');
   }
 
   cleanup(): void {
