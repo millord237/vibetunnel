@@ -401,15 +401,15 @@ export class SessionList extends LitElement {
     if (exitedSessions.length === 0 && runningSessions.length === 0) return '';
 
     return html`
-      <div class="flex flex-col gap-2 mt-8 pb-4 px-4 w-full">
-        <!-- First row: Show/Hide Exited and Clean Exited (when visible) -->
+      <div class="flex flex-col sm:flex-row sm:flex-wrap gap-2 mt-8 pb-4 px-4 w-full">
+        <!-- First group: Show/Hide Exited and Clean Exited (when visible) -->
         ${
           exitedSessions.length > 0
             ? html`
-              <div class="flex gap-2 w-full">
+              <div class="flex gap-2 w-full sm:w-auto">
                 <!-- Show/Hide Exited button -->
                 <button
-                  class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 flex-1 ${
+                  class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 flex-1 sm:flex-none sm:w-auto sm:min-w-[180px] ${
                     this.hideExited
                       ? 'border-dark-border bg-dark-bg-secondary text-dark-text-muted hover:bg-dark-bg-tertiary hover:text-dark-text'
                       : 'border-dark-border bg-dark-bg-tertiary text-dark-text hover:bg-dark-bg-secondary'
@@ -447,7 +447,7 @@ export class SessionList extends LitElement {
                   !this.hideExited
                     ? html`
                       <button
-                        class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 flex-1 border-dark-border bg-dark-bg-secondary text-status-warning hover:bg-dark-bg-tertiary hover:border-status-warning"
+                        class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 flex-1 sm:flex-none sm:w-auto sm:min-w-[120px] border-dark-border bg-dark-bg-secondary text-status-warning hover:bg-dark-bg-tertiary hover:border-status-warning"
                         @click=${this.handleCleanupExited}
                         ?disabled=${this.cleaningExited}
                       >
@@ -468,12 +468,12 @@ export class SessionList extends LitElement {
             : ''
         }
         
-        <!-- Second row: Kill All button (full width) -->
+        <!-- Kill All button -->
         ${
           runningSessions.length > 0
             ? html`
               <button
-                class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 w-full border-status-error bg-dark-bg-secondary text-status-error hover:bg-dark-bg-tertiary hover:border-status-error"
+                class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 w-full sm:w-auto sm:min-w-[120px] border-status-error bg-dark-bg-secondary text-status-error hover:bg-dark-bg-tertiary hover:border-status-error"
                 @click=${() => this.dispatchEvent(new CustomEvent('kill-all-sessions'))}
               >
                 Kill All (${runningSessions.length})
