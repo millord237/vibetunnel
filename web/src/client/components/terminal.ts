@@ -33,6 +33,7 @@ export class Terminal extends LitElement {
   @property({ type: Boolean }) fitHorizontally = false;
   @property({ type: Number }) maxCols = 0; // 0 means no limit
   @property({ type: Boolean }) disableClick = false; // Disable click handling (for mobile direct keyboard)
+  @property({ type: Boolean }) hideScrollButton = false; // Hide scroll-to-bottom button
 
   private originalFontSize: number = 14;
 
@@ -1264,7 +1265,7 @@ export class Terminal extends LitElement {
           @click=${this.handleClick}
         ></div>
         ${
-          !this.followCursorEnabled
+          !this.followCursorEnabled && !this.hideScrollButton
             ? html`
               <div
                 class="scroll-to-bottom"
