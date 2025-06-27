@@ -87,7 +87,7 @@ export class InputManager {
         inputText = 'arrow_right';
         break;
       case 'Tab':
-        inputText = 'tab';
+        inputText = e.shiftKey ? 'shift_tab' : 'tab';
         break;
       case 'Backspace':
         inputText = 'backspace';
@@ -132,6 +132,7 @@ export class InputManager {
         'escape',
         'backspace',
         'tab',
+        'shift_tab',
         'arrow_up',
         'arrow_down',
         'arrow_left',
@@ -196,6 +197,7 @@ export class InputManager {
         'escape',
         'backspace',
         'tab',
+        'shift_tab',
         'arrow_up',
         'arrow_down',
         'arrow_left',
