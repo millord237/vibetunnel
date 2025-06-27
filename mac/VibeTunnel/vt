@@ -1,6 +1,13 @@
 #!/bin/bash
 # VibeTunnel CLI wrapper
 
+# Check if we're already inside a VibeTunnel session
+if [ -n "$VIBETUNNEL_SESSION_ID" ]; then
+    echo "Error: Already inside a VibeTunnel session (ID: $VIBETUNNEL_SESSION_ID). Recursive VibeTunnel sessions are not supported." >&2
+    echo "If you need to run commands, use them directly without the 'vt' prefix." >&2
+    exit 1
+fi
+
 # Try standard locations first, but verify the binary exists
 APP_PATH=""
 for TRY_PATH in "/Applications/VibeTunnel.app" "$HOME/Applications/VibeTunnel.app"; do
