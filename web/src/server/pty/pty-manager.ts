@@ -6,7 +6,7 @@
  */
 
 import chalk from 'chalk';
-import { EventEmitter } from 'events';
+import { EventEmitter, once } from 'events';
 import * as fs from 'fs';
 import * as net from 'net';
 import type { IPty } from 'node-pty';
@@ -22,6 +22,7 @@ import type {
 } from '../../shared/types.js';
 import { ProcessTreeAnalyzer } from '../services/process-tree-analyzer.js';
 import { createLogger } from '../utils/logger.js';
+import { WriteQueue } from '../utils/write-queue.js';
 import { AsciinemaWriter } from './asciinema-writer.js';
 import { ProcessUtils } from './process-utils.js';
 import { SessionManager } from './session-manager.js';
@@ -381,32 +382,30 @@ export class PtyManager extends EventEmitter {
       return;
     }
 
-    // Handle PTY data output
-    ptyProcess.onData(async (data: string) => {
-      try {
-        // Write to asciinema file first
-        asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
+    // Create write queue for stdout if forwarding
+    const stdoutQueue = forwardToStdout ? new WriteQueue() : null;
+    if (stdoutQueue) {
+      session.stdoutQueue = stdoutQueue;
+    }
 
-        // Then forward to stdout if requested
-        if (forwardToStdout) {
+    // Handle PTY data output
+    ptyProcess.onData((data: string) => {
+      // Write to asciinema file (it has its own internal queue)
+      asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
+
+      // Forward to stdout if requested (using queue for ordering)
+      if (forwardToStdout && stdoutQueue) {
+        stdoutQueue.enqueue(async () => {
           const canWrite = process.stdout.write(data);
           if (!canWrite) {
-            // stdout buffer is full, pause PTY output
-            ptyProcess.pause();
-
-            // Resume when stdout drains
-            process.stdout.once('drain', () => {
-              ptyProcess.resume();
-            });
+            await once(process.stdout, 'drain');
           }
-        }
-      } catch (error) {
-        logger.error(`Failed to write PTY data for session ${session.id}:`, error);
+        });
       }
     });
 
     // Handle PTY exit
-    ptyProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+    ptyProcess.onExit(async ({ exitCode, signal }: { exitCode: number; signal?: number }) => {
       try {
         // Mark session as exiting to prevent false bell notifications
         this.sessionExitTimes.set(session.id, Date.now());
@@ -427,6 +426,15 @@ export class PtyManager extends EventEmitter {
           undefined,
           exitCode || (signal ? 128 + (typeof signal === 'number' ? signal : 1) : 1)
         );
+
+        // Wait for stdout queue to drain if it exists
+        if (session.stdoutQueue) {
+          try {
+            await session.stdoutQueue.drain();
+          } catch (error) {
+            logger.error(`Failed to drain stdout queue for session ${session.id}:`, error);
+          }
+        }
 
         // Clean up session resources
         this.cleanupSessionResources(session);

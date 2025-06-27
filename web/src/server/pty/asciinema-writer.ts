@@ -5,12 +5,16 @@
  * which is compatible with asciinema players and the existing web interface.
  */
 
+import { once } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
+import { promisify } from 'util';
 import { createLogger } from '../utils/logger.js';
+import { WriteQueue } from '../utils/write-queue.js';
 import { type AsciinemaEvent, type AsciinemaHeader, PtyError } from './types.js';
 
 const _logger = createLogger('AsciinemaWriter');
+const fsync = promisify(fs.fsync);
 
 export class AsciinemaWriter {
   private writeStream: fs.WriteStream;
@@ -18,6 +22,7 @@ export class AsciinemaWriter {
   private utf8Buffer: Buffer = Buffer.alloc(0);
   private headerWritten = false;
   private fd: number | null = null;
+  private writeQueue = new WriteQueue();
 
   constructor(
     private filePath: string,
@@ -76,11 +81,13 @@ export class AsciinemaWriter {
   private writeHeader(): void {
     if (this.headerWritten) return;
 
-    const headerJson = JSON.stringify(this.header);
-    const canWrite = this.writeStream.write(`${headerJson}\n`);
-    if (!canWrite) {
-      _logger.debug(`File stream buffer full while writing header to ${this.filePath}`);
-    }
+    this.writeQueue.enqueue(async () => {
+      const headerJson = JSON.stringify(this.header);
+      const canWrite = this.writeStream.write(`${headerJson}\n`);
+      if (!canWrite) {
+        await once(this.writeStream, 'drain');
+      }
+    });
     this.headerWritten = true;
   }
 
@@ -88,102 +95,107 @@ export class AsciinemaWriter {
    * Write terminal output data
    */
   writeOutput(data: Buffer): void {
-    const time = this.getElapsedTime();
+    this.writeQueue.enqueue(async () => {
+      const time = this.getElapsedTime();
 
-    // Combine any buffered bytes with the new data
-    const combinedBuffer = Buffer.concat([this.utf8Buffer, data]);
+      // Combine any buffered bytes with the new data
+      const combinedBuffer = Buffer.concat([this.utf8Buffer, data]);
 
-    // Process data in escape-sequence-aware chunks
-    const { processedData, remainingBuffer } = this.processTerminalData(combinedBuffer);
+      // Process data in escape-sequence-aware chunks
+      const { processedData, remainingBuffer } = this.processTerminalData(combinedBuffer);
 
-    if (processedData.length > 0) {
-      const event: AsciinemaEvent = {
-        time,
-        type: 'o',
-        data: processedData,
-      };
-      this.writeEvent(event);
-    }
+      if (processedData.length > 0) {
+        const event: AsciinemaEvent = {
+          time,
+          type: 'o',
+          data: processedData,
+        };
+        await this.writeEvent(event);
+      }
 
-    // Store any remaining incomplete data for next time
-    this.utf8Buffer = remainingBuffer;
+      // Store any remaining incomplete data for next time
+      this.utf8Buffer = remainingBuffer;
+    });
   }
 
   /**
    * Write terminal input data (usually from user)
    */
   writeInput(data: string): void {
-    const time = this.getElapsedTime();
-    const event: AsciinemaEvent = {
-      time,
-      type: 'i',
-      data,
-    };
-    this.writeEvent(event);
+    this.writeQueue.enqueue(async () => {
+      const time = this.getElapsedTime();
+      const event: AsciinemaEvent = {
+        time,
+        type: 'i',
+        data,
+      };
+      await this.writeEvent(event);
+    });
   }
 
   /**
    * Write terminal resize event
    */
   writeResize(cols: number, rows: number): void {
-    const time = this.getElapsedTime();
-    const event: AsciinemaEvent = {
-      time,
-      type: 'r',
-      data: `${cols}x${rows}`,
-    };
-    this.writeEvent(event);
+    this.writeQueue.enqueue(async () => {
+      const time = this.getElapsedTime();
+      const event: AsciinemaEvent = {
+        time,
+        type: 'r',
+        data: `${cols}x${rows}`,
+      };
+      await this.writeEvent(event);
+    });
   }
 
   /**
    * Write marker event (for bookmarks/annotations)
    */
   writeMarker(message: string): void {
-    const time = this.getElapsedTime();
-    const event: AsciinemaEvent = {
-      time,
-      type: 'm',
-      data: message,
-    };
-    this.writeEvent(event);
+    this.writeQueue.enqueue(async () => {
+      const time = this.getElapsedTime();
+      const event: AsciinemaEvent = {
+        time,
+        type: 'm',
+        data: message,
+      };
+      await this.writeEvent(event);
+    });
   }
 
   /**
    * Write a raw JSON event (for custom events like exit)
    */
   writeRawJson(jsonValue: unknown): void {
-    const jsonString = JSON.stringify(jsonValue);
-    const canWrite = this.writeStream.write(`${jsonString}\n`);
-    if (!canWrite) {
-      _logger.debug(`File stream buffer full while writing raw JSON to ${this.filePath}`);
-    }
+    this.writeQueue.enqueue(async () => {
+      const jsonString = JSON.stringify(jsonValue);
+      const canWrite = this.writeStream.write(`${jsonString}\n`);
+      if (!canWrite) {
+        await once(this.writeStream, 'drain');
+      }
+    });
   }
 
   /**
    * Write an asciinema event to the file
    */
-  private writeEvent(event: AsciinemaEvent): void {
+  private async writeEvent(event: AsciinemaEvent): Promise<void> {
     // Asciinema format: [time, type, data]
     const eventArray = [event.time, event.type, event.data];
     const eventJson = JSON.stringify(eventArray);
+
+    // Write and handle backpressure
     const canWrite = this.writeStream.write(`${eventJson}\n`);
     if (!canWrite) {
-      _logger.debug(`File stream buffer full while writing event to ${this.filePath}`);
+      await once(this.writeStream, 'drain');
     }
 
-    // Force immediate disk write to trigger file watchers asynchronously
+    // Sync to disk asynchronously
     if (this.fd !== null) {
-      // Use setImmediate to avoid blocking the event loop
-      if (this.fd !== null) {
-        try {
-          fs.fsync(this.fd, (err) => {
-            if (err) {
-              // Ignore sync errors
-            }
-          });
-        } catch (_e) {
-          // Ignore sync errors
-        }
+      try {
+        await fsync(this.fd);
+      } catch (err) {
+        _logger.debug(`fsync failed for ${this.filePath}:`, err);
       }
     }
   }
@@ -374,21 +386,28 @@ export class AsciinemaWriter {
   /**
    * Close the writer and finalize the file
    */
-  close(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // Flush any remaining UTF-8 buffer
-      if (this.utf8Buffer.length > 0) {
-        // Force write any remaining data using lossy conversion
-        const time = this.getElapsedTime();
-        const event: AsciinemaEvent = {
-          time,
-          type: 'o',
-          data: this.utf8Buffer.toString('latin1'),
-        };
-        this.writeEvent(event);
-        this.utf8Buffer = Buffer.alloc(0);
-      }
+  async close(): Promise<void> {
+    // Flush any remaining UTF-8 buffer through the queue
+    if (this.utf8Buffer.length > 0) {
+      // Force write any remaining data using lossy conversion
+      const time = this.getElapsedTime();
+      const event: AsciinemaEvent = {
+        time,
+        type: 'o',
+        data: this.utf8Buffer.toString('latin1'),
+      };
+      // Use the queue to ensure ordering
+      this.writeQueue.enqueue(async () => {
+        await this.writeEvent(event);
+      });
+      this.utf8Buffer = Buffer.alloc(0);
+    }
 
+    // Wait for all queued writes to complete
+    await this.writeQueue.drain();
+
+    // Now it's safe to end the stream
+    return new Promise((resolve, reject) => {
       this.writeStream.end((error?: Error) => {
         if (error) {
           reject(new PtyError(`Failed to close asciinema writer: ${error.message}`));
