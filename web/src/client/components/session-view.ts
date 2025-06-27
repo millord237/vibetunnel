@@ -494,6 +494,18 @@ export class SessionView extends LitElement {
       if (this.connectionManager) {
         this.connectionManager.cleanupStreamConnection();
       }
+
+      // Notify parent app that session status changed so it can refresh the session list
+      this.dispatchEvent(
+        new CustomEvent('session-status-changed', {
+          detail: {
+            sessionId: this.session.id,
+            newStatus: 'exited',
+            exitCode: customEvent.detail.exitCode,
+          },
+          bubbles: true,
+        })
+      );
     }
   }
 

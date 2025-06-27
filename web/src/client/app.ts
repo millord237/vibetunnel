@@ -310,6 +310,23 @@ export class VibeTunnelApp extends LitElement {
         if (response.ok) {
           this.sessions = (await response.json()) as Session[];
           this.clearError();
+
+          // Check if currently selected session still exists after refresh
+          if (this.selectedSessionId && this.currentView === 'session') {
+            const sessionExists = this.sessions.find((s) => s.id === this.selectedSessionId);
+            if (!sessionExists) {
+              // Session no longer exists, redirect to dashboard
+              console.warn(
+                `Selected session ${this.selectedSessionId} no longer exists, redirecting to dashboard`
+              );
+              this.selectedSessionId = null;
+              this.currentView = 'list';
+              // Clear the session param from URL
+              const newUrl = new URL(window.location.href);
+              newUrl.searchParams.delete('session');
+              window.history.replaceState({}, '', newUrl.toString());
+            }
+          }
         } else if (response.status === 401) {
           // Authentication failed, redirect to login
           this.handleLogout();
@@ -713,6 +730,12 @@ export class VibeTunnelApp extends LitElement {
   private handleToggleSidebar() {
     this.sidebarCollapsed = !this.sidebarCollapsed;
     this.saveSidebarState(this.sidebarCollapsed);
+  }
+
+  private handleSessionStatusChanged(e: CustomEvent) {
+    logger.log('Session status changed:', e.detail);
+    // Immediately refresh the session list to show updated status
+    this.loadSessions();
   }
 
   private handleMobileOverlayClick = (e: Event) => {
@@ -1247,6 +1270,7 @@ export class VibeTunnelApp extends LitElement {
                       .disableFocusManagement=${this.hasActiveOverlay}
                       @navigate-to-list=${this.handleNavigateToList}
                       @toggle-sidebar=${this.handleToggleSidebar}
+                      @session-status-changed=${this.handleSessionStatusChanged}
                     ></session-view>
                   `
                 )}
