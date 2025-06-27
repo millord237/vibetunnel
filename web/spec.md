@@ -10,6 +10,8 @@ VibeTunnel is a web-based terminal multiplexer with distributed architecture sup
 - Binary-optimized buffer synchronization (current viewport via WebSocket)
 - Distributed HQ/remote server architecture
 - Web UI with full terminal emulation
+- Push notifications for terminal bell events
+- Multi-method authentication (SSH keys, JWT, PAM)
 
 ## Directory Structure
 
@@ -21,7 +23,7 @@ web/
 │   │   ├── pty/         # PTY management
 │   │   ├── routes/      # API endpoints
 │   │   ├── services/    # Core services
-│   │   ├── server.ts    # Server loader
+│   │   ├── server.ts    # Main server implementation
 │   │   └── fwd.ts       # CLI forwarding tool
 │   ├── client/           # Lit-based web UI
 │   │   ├── assets/      # Static files (fonts, icons, html)
@@ -29,7 +31,7 @@ web/
 │   │   ├── services/    # Client services
 │   │   └── utils/       # Client utilities
 │   ├── test/            # Test files
-│   └── index.ts         # Main entry point
+│   └── cli.ts           # Main entry point
 ├── scripts/             # Build scripts
 └── public/              # Built static assets (generated)
 ```
@@ -39,101 +41,102 @@ web/
 ### Core Components
 
 #### Entry Points
-- `index.ts` (1-25): Main entry point, chooses between server and forward modes
-- `server/server.ts` (1-4): Simple loader for modular server
-- `server/index.ts` (1-49): Server initialization, cleanup intervals, graceful shutdown
-- `server/app.ts` (198-404): Express app factory, CLI parsing, mode configuration
-
-#### Server Modes
-1. **Normal Mode**: Standalone terminal server
-2. **HQ Mode** (`--hq`): Central server managing remotes
-3. **Remote Mode** (`--hq-url`): Registers with HQ server
+- `cli.ts` (1-62): Main entry point, routes to server or forward mode
+- `server/server.ts` (1-953): Core server implementation with Express app factory
+  - CLI parsing (132-236): Extensive configuration options
+  - Server modes (432-444): Normal, HQ, Remote initialization
+  - WebSocket upgrade (564-677): Authentication and buffer streaming
+  - Graceful shutdown (888-944): Cleanup intervals and service termination
 
 ### Authentication (`middleware/auth.ts`)
-- Basic Auth: Username/password (46-55)
-- Bearer Token: HQ↔Remote communication (28-44)
-- Health endpoint bypass (14-16)
+- Multi-method authentication (1-159)
+  - SSH key authentication with Ed25519 support
+  - Basic auth (username/password)
+  - Bearer token for HQ↔Remote communication
+  - JWT tokens for session persistence
+- Local bypass for localhost connections (24-48, 68-87)
+- Query parameter token support for EventSource
 
 ### Session Management
 
 #### PTY Manager (`pty/pty-manager.ts`)
-- `createSession()` (155-287): Spawns PTY processes
-  - Supports `forwardToStdout` option for direct stdout forwarding
-  - Supports `onExit` callback for handling process termination
-  - **Automatic alias resolution**: Uses `ProcessUtils.resolveCommand()` to detect and run aliases through shell
-- `sendInput()` (515-588): Handles keyboard input
-- `killSession()` (687-764): SIGTERM→SIGKILL escalation
-- `resizeSession()` (638-681): Terminal dimension changes
-- Control pipe support using file watching on all platforms (414-475)
-- `shutdown()` (937-974): Clean termination of all active sessions
-- Proper TypeScript types throughout (no "as any" assertions)
+- Session creation (78-163): Spawns PTY processes with node-pty
+- **Automatic alias resolution** (191-204): Uses `ProcessUtils.resolveCommand()`
+- Terminal resize handling (63-157): Dimension synchronization
+- Control pipe support using file watching on all platforms
+- Bell event emission for push notifications
+- Clean termination with SIGTERM→SIGKILL escalation
 
 #### Process Utils (`pty/process-utils.ts`)
-- `resolveCommand()` (168-242): Detects if command exists in PATH or needs shell execution
-  - Uses `which` (Unix) or `where` (Windows) to check command existence
-  - Returns appropriate shell command with args for aliases/builtins
-  - Platform-specific shell argument handling
-- `getUserShell()` (219-281): Determines user's preferred shell
+- `resolveCommand()` (242-378): Detects if command exists in PATH
+  - Uses `which` (Unix) or `where` (Windows) to check existence
+  - Returns appropriate shell command for aliases/builtins
+  - Sources shell config files for proper alias support
+- `getUserShell()` (384-484): Determines user's preferred shell
   - Checks `$SHELL` environment variable first
-  - Windows: Checks for pwsh, PowerShell, Git Bash, then cmd.exe
-  - Unix: Checks common shell paths (/bin/zsh, /bin/bash, etc.)
+  - Platform-specific fallbacks (pwsh/cmd on Windows, zsh/bash on Unix)
+- Interactive shell detection (220-235): Auto-adds `-i -l` flags
 
 #### Session Manager (`pty/session-manager.ts`)
 - Session persistence in `~/.vibetunnel/control/`
-- `listSessions()` (155-224): Filesystem-based discovery
-- `updateZombieSessions()` (231-257): Dead process cleanup
+- Filesystem-based session discovery
+- Zombie session cleanup
 
 #### Terminal Manager (`services/terminal-manager.ts`)
-- Headless xterm.js for server-side state (40-69)
-- `getBufferSnapshot()` (255-323): Captures terminal buffer
-- `encodeSnapshot()` (328-555): Binary protocol encoding
-- Debounced buffer notifications (627-642)
+- Headless xterm.js for server-side state
+- Binary buffer snapshot generation
+- Watches asciinema cast files and applies to terminal
+- Debounced buffer change notifications
 
 ### API Routes (`routes/`)
 
 #### Sessions (`sessions.ts`)
-- `GET /api/sessions` (40-120): List with HQ aggregation
-  - Returns array of `SessionEntryWithId` objects with additional fields:
-    - All fields from `SessionEntryWithId` (see types.ts)
-    - `source`: 'local' | 'remote'
-    - For remote sessions: `remoteId`, `remoteName`, `remoteUrl`
-- `POST /api/sessions` (123-199): Create local/remote
-- `DELETE /api/sessions/:id` (270-323): Kill session
-- `GET /api/sessions/:id/stream` (517-627): SSE streaming of asciinema cast files
-- `POST /api/sessions/:id/input` (630-695): Send input
-- `POST /api/sessions/:id/resize` (698-767): Resize terminal
-- `GET /api/sessions/:id/buffer` (569-631): Binary snapshot of current terminal view
-- `GET /api/sessions/:id/text` (504-654): Plain text of current terminal view
-  - Optional `?styles` query parameter adds style markup
-  - Style format: `[style fg="color" bg="color" bold italic ...]text[/style]`
-  - Colors: indexed (0-255) as `"15"`, RGB as `"255,128,0"`
-  - Attributes: bold, dim, italic, underline, inverse, invisible, strikethrough
-- `GET /api/sessions/activity` (255-311): Activity status for all sessions
-  - Returns: `{ [sessionId]: ActivityStatus }` where ActivityStatus includes:
-    - `isActive`: boolean - Currently generating output
-    - `timestamp`: string - Last update time
-    - `session`: SessionInfo object (see types.ts)
-  - In HQ mode: aggregates activity from all remote servers
-- `GET /api/sessions/:id/activity` (314-370): Activity status for specific session
-  - Returns: `ActivityStatus` object (same format as above)
-  - In HQ mode: forwards to appropriate remote server
+- `GET /api/sessions` (51-124): List all sessions
+  - Returns array with `source: 'local' | 'remote'`
+  - HQ mode: Aggregates from all remote servers
+- `POST /api/sessions` (126-265): Create session
+  - Body: `{ command, workingDir?, name?, remoteId?, spawn_terminal? }`
+  - Returns: `{ sessionId: string, message?: string }`
+- `GET /api/sessions/:id` (369-410): Get session info
+- `DELETE /api/sessions/:id` (413-467): Kill session
+- `DELETE /api/sessions/:id/cleanup` (470-518): Clean session files
+- `POST /api/cleanup-exited` (521-598): Clean all exited sessions
+
+#### Session I/O
+- `POST /api/sessions/:id/input` (874-950): Send keyboard input
+  - Body: `{ text: string }` OR `{ key: SpecialKey }`
+- `POST /api/sessions/:id/resize` (953-1025): Resize terminal
+  - Body: `{ cols: number, rows: number }`
+- `POST /api/sessions/:id/reset-size` (1028-1083): Reset to native size
+
+#### Session Output
+- `GET /api/sessions/:id/stream` (723-871): SSE streaming
+  - Streams asciinema v2 format with custom exit event
+  - Replays existing content, then real-time streaming
+- `GET /api/sessions/:id/buffer` (662-721): Binary buffer snapshot
+- `GET /api/sessions/:id/text` (601-659): Plain text output
+  - Optional `?styles` for markup: `[style fg="15" bold]text[/style]`
+
+#### Activity Monitoring
+- `GET /api/sessions/activity` (268-324): All sessions activity
+- `GET /api/sessions/:id/activity` (327-366): Single session activity
+  - Returns: `{ isActive: boolean, timestamp: string, session: SessionInfo }`
 
 #### Remotes (`remotes.ts`) - HQ Mode Only
-- `GET /api/remotes` (15-27): List registered servers
-- `POST /api/remotes/register` (30-52): Remote registration
-- `DELETE /api/remotes/:id` (55-69): Unregister remote
+- `GET /api/remotes` (19-33): List registered servers
+- `POST /api/remotes/register` (36-64): Register remote
+- `DELETE /api/remotes/:id` (67-84): Unregister remote
+- `POST /api/remotes/:id/refresh-sessions` (87-152): Refresh session list
 
 #### Logs (`logs.ts`)
-- `POST /api/logs/client` (24-56): Client-side log submission
-  - Accepts: `{ level, module, args }`
-  - Prefixes module with `CLIENT:` for identification
-- `GET /api/logs/raw` (59-76): Stream raw log file
-- `GET /api/logs/info` (79-104): Log file metadata
-- `DELETE /api/logs/clear` (107-121): Clear log file
+- `POST /api/logs/client` (21-53): Client log submission
+- `GET /api/logs/raw` (56-74): Stream raw log file
+- `GET /api/logs/info` (77-102): Log file metadata
+- `DELETE /api/logs/clear` (105-119): Clear log file
 
 ### Binary Buffer Protocol
 
-**Note**: "Buffer" refers to the current terminal display state (visible viewport) without scrollback history - just what's currently shown at the bottom of the terminal. This is used for rendering terminal previews in the session list.
+**Note**: "Buffer" refers to the current terminal viewport without scrollback - used for terminal previews.
 
 #### Format (`terminal-manager.ts:361-555`)
 ```
@@ -151,356 +154,329 @@ Cells: Variable-length with type byte
 
 ### SSE Streaming and Asciinema Files
 
-#### File Writing (`pty/asciinema-writer.ts`)
-- **AsciinemaWriter** (separate file) writes cast files to `~/.vibetunnel/control/[sessionId]/stream-out`
-- Used by PtyManager when creating sessions
-- Records in asciinema v2 format with custom extensions:
+#### Asciinema Writer (`pty/asciinema-writer.ts`)
+- Writes cast files to `~/.vibetunnel/control/[sessionId]/stream-out`
+- Format:
   - Standard: `[timestamp, "o", output]` for terminal output
   - Standard: `[timestamp, "i", input]` for user input
   - Standard: `[timestamp, "r", "colsxrows"]` for resize events
   - **Custom**: `["exit", exitCode, sessionId]` when process terminates
 
-#### SSE Streaming (`routes/sessions.ts:517-627`)
-- Streams asciinema cast files from disk in real-time
-- **StreamWatcher** monitors file changes and broadcasts to clients
-- Replays existing content first (timestamps zeroed)
+#### SSE Streaming (`routes/sessions.ts:723-871`)
+- Real-time streaming of asciinema cast files
+- Replays existing content with zeroed timestamps
 - Watches for new content and streams incrementally
-- Closes connections on exit event
-
-#### Client Playback (`client/utils/cast-converter.ts`)
-- Parses asciinema v2 format
-- Handles custom exit event to dispatch `session-exit`
-- Supports batch loading and real-time streaming
+- Heartbeat every 30 seconds
 
 ### WebSocket (`services/buffer-aggregator.ts`)
-- Client connections (31-68)
-- Message handling (69-127)
-- Local session buffers (131-195)
-- Remote session proxy (200-232)
-- Binary message format (136-164)
+- Client connections (30-87): Authentication and subscription
+- Message handling (88-127): Subscribe/unsubscribe/ping
+- Binary protocol (156-209): `[0xBF][ID Length][Session ID][Buffer Data]`
+- Local and remote session proxy support
 
 ### Activity Monitoring (`services/activity-monitor.ts`)
-
-#### Overview
-Monitors all terminal sessions for activity by watching `stream-out` file changes.
-- Works for ALL sessions regardless of creation method (server or fwd.ts)
-- No performance impact on terminal output
-- File-based persistence for cross-process access
-
-#### Implementation
-- `start()` (26-37): Begins monitoring with 100ms check interval
-- `scanSessions()` (61-98): Discovers and monitors session directories
-- `handleFileChange()` (146-168): Detects output by file size increase
-- `updateActivityStates()` (173-182): Marks inactive after 500ms timeout
-- `writeActivityStatus()` (187-198): Persists to `activity.json` per session
-
-#### Activity Status Format
-```json
-{
-  "isActive": boolean,
-  "timestamp": "ISO 8601 date string",
-  "session": {                                   // SessionInfo object from session.json
-    "cmdline": ["command", "args"],
-    "name": "session name",
-    "cwd": "/working/directory",
-    "pid": 12345,
-    "status": "starting" | "running" | "exited",
-    "exit_code": 0,
-    "started_at": "ISO 8601 date string",
-    "term": "xterm-256color",
-    "spawn_type": "pty"
-  }
-}
-```
+- Monitors `stream-out` file size changes (143-146)
+- 100ms check interval (41-44)
+- 500ms inactivity timeout (209-212)
+- Persists to `activity.json` per session (220-245)
+- Works for all sessions regardless of creation method
 
 ### HQ Mode Components
 
 #### Remote Registry (`services/remote-registry.ts`)
-- Health checks every 15s (118-146)
-- Session ownership tracking (82-96)
+- Health checks every 15s (150-187)
+- Session ownership tracking (91-148)
 - Bearer token authentication
+- Automatic unhealthy remote removal
 
 #### HQ Client (`services/hq-client.ts`)
-- Registration with HQ (29-58)
-- Unregister on shutdown (60-72)
+- Registration with HQ (40-90)
+- Unique ID generation with UUID v4
+- Graceful unregistration on shutdown (92-113)
 
-### Logging Infrastructure (`utils/logger.ts`)
+### Additional Services
 
-#### Server Logger
-- Unified logging with file and console output
+#### Push Notifications (`services/push-notification-service.ts`)
+- Web Push API integration (64-363)
+- Subscription management in `~/.vibetunnel/notifications/`
+- Bell event notifications (231-247)
+- Automatic expired subscription cleanup
+
+#### Bell Event Handler (`services/bell-event-handler.ts`)
+- Processes terminal bell events (59-182)
+- Integrates with push notifications
+- Includes process context in notifications
+
+#### Authentication Service (`services/auth-service.ts`)
+- SSH key authentication (144-159, 201-271)
+  - Ed25519 signature verification
+  - Challenge-response system
+  - Checks `~/.ssh/authorized_keys`
+- Password authentication (105-120)
+- PAM authentication fallback (184-196)
+- JWT token management (176-180)
+
+#### Control Directory Watcher (`services/control-dir-watcher.ts`)
+- Monitors external session changes (20-175)
+- HQ mode integration (116-163)
+- Detects new/removed sessions
+
+### Utilities
+
+#### Logger (`utils/logger.ts`)
+- Structured logging with file and console output (1-186)
+- Color-coded console with chalk
 - Log levels: log, warn, error, debug
 - File output to `~/.vibetunnel/log.txt`
-- Formatted timestamps and module names
-- Debug mode toggle
-- Style guide compliance (see LOGGING_STYLE_GUIDE.md)
+- Debug mode via `VIBETUNNEL_DEBUG`
 
-#### Client Logger (`client/utils/logger.ts`)
-- Mirrors server logger interface
-- Logs to browser console
-- Sends logs to `/api/logs/client` endpoint
-- Objects formatted as JSON before sending
-- Integrates with server logging system
+#### VAPID Manager (`utils/vapid-manager.ts`)
+- Auto-generates VAPID keys for push notifications (20-331)
+- Stores in `~/.vibetunnel/vapid/keys.json`
+- Key rotation support
 
 ## Client Architecture (`src/client/`)
 
 ### Core Components
 
 #### Entry Points
-- `app-entry.ts` - Main application entry point
-- `test-terminals-entry.ts` - Test terminals entry point
-- `styles.css` - Global styles
+- `app-entry.ts` (1-28): Main entry, initializes Monaco and push notifications
+- `test-entry.ts`: Test terminals entry
+- `styles.css`: Global Tailwind styles
 
-#### Main Application Component
-- `app.ts` - Lit-based SPA (15-331)
-  - URL-based routing `?session=<id>`
-  - Global keyboard handlers
-  - Error/success message handling (74-90)
-  - **Events fired**:
-    - `toggle-nav` - Toggle navigation
-    - `navigate-to-list` - Navigate to session list
-    - `error` - Display error message
-    - `success` - Display success message
-    - `navigate` - Navigate to specific session
-  - **Events listened**: Various events from child components
+#### Main Application (`app.ts`)
+- Lit-based SPA (15-1200+): `<vibetunnel-app>`
+- URL-based routing with `?session=<id>`
+- Global keyboard handlers (Cmd+O, Escape)
+- View management: auth/list/session
+- **Events fired**:
+  - `toggle-nav`, `navigate-to-list`, `error`, `success`, `navigate`
 
 ### Component Event Architecture
 
-#### Terminal Components
+```
+vibetunnel-app
+├── app-header (navigation, controls)
+├── session-list (when view='list')
+│   └── session-card (per session)
+│       └── vibe-terminal-buffer (terminal preview)
+├── session-view (when view='session')
+│   ├── session-header
+│   ├── vibe-terminal (main terminal)
+│   ├── mobile-input-overlay
+│   ├── ctrl-alpha-overlay
+│   └── terminal-quick-keys
+├── session-create-form (modal)
+├── file-browser (modal)
+├── unified-settings (modal)
+└── auth-login (when view='auth')
+```
 
-##### `terminal.ts` - Custom DOM terminal renderer (17-1000+)
-Full terminal implementation with xterm.js for rendering and input handling.
+### Terminal Components
+
+#### Terminal (`terminal.ts`)
+- Full xterm.js implementation (1-1000+)
 - Virtual scrolling (537-555)
 - Touch/momentum support
 - URL highlighting integration
-- Copy/paste handling
-- **Events fired**:
-  - `terminal-ready` - When terminal is initialized and ready
-  - `terminal-input` - When user types (detail: string)
-  - `terminal-resize` - When terminal is resized (detail: { cols: number, rows: number })
-  - `url-clicked` - When a URL is clicked (detail: string)
+- **Events**: `terminal-ready`, `terminal-input`, `terminal-resize`, `url-clicked`
 
-##### `session-view.ts` - Full-screen terminal view (29-1331)
-Full-screen terminal view for an active session. Handles terminal I/O, streaming updates via SSE, file browser integration, and mobile overlays.
-- SSE streaming (275-333)
-- Mobile input overlays
-- Resize synchronization
-- **Events fired**:
-  - `navigate-to-list` - When navigating back to session list
-  - `error` - When an error occurs (detail: string)
-  - `warning` - When a warning occurs (detail: string)
-- **Events listened**:
-  - `session-exit` - From SSE stream when session exits
-  - `terminal-ready` - From terminal component when ready
-  - `file-selected` - From file browser when file is selected
-  - `browser-cancel` - From file browser when cancelled
+#### VibeTunnelBuffer (`vibe-terminal-buffer.ts`)
+- Read-only terminal preview (25-268)
+- WebSocket buffer subscription
+- Auto-resizing
+- **Events**: `content-changed`
 
-##### `vibe-terminal-buffer.ts` - Terminal buffer display (25-268)
-Displays a read-only terminal buffer snapshot with automatic resizing. Subscribes to buffer updates via WebSocket and renders the terminal content.
-- **Events fired**:
-  - `content-changed` - When terminal content changes (no detail)
+#### SessionView (`session-view.ts`)
+- Full-screen terminal view (29-1331)
+- Manager architecture:
+  - ConnectionManager: SSE streaming
+  - InputManager: Keyboard/mouse
+  - MobileInputManager: Mobile input
+  - DirectKeyboardManager: Direct keyboard access
+  - TerminalLifecycleManager: Terminal state
+- **Events**: `navigate-to-list`, `error`, `warning`
 
-#### Session Management Components
+### Session Management Components
 
-##### `session-list.ts` - Active sessions list view (61-700+)
-Main session list view showing all active terminal sessions with real-time updates, search/filtering, and session management capabilities.
-- **Events fired**:
-  - `navigate` - When clicking on a session (detail: { sessionId: string })
-  - `error` - When an error occurs (detail: string)
-  - `success` - When an operation succeeds (detail: string)
-  - `session-created` - When a new session is created (detail: Session)
-  - `session-updated` - When a session is updated (detail: Session)
-  - `sessions-changed` - When the session list changes
-  - `toggle-create-form` - When toggling the create form
-- **Events listened**:
-  - `session-created` - From create form
-  - `cancel` - From create form
-  - `error` - From create form
+#### SessionList (`session-list.ts`)
+- Grid/list layout (61-700+)
+- Hide/show exited sessions
+- Search and filtering
+- **Events**: `navigate-to-session`, `refresh`, `error`, `success`
 
-##### `session-card.ts` - Individual session card (31-420+)
-Individual session card component showing terminal preview and session controls. Displays a live terminal buffer preview and detects activity changes.
-- **Events fired**:
-  - `view-session` - When viewing a session (detail: Session)
-  - `kill-session` - When killing a session (detail: Session)
-  - `copy-session-id` - When copying session ID (detail: Session)
-- **Events listened**:
-  - `content-changed` - From vibe-terminal-buffer component
+#### SessionCard (`session-card.ts`)
+- Individual session display (31-420+)
+- Live terminal preview
+- Activity detection
+- **Events**: `session-select`, `session-killed`, `session-kill-error`
 
-##### `session-create-form.ts` - New session creation form (27-381)
-Modal dialog for creating new terminal sessions. Provides command input, working directory selection, and options for spawning in native terminal.
-- **Events fired**:
-  - `session-created` - When session is successfully created (detail: { sessionId: string, message?: string })
-  - `cancel` - When form is cancelled
-  - `error` - When creation fails (detail: string)
-- **Events listened**:
-  - `file-selected` - From file browser when directory is selected
-  - `browser-cancel` - From file browser when cancelled
+#### SessionCreateForm (`session-create-form.ts`)
+- Modal dialog (27-381)
+- Command input with working directory
+- Native terminal spawn option
+- **Events**: `session-created`, `cancel`, `error`
 
-#### UI Components
+### UI Components
 
-##### `app-header.ts` - Application header (15-280+)
-Main application header with logo, title, navigation controls, and session status.
-- **Events fired**:
-  - `toggle-nav` - Toggle navigation menu
-  - `navigate-to-list` - Navigate to session list
-  - `toggle-create-form` - Toggle session create form
-  - `toggle-theme` - Toggle dark/light theme
-  - `open-settings` - Open settings modal
+#### AppHeader (`app-header.ts`)
+- Main navigation (15-280+)
+- Session status display
+- Theme toggle
+- **Events**: `toggle-nav`, `navigate-to-list`, `toggle-create-form`
 
-##### `file-browser.ts` - File browser component (48-665)
-Modal file browser for navigating the filesystem and selecting files/directories. Supports Git status display, file preview with Monaco editor, and diff viewing.
-- **Events fired**:
-  - `insert-path` - When inserting a file path into terminal (detail: { path: string, type: 'file' | 'directory' })
-  - `open-in-editor` - When opening a file in external editor (detail: { path: string })
-  - `directory-selected` - When a directory is selected in 'select' mode (detail: string)
-  - `browser-cancel` - When the browser is cancelled or closed
+#### FileBrowser (`file-browser.ts`)
+- Filesystem navigation (48-665)
+- Git status display
+- Monaco editor preview
+- **Events**: `insert-path`, `open-in-editor`, `directory-selected`
 
-##### `log-viewer.ts` - System log viewer (1-432)
-Real-time log viewer with filtering and search capabilities.
-- SSE-style polling every 2 seconds
-- Client/server log distinction
-- Log level filtering
-- Relative timestamps
-- Mobile-responsive layout
-- Mac-style auto-hiding scrollbars
-- **Features**:
-  - Filter by log level (error, warn, log, debug)
-  - Toggle client/server logs
-  - Search/filter by text
-  - Auto-scroll (smart - only when near bottom)
-  - Download logs
-  - Clear logs
-
-##### Icon Components
-- `vibe-logo.ts` - Application logo
-- `terminal-icon.ts` - Terminal icon
-- `copy-icon.ts` - Copy icon
+#### LogViewer (`log-viewer.ts`)
+- Real-time log display (1-432)
+- SSE-style polling
+- Level filtering
+- Search functionality
 
 ### Services
 
-#### Buffer Subscription (`services/buffer-subscription-service.ts`)
+#### BufferSubscriptionService (`buffer-subscription-service.ts`)
 - WebSocket client (30-87)
 - Binary protocol decoder (163-208)
 - Auto-reconnection with backoff
+- Per-session subscriptions
+
+#### PushNotificationService (`push-notification-service.ts`)
+- Service worker registration
+- Push subscription management
+- Notification action handling
+
+#### AuthClient (`auth-client.ts`)
+- Token management
+- Authentication state
+- API header generation
 
 ### Utils
 
-#### Cast Converter (`utils/cast-converter.ts`)
+#### CastConverter (`cast-converter.ts`)
 - Asciinema v2 parser (31-82)
 - SSE stream handler (294-427)
-- Batch loading (221-283)
+- Custom exit event support
 
-#### Terminal Renderer (`utils/terminal-renderer.ts`)
+#### TerminalRenderer (`terminal-renderer.ts`)
 - Binary buffer decoder (279-424)
-- HTML generation
+- HTML generation from buffer
 - Style mapping
 
-#### Additional Utilities
-- `url-highlighter.ts` - URL detection and highlighting
-- `xterm-colors.ts` - Terminal color definitions
-- `terminal-preferences.ts` - Terminal preference management
+#### URLHighlighter (`url-highlighter.ts`)
+- Multi-line URL detection
+- Protocol validation
+- Click event handling
 
 ## Forward Tool (`src/server/fwd.ts`)
 
 ### Purpose
-Simplified CLI tool that spawns PTY sessions using VibeTunnel infrastructure.
-
-### Key Features
-- Interactive terminal forwarding with colorful output (chalk)
-- Session creation with pre-generated IDs support
-- Graceful cleanup on exit
-- **Automatic shell alias support** via ProcessUtils.resolveCommand()
+CLI tool for spawning PTY sessions using VibeTunnel infrastructure.
 
 ### Usage
 ```bash
 npx tsx src/fwd.ts [--session-id <id>] <command> [args...]
 
-# Examples with aliases
-npx tsx src/fwd.ts claude-danger  # Automatically resolved through shell
+# Examples
+npx tsx src/fwd.ts claude --resume
+npx tsx src/fwd.ts --session-id abc123 bash -l
 ```
 
+### Key Features
+- Interactive terminal forwarding (43-195)
+- Automatic shell alias support via ProcessUtils
+- Session ID pre-generation support
+- Graceful cleanup on exit
+- Colorful output with chalk
+
 ### Integration Points
-- Uses PtyManager for all session management
-- Control pipe and stdin forwarding handled by PtyManager
-- Automatic cleanup via PtyManager's shutdown() method
+- Uses central PTY Manager (78-82)
+- Control pipe handling delegated to PTY Manager
+- Terminal resize synchronization (148-163)
+- Raw mode for proper input capture (166-172)
+
+## Build System
+
+### Main Build (`scripts/build.js`)
+- Asset copying (7-121)
+- CSS compilation with Tailwind
+- Client bundling with esbuild
+- Server TypeScript compilation
+- Native executable creation
+
+### Native Binary (`scripts/build-native.js`)
+- Node.js SEA integration (1-537)
+- node-pty patching for compatibility (82-218)
+- Outputs:
+  - `native/vibetunnel`: Main executable
+  - `native/pty.node`: Terminal emulation
+  - `native/spawn-helper`: Process spawning (macOS)
+  - `native/authenticate_pam.node`: PAM auth
 
 ## Key Files Quick Reference
 
 ### Server Core
-- `src/index.ts`: Main entry point
-- `src/server/server.ts`: Server loader
-- `src/server/app.ts`: App configuration, CLI parsing
-- `src/server/middleware/auth.ts`: Authentication logic
-- `src/server/routes/sessions.ts`: Session API endpoints
-- `src/server/pty/pty-manager.ts`: PTY process management with file-watching control pipes
-- `src/server/pty/asciinema-writer.ts`: Cast file writer
-- `src/server/services/terminal-manager.ts`: Terminal state & binary protocol
-- `src/server/services/buffer-aggregator.ts`: WebSocket buffer distribution
-- `src/server/services/stream-watcher.ts`: SSE file streaming
-- `src/server/services/activity-monitor.ts`: Session activity detection
-- `src/server/fwd.ts`: Simplified CLI forwarding tool
+- `src/cli.ts`: Main entry point
+- `src/server/server.ts`: Server implementation
+- `src/server/middleware/auth.ts`: Authentication
+- `src/server/routes/sessions.ts`: Session API
+- `src/server/pty/pty-manager.ts`: PTY management
+- `src/server/services/terminal-manager.ts`: Terminal state
+- `src/server/services/activity-monitor.ts`: Activity tracking
+- `src/server/fwd.ts`: CLI forwarding tool
 
 ### Client Core
-- `src/client/app-entry.ts`: Application entry point
-- `src/client/app.ts`: Main SPA component
+- `src/client/app-entry.ts`: Entry point
+- `src/client/app.ts`: Main SPA
 - `src/client/components/terminal.ts`: Terminal renderer
 - `src/client/components/session-view.ts`: Session viewer
-- `src/client/components/session-list.ts`: Session list view
-- `src/client/services/buffer-subscription-service.ts`: WebSocket client
+- `src/client/services/buffer-subscription-service.ts`: WebSocket
 - `src/client/utils/cast-converter.ts`: Asciinema parser
-- `src/client/assets/`: Static files (fonts, icons, HTML)
 
 ### Configuration
 - Environment: `PORT`, `VIBETUNNEL_USERNAME`, `VIBETUNNEL_PASSWORD`, `VIBETUNNEL_DEBUG`
 - CLI: `--port`, `--username`, `--password`, `--hq`, `--hq-url`, `--name`
-- Express static: `.html` extension handling for clean URLs
-- Debug logging: Set `VIBETUNNEL_DEBUG=1` or `VIBETUNNEL_DEBUG=true`
+- Debug logging: Set `VIBETUNNEL_DEBUG=1` or `true`
 
 ### Protocols
-- REST API: Session CRUD, terminal I/O, activity status
-- SSE: Real-time streaming of asciinema cast files from disk
-- WebSocket: Binary buffer updates (current terminal viewport)
+- REST API: Session CRUD, terminal I/O
+- SSE: Real-time asciinema streaming
+- WebSocket: Binary buffer updates
 - Control pipes: External session control
 
 ### Session Data Storage
-Each session has a directory in `~/.vibetunnel/control/[sessionId]/` containing:
+Each session has a directory in `~/.vibetunnel/control/[sessionId]/`:
 - `session.json`: Session metadata
-- `stream-out`: Asciinema cast file with terminal output
-- `stdin`: Input pipe for sending keystrokes
-- `control`: Control pipe for resize/kill commands
-- `activity.json`: Activity status (written by ActivityMonitor)
+- `stream-out`: Asciinema cast file
+- `stdin`: Input pipe
+- `control`: Control pipe
+- `activity.json`: Activity status
 
 ## Development Notes
 
-### Architecture Changes (Recent)
-- PTY Manager now uses file watching for control pipes on all platforms (not just FIFO)
-- No global exit handlers - clean shutdown via `shutdown()` method
-- Simplified fwd.ts - control pipe and stdin forwarding handled by PTY Manager
-- Added proper TypeScript types throughout (removed all "as any" assertions)
-- Cleaned up logging and added colorful output messages using chalk
-- **Unified logging infrastructure**:
-  - Server-wide adoption of structured logger
-  - Client-side logger with server integration
-  - Centralized log viewer at `/logs`
-  - Consistent style guide (LOGGING_STYLE_GUIDE.md)
-- **Express enhancements**:
-  - Auto `.html` extension resolution for static files
-
-### Build System
-- `pnpm run dev`: Auto-rebuilds TypeScript
-- `pnpm run build`: Full build including Node.js SEA executable
-- ESBuild: Fast bundling
-- Node.js SEA: Creates standalone executable (Node.js 20+ required)
-- Vitest: Testing framework
-- Assets: Copied from `src/client/assets/` to `public/` during build
+### Recent Improvements
+- Push notification support for terminal bells
+- Multi-method authentication (SSH keys, JWT, PAM)
+- Unified logging infrastructure with style guide
+- Activity monitoring for all sessions
+- Control directory watcher for external sessions
+- Improved TypeScript types (no "as any")
+- Colorful CLI output with chalk
+- Auto-generation of security keys (VAPID)
 
 ### Testing
 - Unit tests: `pnpm test`
 - E2E tests: `pnpm run test:e2e`
-- Integration: `pnpm run test:integration`
+- Vitest configuration with coverage
 
 ### Key Dependencies
 - node-pty: Cross-platform PTY
 - @xterm/headless: Terminal emulation
 - Lit: Web components
 - Express: HTTP server
+- web-push: Push notifications
 - TailwindCSS: Styling

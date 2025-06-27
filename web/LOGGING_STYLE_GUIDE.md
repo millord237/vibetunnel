@@ -1,6 +1,6 @@
 # VibeTunnel Logging Style Guide
 
-## Core Rules
+## Logging style
 
 ### 1. No Colors in Error/Warn
 ```typescript
@@ -19,7 +19,7 @@ logger.warn('Missing config');
 logger.log(chalk.green('Session created'));
 logger.log(chalk.green(`Connected to ${server}`));
 
-// Warning/Neutral = yellow  
+// Warning/Neutral = yellow
 logger.log(chalk.yellow('Shutting down...'));
 logger.log(chalk.yellow(`Client disconnected`));
 
@@ -50,7 +50,7 @@ logger.error('Failed to connect:', error);
 logger.log('The session has been created successfully.');
 logger.error('ERROR: Failed to connect to server!');
 
-// ✅ GOOD  
+// ✅ GOOD
 logger.log(`Session ${id} created`);
 logger.error('Failed to connect to server');
 ```
@@ -76,7 +76,7 @@ logger.warn('Low memory');
 logger.log(chalk.green('Server started'));
 logger.log(chalk.green(`Session ${id} created`));
 
-// Stopping  
+// Stopping
 logger.log(chalk.yellow('Shutting down...'));
 logger.log(chalk.yellow(`Session ${id} terminated`));
 

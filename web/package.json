@@ -35,6 +35,7 @@
     "onlyBuiltDependencies": [
       "authenticate-pam",
       "esbuild",
+      "node-pty",
       "puppeteer"
     ]
   },
