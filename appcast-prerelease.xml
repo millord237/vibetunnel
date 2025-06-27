@@ -6,6 +6,39 @@
         <description>VibeTunnel pre-release and beta updates feed</description>
         <language>en</language>
         <item>
+            <title>VibeTunnel 1.0.0-beta.4</title>
+            <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.4/VibeTunnel-1.0.0-beta.4.dmg</link>
+            <sparkle:version>114</sparkle:version>
+            <sparkle:shortVersionString>1.0.0-beta.4</sparkle:shortVersionString>
+            <description><![CDATA[
+                <h2>VibeTunnel 1.0.0-beta.4</h2><p><strong>Pre-release version</strong></p><div><h3>✨ Highlights</h3>
+<ul>
+<li>Completely revamped mobile keyboard</li>
+<li>Mobile and Mac UI polish</li>
+<li>Fixes issues with Terminal app</li>
+<li>New security model: OS password or SSH keys</li>
+</ul>
+
+<h3>🎨 Improvements</h3>
+<ul>
+<li>Enhanced terminal session handling and stability</li>
+<li>Fixed various edge cases in terminal rendering and performance</li>
+<li>Resolved session management issues</li>
+<li>Fixed URL link detection for wrapped URLs on mobile terminals (#85)</li>
+<li>Split session view file for better code organization (#89)</li>
+</ul>
+<p><a href="https://github.com/amantus-ai/vibetunnel/blob/main/CHANGELOG.md#100-beta4---2025-06-27">View full changelog</a></p></div>
+            ]]></description>
+            <pubDate>Thu, 27 Jun 2025 00:31:41 +0000</pubDate>
+            <enclosure 
+                url="https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.4/VibeTunnel-1.0.0-beta.4.dmg"
+                length="35449335"
+                type="application/octet-stream"
+                sparkle:edSignature="dE/g2OqA2Gv/ZexRG43WudUWWhoKUi3XldlkZjR4kfgMaCIwvbtv4LyCVDRsJ094hqYZThomfGow6MgghsW6Dw=="
+            />
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+        </item>
+        <item>
             <title>VibeTunnel 1.0.0-beta.3</title>
             <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.3/VibeTunnel-1.0.0-beta.3.dmg</link>
             <sparkle:version>110</sparkle:version>
