@@ -2,16 +2,15 @@
 
 ## [1.0.0-beta.4] - 2025-06-27
 
-### 🎨 Improvements
+- Completely revamped mobile keyboard
+- Mobile and Mac UI polish
+- Fixes issues with Terminal app
+- New security model: OS password or SSH keys
 - Enhanced terminal session handling and stability
-- Improved performance optimizations
-- Better error handling and recovery
-- Updated dependencies for security and compatibility
-
-### 🐛 Bug Fixes
-- Fixed various edge cases in terminal rendering
+- Fixed various edge cases in terminal rendering and performance
 - Resolved session management issues
-- Improved memory usage and resource cleanup
+- Fixed URL link detection for wrapped URLs on mobile terminals (#85)
+- Split session view file for better code organization (#89)
 
 ## [1.0.0-beta.3] - 2025-06-23
 
