@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.0-beta.4] - 2025-06-27
+
+### 🎨 Improvements
+- Enhanced terminal session handling and stability
+- Improved performance optimizations
+- Better error handling and recovery
+- Updated dependencies for security and compatibility
+
+### 🐛 Bug Fixes
+- Fixed various edge cases in terminal rendering
+- Resolved session management issues
+- Improved memory usage and resource cleanup
+
 ## [1.0.0-beta.3] - 2025-06-23
 
 There's too much to list! This is the version you've been waiting for. 
