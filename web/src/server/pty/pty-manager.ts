@@ -382,17 +382,10 @@ export class PtyManager extends EventEmitter {
     // Handle PTY data output
     ptyProcess.onData(async (data: string) => {
       try {
-        // Execute both writes in parallel
-        const promises: Promise<void>[] = [];
+        // Write to asciinema file first
+        asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
 
-        // Write to asciinema file
-        promises.push(
-          Promise.resolve().then(() => {
-            asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
-          })
-        );
-
-        // Forward to stdout if requested
+        // Then forward to stdout if requested
         if (forwardToStdout) {
           const canWrite = process.stdout.write(data);
           if (!canWrite) {
@@ -404,11 +397,6 @@ export class PtyManager extends EventEmitter {
               ptyProcess.resume();
             });
           }
-        }
-
-        // Wait for both operations to complete
-        if (promises.length > 0) {
-          await Promise.all(promises);
         }
       } catch (error) {
         logger.error(`Failed to write PTY data for session ${session.id}:`, error);
