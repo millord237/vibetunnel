@@ -394,7 +394,7 @@ export class SessionList extends LitElement {
         ${
           exitedSessions.length > 0
             ? html`
-              <div class="flex gap-2 w-full sm:w-auto">
+              <div class="flex flex-col gap-2 w-full sm:w-auto">
                 <!-- Show/Hide Exited button -->
                 <button
                   class="font-mono text-xs sm:text-sm px-3 sm:px-6 py-2 rounded-lg border transition-all duration-200 flex-1 sm:flex-none sm:w-auto sm:min-w-[180px] ${
