@@ -723,12 +723,14 @@ export class SessionView extends LitElement {
 
     if (this.showQuickKeys && this.isMobile) {
       // Quick keys height (approximately 140px based on CSS)
-      const quickKeysHeight = 140;
+      // Add 10px buffer to ensure content is visible above quick keys
+      const quickKeysHeight = 150;
       heightReduction += quickKeysHeight;
     }
 
     if (this.keyboardHeight > 0) {
-      heightReduction += this.keyboardHeight;
+      // Add small buffer for keyboard too
+      heightReduction += this.keyboardHeight + 10;
     }
 
     // Calculate terminal container height
@@ -744,24 +746,29 @@ export class SessionView extends LitElement {
       `Terminal height updated: quickKeys=${this.showQuickKeys}, keyboardHeight=${this.keyboardHeight}, reduction=${heightReduction}px`
     );
 
-    // If terminal height changed, notify terminal to resize
-    if (heightReduction > 0) {
-      // Request terminal to resize and scroll to cursor
+    // Force immediate update to apply height change
+    this.requestUpdate();
+
+    // Always notify terminal to resize when there's a change
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
       const terminal = this.querySelector('vibe-terminal') as Terminal;
       if (terminal) {
-        // Trigger resize after DOM update
-        setTimeout(() => {
-          // Notify terminal of size change
-          const terminalElement = terminal as unknown as { fitTerminal?: () => void };
-          if (typeof terminalElement.fitTerminal === 'function') {
-            terminalElement.fitTerminal();
-          }
+        // Notify terminal of size change
+        const terminalElement = terminal as unknown as { fitTerminal?: () => void };
+        if (typeof terminalElement.fitTerminal === 'function') {
+          terminalElement.fitTerminal();
+        }
 
-          // Scroll to bottom to keep cursor visible
-          terminal.scrollToBottom();
-        }, 100);
+        // If height was reduced, scroll to keep cursor visible
+        if (heightReduction > 0) {
+          // Small delay then scroll to bottom to keep cursor visible
+          setTimeout(() => {
+            terminal.scrollToBottom();
+          }, 50);
+        }
       }
-    }
+    });
   }
 
   refreshTerminalAfterMobileInput() {
@@ -842,11 +849,11 @@ export class SessionView extends LitElement {
 
         <!-- Terminal Container -->
         <div
-          class="flex-1 bg-black overflow-hidden min-h-0 relative ${
+          class="${this.terminalContainerHeight === '100%' ? 'flex-1' : ''} bg-black overflow-hidden min-h-0 relative ${
             this.session?.status === 'exited' ? 'session-exited' : ''
           }"
           id="terminal-container"
-          style="height: ${this.terminalContainerHeight}; transition: height 0.3s ease-out;"
+          style="${this.terminalContainerHeight !== '100%' ? `height: ${this.terminalContainerHeight}; flex: none; max-height: ${this.terminalContainerHeight};` : ''} transition: height 0.3s ease-out;"
         >
           ${
             this.loadingAnimationManager.isLoading()
@@ -873,6 +880,7 @@ export class SessionView extends LitElement {
             .fitHorizontally=${false}
             .maxCols=${this.terminalMaxCols}
             .disableClick=${this.isMobile && this.useDirectKeyboard}
+            .hideScrollButton=${this.showQuickKeys}
             class="w-full h-full p-0 m-0"
             @click=${this.handleTerminalClick}
           ></vibe-terminal>
