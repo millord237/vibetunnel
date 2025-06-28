@@ -117,6 +117,30 @@ describe('UrlHighlighter', () => {
       expect(uniqueUrls).toHaveLength(1);
       expect(uniqueUrls[0]).toBe('https://example.com/very/long/path/to/resource');
     });
+
+    it('should handle domain continuation with TLD extension', () => {
+      createLines(['https://example.com', '.uk/path']);
+      UrlHighlighter.processLinks(container);
+      const uniqueUrls = getUniqueUrls();
+      expect(uniqueUrls).toHaveLength(1);
+      expect(uniqueUrls[0]).toBe('https://example.com.uk/path');
+    });
+
+    it('should handle path continuation without leading slash', () => {
+      createLines(['https://example.com/', 'path/to/resource']);
+      UrlHighlighter.processLinks(container);
+      const uniqueUrls = getUniqueUrls();
+      expect(uniqueUrls).toHaveLength(1);
+      expect(uniqueUrls[0]).toBe('https://example.com/path/to/resource');
+    });
+
+    it('should not continue URL with common words', () => {
+      createLines(['https://example.com', 'Check this out']);
+      UrlHighlighter.processLinks(container);
+      const uniqueUrls = getUniqueUrls();
+      expect(uniqueUrls).toHaveLength(1);
+      expect(uniqueUrls[0]).toBe('https://example.com/');
+    });
   });
 
   describe('False positive prevention', () => {
@@ -500,6 +524,292 @@ describe('UrlHighlighter', () => {
       expect(urls).toHaveLength(2);
       expect(urls[0].href).toBe('https://example.com/');
       expect(urls[1].href).toBe('https://google.com/');
+    });
+  });
+
+  describe('Bug fix: Numbered lists should not be detected as URLs', () => {
+    it('should not detect single digit numbered lists as URLs', () => {
+      createLines([
+        '1. First item in the list',
+        '2. Second item in the list',
+        '3. Third item in the list',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect double digit numbered lists as URLs', () => {
+      createLines(['10. Tenth item', '11. Eleventh item', '99. Ninety-ninth item']);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect numbered lists with various content as URLs', () => {
+      createLines([
+        '1. Successfully set up Playwright E2E testing framework with:',
+        '2. There might be a WebSocket or SSE connection issue',
+        '3. The terminal component might not be initializing properly for web sessions',
+        '4. Identified the issue: Web sessions in the test environment',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect numbered sub-lists as URLs', () => {
+      createLines([
+        '1.1 First sub-item',
+        '1.2 Second sub-item',
+        '2.1 Another sub-item',
+        '10.5 Decimal numbered item',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should still detect actual URLs in lines with numbers', () => {
+      createLines([
+        '1. Visit https://example.com for more info',
+        '2. Check http://localhost:3000 for the local server',
+        '3. The file is at file:///home/user/doc.pdf',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(3);
+      expect(urls[0].href).toBe('https://example.com/');
+      expect(urls[1].href).toBe('http://localhost:3000/');
+      expect(urls[2].href).toBe('file:///home/user/doc.pdf');
+    });
+
+    it('should not detect lettered lists as URLs', () => {
+      createLines([
+        'a. First lettered item',
+        'b. Second lettered item',
+        'A. Uppercase letter',
+        'B. Another uppercase',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect version numbers as URLs', () => {
+      createLines(['Version 1.0', 'Release 2.5.3', 'v3.14.159']);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect decimal numbers as URLs', () => {
+      createLines([
+        'Pi is approximately 3.14159',
+        'The price is $19.99',
+        'Temperature: 98.6 degrees',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect IP-like patterns in text as URLs', () => {
+      createLines([
+        'Error code 404.503 occurred',
+        'Section 1.2.3 of the manual',
+        'Coordinates 40.7128.74.0060',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should still detect domains containing numbers', () => {
+      createLines([
+        'Visit https://web3.example.com',
+        'Check http://api.v2.service.io',
+        'Go to https://365.microsoft.com',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const uniqueUrls = getUniqueUrls();
+      expect(uniqueUrls).toHaveLength(3);
+      expect(uniqueUrls).toContain('https://web3.example.com/');
+      expect(uniqueUrls).toContain('http://api.v2.service.io/');
+      expect(uniqueUrls).toContain('https://365.microsoft.com/');
+    });
+
+    it('should detect domains starting with numbers', () => {
+      createLines([
+        'Visit https://365.microsoft.com',
+        'Check https://911.gov',
+        'Go to https://123movies.example.com',
+        'See https://4chan.org',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const uniqueUrls = getUniqueUrls();
+      expect(uniqueUrls).toHaveLength(4);
+      expect(uniqueUrls).toContain('https://365.microsoft.com/');
+      expect(uniqueUrls).toContain('https://911.gov/');
+      expect(uniqueUrls).toContain('https://123movies.example.com/');
+      expect(uniqueUrls).toContain('https://4chan.org/');
+    });
+
+    it('should not detect invalid domains with hyphens at start or end', () => {
+      createLines([
+        'https://-invalid.com',
+        'https://invalid-.com',
+        'https://test.-invalid.com',
+        'https://test.invalid-.com',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect Roman numerals as URLs', () => {
+      createLines([
+        'i. First item',
+        'ii. Second item',
+        'iii. Third item',
+        'iv. Fourth item',
+        'v. Fifth item',
+        'I. First uppercase',
+        'II. Second uppercase',
+        'III. Third uppercase',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect alternative list styles as URLs', () => {
+      createLines([
+        '1) Alternative list style',
+        '2) Another item',
+        '3) Third item with content',
+        'a) Letter with parenthesis',
+        'b) Another letter item',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect extremely long numbered lists as URLs', () => {
+      createLines([
+        '999. Item nine hundred ninety-nine',
+        '1000. Item one thousand',
+        '12345. Very long numbered item',
+        '999999. Extremely long number',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect markdown-style checkbox lists as URLs', () => {
+      createLines([
+        '- [ ] Unchecked item',
+        '- [x] Checked item',
+        '* [ ] Another unchecked',
+        '+ [x] Another checked',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect time formats as URLs', () => {
+      createLines([
+        'Meeting at 10:30 AM',
+        'Deadline: 23:59:59',
+        'Duration: 1:30:45',
+        'Timer: 00:05:30',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should not detect mathematical expressions as URLs', () => {
+      createLines(['Result: 3.14 * 2.71', 'Formula: E = mc^2', 'Ratio 16:9', 'Score 10/10']);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(0);
+    });
+
+    it('should detect internationalized domain names', () => {
+      createLines([
+        'Visit https://münchen.de',
+        'Check https://россия.рф',
+        'Go to https://香港.cn',
+        'See https://example.xn--fiqs8s', // Punycode for .中国
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      // Note: The browser's URL constructor will convert IDNs to punycode
+      expect(urls.length).toBeGreaterThan(0);
+    });
+
+    it('should validate all domain labels correctly', () => {
+      createLines([
+        'Visit https://valid.subdomain.example.com today',
+        'Check https://test-123.sub-domain.example.org now',
+        'Go to https://a.b.c.d.e.f.g.com please',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(3);
+      expect(urls[0].href).toBe('https://valid.subdomain.example.com/');
+      expect(urls[1].href).toBe('https://test-123.sub-domain.example.org/');
+      expect(urls[2].href).toBe('https://a.b.c.d.e.f.g.com/');
+    });
+
+    it('should reject domains with invalid TLD labels', () => {
+      createLines([
+        'Invalid: https://example.com- (TLD ends with hyphen)',
+        'Invalid: https://example.-com (TLD starts with hyphen)',
+        'Valid: https://example.c-om (TLD has hyphen in middle)',
+        'Invalid: https://example.123 (TLD is purely numeric)',
+        'Valid: https://example.co2m (TLD with number but has letters)',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      // Only the valid ones should be detected
+      expect(urls).toHaveLength(2);
+      expect(urls[0].text).toBe('https://example.c-om');
+      expect(urls[1].text).toBe('https://example.co2m');
+    });
+
+    it('should validate each subdomain label independently', () => {
+      createLines([
+        'https://valid-.subdomain.example.com', // First label invalid
+        'https://valid.-subdomain.example.com', // Second label invalid
+        'https://valid.subdomain-.example.com', // Third label invalid
+        'https://valid.subdomain.example-.com', // Fourth label invalid
+        'https://valid.subdomain.example.-com', // TLD invalid
+        'https://valid-sub.sub-domain.ex-ample.com', // All valid
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      // Only the last one with all valid labels should be detected
+      expect(urls).toHaveLength(1);
+      expect(urls[0].href).toBe('https://valid-sub.sub-domain.ex-ample.com/');
+    });
+
+    it('should enforce minimum domain structure', () => {
+      createLines([
+        'Test 1: https://com (No domain, just TLD)',
+        'Test 2: https://example (No TLD)',
+        'Test 3: https://example.c (Single letter TLD - valid)',
+        'Test 4: https://a.b (Minimal valid domain)',
+      ]);
+      UrlHighlighter.processLinks(container);
+      const urls = getHighlightedUrls();
+      expect(urls).toHaveLength(2);
+      expect(urls[0].text).toBe('https://example.c');
+      expect(urls[1].text).toBe('https://a.b');
     });
   });
 });
