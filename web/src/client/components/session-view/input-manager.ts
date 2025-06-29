@@ -6,6 +6,7 @@
  */
 
 import { authClient } from '../../services/auth-client.js';
+import { websocketInputClient } from '../../services/websocket-input-client.js';
 import { createLogger } from '../../utils/logger.js';
 import type { Session } from '../session-list.js';
 
@@ -18,9 +19,27 @@ export interface InputManagerCallbacks {
 export class InputManager {
   private session: Session | null = null;
   private callbacks: InputManagerCallbacks | null = null;
+  private useWebSocketInput = true; // Feature flag for WebSocket input
 
   setSession(session: Session | null): void {
     this.session = session;
+
+    // Check URL parameter for WebSocket input feature flag
+    const urlParams = new URLSearchParams(window.location.search);
+    const socketInputParam = urlParams.get('socket_input');
+    if (socketInputParam !== null) {
+      this.useWebSocketInput = socketInputParam === 'true';
+      logger.log(
+        `WebSocket input ${this.useWebSocketInput ? 'enabled' : 'disabled'} via URL parameter`
+      );
+    }
+
+    // Connect to WebSocket when session is set (if feature enabled)
+    if (session && this.useWebSocketInput) {
+      websocketInputClient.connect(session).catch((error) => {
+        logger.debug('WebSocket connection failed, will use HTTP fallback:', error);
+      });
+    }
   }
 
   setCallbacks(callbacks: InputManagerCallbacks): void {
@@ -122,118 +141,32 @@ export class InputManager {
     await this.sendInput(inputText);
   }
 
-  async sendInputText(text: string): Promise<void> {
+  private async sendInputInternal(
+    input: { text?: string; key?: string },
+    errorContext: string
+  ): Promise<void> {
     if (!this.session) return;
 
     try {
-      // Determine if we should send as key or text
-      const body = [
-        'enter',
-        'escape',
-        'backspace',
-        'tab',
-        'shift_tab',
-        'arrow_up',
-        'arrow_down',
-        'arrow_left',
-        'arrow_right',
-        'ctrl_enter',
-        'shift_enter',
-        'page_up',
-        'page_down',
-        'home',
-        'end',
-        'delete',
-        'f1',
-        'f2',
-        'f3',
-        'f4',
-        'f5',
-        'f6',
-        'f7',
-        'f8',
-        'f9',
-        'f10',
-        'f11',
-        'f12',
-      ].includes(text)
-        ? { key: text }
-        : { text };
+      // Try WebSocket first if feature enabled - non-blocking (connection should already be established)
+      if (this.useWebSocketInput) {
+        const sentViaWebSocket = websocketInputClient.sendInput(input);
 
-      const response = await fetch(`/api/sessions/${this.session.id}/input`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authClient.getAuthHeader(),
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        logger.error('failed to send input to session', { status: response.status });
-
-        // Check if session has exited (400 response)
-        if (response.status === 400) {
-          // Update session status to exited
-          if (this.session) {
-            this.session.status = 'exited';
-            // Trigger UI update through callbacks
-            if (this.callbacks) {
-              this.callbacks.requestUpdate();
-            }
-          }
+        if (sentViaWebSocket) {
+          // Successfully sent via WebSocket, no need for HTTP fallback
+          return;
         }
       }
-    } catch (error) {
-      logger.error('error sending input', error);
-    }
-  }
 
-  private async sendInput(inputText: string): Promise<void> {
-    try {
-      // Determine if we should send as key or text
-      const body = [
-        'enter',
-        'escape',
-        'backspace',
-        'tab',
-        'shift_tab',
-        'arrow_up',
-        'arrow_down',
-        'arrow_left',
-        'arrow_right',
-        'ctrl_enter',
-        'shift_enter',
-        'page_up',
-        'page_down',
-        'home',
-        'end',
-        'delete',
-        'f1',
-        'f2',
-        'f3',
-        'f4',
-        'f5',
-        'f6',
-        'f7',
-        'f8',
-        'f9',
-        'f10',
-        'f11',
-        'f12',
-      ].includes(inputText)
-        ? { key: inputText }
-        : { text: inputText };
-
-      if (!this.session) return;
-
+      // Fallback to HTTP if WebSocket failed
+      logger.debug('WebSocket unavailable, falling back to HTTP');
       const response = await fetch(`/api/sessions/${this.session.id}/input`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...authClient.getAuthHeader(),
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(input),
       });
 
       if (!response.ok) {
@@ -248,12 +181,61 @@ export class InputManager {
             }
           }
         } else {
-          logger.error('failed to send input to session', { status: response.status });
+          logger.error(`failed to ${errorContext}`, { status: response.status });
         }
       }
     } catch (error) {
-      logger.error('error sending input', error);
+      logger.error(`error ${errorContext}`, error);
     }
+  }
+
+  async sendInputText(text: string): Promise<void> {
+    // sendInputText is used for pasted content - always treat as literal text
+    // Never interpret pasted text as special keys to avoid ambiguity
+    await this.sendInputInternal({ text }, 'send input to session');
+  }
+
+  async sendControlSequence(controlChar: string): Promise<void> {
+    // sendControlSequence is for control characters - always send as literal text
+    // Control characters like '\x12' (Ctrl+R) should be sent directly
+    await this.sendInputInternal({ text: controlChar }, 'send control sequence to session');
+  }
+
+  async sendInput(inputText: string): Promise<void> {
+    // Determine if we should send as key or text
+    const specialKeys = [
+      'enter',
+      'escape',
+      'backspace',
+      'tab',
+      'shift_tab',
+      'arrow_up',
+      'arrow_down',
+      'arrow_left',
+      'arrow_right',
+      'ctrl_enter',
+      'shift_enter',
+      'page_up',
+      'page_down',
+      'home',
+      'end',
+      'delete',
+      'f1',
+      'f2',
+      'f3',
+      'f4',
+      'f5',
+      'f6',
+      'f7',
+      'f8',
+      'f9',
+      'f10',
+      'f11',
+      'f12',
+    ];
+
+    const input = specialKeys.includes(inputText) ? { key: inputText } : { text: inputText };
+    await this.sendInputInternal(input, 'send input to session');
   }
 
   isKeyboardShortcut(e: KeyboardEvent): boolean {
@@ -314,6 +296,11 @@ export class InputManager {
   }
 
   cleanup(): void {
+    // Disconnect WebSocket if feature was enabled
+    if (this.useWebSocketInput) {
+      websocketInputClient.disconnect();
+    }
+
     // Clear references to prevent memory leaks
     this.session = null;
     this.callbacks = null;

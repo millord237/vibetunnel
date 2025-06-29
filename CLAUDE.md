@@ -78,7 +78,7 @@ In the `mac/` directory:
 
 ## Key Files Quick Reference
 
-- API Documentation: `docs/API.md`
 - Architecture Details: `docs/ARCHITECTURE.md`
+- API Specifications: `docs/spec.md`
 - Server Implementation Guide: `web/spec.md`
 - Build Configuration: `web/package.json`, `mac/Package.swift`

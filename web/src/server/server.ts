@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import type { Response as ExpressResponse } from 'express';
 import express from 'express';
 import * as fs from 'fs';
+import type * as http from 'http';
 import { createServer } from 'http';
 import * as os from 'os';
 import * as path from 'path';
@@ -16,6 +17,7 @@ import { createLogRoutes } from './routes/logs.js';
 import { createPushRoutes } from './routes/push.js';
 import { createRemoteRoutes } from './routes/remotes.js';
 import { createSessionRoutes } from './routes/sessions.js';
+import { WebSocketInputHandler } from './routes/websocket-input.js';
 import { ActivityMonitor } from './services/activity-monitor.js';
 import { AuthService } from './services/auth-service.js';
 import { BellEventHandler } from './services/bell-event-handler.js';
@@ -29,6 +31,14 @@ import { TerminalManager } from './services/terminal-manager.js';
 import { closeLogger, createLogger, initLogger, setDebugMode } from './utils/logger.js';
 import { VapidManager } from './utils/vapid-manager.js';
 import { getVersionInfo, printVersionBanner } from './version.js';
+
+// Extended WebSocket request with authentication and routing info
+interface WebSocketRequest extends http.IncomingMessage {
+  pathname?: string;
+  searchParams?: URLSearchParams;
+  userId?: string;
+  authMethod?: string;
+}
 
 const logger = createLogger('server');
 
@@ -443,6 +453,10 @@ export async function createApp(): Promise<AppInstance> {
     logger.debug(`Generated bearer token for remote server: ${config.remoteName}`);
   }
 
+  // Initialize authentication service
+  const authService = new AuthService();
+  logger.debug('Initialized authentication service');
+
   // Initialize buffer aggregator
   bufferAggregator = new BufferAggregator({
     terminalManager,
@@ -451,9 +465,16 @@ export async function createApp(): Promise<AppInstance> {
   });
   logger.debug('Initialized buffer aggregator');
 
-  // Initialize authentication service
-  const authService = new AuthService();
-  logger.debug('Initialized authentication service');
+  // Initialize WebSocket input handler
+  const websocketInputHandler = new WebSocketInputHandler({
+    ptyManager,
+    terminalManager,
+    activityMonitor,
+    remoteRegistry,
+    authService,
+    isHQMode: config.isHQMode,
+  });
+  logger.debug('Initialized WebSocket input handler');
 
   // Set up authentication
   const authMiddleware = createAuthMiddleware({
@@ -565,18 +586,26 @@ export async function createApp(): Promise<AppInstance> {
     // Parse the URL to extract path and query parameters
     const parsedUrl = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
 
-    // Only handle /buffers path
-    if (parsedUrl.pathname !== '/buffers') {
+    // Handle both /buffers and /ws/input paths
+    if (parsedUrl.pathname !== '/buffers' && parsedUrl.pathname !== '/ws/input') {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
       socket.destroy();
       return;
     }
 
-    // Check authentication
-    const isAuthenticated = await new Promise<boolean>((resolve) => {
+    // Check authentication and capture user info
+    const authResult = await new Promise<{
+      authenticated: boolean;
+      userId?: string;
+      authMethod?: string;
+    }>((resolve) => {
       // Track if promise has been resolved to prevent multiple resolutions
       let resolved = false;
-      const safeResolve = (value: boolean) => {
+      const safeResolve = (value: {
+        authenticated: boolean;
+        userId?: string;
+        authMethod?: string;
+      }) => {
         if (!resolved) {
           resolved = true;
           resolve(value);
@@ -616,7 +645,7 @@ export async function createApp(): Promise<AppInstance> {
           // Only consider it a failure if it's an error status code
           if (code >= 400) {
             authFailed = true;
-            safeResolve(false);
+            safeResolve({ authenticated: false });
           }
           return {
             json: () => {},
@@ -632,13 +661,18 @@ export async function createApp(): Promise<AppInstance> {
 
       const next = (error?: unknown) => {
         // Authentication succeeds if next() is called without error and no auth failure was recorded
-        safeResolve(!error && !authFailed);
+        const authenticated = !error && !authFailed;
+        safeResolve({
+          authenticated,
+          userId: req.userId,
+          authMethod: req.authMethod,
+        });
       };
 
       // Add a timeout to prevent indefinite hanging
       const timeoutId = setTimeout(() => {
         logger.error('WebSocket auth timeout - auth middleware did not complete in time');
-        safeResolve(false);
+        safeResolve({ authenticated: false });
       }, 5000); // 5 second timeout
 
       // Call authMiddleware and handle potential async errors
@@ -649,11 +683,11 @@ export async function createApp(): Promise<AppInstance> {
         .catch((error) => {
           clearTimeout(timeoutId);
           logger.error('Auth middleware error:', error);
-          safeResolve(false);
+          safeResolve({ authenticated: false });
         });
     });
 
-    if (!isAuthenticated) {
+    if (!authResult.authenticated) {
       logger.debug('WebSocket connection rejected: unauthorized');
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
@@ -662,16 +696,46 @@ export async function createApp(): Promise<AppInstance> {
 
     // Handle the upgrade
     wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
+      // Add path and auth information to the request for routing
+      const wsRequest = request as WebSocketRequest;
+      wsRequest.pathname = parsedUrl.pathname;
+      wsRequest.searchParams = parsedUrl.searchParams;
+      wsRequest.userId = authResult.userId;
+      wsRequest.authMethod = authResult.authMethod;
+      wss.emit('connection', ws, wsRequest);
     });
   });
 
-  // WebSocket endpoint for buffer updates
-  wss.on('connection', (ws, _req) => {
-    if (bufferAggregator) {
-      bufferAggregator.handleClientConnection(ws);
+  // WebSocket connection router
+  wss.on('connection', (ws, req) => {
+    const wsReq = req as WebSocketRequest;
+    const pathname = wsReq.pathname;
+    const searchParams = wsReq.searchParams;
+
+    if (pathname === '/buffers') {
+      // Handle buffer updates WebSocket
+      if (bufferAggregator) {
+        bufferAggregator.handleClientConnection(ws);
+      } else {
+        logger.error('BufferAggregator not initialized for WebSocket connection');
+        ws.close();
+      }
+    } else if (pathname === '/ws/input') {
+      // Handle input WebSocket
+      const sessionId = searchParams?.get('sessionId');
+
+      if (!sessionId) {
+        logger.error('WebSocket input connection missing sessionId parameter');
+        ws.close();
+        return;
+      }
+
+      // Extract user ID from the authenticated request
+      const userId = wsReq.userId || 'unknown';
+
+      websocketInputHandler.handleConnection(ws, sessionId, userId);
     } else {
-      logger.error('BufferAggregator not initialized for WebSocket connection');
+      logger.error(`Unknown WebSocket path: ${pathname}`);
       ws.close();
     }
   });
@@ -852,8 +916,8 @@ export async function startVibeTunnelServer() {
     config,
   } = appInstance;
 
-  // Update debug mode based on config
-  if (config.debug) {
+  // Update debug mode based on config or environment variable
+  if (config.debug || process.env.DEBUG === 'true') {
     setDebugMode(true);
     logger.log(chalk.gray('Debug logging enabled'));
   }
