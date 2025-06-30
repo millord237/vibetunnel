@@ -14,6 +14,7 @@
 import { html, LitElement, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import './file-browser.js';
+import { TitleMode } from '../../shared/types.js';
 import type { AuthClient } from '../services/auth-client.js';
 import { createLogger } from '../utils/logger.js';
 import type { Session } from './session-list.js';
@@ -27,6 +28,7 @@ export interface SessionCreateData {
   spawn_terminal?: boolean;
   cols?: number;
   rows?: number;
+  titleMode?: TitleMode;
 }
 
 @customElement('session-create-form')
@@ -43,16 +45,16 @@ export class SessionCreateForm extends LitElement {
   @property({ type: Boolean }) visible = false;
   @property({ type: Object }) authClient!: AuthClient;
   @property({ type: Boolean }) spawnWindow = false;
+  @property({ type: String }) titleMode = TitleMode.DYNAMIC;
 
   @state() private isCreating = false;
   @state() private showFileBrowser = false;
   @state() private selectedQuickStart = 'zsh';
 
-  private quickStartCommands = [
+  quickStartCommands = [
     { label: 'claude', command: 'claude' },
     { label: 'gemini', command: 'gemini' },
     { label: 'zsh', command: 'zsh' },
-    { label: 'bash', command: 'bash' },
     { label: 'python3', command: 'python3' },
     { label: 'node', command: 'node' },
     { label: 'pnpm run dev', command: 'pnpm run dev' },
@@ -61,6 +63,7 @@ export class SessionCreateForm extends LitElement {
   private readonly STORAGE_KEY_WORKING_DIR = 'vibetunnel_last_working_dir';
   private readonly STORAGE_KEY_COMMAND = 'vibetunnel_last_command';
   private readonly STORAGE_KEY_SPAWN_WINDOW = 'vibetunnel_spawn_window';
+  private readonly STORAGE_KEY_TITLE_MODE = 'vibetunnel_title_mode';
 
   connectedCallback() {
     super.connectedCallback();
@@ -90,7 +93,7 @@ export class SessionCreateForm extends LitElement {
 
       // Check if form is valid (same conditions as Create button)
       const canCreate =
-        !this.disabled && !this.isCreating && this.workingDir.trim() && this.command.trim();
+        !this.disabled && !this.isCreating && this.workingDir?.trim() && this.command?.trim();
 
       if (canCreate) {
         e.preventDefault();
@@ -105,9 +108,10 @@ export class SessionCreateForm extends LitElement {
       const savedWorkingDir = localStorage.getItem(this.STORAGE_KEY_WORKING_DIR);
       const savedCommand = localStorage.getItem(this.STORAGE_KEY_COMMAND);
       const savedSpawnWindow = localStorage.getItem(this.STORAGE_KEY_SPAWN_WINDOW);
+      const savedTitleMode = localStorage.getItem(this.STORAGE_KEY_TITLE_MODE);
 
       logger.debug(
-        `loading from localStorage: workingDir=${savedWorkingDir}, command=${savedCommand}, spawnWindow=${savedSpawnWindow}`
+        `loading from localStorage: workingDir=${savedWorkingDir}, command=${savedCommand}, spawnWindow=${savedSpawnWindow}, titleMode=${savedTitleMode}`
       );
 
       if (savedWorkingDir) {
@@ -119,6 +123,18 @@ export class SessionCreateForm extends LitElement {
       if (savedSpawnWindow !== null) {
         this.spawnWindow = savedSpawnWindow === 'true';
       }
+      if (savedTitleMode !== null) {
+        // Validate the saved mode is a valid enum value
+        if (Object.values(TitleMode).includes(savedTitleMode as TitleMode)) {
+          this.titleMode = savedTitleMode as TitleMode;
+        } else {
+          // If invalid value in localStorage, default to DYNAMIC
+          this.titleMode = TitleMode.DYNAMIC;
+        }
+      } else {
+        // If no value in localStorage, ensure DYNAMIC is set
+        this.titleMode = TitleMode.DYNAMIC;
+      }
 
       // Force re-render to update the input values
       this.requestUpdate();
@@ -129,11 +145,11 @@ export class SessionCreateForm extends LitElement {
 
   private saveToLocalStorage() {
     try {
-      const workingDir = this.workingDir.trim();
-      const command = this.command.trim();
+      const workingDir = this.workingDir?.trim() || '';
+      const command = this.command?.trim() || '';
 
       logger.debug(
-        `saving to localStorage: workingDir=${workingDir}, command=${command}, spawnWindow=${this.spawnWindow}`
+        `saving to localStorage: workingDir=${workingDir}, command=${command}, spawnWindow=${this.spawnWindow}, titleMode=${this.titleMode}`
       );
 
       // Only save non-empty values
@@ -144,6 +160,7 @@ export class SessionCreateForm extends LitElement {
         localStorage.setItem(this.STORAGE_KEY_COMMAND, command);
       }
       localStorage.setItem(this.STORAGE_KEY_SPAWN_WINDOW, String(this.spawnWindow));
+      localStorage.setItem(this.STORAGE_KEY_TITLE_MODE, this.titleMode);
     } catch (_error) {
       logger.warn('failed to save to localStorage');
     }
@@ -179,6 +196,11 @@ export class SessionCreateForm extends LitElement {
   private handleCommandChange(e: Event) {
     const input = e.target as HTMLInputElement;
     this.command = input.value;
+
+    // Auto-select dynamic mode for Claude
+    if (this.command.toLowerCase().includes('claude')) {
+      this.titleMode = TitleMode.DYNAMIC;
+    }
   }
 
   private handleSessionNameChange(e: Event) {
@@ -188,6 +210,26 @@ export class SessionCreateForm extends LitElement {
 
   private handleSpawnWindowChange() {
     this.spawnWindow = !this.spawnWindow;
+  }
+
+  private handleTitleModeChange(e: Event) {
+    const select = e.target as HTMLSelectElement;
+    this.titleMode = select.value as TitleMode;
+  }
+
+  private getTitleModeDescription(): string {
+    switch (this.titleMode) {
+      case TitleMode.NONE:
+        return 'Apps control their own titles';
+      case TitleMode.FILTER:
+        return 'Blocks all title changes';
+      case TitleMode.STATIC:
+        return 'Shows path and command';
+      case TitleMode.DYNAMIC:
+        return '○ idle ● active ▶ running';
+      default:
+        return '';
+    }
   }
 
   private handleBrowse() {
@@ -204,7 +246,7 @@ export class SessionCreateForm extends LitElement {
   }
 
   private async handleCreate() {
-    if (!this.workingDir.trim() || !this.command.trim()) {
+    if (!this.workingDir?.trim() || !this.command?.trim()) {
       this.dispatchEvent(
         new CustomEvent('error', {
           detail: 'Please fill in both working directory and command',
@@ -215,21 +257,23 @@ export class SessionCreateForm extends LitElement {
 
     this.isCreating = true;
 
-    // Use conservative defaults that work well across devices
-    // The terminal will auto-resize to fit the actual container after creation
-    const terminalCols = 120;
-    const terminalRows = 30;
-
     const sessionData: SessionCreateData = {
-      command: this.parseCommand(this.command.trim()),
-      workingDir: this.workingDir.trim(),
+      command: this.parseCommand(this.command?.trim() || ''),
+      workingDir: this.workingDir?.trim() || '',
       spawn_terminal: this.spawnWindow,
-      cols: terminalCols,
-      rows: terminalRows,
+      titleMode: this.titleMode,
     };
 
+    // Only add dimensions for web sessions (not external terminal spawns)
+    if (!this.spawnWindow) {
+      // Use conservative defaults that work well across devices
+      // The terminal will auto-resize to fit the actual container after creation
+      sessionData.cols = 120;
+      sessionData.rows = 30;
+    }
+
     // Add session name if provided
-    if (this.sessionName.trim()) {
+    if (this.sessionName?.trim()) {
       sessionData.name = this.sessionName.trim();
     }
 
@@ -318,6 +362,11 @@ export class SessionCreateForm extends LitElement {
   private handleQuickStart(command: string) {
     this.command = command;
     this.selectedQuickStart = command;
+
+    // Auto-select dynamic mode for Claude
+    if (command.toLowerCase().includes('claude')) {
+      this.titleMode = TitleMode.DYNAMIC;
+    }
   }
 
   render() {
@@ -367,7 +416,6 @@ export class SessionCreateForm extends LitElement {
                 @input=${this.handleSessionNameChange}
                 placeholder="My Session"
                 ?disabled=${this.disabled || this.isCreating}
-                data-testid="session-name-input"
               />
             </div>
 
@@ -381,7 +429,6 @@ export class SessionCreateForm extends LitElement {
                 @input=${this.handleCommandChange}
                 placeholder="zsh"
                 ?disabled=${this.disabled || this.isCreating}
-                data-testid="command-input"
               />
             </div>
 
@@ -396,7 +443,6 @@ export class SessionCreateForm extends LitElement {
                   @input=${this.handleWorkingDirChange}
                   placeholder="~/"
                   ?disabled=${this.disabled || this.isCreating}
-                  data-testid="working-dir-input"
                 />
                 <button
                   class="btn-secondary font-mono px-4"
@@ -421,7 +467,6 @@ export class SessionCreateForm extends LitElement {
                 class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
                   this.spawnWindow ? 'bg-accent-green' : 'bg-dark-border'
                 }"
-                data-testid="spawn-window-toggle"
                 ?disabled=${this.disabled || this.isCreating}
               >
                 <span
@@ -430,6 +475,35 @@ export class SessionCreateForm extends LitElement {
                   }"
                 ></span>
               </button>
+            </div>
+
+            <!-- Terminal Title Mode -->
+            <div class="mb-4 flex items-center justify-between">
+              <div class="flex-1 pr-4">
+                <span class="text-dark-text text-sm">Terminal Title Mode</span>
+                <p class="text-xs text-dark-text-muted mt-1 opacity-50">
+                  ${this.getTitleModeDescription()}
+                </p>
+              </div>
+              <div class="relative">
+                <select
+                  .value=${this.titleMode}
+                  @change=${this.handleTitleModeChange}
+                  class="bg-[#1a1a1a] border border-dark-border rounded-lg px-3 py-2 pr-8 text-dark-text text-sm transition-all duration-200 hover:border-accent-green-darker focus:border-accent-green focus:outline-none appearance-none cursor-pointer"
+                  style="min-width: 140px"
+                  ?disabled=${this.disabled || this.isCreating}
+                >
+                  <option value="${TitleMode.NONE}" class="bg-[#1a1a1a] text-dark-text" ?selected=${this.titleMode === TitleMode.NONE}>None</option>
+                  <option value="${TitleMode.FILTER}" class="bg-[#1a1a1a] text-dark-text" ?selected=${this.titleMode === TitleMode.FILTER}>Filter</option>
+                  <option value="${TitleMode.STATIC}" class="bg-[#1a1a1a] text-dark-text" ?selected=${this.titleMode === TitleMode.STATIC}>Static</option>
+                  <option value="${TitleMode.DYNAMIC}" class="bg-[#1a1a1a] text-dark-text" ?selected=${this.titleMode === TitleMode.DYNAMIC}>Dynamic</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-dark-text-muted">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
             </div>
 
             <!-- Quick Start Section -->
@@ -442,12 +516,11 @@ export class SessionCreateForm extends LitElement {
                   ({ label, command }) => html`
                     <button
                       @click=${() => this.handleQuickStart(command)}
-                      class="px-4 py-3 rounded border text-left transition-all
-                        ${
-                          this.command === command
-                            ? 'bg-accent-green bg-opacity-20 border-accent-green text-accent-green'
-                            : 'bg-dark-border bg-opacity-10 border-dark-border text-dark-text hover:bg-opacity-20 hover:border-dark-text-secondary'
-                        }"
+                      class="${
+                        this.command === command
+                          ? 'px-4 py-3 rounded border text-left transition-all bg-accent-green bg-opacity-20 border-accent-green text-accent-green'
+                          : 'px-4 py-3 rounded border text-left transition-all bg-dark-border bg-opacity-10 border-dark-border text-dark-text hover:bg-opacity-20 hover:border-dark-text-secondary'
+                      }"
                       ?disabled=${this.disabled || this.isCreating}
                     >
                       ${label === 'gemini' ? '✨ ' : ''}${label === 'claude' ? '✨ ' : ''}${
@@ -473,10 +546,9 @@ export class SessionCreateForm extends LitElement {
                 ?disabled=${
                   this.disabled ||
                   this.isCreating ||
-                  !this.workingDir.trim() ||
-                  !this.command.trim()
+                  !this.workingDir?.trim() ||
+                  !this.command?.trim()
                 }
-                data-testid="create-session-submit"
               >
                 ${this.isCreating ? 'Creating...' : 'Create'}
               </button>

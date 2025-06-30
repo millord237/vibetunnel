@@ -20,8 +20,17 @@ import type {
   SessionInput,
   SpecialKey,
 } from '../../shared/types.js';
+import { TitleMode } from '../../shared/types.js';
 import { ProcessTreeAnalyzer } from '../services/process-tree-analyzer.js';
+import { ActivityDetector } from '../utils/activity-detector.js';
+import { filterTerminalTitleSequences } from '../utils/ansi-filter.js';
 import { createLogger } from '../utils/logger.js';
+import {
+  extractCdDirectory,
+  generateDynamicTitle,
+  generateTitleSequence,
+  injectTitleIfNeeded,
+} from '../utils/terminal-title.js';
 import { WriteQueue } from '../utils/write-queue.js';
 import { AsciinemaWriter } from './asciinema-writer.js';
 import { ProcessUtils } from './process-utils.js';
@@ -51,6 +60,7 @@ export class PtyManager extends EventEmitter {
   private lastBellTime = new Map<string, number>(); // Track last bell time per session
   private sessionExitTimes = new Map<string, number>(); // Track session exit times to avoid false bells
   private processTreeAnalyzer = new ProcessTreeAnalyzer(); // Process tree analysis for bell source identification
+  private activityFileWarningsLogged = new Set<string>(); // Track which sessions we've logged warnings for
 
   constructor(controlPath?: string) {
     super();
@@ -171,8 +181,10 @@ export class PtyManager extends EventEmitter {
     const sessionName = options.name || path.basename(command[0]);
     const workingDir = options.workingDir || process.cwd();
     const term = this.defaultTerm;
-    const cols = options.cols || 80;
-    const rows = options.rows || 24;
+    // For external spawns without dimensions, let node-pty use the terminal's natural size
+    // For other cases, use reasonable defaults
+    const cols = options.cols;
+    const rows = options.rows;
 
     // Verify working directory exists
     logger.debug('Session creation parameters:', {
@@ -180,8 +192,8 @@ export class PtyManager extends EventEmitter {
       sessionName,
       workingDir,
       term,
-      cols,
-      rows,
+      cols: cols !== undefined ? cols : 'terminal default',
+      rows: rows !== undefined ? rows : 'terminal default',
     });
 
     try {
@@ -224,10 +236,11 @@ export class PtyManager extends EventEmitter {
       this.sessionManager.saveSessionInfo(sessionId, sessionInfo);
 
       // Create asciinema writer
+      // Use actual dimensions if provided, otherwise AsciinemaWriter will use defaults (80x24)
       const asciinemaWriter = AsciinemaWriter.create(
         paths.stdoutPath,
-        cols,
-        rows,
+        cols || undefined,
+        rows || undefined,
         command.join(' '),
         sessionName,
         this.createEnvVars(term)
@@ -250,21 +263,31 @@ export class PtyManager extends EventEmitter {
           args: finalArgs,
           options: {
             name: term,
-            cols,
-            rows,
+            cols: cols !== undefined ? cols : 'terminal default',
+            rows: rows !== undefined ? rows : 'terminal default',
             cwd: workingDir,
             hasEnv: !!ptyEnv,
             envKeys: Object.keys(ptyEnv).length,
           },
         });
 
-        ptyProcess = pty.spawn(finalCommand, finalArgs, {
+        // Build spawn options - only include dimensions if provided
+        const spawnOptions: pty.IPtyForkOptions = {
           name: term,
-          cols,
-          rows,
           cwd: workingDir,
           env: ptyEnv,
-        });
+        };
+
+        // Only add dimensions if they're explicitly provided
+        // This allows node-pty to use the terminal's natural size for external spawns
+        if (cols !== undefined) {
+          spawnOptions.cols = cols;
+        }
+        if (rows !== undefined) {
+          spawnOptions.rows = rows;
+        }
+
+        ptyProcess = pty.spawn(finalCommand, finalArgs, spawnOptions);
       } catch (spawnError) {
         // Debug log the raw error first
         logger.debug('Raw spawn error:', {
@@ -306,6 +329,18 @@ export class PtyManager extends EventEmitter {
       }
 
       // Create session object
+      // Auto-detect Claude commands and set dynamic mode if no title mode specified
+      let titleMode = options.titleMode;
+      if (!titleMode) {
+        // Check all command arguments for Claude
+        const isClaudeCommand = command.some((arg) => arg.toLowerCase().includes('claude'));
+        if (isClaudeCommand) {
+          titleMode = TitleMode.DYNAMIC;
+          logger.log(chalk.cyan('✓ Auto-selected dynamic title mode for Claude'));
+          logger.debug(`Detected Claude in command: ${command.join(' ')}`);
+        }
+      }
+
       const session: PtySession = {
         id: sessionId,
         sessionInfo,
@@ -317,6 +352,8 @@ export class PtyManager extends EventEmitter {
         controlPipePath: paths.controlPipePath,
         sessionJsonPath: paths.sessionJsonPath,
         startTime: new Date(),
+        titleMode: titleMode || TitleMode.NONE,
+        currentWorkingDir: workingDir,
       };
 
       this.sessions.set(sessionId, session);
@@ -340,6 +377,9 @@ export class PtyManager extends EventEmitter {
         this.setupStdinForwarding(session);
         logger.log(chalk.gray('Stdin forwarding enabled'));
       }
+
+      // Initial title will be set when the first output is received
+      // Do not write title sequence to PTY input as it would be sent to the shell
 
       return {
         sessionId,
@@ -390,15 +430,157 @@ export class PtyManager extends EventEmitter {
       session.stdoutQueue = stdoutQueue;
     }
 
+    // Setup activity detector for dynamic mode
+    if (session.titleMode === TitleMode.DYNAMIC) {
+      session.activityDetector = new ActivityDetector(session.sessionInfo.command);
+
+      // Periodic activity state updates
+      // This ensures the title shows idle state when there's no output
+      session.titleUpdateInterval = setInterval(() => {
+        if (session.activityDetector) {
+          const activityState = session.activityDetector.getActivityState();
+
+          // Write activity state to file for persistence
+          // Use a different filename to avoid conflicts with ActivityMonitor service
+          const activityPath = path.join(session.controlDir, 'claude-activity.json');
+          const activityData = {
+            isActive: activityState.isActive,
+            specificStatus: activityState.specificStatus,
+            timestamp: new Date().toISOString(),
+          };
+          try {
+            fs.writeFileSync(activityPath, JSON.stringify(activityData, null, 2));
+            // Debug log first write
+            if (!session.activityFileWritten) {
+              session.activityFileWritten = true;
+              logger.debug(`Writing activity state to ${activityPath} for session ${session.id}`, {
+                activityState,
+                timestamp: activityData.timestamp,
+              });
+            }
+          } catch (error) {
+            logger.error(`Failed to write activity state for session ${session.id}:`, error);
+          }
+
+          if (forwardToStdout) {
+            const dynamicDir = session.currentWorkingDir || session.sessionInfo.workingDir;
+            const titleSequence = generateDynamicTitle(
+              dynamicDir,
+              session.sessionInfo.command,
+              activityState,
+              session.sessionInfo.name
+            );
+
+            // Write title update directly to stdout
+            process.stdout.write(titleSequence);
+          }
+        }
+      }, 500);
+    }
+
     // Handle PTY data output
     ptyProcess.onData((data: string) => {
+      let processedData = data;
+
+      // Handle title modes
+      switch (session.titleMode) {
+        case TitleMode.FILTER:
+          // Filter out all title sequences
+          processedData = filterTerminalTitleSequences(data, true);
+          break;
+
+        case TitleMode.STATIC: {
+          // Filter out app titles and inject static title
+          processedData = filterTerminalTitleSequences(data, true);
+          const currentDir = session.currentWorkingDir || session.sessionInfo.workingDir;
+          const titleSequence = generateTitleSequence(
+            currentDir,
+            session.sessionInfo.command,
+            session.sessionInfo.name
+          );
+
+          // Only inject title sequences for external terminals (not web sessions)
+          // Web sessions should never have title sequences in their data stream
+          if (forwardToStdout) {
+            if (!session.initialTitleSent) {
+              processedData = titleSequence + processedData;
+              session.initialTitleSent = true;
+            } else {
+              processedData = injectTitleIfNeeded(processedData, titleSequence);
+            }
+          }
+          break;
+        }
+
+        case TitleMode.DYNAMIC:
+          // Filter out app titles and process through activity detector
+          processedData = filterTerminalTitleSequences(data, true);
+
+          if (session.activityDetector) {
+            // Debug: Log raw data when it contains Claude status indicators
+            if (process.env.VIBETUNNEL_CLAUDE_DEBUG === 'true') {
+              if (data.includes('interrupt') || data.includes('tokens') || data.includes('…')) {
+                console.log('[PtyManager] Detected potential Claude output');
+                console.log(
+                  '[PtyManager] Raw data sample:',
+                  data
+                    .substring(0, 200)
+                    .replace(/\n/g, '\\n')
+                    // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape codes need control characters
+                    .replace(/\x1b/g, '\\x1b')
+                );
+
+                // Also log to file for analysis
+                const debugPath = '/tmp/claude-output-debug.txt';
+                require('fs').appendFileSync(
+                  debugPath,
+                  `\n\n=== ${new Date().toISOString()} ===\n`
+                );
+                require('fs').appendFileSync(debugPath, `Raw: ${data}\n`);
+                require('fs').appendFileSync(
+                  debugPath,
+                  `Hex: ${Buffer.from(data).toString('hex')}\n`
+                );
+              }
+            }
+
+            const { filteredData, activity } =
+              session.activityDetector.processOutput(processedData);
+            processedData = filteredData;
+
+            // Generate dynamic title with activity
+            const dynamicDir = session.currentWorkingDir || session.sessionInfo.workingDir;
+            const dynamicTitleSequence = generateDynamicTitle(
+              dynamicDir,
+              session.sessionInfo.command,
+              activity,
+              session.sessionInfo.name
+            );
+
+            // Only inject title sequences for external terminals (not web sessions)
+            // Web sessions should never have title sequences in their data stream
+            if (forwardToStdout) {
+              if (!session.initialTitleSent) {
+                processedData = dynamicTitleSequence + processedData;
+                session.initialTitleSent = true;
+              } else {
+                processedData = injectTitleIfNeeded(processedData, dynamicTitleSequence);
+              }
+            }
+          }
+          break;
+        default:
+          // No title management
+          break;
+      }
+
       // Write to asciinema file (it has its own internal queue)
-      asciinemaWriter?.writeOutput(Buffer.from(data, 'utf8'));
+      asciinemaWriter?.writeOutput(Buffer.from(processedData, 'utf8'));
 
       // Forward to stdout if requested (using queue for ordering)
       if (forwardToStdout && stdoutQueue) {
         stdoutQueue.enqueue(async () => {
-          const canWrite = process.stdout.write(data);
+          const canWrite = process.stdout.write(processedData);
           if (!canWrite) {
             await once(process.stdout, 'drain');
           }
@@ -456,6 +638,36 @@ export class PtyManager extends EventEmitter {
         logger.error(`Failed to handle exit for session ${session.id}:`, error);
       }
     });
+
+    // Send initial title for static and dynamic modes
+    if (
+      forwardToStdout &&
+      (session.titleMode === TitleMode.STATIC || session.titleMode === TitleMode.DYNAMIC)
+    ) {
+      const currentDir = session.currentWorkingDir || session.sessionInfo.workingDir;
+      let initialTitle: string;
+
+      if (session.titleMode === TitleMode.STATIC) {
+        initialTitle = generateTitleSequence(
+          currentDir,
+          session.sessionInfo.command,
+          session.sessionInfo.name
+        );
+      } else {
+        // For dynamic mode, start with idle state
+        initialTitle = generateDynamicTitle(
+          currentDir,
+          session.sessionInfo.command,
+          { isActive: false, lastActivityTime: Date.now() },
+          session.sessionInfo.name
+        );
+      }
+
+      // Write initial title directly to stdout
+      process.stdout.write(initialTitle);
+      session.initialTitleSent = true;
+      logger.debug(`Sent initial ${session.titleMode} title for session ${session.id}`);
+    }
 
     // Monitor stdin file for input
     this.monitorStdinFile(session);
@@ -655,6 +867,23 @@ export class PtyManager extends EventEmitter {
       if (memorySession?.ptyProcess) {
         memorySession.ptyProcess.write(dataToSend);
         memorySession.asciinemaWriter?.writeInput(dataToSend);
+
+        // Track directory changes for title modes that need it
+        if (
+          (memorySession.titleMode === TitleMode.STATIC ||
+            memorySession.titleMode === TitleMode.DYNAMIC) &&
+          input.text
+        ) {
+          const newDir = extractCdDirectory(
+            input.text,
+            memorySession.currentWorkingDir || memorySession.sessionInfo.workingDir
+          );
+          if (newDir) {
+            memorySession.currentWorkingDir = newDir;
+            logger.debug(`Session ${sessionId} changed directory to: ${newDir}`);
+          }
+        }
+
         return; // Important: return here to avoid socket path
       } else {
         const sessionPaths = this.sessionManager.getSessionPaths(sessionId);
@@ -1122,8 +1351,72 @@ export class PtyManager extends EventEmitter {
       }
     }
 
-    // Return all sessions from storage
-    return this.sessionManager.listSessions();
+    // Get all sessions from storage
+    const sessions = this.sessionManager.listSessions();
+
+    // Enhance with activity information
+    return sessions.map((session) => {
+      // First try to get activity from active session
+      const activeSession = this.sessions.get(session.id);
+      if (activeSession?.activityDetector) {
+        const activityState = activeSession.activityDetector.getActivityState();
+        return {
+          ...session,
+          activityStatus: {
+            isActive: activityState.isActive,
+            specificStatus: activityState.specificStatus,
+          },
+        };
+      }
+
+      // Otherwise, try to read from activity file (for external sessions)
+      try {
+        const sessionPaths = this.sessionManager.getSessionPaths(session.id);
+        if (!sessionPaths) {
+          return session;
+        }
+        const activityPath = path.join(sessionPaths.controlDir, 'claude-activity.json');
+
+        if (fs.existsSync(activityPath)) {
+          const activityData = JSON.parse(fs.readFileSync(activityPath, 'utf-8'));
+          // Check if activity is recent (within last 60 seconds)
+          // Use Math.abs to handle future timestamps from system clock issues
+          const timeDiff = Math.abs(Date.now() - new Date(activityData.timestamp).getTime());
+          const isRecent = timeDiff < 60000;
+
+          if (isRecent) {
+            logger.debug(`Found recent activity for external session ${session.id}:`, {
+              isActive: activityData.isActive,
+              specificStatus: activityData.specificStatus,
+            });
+            return {
+              ...session,
+              activityStatus: {
+                isActive: activityData.isActive,
+                specificStatus: activityData.specificStatus,
+              },
+            };
+          } else {
+            logger.debug(
+              `Activity file for session ${session.id} is stale (time diff: ${timeDiff}ms)`
+            );
+          }
+        } else {
+          // Only log once per session to avoid spam
+          if (!this.activityFileWarningsLogged.has(session.id)) {
+            this.activityFileWarningsLogged.add(session.id);
+            logger.debug(
+              `No claude-activity.json found for session ${session.id} at ${activityPath}`
+            );
+          }
+        }
+      } catch (error) {
+        // Ignore errors reading activity file
+        logger.debug(`Failed to read activity file for session ${session.id}:`, error);
+      }
+
+      return session;
+    });
   }
 
   /**
@@ -1347,6 +1640,18 @@ export class PtyManager extends EventEmitter {
   private cleanupSessionResources(session: PtySession): void {
     // Clean up resize tracking
     this.sessionResizeSources.delete(session.id);
+
+    // Clean up title update interval for dynamic mode
+    if (session.titleUpdateInterval) {
+      clearInterval(session.titleUpdateInterval);
+      session.titleUpdateInterval = undefined;
+    }
+
+    // Clean up activity detector
+    if (session.activityDetector) {
+      session.activityDetector.clearStatus();
+      session.activityDetector = undefined;
+    }
 
     // Clean up input socket server
     if (session.inputSocketServer) {

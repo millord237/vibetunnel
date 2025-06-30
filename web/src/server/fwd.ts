@@ -14,6 +14,7 @@
 import chalk from 'chalk';
 import * as os from 'os';
 import * as path from 'path';
+import { TitleMode } from '../shared/types.js';
 import { PtyManager } from './pty/index.js';
 import { closeLogger, createLogger } from './utils/logger.js';
 import { generateSessionName } from './utils/session-naming.js';
@@ -25,15 +26,29 @@ function showUsage() {
   console.log(chalk.blue(`VibeTunnel Forward v${VERSION}`) + chalk.gray(` (${BUILD_DATE})`));
   console.log('');
   console.log('Usage:');
-  console.log('  pnpm exec tsx src/fwd.ts [--session-id <id>] <command> [args...]');
+  console.log(
+    '  pnpm exec tsx src/fwd.ts [--session-id <id>] [--title-mode <mode>] <command> [args...]'
+  );
   console.log('');
   console.log('Options:');
-  console.log('  --session-id <id>   Use a pre-generated session ID');
+  console.log('  --session-id <id>     Use a pre-generated session ID');
+  console.log('  --title-mode <mode>   Terminal title mode: none, filter, static, dynamic');
+  console.log('                        (defaults to none for most commands, dynamic for claude)');
+  console.log('');
+  console.log('Title Modes:');
+  console.log('  none     - No title management (default)');
+  console.log('  filter   - Block all title changes from applications');
+  console.log('  static   - Show working directory and command');
+  console.log('  dynamic  - Show directory, command, and activity (auto-selected for claude)');
+  console.log('');
+  console.log('Environment Variables:');
+  console.log('  VIBETUNNEL_TITLE_MODE=<mode>         Set default title mode');
+  console.log('  VIBETUNNEL_CLAUDE_DYNAMIC_TITLE=1    Force dynamic title for Claude');
   console.log('');
   console.log('Examples:');
   console.log('  pnpm exec tsx src/fwd.ts claude --resume');
-  console.log('  pnpm exec tsx src/fwd.ts bash -l');
-  console.log('  pnpm exec tsx src/fwd.ts python3 -i');
+  console.log('  pnpm exec tsx src/fwd.ts --title-mode static bash -l');
+  console.log('  pnpm exec tsx src/fwd.ts --title-mode filter vim');
   console.log('  pnpm exec tsx src/fwd.ts --session-id abc123 claude');
   console.log('');
   console.log('The command will be spawned in the current working directory');
@@ -54,14 +69,51 @@ export async function startVibeTunnelForward(args: string[]) {
   }
 
   logger.log(chalk.blue(`VibeTunnel Forward v${VERSION}`) + chalk.gray(` (${BUILD_DATE})`));
+  logger.debug(`Full command: ${args.join(' ')}`);
 
-  // Check for --session-id parameter
+  // Parse command line arguments
   let sessionId: string | undefined;
+  let titleMode: TitleMode = TitleMode.NONE;
   let remainingArgs = args;
 
-  if (args[0] === '--session-id' && args.length > 1) {
-    sessionId = args[1];
-    remainingArgs = args.slice(2);
+  // Check environment variables for title mode
+  if (process.env.VIBETUNNEL_TITLE_MODE) {
+    const envMode = process.env.VIBETUNNEL_TITLE_MODE.toLowerCase();
+    if (Object.values(TitleMode).includes(envMode as TitleMode)) {
+      titleMode = envMode as TitleMode;
+      logger.debug(`Title mode set from environment: ${titleMode}`);
+    }
+  }
+
+  // Force dynamic mode for Claude via environment variable
+  if (
+    process.env.VIBETUNNEL_CLAUDE_DYNAMIC_TITLE === '1' ||
+    process.env.VIBETUNNEL_CLAUDE_DYNAMIC_TITLE === 'true'
+  ) {
+    titleMode = TitleMode.DYNAMIC;
+    logger.debug('Forced dynamic title mode for Claude via environment variable');
+  }
+
+  // Parse flags
+  while (remainingArgs.length > 0) {
+    if (remainingArgs[0] === '--session-id' && remainingArgs.length > 1) {
+      sessionId = remainingArgs[1];
+      remainingArgs = remainingArgs.slice(2);
+    } else if (remainingArgs[0] === '--title-mode' && remainingArgs.length > 1) {
+      const mode = remainingArgs[1].toLowerCase();
+      if (Object.values(TitleMode).includes(mode as TitleMode)) {
+        titleMode = mode as TitleMode;
+      } else {
+        logger.error(`Invalid title mode: ${remainingArgs[1]}`);
+        logger.error(`Valid modes: ${Object.values(TitleMode).join(', ')}`);
+        closeLogger();
+        process.exit(1);
+      }
+      remainingArgs = remainingArgs.slice(2);
+    } else {
+      // Not a flag, must be the start of the command
+      break;
+    }
   }
 
   // Handle -- separator (used by some shells as end-of-options marker)
@@ -79,6 +131,17 @@ export async function startVibeTunnelForward(args: string[]) {
     process.exit(1);
   }
 
+  // Auto-select dynamic mode for Claude if no mode was explicitly set
+  if (titleMode === TitleMode.NONE) {
+    // Check all command arguments for Claude
+    const isClaudeCommand = command.some((arg) => arg.toLowerCase().includes('claude'));
+    if (isClaudeCommand) {
+      titleMode = TitleMode.DYNAMIC;
+      logger.log(chalk.cyan('✓ Auto-selected dynamic title mode for Claude'));
+      logger.debug(`Detected Claude in command: ${command.join(' ')}`);
+    }
+  }
+
   const cwd = process.cwd();
 
   // Initialize PTY manager
@@ -87,9 +150,32 @@ export async function startVibeTunnelForward(args: string[]) {
   const ptyManager = new PtyManager(controlPath);
 
   // Store original terminal dimensions
-  const originalCols = process.stdout.columns || 80;
-  const originalRows = process.stdout.rows || 24;
-  logger.debug(`Original terminal size: ${originalCols}x${originalRows}`);
+  // For external spawns, wait a moment for terminal to fully initialize
+  const isExternalSpawn = process.env.VIBETUNNEL_SESSION_ID !== undefined;
+
+  let originalCols: number | undefined;
+  let originalRows: number | undefined;
+
+  if (isExternalSpawn) {
+    // Give terminal window time to fully initialize its dimensions
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // For external spawns, try to get the actual terminal size
+    // If stdout isn't properly connected, don't use fallback values
+    if (process.stdout.isTTY && process.stdout.columns && process.stdout.rows) {
+      originalCols = process.stdout.columns;
+      originalRows = process.stdout.rows;
+      logger.debug(`External spawn using actual terminal size: ${originalCols}x${originalRows}`);
+    } else {
+      // Don't pass dimensions - let PTY use terminal's natural size
+      logger.debug('External spawn: terminal dimensions not available, using terminal defaults');
+    }
+  } else {
+    // For non-external spawns, use reasonable defaults
+    originalCols = process.stdout.columns || 120;
+    originalRows = process.stdout.rows || 40;
+    logger.debug(`Regular spawn with dimensions: ${originalCols}x${originalRows}`);
+  }
 
   try {
     // Create a human-readable session name
@@ -101,12 +187,21 @@ export async function startVibeTunnelForward(args: string[]) {
     logger.log(`Creating session for command: ${command.join(' ')}`);
     logger.debug(`Session ID: ${finalSessionId}, working directory: ${cwd}`);
 
-    const result = await ptyManager.createSession(command, {
+    // Log title mode if not default
+    if (titleMode !== TitleMode.NONE) {
+      const modeDescriptions = {
+        [TitleMode.FILTER]: 'Terminal title changes will be blocked',
+        [TitleMode.STATIC]: 'Terminal title will show path and command',
+        [TitleMode.DYNAMIC]: 'Terminal title will show path, command, and activity',
+      };
+      logger.log(chalk.cyan(`✓ ${modeDescriptions[titleMode]}`));
+    }
+
+    const sessionOptions: Parameters<typeof ptyManager.createSession>[1] = {
       sessionId: finalSessionId,
       name: sessionName,
       workingDir: cwd,
-      cols: originalCols,
-      rows: originalRows,
+      titleMode: titleMode,
       forwardToStdout: true,
       onExit: async (exitCode: number) => {
         // Show exit message
@@ -138,7 +233,15 @@ export async function startVibeTunnelForward(args: string[]) {
         closeLogger();
         process.exit(exitCode || 0);
       },
-    });
+    };
+
+    // Only add dimensions if they're available (for non-external spawns or when TTY is properly connected)
+    if (originalCols !== undefined && originalRows !== undefined) {
+      sessionOptions.cols = originalCols;
+      sessionOptions.rows = originalRows;
+    }
+
+    const result = await ptyManager.createSession(command, sessionOptions);
 
     // Get session info
     const session = ptyManager.getSession(result.sessionId);

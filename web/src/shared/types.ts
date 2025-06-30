@@ -32,6 +32,15 @@ export interface Session extends SessionInfo {
   lastModified: string;
   active?: boolean;
 
+  // Activity information (for dynamic title mode)
+  activityStatus?: {
+    isActive: boolean;
+    specificStatus?: {
+      app: string;
+      status: string;
+    };
+  };
+
   // Source information (for HQ mode)
   source?: 'local' | 'remote';
   remoteId?: string;
@@ -49,6 +58,16 @@ export interface SessionActivity {
 }
 
 /**
+ * Terminal title management modes
+ */
+export enum TitleMode {
+  NONE = 'none', // No title management
+  FILTER = 'filter', // Block all title changes from apps
+  STATIC = 'static', // Static title: path — command — session
+  DYNAMIC = 'dynamic', // Static + live activity indicators
+}
+
+/**
  * Session creation options
  */
 export interface SessionCreateOptions {
@@ -57,6 +76,7 @@ export interface SessionCreateOptions {
   workingDir?: string;
   cols?: number;
   rows?: number;
+  titleMode?: TitleMode;
 }
 
 /**

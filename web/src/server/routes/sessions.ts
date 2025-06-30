@@ -5,7 +5,7 @@ import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import { cellsToText } from '../../shared/terminal-text-formatter.js';
-import type { Session, SessionActivity } from '../../shared/types.js';
+import type { Session, SessionActivity, TitleMode } from '../../shared/types.js';
 import { PtyError, type PtyManager } from '../pty/index.js';
 import type { ActivityMonitor } from '../services/activity-monitor.js';
 import type { RemoteRegistry } from '../services/remote-registry.js';
@@ -125,9 +125,9 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
   // Create new session (local or on remote)
   router.post('/sessions', async (req, res) => {
-    const { command, workingDir, name, remoteId, spawn_terminal, cols, rows } = req.body;
+    const { command, workingDir, name, remoteId, spawn_terminal, cols, rows, titleMode } = req.body;
     logger.debug(
-      `creating new session: command=${JSON.stringify(command)}, remoteId=${remoteId || 'local'}, spawn_terminal=${spawn_terminal}, cols=${cols}, rows=${rows}`
+      `creating new session: command=${JSON.stringify(command)}, remoteId=${remoteId || 'local'}, cols=${cols}, rows=${rows}`
     );
 
     if (!command || !Array.isArray(command) || command.length === 0) {
@@ -161,6 +161,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
             spawn_terminal,
             cols,
             rows,
+            titleMode,
             // Don't forward remoteId to avoid recursion
           }),
           signal: AbortSignal.timeout(10000), // 10 second timeout
@@ -183,56 +184,47 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
         return;
       }
 
-      // Handle spawn_terminal logic
+      // If spawn_terminal is true and socket exists, use the spawn-terminal logic
       const socketPath = '/tmp/vibetunnel-terminal.sock';
+      if (spawn_terminal && fs.existsSync(socketPath)) {
+        try {
+          // Generate session ID
+          const sessionId = generateSessionId();
+          const sessionName =
+            name || generateSessionName(command, resolvePath(workingDir, process.cwd()));
 
-      if (spawn_terminal) {
-        if (fs.existsSync(socketPath)) {
-          logger.debug(
-            `spawn_terminal is true, attempting to use terminal socket at ${socketPath}`
+          // Request Mac app to spawn terminal
+          logger.log(
+            chalk.blue(`requesting terminal spawn with command: ${JSON.stringify(command)}`)
           );
-          try {
-            // Generate session ID
-            const sessionId = generateSessionId();
-            const sessionName =
-              name || generateSessionName(command, resolvePath(workingDir, process.cwd()));
+          const spawnResult = await requestTerminalSpawn({
+            sessionId,
+            sessionName,
+            command,
+            workingDir: resolvePath(workingDir, process.cwd()),
+            titleMode,
+          });
 
-            // Request Mac app to spawn terminal
-            logger.log(
-              chalk.blue(`requesting terminal spawn with command: ${JSON.stringify(command)}`)
-            );
-            const spawnResult = await requestTerminalSpawn({
-              sessionId,
-              sessionName,
-              command,
-              workingDir: resolvePath(workingDir, process.cwd()),
-            });
+          if (!spawnResult.success) {
+            // Log the error but continue with fallback
+            logger.warn('terminal spawn failed:', spawnResult.error || 'Unknown error');
+            logger.debug('falling back to normal web session');
+          } else {
+            // Wait a bit for the session to be created
+            await new Promise((resolve) => setTimeout(resolve, 500));
 
-            if (spawnResult.success) {
-              // Success - wait a bit for the session to be created
-              await new Promise((resolve) => setTimeout(resolve, 500));
-
-              // Return the session ID - client will poll for the session to appear
-              logger.log(chalk.green(`terminal spawn requested for session ${sessionId}`));
-              res.json({ sessionId, message: 'Terminal spawn requested' });
-              return;
-            } else {
-              // Log the failure but continue to create a normal web session
-              logger.debug(
-                `terminal spawn failed (${spawnResult.error}), falling back to normal spawn`
-              );
-            }
-          } catch (error) {
-            // Log the error but continue to create a normal web session
-            logger.error('error spawning terminal:', error);
+            // Return the session ID - client will poll for the session to appear
+            logger.log(chalk.green(`terminal spawn requested for session ${sessionId}`));
+            res.json({ sessionId, message: 'Terminal spawn requested' });
+            return;
           }
-        } else {
-          logger.debug(
-            `spawn_terminal is true but socket doesn't exist at ${socketPath}, falling back to normal spawn`
-          );
+        } catch (error) {
+          // Log the error but continue with fallback
+          logger.error('error spawning terminal:', error);
+          logger.debug('falling back to normal web session');
         }
-      } else {
-        logger.debug('spawn_terminal is false, creating normal web session');
+      } else if (spawn_terminal && !fs.existsSync(socketPath)) {
+        logger.debug('terminal spawn socket not available, falling back to normal spawn');
       }
 
       // Create local session
@@ -255,6 +247,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
         workingDir: cwd,
         cols,
         rows,
+        titleMode,
       });
 
       const { sessionId, sessionInfo } = result;
@@ -1123,6 +1116,7 @@ async function requestTerminalSpawn(params: {
   sessionName: string;
   command: string[];
   workingDir: string;
+  titleMode?: TitleMode;
 }): Promise<{ success: boolean; error?: string }> {
   const socketPath = '/tmp/vibetunnel-terminal.sock';
 
@@ -1139,6 +1133,7 @@ async function requestTerminalSpawn(params: {
     sessionId: params.sessionId,
     command: params.command.join(' '),
     terminal: null, // Let Mac app use default terminal
+    titleMode: params.titleMode,
   };
 
   return new Promise((resolve) => {
