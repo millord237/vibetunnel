@@ -55,7 +55,14 @@ export class SessionView extends LitElement {
     return this;
   }
 
-  @property({ type: Object }) session: Session | null = null;
+  @property({
+    type: Object,
+    hasChanged: (value: Session | null, oldValue: Session | null) => {
+      // Always return true to ensure updates are triggered
+      return value !== oldValue;
+    },
+  })
+  session: Session | null = null;
   @property({ type: Boolean }) showBackButton = true;
   @property({ type: Boolean }) showSidebarToggle = false;
   @property({ type: Boolean }) sidebarCollapsed = false;
@@ -305,6 +312,10 @@ export class SessionView extends LitElement {
     if (this.session) {
       this.inputManager.setSession(this.session);
       this.terminalLifecycleManager.setSession(this.session);
+
+      // Set initial page title
+      const sessionName = this.session.name || this.session.command.join(' ');
+      document.title = `${sessionName} - VibeTunnel`;
     }
 
     // Load terminal preferences
@@ -316,6 +327,8 @@ export class SessionView extends LitElement {
     // Initialize lifecycle event manager
     this.lifecycleEventManager = new LifecycleEventManager();
     this.lifecycleEventManager.setSessionViewElement(this);
+
+    // Set up lifecycle callbacks
     this.lifecycleEventManager.setCallbacks(this.createLifecycleEventManagerCallbacks());
     this.lifecycleEventManager.setSession(this.session);
 
@@ -356,6 +369,20 @@ export class SessionView extends LitElement {
     this.loadingAnimationManager.cleanup();
   }
 
+  willUpdate(changedProperties: PropertyValues) {
+    super.willUpdate(changedProperties);
+
+    // Update title whenever session changes
+    if (changedProperties.has('session')) {
+      if (this.session) {
+        const sessionName = this.session.name || this.session.command.join(' ');
+        document.title = `${sessionName} - VibeTunnel`;
+      } else {
+        document.title = 'VibeTunnel - Terminal Multiplexer';
+      }
+    }
+  }
+
   firstUpdated(changedProperties: PropertyValues) {
     super.firstUpdated(changedProperties);
     if (this.session) {
@@ -376,6 +403,7 @@ export class SessionView extends LitElement {
           this.connectionManager.cleanupStreamConnection();
         }
       }
+
       // Update input manager with new session
       if (this.inputManager) {
         this.inputManager.setSession(this.session);
