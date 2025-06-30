@@ -6,6 +6,58 @@
         <description>VibeTunnel pre-release and beta updates feed</description>
         <language>en</language>
         <item>
+            <title>VibeTunnel 1.0.0-beta.5</title>
+            <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.5/VibeTunnel-1.0.0-beta.5.dmg</link>
+            <sparkle:version>150</sparkle:version>
+            <sparkle:shortVersionString>1.0.0-beta.5</sparkle:shortVersionString>
+            <description><![CDATA[
+                <h2>VibeTunnel 1.0.0-beta.5</h2><p><strong>Pre-release version</strong></p><div>
+<h3>🎯 Features</h3>
+
+<p><strong>Real-time Claude Activity Monitoring</strong></p>
+<ul>
+<li><strong>See Claude's live status directly in the VibeTunnel sidebar</strong> - Know exactly what Claude is "Thinking", "Crafting", or "Searching" with real-time progress indicators showing duration and token counts.</li>
+<li><strong>Activity status persists across browser refreshes</strong> - Works seamlessly with external terminal sessions.</li>
+<li><strong>Faster sidebar updates</strong> - Sidebar now refreshes every second (previously 3 seconds) for more responsive activity tracking.</li>
+</ul>
+
+<p><strong>Comprehensive Terminal Title Management</strong></p>
+<ul>
+<li><strong>Dynamic, context-aware terminal titles</strong> - Terminal windows display your current directory, running command, and live activity status.</li>
+<li><strong>Choose your title mode</strong> - Select between static titles (path + command) or dynamic titles that include real-time activity indicators.</li>
+<li><strong>Automatic directory tracking</strong> - Terminal titles update automatically when you change directories with <code>cd</code> commands.</li>
+<li><strong>Session name integration</strong> - Custom session names are reflected in terminal titles for better organization.</li>
+</ul>
+
+<h3>🌏 International Input Support</h3>
+<ul>
+<li><strong>Fixed Japanese/CJK input duplication on iOS</strong> - Typing Japanese, Chinese, or Korean text on mobile browsers no longer produces duplicate characters. IME composition is now handled correctly.</li>
+</ul>
+
+<h3>⌨️ Enhanced Terminal Experience</h3>
+<ul>
+<li><strong>Shell aliases now work properly</strong> - Commands like <code>claude</code>, <code>ll</code>, and other custom aliases from your <code>.zshrc</code>/<code>.bashrc</code> are now recognized when launching terminals through VibeTunnel.</li>
+<li><strong>Prevented recursive VibeTunnel sessions</strong> - Running <code>vt</code> inside a VibeTunnel session now shows a helpful error instead of creating confusing nested sessions.</li>
+<li><strong>Fixed critical race condition in terminal output</strong> - Terminal sessions now handle high-volume output without corruption or out-of-order text.</li>
+</ul>
+
+<h3>🤖 Claude Code Integration</h3>
+<ul>
+<li><strong>Added Shift+Tab support</strong> - Full support for Claude Code's mode switching (regular/planning/autoaccept modes) on both desktop and mobile.</li>
+<li><strong>Mobile quick keyboard enhancement</strong> - Added dedicated Shift+Tab button (⇤) to the mobile keyboard for easy mode switching.</li>
+<li><strong>Fixed keyboard input conflicts</strong> - Typing in Monaco Editor or other code editors no longer triggers unintended shortcuts.</li>
+</ul>
+
+<h3>🚀 Quick Start Enhancements</h3>
+<ul>
+<li><strong>Added Gemini as quickstart entry</strong> - Google's Gemini AI assistant is now available as a one-click option when creating new terminal sessions, alongside Claude and other common commands.</li>
+</ul>
+</div>
+            ]]></description>
+            <pubDate>Sun, 30 Jun 2025 03:26:47 +0000</pubDate>
+            <enclosure url="https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.5/VibeTunnel-1.0.0-beta.5.dmg" sparkle:version="150" sparkle:shortVersionString="1.0.0-beta.5" length="35714742" type="application/x-apple-diskimage" sparkle:edSignature="Kn1lcwGww8okqRz83fX3RpaFKXVbk2x7fV0mnuVzHRKvqJEcQeD7vQDoI+Yd5WAWyueVK9E+LPZ3ycjr5ufICw=="/>
+        </item>
+        <item>
             <title>VibeTunnel 1.0.0-beta.4</title>
             <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.4/VibeTunnel-1.0.0-beta.4.dmg</link>
             <sparkle:version>114</sparkle:version>
