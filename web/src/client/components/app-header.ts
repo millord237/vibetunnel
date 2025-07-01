@@ -10,6 +10,7 @@
  * @fires clean-exited-sessions - When clean exited button is clicked
  * @fires open-file-browser - When browse button is clicked
  * @fires logout - When logout is clicked
+ * @fires toggle-sidebar - When sidebar toggle button is clicked
  */
 import { html, LitElement } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
@@ -60,6 +61,7 @@ export class AppHeader extends LitElement {
         @open-settings=${this.forwardEvent}
         @logout=${this.forwardEvent}
         @navigate-to-list=${this.forwardEvent}
+        @toggle-sidebar=${this.forwardEvent}
       ></sidebar-header>
     `;
   }

@@ -62,7 +62,6 @@ export class VibeTunnelApp extends LitElement {
   @state() private isAuthenticated = false;
   @state() private sidebarCollapsed = this.loadSidebarState();
   @state() private sidebarWidth = this.loadSidebarWidth();
-  @state() private userInitiatedSessionChange = false;
   @state() private isResizing = false;
   @state() private mediaState: MediaQueryState = responsiveObserver.getCurrentState();
   @state() private showLogLink = false;
@@ -70,6 +69,7 @@ export class VibeTunnelApp extends LitElement {
   private initialLoadComplete = false;
   private responsiveObserverInitialized = false;
   private initialRenderComplete = false;
+  private sidebarAnimationReady = false;
 
   private hotReloadWs: WebSocket | null = null;
   private errorTimeoutId: number | null = null;
@@ -95,6 +95,10 @@ export class VibeTunnelApp extends LitElement {
     // Mark initial render as complete after a microtask to ensure DOM is settled
     Promise.resolve().then(() => {
       this.initialRenderComplete = true;
+      // Enable sidebar animations after a short delay to prevent initial load animations
+      setTimeout(() => {
+        this.sidebarAnimationReady = true;
+      }, 100);
     });
   }
 
@@ -138,6 +142,12 @@ export class VibeTunnelApp extends LitElement {
     if ((e.metaKey || e.ctrlKey) && e.key === 'o' && this.currentView === 'list') {
       e.preventDefault();
       this.showFileBrowser = true;
+    }
+
+    // Handle Cmd+B / Ctrl+B to toggle sidebar
+    if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+      e.preventDefault();
+      this.handleToggleSidebar();
     }
 
     // Handle Escape to close the session and return to list view
@@ -213,18 +223,10 @@ export class VibeTunnelApp extends LitElement {
     const url = new URL(window.location.href);
     const sessionId = url.searchParams.get('session');
     if (sessionId) {
-      // Try to find the session and navigate to it
-      const session = this.sessions.find((s) => s.id === sessionId);
-      if (session) {
-        this.userInitiatedSessionChange = false;
-        this.selectedSessionId = sessionId;
-        this.currentView = 'session';
-
-        // Update page title with session name
-        const sessionName = session.name || session.command.join(' ');
-        console.log('[App] Setting title from checkUrlParams:', sessionName);
-        document.title = `${sessionName} - VibeTunnel`;
-      }
+      // Always navigate to the session view if a session ID is provided
+      logger.log(`Navigating to session ${sessionId} from URL after auth`);
+      this.selectedSessionId = sessionId;
+      this.currentView = 'session';
     }
   }
 
@@ -350,20 +352,14 @@ export class VibeTunnelApp extends LitElement {
             document.title = `VibeTunnel - ${sessionCount} Session${sessionCount !== 1 ? 's' : ''}`;
           }
 
-          // Check if currently selected session still exists after refresh
+          // Don't redirect away from session view during loadSessions
+          // The session-view component will handle missing sessions
           if (this.selectedSessionId && this.currentView === 'session') {
             const sessionExists = this.sessions.find((s) => s.id === this.selectedSessionId);
             if (!sessionExists) {
-              // Session no longer exists, redirect to dashboard
               logger.warn(
-                `Selected session ${this.selectedSessionId} no longer exists, redirecting to dashboard`
+                `Selected session ${this.selectedSessionId} not found in current sessions list, but keeping session view`
               );
-              this.selectedSessionId = null;
-              this.currentView = 'list';
-              // Clear the session param from URL
-              const newUrl = new URL(window.location.href);
-              newUrl.searchParams.delete('session');
-              window.history.replaceState({}, '', newUrl.toString());
             }
           }
         } else if (response.status === 401) {
@@ -637,8 +633,6 @@ export class VibeTunnelApp extends LitElement {
       mediaStateIsMobile: this.mediaState.isMobile,
     });
 
-    this.userInitiatedSessionChange = true;
-
     // Check if View Transitions API is supported
     if ('startViewTransition' in document && typeof document.startViewTransition === 'function') {
       // Debug: Check what elements have view-transition-name before transition
@@ -837,19 +831,17 @@ export class VibeTunnelApp extends LitElement {
   private loadSidebarState(): boolean {
     try {
       const saved = localStorage.getItem('sidebarCollapsed');
-      // Default to false (expanded) on desktop, true (collapsed) on mobile
-      // Use window.innerWidth for initial load since mediaState might not be initialized yet
       const isMobile = window.innerWidth < BREAKPOINTS.MOBILE;
 
-      // Force expanded on desktop regardless of localStorage for better UX
-      const result = isMobile ? (saved !== null ? saved === 'true' : true) : false;
+      // Respect saved state if it exists, otherwise default based on device type
+      const result = saved !== null ? saved === 'true' : isMobile;
 
       logger.debug('Loading sidebar state:', {
         savedValue: saved,
         windowWidth: window.innerWidth,
         mobileBreakpoint: BREAKPOINTS.MOBILE,
         isMobile,
-        forcedDesktopExpanded: !isMobile,
+        hasSavedState: saved !== null,
         resultingState: result ? 'collapsed' : 'expanded',
       });
 
@@ -994,26 +986,17 @@ export class VibeTunnelApp extends LitElement {
     }
 
     if (sessionId) {
-      // Check if we have sessions loaded
-      if (this.sessions.length === 0 && this.isAuthenticated) {
-        // Sessions not loaded yet, load them first
-        await this.loadSessions();
-      }
+      // Always navigate to the session view if a session ID is provided
+      // The session-view component will handle loading and error cases
+      logger.log(`Navigating to session ${sessionId} from URL`);
+      this.selectedSessionId = sessionId;
+      this.currentView = 'session';
 
-      // Now check if the session exists
-      const session = this.sessions.find((s) => s.id === sessionId);
-      if (session) {
-        this.selectedSessionId = sessionId;
-        this.currentView = 'session';
-      } else {
-        // Session not found, go to list view
-        logger.warn(`Session ${sessionId} not found in sessions list`);
-        this.selectedSessionId = null;
-        this.currentView = 'list';
-        // Clear the session param from URL
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.delete('session');
-        window.history.replaceState({}, '', newUrl.toString());
+      // Load sessions in the background if not already loaded
+      if (this.sessions.length === 0 && this.isAuthenticated) {
+        this.loadSessions().catch((error) => {
+          logger.error('Error loading sessions:', error);
+        });
       }
     } else {
       this.selectedSessionId = null;
@@ -1114,18 +1097,14 @@ export class VibeTunnelApp extends LitElement {
 
     const baseClasses = 'bg-dark-bg-secondary border-r border-dark-border flex flex-col';
     const isMobile = this.mediaState.isMobile;
-    const transitionClass =
-      this.initialRenderComplete && !isMobile
-        ? this.userInitiatedSessionChange
-          ? 'sidebar-transition'
-          : ''
-        : '';
+    // Only apply transition class when animations are ready (not during initial load)
+    const transitionClass = this.sidebarAnimationReady && !isMobile ? 'sidebar-transition' : '';
     const mobileClasses = isMobile ? 'absolute left-0 top-0 bottom-0 z-30 flex' : transitionClass;
 
     const collapsedClasses = this.sidebarCollapsed
       ? isMobile
         ? 'hidden mobile-sessions-sidebar collapsed'
-        : 'sm:w-0 sm:overflow-hidden sm:translate-x-0 flex'
+        : 'sm:overflow-hidden sm:translate-x-0 flex'
       : isMobile
         ? 'overflow-visible sm:translate-x-0 flex mobile-sessions-sidebar expanded'
         : 'overflow-visible sm:translate-x-0 flex';
@@ -1134,12 +1113,18 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private get sidebarStyles(): string {
-    if (!this.showSplitView || this.sidebarCollapsed) {
-      const isMobile = this.mediaState.isMobile;
-      return this.showSplitView && this.sidebarCollapsed && !isMobile ? 'width: 0px;' : '';
+    if (!this.showSplitView) {
+      return '';
     }
 
     const isMobile = this.mediaState.isMobile;
+
+    if (this.sidebarCollapsed) {
+      // Hide completely on both desktop and mobile
+      return 'width: 0px;';
+    }
+
+    // Expanded state
     if (isMobile) {
       return `width: calc(100vw - ${SIDEBAR.MOBILE_RIGHT_MARGIN}px);`;
     }
@@ -1282,6 +1267,7 @@ export class VibeTunnelApp extends LitElement {
             @open-settings=${this.handleOpenSettings}
             @logout=${this.handleLogout}
             @navigate-to-list=${this.handleNavigateToList}
+            @toggle-sidebar=${this.handleToggleSidebar}
           ></app-header>
           <div class="${this.showSplitView ? 'flex-1 overflow-y-auto' : 'flex-1'} bg-dark-bg-secondary">
             <session-list
@@ -1290,6 +1276,7 @@ export class VibeTunnelApp extends LitElement {
               .hideExited=${this.hideExited}
               .selectedSessionId=${this.selectedSessionId}
               .compactMode=${showSplitView}
+              .collapsed=${this.sidebarCollapsed}
               .authClient=${authClient}
               @session-killed=${this.handleSessionKilled}
               @refresh=${this.handleRefresh}
@@ -1336,6 +1323,7 @@ export class VibeTunnelApp extends LitElement {
                       .disableFocusManagement=${this.hasActiveOverlay}
                       @navigate-to-list=${this.handleNavigateToList}
                       @toggle-sidebar=${this.handleToggleSidebar}
+                      @create-session=${this.handleCreateSession}
                       @session-status-changed=${this.handleSessionStatusChanged}
                     ></session-view>
                   `
