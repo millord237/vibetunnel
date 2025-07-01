@@ -77,8 +77,8 @@ export class SessionHeader extends LitElement {
     return html`
       <!-- Enhanced Header with gradient background -->
       <div
-        class="flex items-center justify-between border-b border-dark-border text-sm min-w-0 bg-gradient-to-r from-dark-bg-secondary to-dark-bg-tertiary p-4 shadow-sm"
-        style="padding-top: max(1rem, calc(1rem + env(safe-area-inset-top))); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right));"
+        class="flex items-center justify-between border-b border-dark-border text-sm min-w-0 bg-gradient-to-r from-dark-bg-secondary to-dark-bg-tertiary px-4 py-2 shadow-sm"
+        style="padding-top: max(0.5rem, env(safe-area-inset-top)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right));"
       >
         <div class="flex items-center gap-3 min-w-0 flex-1">
           <!-- Sidebar Toggle and Create Session Buttons (shown when sidebar is collapsed) -->
@@ -118,7 +118,7 @@ export class SessionHeader extends LitElement {
             this.showBackButton
               ? html`
                 <button
-                  class="btn-secondary font-mono text-xs px-3 py-1 flex-shrink-0"
+                  class="bg-dark-bg-elevated border border-dark-border rounded-lg px-3 py-1.5 font-mono text-xs text-dark-text-muted transition-all duration-200 hover:text-accent-primary hover:bg-dark-surface-hover hover:border-accent-primary hover:shadow-sm flex-shrink-0"
                   @click=${() => this.onBack?.()}
                 >
                   Back
