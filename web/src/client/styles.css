@@ -99,23 +99,50 @@
     @apply hover:text-dark-text hover:bg-dark-bg-tertiary;
   }
 
-  /* Card styles */
+  /* Enhanced card styles */
   .card {
-    @apply bg-black border border-dark-border rounded-lg p-0;
-    @apply transition-all duration-200 ease-in-out;
-    @apply hover:border-accent-green-darker hover:shadow-glow-green-sm;
+    @apply bg-dark-bg-secondary border border-dark-border rounded-lg p-0;
+    @apply transition-all duration-200 ease-in-out shadow-sm;
+    @apply hover:bg-dark-bg-tertiary hover:border-dark-border-light hover:shadow-card-hover;
+  }
+  
+  .card-elevated {
+    @apply bg-dark-bg-elevated rounded-xl p-6 shadow-card;
+    @apply hover:shadow-elevated hover:bg-dark-surface-hover;
+    @apply transition-all duration-200;
+  }
+  
+  /* Status badges */
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  
+  .status-badge-success {
+    @apply bg-accent-green bg-opacity-20 text-accent-green;
+  }
+  
+  .status-badge-warning {
+    @apply bg-status-warning bg-opacity-20 text-status-warning;
+  }
+  
+  .status-badge-error {
+    @apply bg-status-error bg-opacity-20 text-status-error;
+  }
+  
+  .status-badge-info {
+    @apply bg-status-info bg-opacity-20 text-status-info;
   }
 
   /* Quick start buttons */
   .quick-start-btn {
     @apply bg-dark-bg-tertiary border border-dark-border rounded-lg px-4 py-3 h-12;
     @apply transition-all duration-200 ease-in-out text-dark-text-muted;
-    @apply hover:border-accent-green hover:text-accent-green hover:shadow-glow-green-sm;
+    @apply hover:border-accent-primary hover:text-accent-primary hover:shadow-glow-primary-sm;
     @apply active:scale-95;
   }
 
   .quick-start-btn.active {
-    @apply bg-accent-green text-dark-bg border-accent-green shadow-glow-green-sm;
+    @apply bg-accent-primary text-dark-bg border-accent-primary shadow-glow-primary-sm;
   }
 
   /* Modal backdrop */
@@ -135,13 +162,13 @@
     @apply text-dark-text-muted text-sm font-medium mb-2 flex items-center gap-2;
   }
 
-  /* Responsive session grid layout */
+  /* Enhanced responsive session grid layout */
   .session-flex-responsive {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    grid-auto-rows: 380px;
-    gap: 1rem;
-    padding: 0 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    grid-auto-rows: 400px;
+    gap: 1.25rem;
+    padding: 0 0.75rem;
     /* Enable smooth grid transitions */
     transition: grid-template-columns 0.3s ease-out;
   }
@@ -153,15 +180,16 @@
 
   @media (max-width: 420px) {
     .session-flex-responsive {
-      padding: 0;
+      padding: 0 0.5rem;
       grid-template-columns: 1fr;
-      grid-auto-rows: 300px;
+      grid-auto-rows: 320px;
+      gap: 1rem;
     }
   }
 
-  /* Authentication styles */
+  /* Enhanced authentication styles */
   .auth-container {
-    @apply bg-dark-bg flex items-center justify-center p-4;
+    @apply bg-gradient-to-br from-dark-bg to-dark-bg-secondary flex items-center justify-center p-4;
     min-height: 100vh;
     min-height: 100dvh; /* Dynamic viewport height for mobile */
   }
@@ -181,7 +209,9 @@
   }
 
   .auth-title {
-    @apply text-2xl font-mono font-bold text-dark-text;
+    @apply text-3xl font-mono font-bold text-dark-text-bright;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -0.02em;
   }
 
   .auth-subtitle {
@@ -189,7 +219,7 @@
   }
 
   .auth-form {
-    @apply bg-dark-bg-secondary border border-dark-border rounded-lg p-0 w-full;
+    @apply bg-dark-bg-elevated border border-dark-border rounded-xl shadow-card p-0 w-full;
   }
 
   .auth-divider {
@@ -222,6 +252,100 @@
 
   .badge-ed25519 {
     @apply bg-purple-500 text-white;
+  }
+}
+
+/* Micro-interactions and animations */
+@layer utilities {
+  /* Smooth transitions for interactive elements */
+  .interactive {
+    @apply transition-all duration-200 ease-out;
+  }
+  
+  .interactive-fast {
+    @apply transition-all duration-150 ease-out;
+  }
+  
+  .interactive-slow {
+    @apply transition-all duration-300 ease-out;
+  }
+  
+  /* Hover lift effect for cards */
+  .hover-lift {
+    @apply transition-transform duration-200 ease-out;
+  }
+  
+  .hover-lift:hover {
+    @apply -translate-y-0.5 shadow-elevated;
+  }
+  
+  /* Hover glow effect */
+  .hover-glow-primary:hover {
+    @apply shadow-glow-primary;
+  }
+  
+  .hover-glow-green:hover {
+    @apply shadow-glow-green;
+  }
+  
+  /* Focus within styles */
+  .focus-within-glow:focus-within {
+    @apply shadow-glow-primary-sm ring-2 ring-accent-primary ring-opacity-50;
+  }
+  
+  /* Smooth color transitions */
+  .transition-colors-all {
+    @apply transition-colors duration-200 ease-out;
+  }
+  
+  /* Scale on click */
+  .active-scale:active {
+    @apply scale-95;
+  }
+  
+  /* Pulse animation for activity indicators */
+  .pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: .7;
+    }
+  }
+  
+  /* Slide animations */
+  .slide-in-from-right {
+    animation: slideInFromRight 0.3s ease-out;
+  }
+  
+  .slide-in-from-bottom {
+    animation: slideInFromBottom 0.3s ease-out;
+  }
+  
+  @keyframes slideInFromRight {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes slideInFromBottom {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
 }
 
@@ -570,28 +694,31 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
   touch-action: pan-x pan-y;
 }
 
-/* XTerm terminal styling */
+/* Enhanced XTerm terminal styling */
 .xterm {
   padding: 0 !important;
   font-family:
-    'Hack Nerd Font Mono', 'Fira Code', ui-monospace, SFMono-Regular, 'SF Mono', Consolas,
+    'JetBrains Mono', 'Hack Nerd Font Mono', 'Fira Code', ui-monospace, SFMono-Regular, 'SF Mono', Consolas,
     'Liberation Mono', Menlo, monospace !important;
-  font-variant-ligatures: none;
+  font-variant-ligatures: contextual;
   font-feature-settings:
-    'liga' 0,
-    'clig' 0,
-    'calt' 0;
+    'liga' 1,
+    'clig' 1,
+    'calt' 1;
   text-rendering: optimizeSpeed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.4;
 }
 
-/* Terminal container styling */
+/* Enhanced terminal container styling */
 .terminal-container {
   color: #e4e4e4;
   white-space: pre;
   overflow: hidden;
-  background-color: #000000;
+  background-color: #0a0a0a;
+  border-radius: 0.5rem;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 /* Terminal line styling */
@@ -643,19 +770,23 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
   opacity: 0;
 }
 
-/* Cursor styling */
+/* Enhanced cursor styling */
 .terminal-char.cursor {
   animation: cursor-blink 1s infinite;
+  background-color: #00D9FF;
+  color: #0a0a0a;
 }
 
 @keyframes cursor-blink {
   0%,
   50% {
     opacity: 1;
+    background-color: #00D9FF;
   }
   51%,
   100% {
-    opacity: 0.3;
+    opacity: 0.4;
+    background-color: #00D9FF;
   }
 }
 
@@ -671,24 +802,40 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
   width: 100%;
 }
 
-/* Terminal focus indicator */
+/* Enhanced terminal focus indicator */
 .terminal-focused {
-  box-shadow: 0 0 0 2px #00ff88;
-  border-color: #00ff88 !important;
+  box-shadow: 0 0 0 2px #00D9FF, 0 0 20px rgba(0, 217, 255, 0.3);
+  border-color: #00D9FF !important;
+  transition: all 0.2s ease-out;
 }
 
-/* Keyboard capture indicator */
+/* Enhanced keyboard capture indicator */
 .keyboard-capture-indicator {
   position: fixed;
   top: 10px;
   right: 10px;
-  background: rgba(0, 255, 136, 0.1);
-  border: 1px solid #00ff88;
-  color: #00ff88;
-  padding: 4px 8px;
-  border-radius: 4px;
+  background: rgba(0, 217, 255, 0.1);
+  backdrop-filter: blur(8px);
+  border: 1px solid #00D9FF;
+  color: #00D9FF;
+  padding: 6px 12px;
+  border-radius: 6px;
   font-size: 12px;
+  font-weight: 500;
   z-index: 1000;
+  animation: slideInFromTop 0.3s ease-out;
+  box-shadow: 0 2px 8px rgba(0, 217, 255, 0.2);
+}
+
+@keyframes slideInFromTop {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* Force XTerm terminal to fit within session card bounds */

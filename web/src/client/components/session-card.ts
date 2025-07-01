@@ -365,6 +365,9 @@ export class SessionCard extends LitElement {
   }
 
   private getStatusColor(): string {
+    if (this.killing) {
+      return 'text-status-error';
+    }
     if (this.session.active === false) {
       return 'text-dark-text-muted';
     }
@@ -372,6 +375,9 @@ export class SessionCard extends LitElement {
   }
 
   private getStatusDotColor(): string {
+    if (this.killing) {
+      return 'bg-status-error animate-pulse';
+    }
     if (this.session.active === false) {
       return 'bg-dark-text-muted';
     }

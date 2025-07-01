@@ -1064,30 +1064,30 @@ export class SessionView extends LitElement {
           }}
         ></session-header>
 
-        <!-- Terminal Container -->
+        <!-- Enhanced Terminal Container -->
         <div
-          class="${this.terminalContainerHeight === '100%' ? 'flex-1' : ''} bg-black overflow-hidden min-h-0 relative ${
-            this.session?.status === 'exited' ? 'session-exited' : ''
+          class="${this.terminalContainerHeight === '100%' ? 'flex-1' : ''} bg-black overflow-hidden min-h-0 relative border-t border-dark-border shadow-inner ${
+            this.session?.status === 'exited' ? 'session-exited opacity-90' : ''
           }"
           id="terminal-container"
-          style="${this.terminalContainerHeight !== '100%' ? `height: ${this.terminalContainerHeight}; flex: none; max-height: ${this.terminalContainerHeight};` : ''} transition: height 0.3s ease-out;"
+          style="${this.terminalContainerHeight !== '100%' ? `height: ${this.terminalContainerHeight}; flex: none; max-height: ${this.terminalContainerHeight};` : ''} transition: all 0.3s ease-out;"
         >
           ${
             this.loadingAnimationManager.isLoading()
               ? html`
-                <!-- Loading overlay -->
+                <!-- Enhanced Loading overlay -->
                 <div
-                  class="absolute inset-0 bg-dark-bg bg-opacity-80 flex items-center justify-center z-10"
+                  class="absolute inset-0 bg-dark-bg bg-opacity-90 backdrop-filter backdrop-blur-sm flex items-center justify-center z-10 animate-fade-in"
                 >
                   <div class="text-dark-text font-mono text-center">
-                    <div class="text-2xl mb-2">${this.loadingAnimationManager.getLoadingText()}</div>
+                    <div class="text-2xl mb-3 text-accent-primary animate-pulse-primary">${this.loadingAnimationManager.getLoadingText()}</div>
                     <div class="text-sm text-dark-text-muted">Connecting to session...</div>
                   </div>
                 </div>
               `
               : ''
           }
-          <!-- Terminal Component -->
+          <!-- Enhanced Terminal Component -->
           <vibe-terminal
             .sessionId=${this.session?.id || ''}
             .sessionStatus=${this.session?.status || 'running'}
@@ -1100,7 +1100,7 @@ export class SessionView extends LitElement {
             .initialRows=${this.session?.initialRows || 0}
             .disableClick=${this.isMobile && this.useDirectKeyboard}
             .hideScrollButton=${this.showQuickKeys}
-            class="w-full h-full p-0 m-0"
+            class="w-full h-full p-0 m-0 terminal-container"
             @click=${this.handleTerminalClick}
             @terminal-input=${this.handleTerminalInput}
           ></vibe-terminal>
@@ -1114,9 +1114,12 @@ export class SessionView extends LitElement {
                 class="fixed inset-0 flex items-center justify-center pointer-events-none z-[25]"
               >
                 <div
-                  class="bg-dark-bg-secondary border border-dark-border text-status-warning font-medium text-sm tracking-wide px-4 py-2 rounded-lg shadow-lg"
+                  class="bg-dark-bg-elevated border border-status-warning text-status-warning font-medium text-sm tracking-wide px-6 py-3 rounded-lg shadow-elevated animate-scale-in"
                 >
-                  SESSION EXITED
+                  <span class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-status-warning"></span>
+                    SESSION EXITED
+                  </span>
                 </div>
               </div>
             `

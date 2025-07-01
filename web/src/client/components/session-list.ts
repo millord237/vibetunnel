@@ -237,45 +237,57 @@ export class SessionList extends LitElement {
                     ${
                       this.compactMode
                         ? html`
-                          <!-- Compact list item for sidebar -->
+                          <!-- Enhanced compact list item for sidebar -->
                           <div
-                            class="group flex items-center gap-3 p-3 rounded-md cursor-pointer transition-all hover:bg-dark-bg-tertiary hover:shadow-md ${
+                            class="group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200 animate-fade-in ${
                               session.id === this.selectedSessionId
-                                ? 'bg-dark-bg-tertiary border border-accent-green shadow-sm'
-                                : 'border border-transparent hover:border-dark-border'
+                                ? 'bg-dark-bg-elevated border border-accent-primary shadow-card-hover'
+                                : 'bg-dark-bg-secondary border border-dark-border hover:bg-dark-bg-tertiary hover:border-dark-border-light hover:shadow-card'
                             }"
                             @click=${() =>
                               this.handleSessionSelect({ detail: session } as CustomEvent)}
                           >
-                            <!-- Activity indicator on the left -->
-                            <div
-                              class="w-2 h-2 rounded-full flex-shrink-0 ${
-                                session.status === 'running'
-                                  ? session.activityStatus?.specificStatus
-                                    ? 'bg-status-warning' // Claude active - orange, no pulse
-                                    : session.activityStatus?.isActive
-                                      ? 'bg-status-success' // Generic active
-                                      : 'bg-status-success ring-1 ring-status-success' // Idle (outline)
-                                  : 'bg-status-warning'
-                              }"
-                              title="${
-                                session.status === 'running' && session.activityStatus
-                                  ? session.activityStatus.specificStatus
-                                    ? `Active: ${session.activityStatus.specificStatus.app}`
-                                    : session.activityStatus.isActive
-                                      ? 'Active'
-                                      : 'Idle'
-                                  : session.status
-                              }"
-                            ></div>
+                            <!-- Enhanced activity indicator with pulse animation -->
+                            <div class="relative flex-shrink-0">
+                              <div
+                                class="w-2.5 h-2.5 rounded-full ${
+                                  session.status === 'running'
+                                    ? session.activityStatus?.specificStatus
+                                      ? 'bg-status-warning animate-pulse-primary' // Claude active - amber with pulse
+                                      : session.activityStatus?.isActive
+                                        ? 'bg-status-success' // Generic active
+                                        : 'bg-status-success ring-1 ring-status-success ring-opacity-50' // Idle (subtle outline)
+                                    : 'bg-status-error'
+                                }"
+                                title="${
+                                  session.status === 'running' && session.activityStatus
+                                    ? session.activityStatus.specificStatus
+                                      ? `Active: ${session.activityStatus.specificStatus.app}`
+                                      : session.activityStatus.isActive
+                                        ? 'Active'
+                                        : 'Idle'
+                                    : session.status
+                                }"
+                              ></div>
+                              <!-- Pulse ring for active sessions -->
+                              ${
+                                session.status === 'running' && session.activityStatus?.isActive
+                                  ? html`<div class="absolute inset-0 w-2.5 h-2.5 rounded-full bg-status-success opacity-30 animate-ping"></div>`
+                                  : ''
+                              }
+                            </div>
                             
-                            <!-- Divider line -->
-                            <div class="w-px h-8 bg-dark-border"></div>
+                            <!-- Elegant divider line -->
+                            <div class="w-px h-8 bg-gradient-to-b from-transparent via-dark-border to-transparent"></div>
                             
                             <!-- Session content -->
                             <div class="flex-1 min-w-0">
                               <div
-                                class="text-sm font-mono text-accent-green truncate"
+                                class="text-sm font-mono truncate ${
+                                  session.id === this.selectedSessionId
+                                    ? 'text-accent-primary font-medium'
+                                    : 'text-dark-text group-hover:text-accent-primary transition-colors'
+                                }"
                                 title="${
                                   session.name ||
                                   (Array.isArray(session.command)
@@ -332,11 +344,11 @@ export class SessionList extends LitElement {
                                 session.status === 'running' || session.status === 'exited'
                                   ? html`
                                     <button
-                                      class="btn-ghost text-status-error p-1 rounded transition-opacity absolute right-0 ${
+                                      class="btn-ghost text-status-error p-1.5 rounded-md transition-all absolute right-0 ${
                                         'ontouchstart' in window
                                           ? 'opacity-100 static ml-2'
                                           : 'opacity-0 group-hover:opacity-100'
-                                      } hover:bg-dark-bg hover:shadow-sm"
+                                      } hover:bg-dark-bg-elevated hover:shadow-sm hover:scale-110"
                                       @click=${async (e: Event) => {
                                         e.stopPropagation();
                                         // Kill the session
