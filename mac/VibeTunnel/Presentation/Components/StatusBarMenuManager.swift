@@ -99,9 +99,14 @@ final class StatusBarMenuManager: NSObject {
 
         // Update menu state to custom window FIRST before any async operations
         updateMenuState(.customWindow, button: button)
-
-        // Ensure button state is set immediately
+        
+        // Ensure button state is set immediately and persistently
         button.state = .on
+        
+        // Force another button state update to ensure it sticks
+        DispatchQueue.main.async {
+            button.state = .on
+        }
 
         // Create SessionService instance
         let sessionService = SessionService(serverManager: serverManager, sessionMonitor: sessionMonitor)
@@ -180,7 +185,8 @@ final class StatusBarMenuManager: NSObject {
     }
 
     var isAnyMenuVisible: Bool {
-        menuState != .none
+        // Check both the menu state and the actual window visibility
+        menuState != .none || (customWindow?.isWindowVisible ?? false)
     }
 
     // MARK: - Right-Click Context Menu

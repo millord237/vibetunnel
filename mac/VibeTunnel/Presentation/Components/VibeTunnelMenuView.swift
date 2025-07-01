@@ -14,6 +14,8 @@ struct VibeTunnelMenuView: View {
     var tailscaleService
     @Environment(\.openWindow)
     private var openWindow
+    @Environment(\.colorScheme)
+    private var colorScheme
 
     @State private var hoveredSessionId: String?
     @State private var hasStartedKeyboardNavigation = false
@@ -50,9 +52,12 @@ struct VibeTunnelMenuView: View {
                 .padding()
                 .background(
                     LinearGradient(
-                        colors: [
+                        colors: colorScheme == .dark ? [
                             Color(NSColor.controlBackgroundColor).opacity(0.6),
                             Color(NSColor.controlBackgroundColor).opacity(0.3)
+                        ] : [
+                            Color(NSColor.controlBackgroundColor),
+                            Color(NSColor.controlBackgroundColor).opacity(0.8)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -325,7 +330,7 @@ struct ServerAddressRow: View {
         HStack(spacing: 4) {
             Image(systemName: "server.rack")
                 .font(.system(size: 10))
-                .foregroundColor(.green)
+                .foregroundColor(Color(red: 0.0, green: 0.7, blue: 0.0))
             Text("Local:")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
@@ -362,20 +367,20 @@ struct ServerStatusBadge: View {
     var body: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(isRunning ? Color.green : Color.red)
+                .fill(isRunning ? Color(red: 0.0, green: 0.7, blue: 0.0) : Color.red)
                 .frame(width: 6, height: 6)
             Text(isRunning ? "Running" : "Stopped")
                 .font(.system(size: 10, weight: .medium))
-                .foregroundColor(isRunning ? .green : .red)
+                .foregroundColor(isRunning ? Color(red: 0.0, green: 0.7, blue: 0.0) : .red)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(isRunning ? Color.green.opacity(0.1) : Color.red.opacity(0.1))
+                .fill(isRunning ? Color(red: 0.0, green: 0.7, blue: 0.0).opacity(0.1) : Color.red.opacity(0.1))
                 .overlay(
                     Capsule()
-                        .stroke(isRunning ? Color.green.opacity(0.3) : Color.red.opacity(0.3), lineWidth: 0.5)
+                        .stroke(isRunning ? Color(red: 0.0, green: 0.7, blue: 0.0).opacity(0.3) : Color.red.opacity(0.3), lineWidth: 0.5)
                 )
         )
     }
@@ -416,6 +421,8 @@ struct SessionRow: View {
     private var sessionMonitor
     @Environment(SessionService.self)
     private var sessionService
+    @Environment(\.colorScheme)
+    private var colorScheme
     @State private var isTerminating = false
     @State private var isEditing = false
     @State private var editedName = ""
@@ -485,7 +492,7 @@ struct SessionRow: View {
                     HStack(spacing: 4) {
                         Text(activityStatus)
                             .font(.system(size: 10))
-                            .foregroundColor(.orange)
+                            .foregroundColor(Color(red: 1.0, green: 0.5, blue: 0.0))
 
                         Spacer(minLength: 4)
 
@@ -557,7 +564,7 @@ struct SessionRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.accentColor.opacity(0.08) : Color.clear)
+                .fill(isHovered ? hoverBackgroundColor : Color.clear)
                 .animation(.easeInOut(duration: 0.15), value: isHovered)
         )
         .overlay(
@@ -693,9 +700,9 @@ struct SessionRow: View {
 
     private var activityColor: Color {
         if isActive {
-            .orange
+            Color(red: 1.0, green: 0.5, blue: 0.0)  // Brighter, more saturated orange
         } else {
-            .green
+            Color(red: 0.0, green: 0.7, blue: 0.0)  // Darker, more visible green
         }
     }
 
@@ -704,6 +711,10 @@ struct SessionRow: View {
         WindowTracker.shared.windowInfo(for: session.key) != nil
     }
 
+    private var hoverBackgroundColor: Color {
+        colorScheme == .dark ? Color.accentColor.opacity(0.08) : Color.accentColor.opacity(0.15)
+    }
+    
     private var duration: String {
         // Parse ISO8601 date string with fractional seconds
         let formatter = ISO8601DateFormatter()

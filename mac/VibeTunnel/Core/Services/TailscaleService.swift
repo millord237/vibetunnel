@@ -137,6 +137,21 @@ final class TailscaleService {
             statusError = nil // No error, just CLI not available
             return
         }
+        
+        // Check if Tailscale daemon is running by looking for the process
+        let isAppRunning = NSWorkspace.shared.runningApplications.contains { app in
+            app.bundleIdentifier == "io.tailscale.ipn.macsys" || 
+            app.bundleIdentifier == "io.tailscale.ipn.macos"
+        }
+        
+        if !isAppRunning {
+            isRunning = false
+            tailscaleHostname = nil
+            tailscaleIP = nil
+            statusError = "Tailscale app is not running"
+            logger.info("Tailscale app is not running - skipping status check")
+            return
+        }
 
         // If CLI is available, check status
         do {
@@ -166,18 +181,20 @@ final class TailscaleService {
                 process.environment = environment
             }
 
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
 
             try process.run()
             process.waitUntilExit()
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
             if process.terminationStatus == 0 {
                 // Check if we have data
-                guard !data.isEmpty else {
+                guard !outputData.isEmpty else {
                     isRunning = false
                     tailscaleHostname = nil
                     tailscaleIP = nil
@@ -187,12 +204,12 @@ final class TailscaleService {
                 }
                 
                 // Log raw output for debugging
-                let rawOutput = String(data: data, encoding: .utf8) ?? "<non-UTF8 data>"
+                let rawOutput = String(data: outputData, encoding: .utf8) ?? "<non-UTF8 data>"
                 logger.debug("Tailscale raw output: \(rawOutput)")
                 
                 // Parse JSON output
                 do {
-                    let jsonObject = try JSONSerialization.jsonObject(with: data)
+                    let jsonObject = try JSONSerialization.jsonObject(with: outputData)
                     
                     // Ensure it's a dictionary
                     guard let json = jsonObject as? [String: Any] else {
@@ -240,13 +257,20 @@ final class TailscaleService {
                     isRunning = false
                     tailscaleHostname = nil
                     tailscaleIP = nil
-                    statusError = "Failed to parse Tailscale status: \(parseError.localizedDescription)"
+                    
+                    // Check if this is the GUI startup error
+                    if rawOutput.contains("The Tailscale GUI failed to start") {
+                        statusError = "Tailscale app is not running"
+                    } else {
+                        statusError = "Failed to parse Tailscale status: \(parseError.localizedDescription)"
+                    }
+                    
                     logger.error("JSON parsing error: \(parseError)")
                     logger.debug("Failed to parse data: \(rawOutput.prefix(200))...")
                 }
             } else {
                 // Tailscale CLI returned error
-                let errorOutput = String(data: data, encoding: .utf8) ?? "Unknown error"
+                let errorOutput = String(data: errorData, encoding: .utf8) ?? String(data: outputData, encoding: .utf8) ?? "Unknown error"
                 isRunning = false
                 tailscaleHostname = nil
                 tailscaleIP = nil
