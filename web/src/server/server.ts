@@ -12,6 +12,7 @@ import type { AuthenticatedRequest } from './middleware/auth.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { PtyManager } from './pty/index.js';
 import { createAuthRoutes } from './routes/auth.js';
+import { createFileRoutes } from './routes/files.js';
 import { createFilesystemRoutes } from './routes/filesystem.js';
 import { createLogRoutes } from './routes/logs.js';
 import { createPushRoutes } from './routes/push.js';
@@ -567,6 +568,10 @@ export async function createApp(): Promise<AppInstance> {
   // Mount log routes
   app.use('/api', createLogRoutes());
   logger.debug('Mounted log routes');
+
+  // Mount file routes
+  app.use('/api', createFileRoutes());
+  logger.debug('Mounted file routes');
 
   // Mount push notification routes
   if (vapidManager) {

@@ -32,6 +32,7 @@ export class SessionHeader extends LitElement {
   @property({ type: Function }) onBack?: () => void;
   @property({ type: Function }) onSidebarToggle?: () => void;
   @property({ type: Function }) onOpenFileBrowser?: () => void;
+  @property({ type: Function }) onOpenImagePicker?: () => void;
   @property({ type: Function }) onMaxWidthToggle?: () => void;
   @property({ type: Function }) onWidthSelect?: (width: number) => void;
   @property({ type: Function }) onFontSizeChange?: (size: number) => void;
@@ -154,6 +155,16 @@ export class SessionHeader extends LitElement {
               <path
                 d="M1.75 1h5.5c.966 0 1.75.784 1.75 1.75v1h4c.966 0 1.75.784 1.75 1.75v7.75A1.75 1.75 0 0113 15H3a1.75 1.75 0 01-1.75-1.75V2.75C1.25 1.784 1.784 1 1.75 1zM2.75 2.5v10.75c0 .138.112.25.25.25h10a.25.25 0 00.25-.25V5.5a.25.25 0 00-.25-.25H8.75v-2.5a.25.25 0 00-.25-.25h-5.5a.25.25 0 00-.25.25z"
               />
+            </svg>
+          </button>
+          <button
+            class="btn-secondary font-mono text-xs p-1 flex-shrink-0"
+            @click=${() => this.onOpenImagePicker?.()}
+            title="Upload File"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="2"/>
+              <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2"/>
             </svg>
           </button>
           <button
