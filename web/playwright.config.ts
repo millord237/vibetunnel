@@ -63,16 +63,19 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: `node dist/vibetunnel-cli --no-auth --port ${testConfig.port}`,
+    command: `pnpm exec tsx src/cli.ts --no-auth --port ${testConfig.port}`, // Use tsx everywhere
     port: testConfig.port,
-    reuseExistingServer: false, // Always use the configured port 4022
-    stdout: 'pipe',
-    stderr: 'pipe',
-    timeout: 180 * 1000, // 3 minutes for server startup
+    reuseExistingServer: !process.env.CI, // Reuse server locally for faster test runs
+    stdout: process.env.CI ? 'inherit' : 'pipe', // Show output in CI for debugging
+    stderr: process.env.CI ? 'inherit' : 'pipe', // Show errors in CI for debugging
+    timeout: 60 * 1000, // 1 minute for server startup (reduced from 3 minutes)
+    cwd: process.cwd(), // Ensure we're in the right directory
     env: {
+      ...process.env, // Include all existing env vars
       NODE_ENV: 'test',
       VIBETUNNEL_DISABLE_PUSH_NOTIFICATIONS: 'true',
       SUPPRESS_CLIENT_ERRORS: 'true',
+      VIBETUNNEL_SEA: '', // Explicitly set to empty to disable SEA loader
     },
   },
 });

@@ -1,4 +1,5 @@
 import { screenshotOnError } from '../helpers/screenshot.helper';
+import { validateCommand, validateSessionName } from '../utils/validation.utils';
 import { BasePage } from './base.page';
 
 export class SessionListPage extends BasePage {
@@ -128,6 +129,9 @@ export class SessionListPage extends BasePage {
 
     // Fill in the session name if provided
     if (sessionName) {
+      // Validate session name for security
+      validateSessionName(sessionName);
+
       // Use the selector we found earlier
       try {
         await this.page.fill(inputSelector, sessionName, { timeout: 3000 });
@@ -151,11 +155,23 @@ export class SessionListPage extends BasePage {
 
     // Fill in the command if provided
     if (command) {
+      // Validate command for security
+      validateCommand(command);
+
       try {
         await this.page.fill('[data-testid="command-input"]', command);
       } catch {
+        // Check if page is still valid before trying fallback
+        if (this.page.isClosed()) {
+          throw new Error('Page was closed unexpectedly');
+        }
         // Fallback to placeholder selector
-        await this.page.fill('input[placeholder="zsh"]', command);
+        try {
+          await this.page.fill('input[placeholder="zsh"]', command);
+        } catch (fallbackError) {
+          console.error('Failed to fill command input:', fallbackError);
+          throw fallbackError;
+        }
       }
     }
 
