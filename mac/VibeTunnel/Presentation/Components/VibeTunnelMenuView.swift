@@ -22,6 +22,13 @@ struct VibeTunnelMenuView: View {
     @State private var showingNewSession = false
     @FocusState private var focusedField: FocusField?
 
+    /// Binding to allow external control of new session state
+    @Binding var isNewSessionActive: Bool
+
+    init(isNewSessionActive: Binding<Bool> = .constant(false)) {
+        self._isNewSessionActive = isNewSessionActive
+    }
+
     enum FocusField: Hashable {
         case sessionRow(String)
         case settingsButton
@@ -31,11 +38,17 @@ struct VibeTunnelMenuView: View {
 
     var body: some View {
         if showingNewSession {
-            NewSessionForm(isPresented: $showingNewSession)
-                .transition(.asymmetric(
-                    insertion: .move(edge: .bottom).combined(with: .opacity),
-                    removal: .move(edge: .bottom).combined(with: .opacity)
-                ))
+            NewSessionForm(isPresented: Binding(
+                get: { showingNewSession },
+                set: { newValue in
+                    showingNewSession = newValue
+                    isNewSessionActive = newValue
+                }
+            ))
+            .transition(.asymmetric(
+                insertion: .move(edge: .bottom).combined(with: .opacity),
+                removal: .move(edge: .bottom).combined(with: .opacity)
+            ))
         } else {
             mainContent
                 .transition(.asymmetric(
@@ -138,6 +151,7 @@ struct VibeTunnelMenuView: View {
                 Button(action: {
                     withAnimation(.easeOut(duration: 0.2)) {
                         showingNewSession = true
+                        isNewSessionActive = true
                     }
                 }) {
                     Label("New Session", systemImage: "plus.square")
@@ -331,7 +345,15 @@ struct ServerAddressRow: View {
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
             Button(action: {
-                if let url = url ?? URL(string: "http://\(computedAddress)") {
+                if let providedUrl = url {
+                    NSWorkspace.shared.open(providedUrl)
+                } else if computedAddress.starts(with: "127.0.0.1:") {
+                    // For localhost, use DashboardURLBuilder
+                    if let dashboardURL = DashboardURLBuilder.dashboardURL(port: serverManager.port) {
+                        NSWorkspace.shared.open(dashboardURL)
+                    }
+                } else if let url = URL(string: "http://\(computedAddress)") {
+                    // For other addresses (network IP, etc.), construct URL directly
                     NSWorkspace.shared.open(url)
                 }
             }) {
@@ -789,7 +811,7 @@ struct SessionRow: View {
         let elapsed = Date().timeIntervalSince(startDate)
 
         if elapsed < 60 {
-            return "just now"
+            return "now"
         } else if elapsed < 3_600 {
             let minutes = Int(elapsed / 60)
             return "\(minutes)m"
