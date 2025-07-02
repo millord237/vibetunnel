@@ -1,6 +1,10 @@
 import SwiftUI
 
-/// Compact new session form designed for the popover
+/// Compact new session form designed for the popover.
+///
+/// Provides a streamlined interface for creating new terminal sessions with
+/// options for command selection, naming, directory settings, and window spawning.
+/// Integrates with the server to create sessions both in terminal windows and web browsers.
 struct NewSessionForm: View {
     @Binding var isPresented: Bool
     @Environment(ServerManager.self)
@@ -21,6 +25,7 @@ struct NewSessionForm: View {
     @State private var isCreating = false
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var isHoveringCreate = false
     @FocusState private var focusedField: Field?
 
     enum Field: Hashable {
@@ -279,29 +284,30 @@ struct NewSessionForm: View {
                                 .scaleEffect(0.7)
                                 .controlSize(.small)
                             Text("Creating...")
+                                .font(.system(size: 12))
                         }
-                        .frame(minWidth: 80)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 3)
                     } else {
                         Text("Create")
-                            .font(.system(size: 13, weight: .medium))
-                            .frame(minWidth: 80)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
+                            .font(.system(size: 12))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 3)
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(.white)
+                .foregroundColor(command.isEmpty || workingDirectory.isEmpty ? .secondary.opacity(0.5) : .secondary)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(command.isEmpty || workingDirectory.isEmpty ? Color.gray.opacity(0.4) : Color(
-                            red: 0.2,
-                            green: 0.6,
-                            blue: 0.3
-                        ))
+                        .fill(isHoveringCreate && !command.isEmpty && !workingDirectory.isEmpty ? Color.accentColor
+                            .opacity(0.05) : Color.clear
+                        )
+                        .animation(.easeInOut(duration: 0.2), value: isHoveringCreate)
                 )
                 .disabled(isCreating || command.isEmpty || workingDirectory.isEmpty)
+                .onHover { hovering in
+                    isHoveringCreate = hovering
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)

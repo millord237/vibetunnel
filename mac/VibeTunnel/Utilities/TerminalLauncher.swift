@@ -47,7 +47,10 @@ struct TerminalLaunchConfig {
     }
 }
 
-/// Terminal launch methods
+/// Terminal launch methods.
+///
+/// Defines the different approaches for launching terminal commands,
+/// each with different trade-offs for reliability and functionality.
 enum TerminalLaunchMethod {
     case appleScript(script: String)
     case processWithArgs(args: [String])
@@ -109,6 +112,19 @@ enum Terminal: String, CaseIterable {
 
     var displayName: String {
         rawValue
+    }
+
+    var applicationName: String {
+        switch self {
+        case .terminal: "Terminal"
+        case .iTerm2: "iTerm2"
+        case .ghostty: "Ghostty"
+        case .warp: "Warp"
+        case .alacritty: "Alacritty"
+        case .hyper: "Hyper"
+        case .wezterm: "WezTerm"
+        case .kitty: "kitty"
+        }
     }
 
     var isInstalled: Bool {
@@ -266,6 +282,10 @@ enum Terminal: String, CaseIterable {
 ///
 /// Represents failures during terminal application launch,
 /// including permission issues and missing applications.
+/// Errors that can occur during terminal launching.
+///
+/// Covers various failure modes including missing applications,
+/// permission issues, and script execution failures.
 enum TerminalLauncherError: LocalizedError {
     case terminalNotFound
     case appleScriptPermissionDenied
@@ -601,6 +621,10 @@ final class TerminalLauncher {
             tell application "Terminal"
                 activate
                 set newTab to do script "\(config.appleScriptEscapedCommand)"
+                
+                -- Set custom title that includes session ID for easier matching
+                set custom title of newTab to "Session \(sessionId)"
+                
                 -- newTab is already a tab reference, get its window's ID
                 set tabWindows to windows whose tabs contains newTab
                 if (count of tabWindows) > 0 then

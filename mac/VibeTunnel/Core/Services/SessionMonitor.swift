@@ -2,7 +2,10 @@ import Foundation
 import Observation
 import os.log
 
-/// Server session information returned by the API
+/// Server session information returned by the API.
+///
+/// Represents the current state of a terminal session running on the VibeTunnel server,
+/// including its command, directory, process status, and activity information.
 struct ServerSessionInfo: Codable {
     let id: String
     let command: [String] // Changed from String to [String] to match server
@@ -17,25 +20,36 @@ struct ServerSessionInfo: Codable {
     let initialRows: Int? // Added missing field
     let activityStatus: ActivityStatus?
     let source: String? // Added for HQ mode
+    let attachedViaVT: Bool? // Added for VT attachment tracking
 
     var isRunning: Bool {
         status == "running"
     }
 }
 
-/// Activity status for a session
+/// Activity status for a session.
+///
+/// Tracks whether a session is actively being used and provides
+/// application-specific status information when available.
 struct ActivityStatus: Codable {
     let isActive: Bool
     let specificStatus: SpecificStatus?
 }
 
-/// App-specific status (e.g., Claude status)
+/// App-specific status information.
+///
+/// Provides detailed status information for specific applications running
+/// within a terminal session, such as Claude's current working state.
 struct SpecificStatus: Codable {
     let app: String
     let status: String
 }
 
-/// Lightweight session monitor that fetches terminal sessions on-demand
+/// Lightweight session monitor that fetches terminal sessions on-demand.
+///
+/// Manages the collection of active terminal sessions by periodically polling
+/// the server API and caching results for efficient access. Provides real-time
+/// session information to the UI with minimal network overhead.
 @MainActor
 @Observable
 final class SessionMonitor {
@@ -50,9 +64,18 @@ final class SessionMonitor {
     private var localAuthToken: String?
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "SessionMonitor")
 
+    /// Reference to GitRepositoryMonitor for pre-caching
+    weak var gitRepositoryMonitor: GitRepositoryMonitor?
+    
+    /// Timer for periodic refresh
+    private var refreshTimer: Timer?
+
     private init() {
         let port = UserDefaults.standard.integer(forKey: "serverPort")
         self.serverPort = port > 0 ? port : 4_020
+        
+        // Start periodic refresh
+        startPeriodicRefresh()
     }
 
     /// Set the local auth token for server requests
@@ -126,6 +149,19 @@ final class SessionMonitor {
 
             // Update WindowTracker
             WindowTracker.shared.updateFromSessions(sessionsArray)
+
+            // Pre-cache Git data for all sessions
+            if let gitMonitor = gitRepositoryMonitor {
+                for session in sessionsArray {
+                    // Only fetch if not already cached
+                    if gitMonitor.getCachedRepository(for: session.workingDir) == nil {
+                        Task {
+                            // This will cache the data for immediate access later
+                            _ = await gitMonitor.findRepository(for: session.workingDir)
+                        }
+                    }
+                }
+            }
         } catch {
             // Only update error if it's not a simple connection error
             if !(error is URLError) {
@@ -134,6 +170,19 @@ final class SessionMonitor {
             logger.error("Failed to fetch sessions: \(error, privacy: .public)")
             self.sessions = [:]
             self.lastFetch = Date() // Still update timestamp to avoid hammering
+        }
+    }
+    
+    /// Start periodic refresh of sessions
+    private func startPeriodicRefresh() {
+        // Clean up any existing timer
+        refreshTimer?.invalidate()
+        
+        // Create a new timer that fires every 3 seconds
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.refresh()
+            }
         }
     }
 }
