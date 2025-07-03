@@ -1,9 +1,13 @@
+import { TIMEOUTS } from '../constants/timeouts';
 import { expect, test } from '../fixtures/test.fixture';
 import { TestSessionManager } from '../helpers/test-data-manager.helper';
 import { TestDataFactory } from '../utils/test-utils';
 
 // Use a unique prefix for this test suite
 const TEST_PREFIX = TestDataFactory.getTestSpecificPrefix('debug-session');
+
+// These tests create their own sessions and can run in parallel
+test.describe.configure({ mode: 'parallel' });
 
 test.describe('Debug Session Tests', () => {
   let sessionManager: TestSessionManager;
@@ -32,9 +36,19 @@ test.describe('Debug Session Tests', () => {
     // Create a session manually to debug the flow
     await createButton.click();
 
-    // Wait for modal to appear
+    // Wait for modal to appear and animations to complete
     await page.waitForSelector('text="New Session"', { state: 'visible', timeout: 10000 });
-    await page.waitForTimeout(500); // Wait for animations
+    await page.waitForFunction(
+      () => {
+        const modal = document.querySelector('[role="dialog"], .modal');
+        return (
+          modal &&
+          getComputedStyle(modal).opacity === '1' &&
+          !document.documentElement.classList.contains('view-transition-active')
+        );
+      },
+      { timeout: TIMEOUTS.UI_ANIMATION }
+    );
 
     // Try both possible selectors for the session name input
     const nameInput = page

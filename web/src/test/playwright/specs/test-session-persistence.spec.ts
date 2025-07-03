@@ -6,6 +6,9 @@ import {
 } from '../helpers/session-lifecycle.helper';
 import { TestSessionManager } from '../helpers/test-data-manager.helper';
 
+// These tests create their own sessions and can run in parallel
+test.describe.configure({ mode: 'parallel' });
+
 test.describe('Session Persistence Tests', () => {
   let sessionManager: TestSessionManager;
 
@@ -18,10 +21,15 @@ test.describe('Session Persistence Tests', () => {
   });
   test('should create and find a long-running session', async ({ page }) => {
     // Create a session with a command that runs longer
-    const { sessionName } = await createAndNavigateToSession(page, {
+    const { sessionName, sessionId } = await createAndNavigateToSession(page, {
       name: sessionManager.generateSessionName('long-running'),
       command: 'bash -c "sleep 30"', // Sleep for 30 seconds to keep session running
     });
+
+    // Track the session for cleanup
+    if (sessionId) {
+      sessionManager.trackSession(sessionName, sessionId);
+    }
 
     // Navigate back to home
     await page.goto('/');
@@ -33,10 +41,15 @@ test.describe('Session Persistence Tests', () => {
 
   test.skip('should handle session with error gracefully', async ({ page }) => {
     // Create a session with a command that will fail immediately
-    const { sessionName } = await createAndNavigateToSession(page, {
+    const { sessionName, sessionId } = await createAndNavigateToSession(page, {
       name: sessionManager.generateSessionName('error-test'),
       command: 'sh -c "exit 1"', // Use sh instead of bash, exit immediately with error code
     });
+
+    // Track the session for cleanup
+    if (sessionId) {
+      sessionManager.trackSession(sessionName, sessionId);
+    }
 
     // Navigate back to home
     await page.goto('/');

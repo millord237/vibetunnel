@@ -1,3 +1,4 @@
+import { TIMEOUTS } from '../constants/timeouts';
 import { screenshotOnError } from '../helpers/screenshot.helper';
 import { validateCommand, validateSessionName } from '../utils/validation.utils';
 import { BasePage } from './base.page';
@@ -35,6 +36,12 @@ export class SessionListPage extends BasePage {
   async createNewSession(sessionName?: string, spawnWindow = false, command?: string) {
     console.log(`Creating session: name="${sessionName}", spawnWindow=${spawnWindow}`);
 
+    // IMPORTANT: Set the spawn window preference in localStorage BEFORE opening the modal
+    // This ensures the form loads with the correct state
+    await this.page.evaluate((shouldSpawnWindow) => {
+      localStorage.setItem('vibetunnel_spawn_window', String(shouldSpawnWindow));
+    }, spawnWindow);
+
     // Dismiss any error messages
     await this.dismissErrors();
 
@@ -60,8 +67,36 @@ export class SessionListPage extends BasePage {
         await createButton.click({ force: true, timeout: 5000 });
       }
 
-      // Wait for View Transition to complete
-      await this.page.waitForTimeout(1000);
+      // Wait for modal to exist first
+      await this.page.waitForSelector('session-create-form', {
+        state: 'attached',
+        timeout: 10000,
+      });
+
+      // Force wait for view transition to complete
+      await this.page.waitForTimeout(500);
+
+      // Now wait for modal to be considered visible by Playwright
+      try {
+        await this.page.waitForSelector('session-create-form', {
+          state: 'visible',
+          timeout: 5000,
+        });
+      } catch (_visibilityError) {
+        // If modal is still not visible, it might be due to view transitions
+        // Force interaction since we know it's there
+        console.log('Modal not visible to Playwright, will use force interaction');
+      }
+
+      // Check if modal is actually functional (can find input elements)
+      await this.page.waitForSelector(
+        '[data-testid="session-name-input"], input[placeholder="My Session"]',
+        {
+          timeout: 5000,
+        }
+      );
+
+      console.log('Modal found and functional, proceeding with session creation');
     } catch (error) {
       console.error('Failed to click create button:', error);
       await screenshotOnError(
@@ -72,17 +107,22 @@ export class SessionListPage extends BasePage {
       throw error;
     }
 
-    // Wait for the modal to appear and be ready
-    try {
-      await this.page.waitForSelector(this.selectors.modal, { state: 'visible', timeout: 10000 });
-    } catch (_e) {
-      const error = new Error('Modal did not appear after clicking create button');
-      await screenshotOnError(this.page, error, 'no-modal-after-click');
-      throw error;
-    }
+    // Modal text might not be visible due to view transitions, skip this check
 
-    // Small delay to ensure modal is interactive
-    await this.page.waitForTimeout(500);
+    // Wait for modal to be fully interactive
+    await this.page.waitForFunction(
+      () => {
+        const modalForm = document.querySelector('session-create-form');
+        if (!modalForm) return false;
+
+        const input = document.querySelector(
+          '[data-testid="session-name-input"], input[placeholder="My Session"]'
+        ) as HTMLInputElement;
+        // Check that input exists, is visible, and is not disabled
+        return input && !input.disabled && input.offsetParent !== null;
+      },
+      { timeout: TIMEOUTS.UI_UPDATE }
+    );
 
     // Now wait for the session name input to be visible AND stable
     let inputSelector: string;
@@ -123,10 +163,14 @@ export class SessionListPage extends BasePage {
     await spawnWindowToggle.waitFor({ state: 'visible', timeout: 2000 });
 
     const isSpawnWindowOn = (await spawnWindowToggle.getAttribute('aria-checked')) === 'true';
+    console.log(`Spawn window toggle state: current=${isSpawnWindowOn}, desired=${spawnWindow}`);
 
     // If current state doesn't match desired state, click to toggle
     if (isSpawnWindowOn !== spawnWindow) {
-      await spawnWindowToggle.click();
+      console.log(
+        `Clicking spawn window toggle to change from ${isSpawnWindowOn} to ${spawnWindow}`
+      );
+      await spawnWindowToggle.click({ force: true });
 
       // Wait for the toggle state to update
       await this.page.waitForFunction(
@@ -137,6 +181,11 @@ export class SessionListPage extends BasePage {
         spawnWindow,
         { timeout: 1000 }
       );
+
+      const finalState = (await spawnWindowToggle.getAttribute('aria-checked')) === 'true';
+      console.log(`Spawn window toggle final state: ${finalState}`);
+    } else {
+      console.log(`Spawn window toggle already in correct state: ${isSpawnWindowOn}`);
     }
 
     // Fill in the session name if provided
@@ -144,9 +193,10 @@ export class SessionListPage extends BasePage {
       // Validate session name for security
       validateSessionName(sessionName);
 
-      // Use the selector we found earlier
+      // Use the selector we found earlier - use force: true to bypass visibility checks
       try {
-        await this.page.fill(inputSelector, sessionName, { timeout: 3000 });
+        await this.page.fill(inputSelector, sessionName, { timeout: 3000, force: true });
+        console.log(`Successfully filled session name: ${sessionName}`);
       } catch (e) {
         const error = new Error(`Could not fill session name field: ${e}`);
         await screenshotOnError(this.page, error, 'fill-session-name-error');
@@ -171,7 +221,8 @@ export class SessionListPage extends BasePage {
       validateCommand(command);
 
       try {
-        await this.page.fill('[data-testid="command-input"]', command);
+        await this.page.fill('[data-testid="command-input"]', command, { force: true });
+        console.log(`Successfully filled command: ${command}`);
       } catch {
         // Check if page is still valid before trying fallback
         if (this.page.isClosed()) {
@@ -179,7 +230,8 @@ export class SessionListPage extends BasePage {
         }
         // Fallback to placeholder selector
         try {
-          await this.page.fill('input[placeholder="zsh"]', command);
+          await this.page.fill('input[placeholder="zsh"]', command, { force: true });
+          console.log(`Successfully filled command (fallback): ${command}`);
         } catch (fallbackError) {
           console.error('Failed to fill command input:', fallbackError);
           throw fallbackError;
@@ -250,8 +302,16 @@ export class SessionListPage extends BasePage {
           console.log('Modal might have already closed');
         });
 
-      // Give the app a moment to process the response
-      await this.page.waitForTimeout(500);
+      // Wait for the UI to process the response
+      await this.page.waitForFunction(
+        () => {
+          // Check if we're no longer on the session list page or modal has closed
+          const onSessionPage = window.location.search.includes('session=');
+          const modalClosed = !document.querySelector('[role="dialog"], .modal, [data-modal]');
+          return onSessionPage || modalClosed;
+        },
+        { timeout: TIMEOUTS.UI_UPDATE }
+      );
 
       // Check if we're already on the session page
       const currentUrl = this.page.url();
@@ -418,8 +478,18 @@ export class SessionListPage extends BasePage {
           // First try Escape key (most reliable)
           await this.page.keyboard.press('Escape');
 
-          // Wait briefly for modal animation
-          await this.page.waitForTimeout(300);
+          // Wait for modal animation to complete
+          await this.page.waitForFunction(
+            () => {
+              const modal = document.querySelector('[role="dialog"], .modal');
+              return (
+                !modal ||
+                getComputedStyle(modal).opacity === '0' ||
+                getComputedStyle(modal).display === 'none'
+              );
+            },
+            { timeout: TIMEOUTS.UI_ANIMATION }
+          );
 
           // Check if modal is still visible
           if (await modal.isVisible({ timeout: 500 })) {

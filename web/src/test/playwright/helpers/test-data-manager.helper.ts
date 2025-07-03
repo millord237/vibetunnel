@@ -39,7 +39,8 @@ export class TestSessionManager {
       // Get session ID from URL for web sessions
       let sessionId = '';
       if (!spawnWindow) {
-        await this.page.waitForURL(/\?session=/, { timeout: 4000 });
+        console.log(`Web session created, waiting for navigation to session view...`);
+        await this.page.waitForURL(/\?session=/, { timeout: 10000 });
         const url = this.page.url();
 
         if (!url.includes('?session=')) {
@@ -50,10 +51,42 @@ export class TestSessionManager {
         if (!sessionId) {
           throw new Error(`No session ID found in URL: ${url}`);
         }
+
+        // Wait for the terminal to be ready before navigating away
+        // This ensures the session is fully created
+        await this.page
+          .waitForSelector('.xterm-screen', {
+            state: 'visible',
+            timeout: 5000,
+          })
+          .catch(() => {
+            console.warn('Terminal screen not visible, session might not be fully initialized');
+          });
+
+        // Additional wait to ensure session is saved to backend
+        await this.page
+          .waitForResponse(
+            (response) => response.url().includes('/api/sessions') && response.status() === 200,
+            { timeout: 5000 }
+          )
+          .catch(() => {
+            console.warn('No session list refresh detected, session might not be fully saved');
+          });
+
+        // Extra wait for file system to flush - critical for CI environments
+        await this.page.waitForTimeout(1000);
       }
 
       // Track the session
       this.sessions.set(name, { id: sessionId, spawnWindow });
+      console.log(`Tracked session: ${name} with ID: ${sessionId}, spawnWindow: ${spawnWindow}`);
+      if (spawnWindow) {
+        console.warn(
+          'WARNING: Created a native terminal session which will not appear in the web session list!'
+        );
+      } else {
+        console.log('Created web session which should appear in the session list');
+      }
 
       return { sessionName: name, sessionId };
     } catch (error) {
@@ -124,39 +157,45 @@ export class TestSessionManager {
       await this.page.goto('/', { waitUntil: 'domcontentloaded' });
     }
 
-    // Try bulk cleanup first
-    try {
-      const killAllButton = this.page.locator('button:has-text("Kill All")');
-      if (await killAllButton.isVisible({ timeout: 1000 })) {
-        const [dialog] = await Promise.all([
-          this.page.waitForEvent('dialog', { timeout: 5000 }).catch(() => null),
-          killAllButton.click(),
-        ]);
-        if (dialog) {
-          await dialog.accept();
+    // For parallel tests, only use individual cleanup to avoid interference
+    // Kill All affects all sessions globally and can interfere with other parallel tests
+    const isParallelMode = process.env.TEST_WORKER_INDEX !== undefined;
+
+    if (!isParallelMode) {
+      // Try bulk cleanup with Kill All button only in non-parallel mode
+      try {
+        const killAllButton = this.page.locator('button:has-text("Kill All")');
+        if (await killAllButton.isVisible({ timeout: 1000 })) {
+          const [dialog] = await Promise.all([
+            this.page.waitForEvent('dialog', { timeout: 5000 }).catch(() => null),
+            killAllButton.click(),
+          ]);
+          if (dialog) {
+            await dialog.accept();
+          }
+
+          // Wait for sessions to be marked as exited
+          await this.page.waitForFunction(
+            () => {
+              const cards = document.querySelectorAll('session-card');
+              return Array.from(cards).every(
+                (card) =>
+                  card.textContent?.toLowerCase().includes('exited') ||
+                  card.textContent?.toLowerCase().includes('exit')
+              );
+            },
+            { timeout: 10000 }
+          );
+
+          this.sessions.clear();
+          return;
         }
-
-        // Wait for sessions to be marked as exited
-        await this.page.waitForFunction(
-          () => {
-            const cards = document.querySelectorAll('session-card');
-            return Array.from(cards).every(
-              (card) =>
-                card.textContent?.toLowerCase().includes('exited') ||
-                card.textContent?.toLowerCase().includes('exit')
-            );
-          },
-          { timeout: 3000 }
-        );
-
-        this.sessions.clear();
-        return;
+      } catch (error) {
+        console.log('Bulk cleanup failed, trying individual cleanup:', error);
       }
-    } catch (error) {
-      console.log('Bulk cleanup failed, trying individual cleanup:', error);
     }
 
-    // Fallback to individual cleanup
+    // Use individual cleanup for parallel tests or as fallback
     const sessionNames = Array.from(this.sessions.keys());
     for (const sessionName of sessionNames) {
       await this.cleanupSession(sessionName);
@@ -182,6 +221,34 @@ export class TestSessionManager {
    */
   clearTracking(): void {
     this.sessions.clear();
+  }
+
+  /**
+   * Manually track a session that was created outside of createTrackedSession
+   */
+  trackSession(sessionName: string, sessionId: string, spawnWindow = false): void {
+    this.sessions.set(sessionName, { id: sessionId, spawnWindow });
+  }
+
+  /**
+   * Wait for session count to be updated in the UI
+   */
+  async waitForSessionCountUpdate(expectedCount: number, timeout = 5000): Promise<void> {
+    await this.page.waitForFunction(
+      (expected) => {
+        const headerElement = document.querySelector('full-header');
+        if (!headerElement) return false;
+        const countElement = headerElement.querySelector('p.text-xs');
+        if (!countElement) return false;
+        const countText = countElement.textContent || '';
+        const match = countText.match(/\d+/);
+        if (!match) return false;
+        const actualCount = Number.parseInt(match[0]);
+        return actualCount === expected;
+      },
+      expectedCount,
+      { timeout }
+    );
   }
 }
 

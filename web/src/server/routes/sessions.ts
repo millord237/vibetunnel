@@ -134,7 +134,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
   router.post('/sessions', async (req, res) => {
     const { command, workingDir, name, remoteId, spawn_terminal, cols, rows, titleMode } = req.body;
     logger.debug(
-      `creating new session: command=${JSON.stringify(command)}, remoteId=${remoteId || 'local'}, cols=${cols}, rows=${rows}`
+      `creating new session: command=${JSON.stringify(command)}, remoteId=${remoteId || 'local'}, spawn_terminal=${spawn_terminal}, cols=${cols}, rows=${rows}`
     );
 
     if (!command || !Array.isArray(command) || command.length === 0) {
@@ -247,7 +247,11 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
 
       const sessionName = name || generateSessionName(command, cwd);
 
-      logger.log(chalk.blue(`creating session: ${command.join(' ')} in ${cwd}`));
+      logger.log(
+        chalk.blue(
+          `creating WEB session: ${command.join(' ')} in ${cwd} (spawn_terminal=${spawn_terminal})`
+        )
+      );
 
       const result = await ptyManager.createSession(command, {
         name: sessionName,
@@ -258,7 +262,7 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
       });
 
       const { sessionId, sessionInfo } = result;
-      logger.log(chalk.green(`session ${sessionId} created (PID: ${sessionInfo.pid})`));
+      logger.log(chalk.green(`WEB session ${sessionId} created (PID: ${sessionInfo.pid})`));
 
       // Stream watcher is set up when clients connect to the stream endpoint
 
