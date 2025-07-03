@@ -29,9 +29,9 @@ struct SessionRow: View {
     @State private var editedName = ""
     @State private var isHoveringFolder = false
     @FocusState private var isEditFieldFocused: Bool
-    
-    // Computed property that reads directly from the monitor's cache
-    // This will automatically update when the monitor refreshes
+
+    /// Computed property that reads directly from the monitor's cache
+    /// This will automatically update when the monitor refreshes
     private var gitRepository: GitRepository? {
         gitRepositoryMonitor.getCachedRepository(for: session.value.workingDir)
     }
@@ -108,6 +108,17 @@ struct SessionRow: View {
                             }
                             .buttonStyle(.plain)
                             .help("Rename session")
+
+                            // Magic wand button for AI assistant sessions
+                            if isAIAssistantSession {
+                                Button(action: sendAIPrompt) {
+                                    Image(systemName: "wand.and.rays")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.primary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Send prompt to update terminal title")
+                            }
                         }
                     }
 
@@ -271,14 +282,14 @@ struct SessionRow: View {
                         }
                     }
                 }
-                
+
                 Divider()
-                
+
                 Button("Copy Branch Name") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(repo.currentBranch ?? "detached", forType: .string)
                 }
-                
+
                 Button("Copy Repository Path") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(repo.path, forType: .string)
@@ -322,13 +333,14 @@ struct SessionRow: View {
     private func getGitAppName() -> String {
         if let preferredApp = UserDefaults.standard.string(forKey: "preferredGitApp"),
            !preferredApp.isEmpty,
-           let gitApp = GitApp(rawValue: preferredApp) {
+           let gitApp = GitApp(rawValue: preferredApp)
+        {
             return gitApp.displayName
         }
         // Return first installed git app or default
         return GitApp.installed.first?.displayName ?? "Git App"
     }
-    
+
     private func terminateSession() {
         isTerminating = true
 
@@ -374,6 +386,16 @@ struct SessionRow: View {
         }
     }
 
+    private var isAIAssistantSession: Bool {
+        // Check if this is an AI assistant session by looking at the command
+        let cmd = commandName.lowercased()
+        return cmd == "claude" || cmd.contains("claude") ||
+               cmd == "gemini" || cmd.contains("gemini") ||
+               cmd == "openhands" || cmd.contains("openhands") ||
+               cmd == "aider" || cmd.contains("aider") ||
+               cmd == "codex" || cmd.contains("codex")
+    }
+
     private var sessionName: String {
         // Use the session name if available, otherwise fall back to directory name
         if let name = session.value.name, !name.isEmpty {
@@ -416,6 +438,22 @@ struct SessionRow: View {
             } catch {
                 // Error already handled - editing state reverted
                 cancelEditing()
+            }
+        }
+    }
+
+    private func sendAIPrompt() {
+        Task {
+            do {
+                // Send a prompt that encourages the AI assistant to use vt title
+                let prompt = "use vt title to update the terminal title with what you're currently working on"
+                try await sessionService.sendInput(to: session.key, text: prompt)
+                
+                // Send Enter key to submit the prompt
+                try await sessionService.sendKey(to: session.key, key: "enter")
+            } catch {
+                // Silently handle errors for now
+                print("Failed to send prompt to AI assistant: \(error)")
             }
         }
     }
