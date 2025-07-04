@@ -114,6 +114,23 @@ export class SessionCard extends LitElement {
       this.requestUpdate();
     }, 200);
 
+    // Set a timeout to prevent getting stuck in killing state
+    const killingTimeout = setTimeout(() => {
+      logger.warn(`Kill operation timed out for session ${this.session.id}`);
+      this.stopKillingAnimation();
+      // Dispatch error event
+      this.dispatchEvent(
+        new CustomEvent('session-kill-error', {
+          detail: {
+            sessionId: this.session.id,
+            error: 'Kill operation timed out',
+          },
+          bubbles: true,
+          composed: true,
+        })
+      );
+    }, 10000); // 10 second timeout
+
     // If cleanup, apply black hole animation FIRST and wait
     if (isCleanup) {
       // Apply the black hole animation class
@@ -161,6 +178,7 @@ export class SessionCard extends LitElement {
       logger.log(
         `Session ${this.session.id} ${action === 'cleanup' ? 'cleaned up' : 'killed'} successfully`
       );
+      clearTimeout(killingTimeout);
       return true;
     } catch (error) {
       logger.error('Error killing session', { error, sessionId: this.session.id });
@@ -176,10 +194,12 @@ export class SessionCard extends LitElement {
           composed: true,
         })
       );
+      clearTimeout(killingTimeout);
       return false;
     } finally {
       // Stop animation in all cases
       this.stopKillingAnimation();
+      clearTimeout(killingTimeout);
     }
   }
 

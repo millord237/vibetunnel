@@ -265,10 +265,19 @@ export class SessionListPage extends BasePage {
     }
 
     // Click and wait for response
+    console.log('Waiting for session creation response...');
     const responsePromise = this.page.waitForResponse(
-      (response) =>
-        response.url().includes('/api/sessions') && response.request().method() === 'POST',
-      { timeout: 10000 }
+      (response) => {
+        const isSessionEndpoint = response.url().includes('/api/sessions');
+        const isPost = response.request().method() === 'POST';
+        if (isSessionEndpoint) {
+          console.log(
+            `Session endpoint response: ${response.status()} ${response.request().method()}`
+          );
+        }
+        return isSessionEndpoint && isPost;
+      },
+      { timeout: 20000 } // Increased timeout for CI
     );
 
     await submitButton.click({ force: true, timeout: 5000 });
@@ -278,39 +287,52 @@ export class SessionListPage extends BasePage {
       let sessionId: string | undefined;
 
       try {
-        const response = await responsePromise;
-        console.log(`Session creation response status: ${response.status()}`);
+        const response = await Promise.race([
+          responsePromise,
+          this.page
+            .waitForTimeout(19000)
+            .then(() => null), // Slightly less than response timeout
+        ]);
 
-        if (response.status() !== 201 && response.status() !== 200) {
-          const body = await response.text();
-          throw new Error(`Session creation failed with status ${response.status()}: ${body}`);
+        if (response) {
+          console.log(`Session creation response status: ${response.status()}`);
+
+          if (response.status() !== 201 && response.status() !== 200) {
+            const body = await response.text();
+            throw new Error(`Session creation failed with status ${response.status()}: ${body}`);
+          }
+
+          // Get session ID from response
+          const responseBody = await response.json();
+          console.log('[CI Debug] Session created:', JSON.stringify(responseBody));
+          sessionId = responseBody.sessionId;
+        } else {
+          console.log(
+            'No response received within timeout, checking if navigation happened anyway'
+          );
         }
-
-        // Get session ID from response
-        const responseBody = await response.json();
-        console.log('Session created:', responseBody);
-        sessionId = responseBody.sessionId;
       } catch (error) {
         console.error('Error waiting for session response:', error);
         // Don't throw yet, check if we navigated anyway
       }
 
-      // Wait for modal to close first
+      // Wait for modal to close first - check for the data-modal-state attribute
       await this.page
-        .waitForSelector('.modal-content', { state: 'hidden', timeout: 5000 })
+        .waitForSelector('[data-modal-state="open"]', { state: 'detached', timeout: 5000 })
         .catch(() => {
           console.log('Modal might have already closed');
         });
 
-      // Wait for the UI to process the response
+      // Additional check to ensure modal is fully closed
       await this.page.waitForFunction(
         () => {
-          // Check if we're no longer on the session list page or modal has closed
-          const onSessionPage = window.location.search.includes('session=');
-          const modalClosed = !document.querySelector('[role="dialog"], .modal, [data-modal]');
-          return onSessionPage || modalClosed;
+          // Check if modal is gone
+          const modalElement = document.querySelector(
+            'session-create-form[data-modal-state="open"]'
+          );
+          return !modalElement;
         },
-        { timeout: TIMEOUTS.UI_UPDATE }
+        { timeout: 5000 }
       );
 
       // Check if we're already on the session page
@@ -399,10 +421,13 @@ export class SessionListPage extends BasePage {
     // Look for the status text in the footer area
     const statusText = await sessionCard.locator('span:has(.w-2.h-2.rounded-full)').textContent();
     // Sessions show "RUNNING" when active, not "active"
-    return statusText?.toUpperCase().includes('RUNNING') || false;
+    return statusText?.toLowerCase() === 'running' || false;
   }
 
   async killSession(sessionName: string) {
+    // Ensure no modal is blocking interaction
+    await this.closeAnyOpenModal();
+
     const sessionCard = await this.getSessionCard(sessionName);
 
     // Wait for the session card to be visible

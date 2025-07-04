@@ -15,6 +15,14 @@ global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 // Import component type separately
 import type { Terminal } from './terminal';
 
+// Test interface to access private methods/properties
+interface TestTerminal extends Terminal {
+  container: HTMLElement | null;
+  measureCharacterWidth(): number;
+  fitTerminal(): void;
+  userOverrideWidth: boolean;
+}
+
 describe('Terminal', () => {
   let element: Terminal;
   let mockTerminal: MockTerminal | null;
@@ -597,8 +605,7 @@ describe('Terminal', () => {
       element.rows = currentRows;
 
       // Mock character width measurement
-      // @ts-expect-error: accessing private method for testing
-      vi.spyOn(element, 'measureCharacterWidth').mockReturnValue(8);
+      vi.spyOn(element as TestTerminal, 'measureCharacterWidth').mockReturnValue(8);
 
       // Calculate container dimensions that would result in the same size
       const lineHeight = element.fontSize * 1.2;
@@ -606,12 +613,10 @@ describe('Terminal', () => {
         clientWidth: (currentCols + 1) * 8, // Account for -1 in calculation
         clientHeight: currentRows * lineHeight,
       };
-      // @ts-expect-error: accessing private property for testing
-      element.container = mockContainer;
+      (element as TestTerminal).container = mockContainer;
 
       // Call fitTerminal
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
+      (element as TestTerminal).fitTerminal();
 
       // Terminal resize should NOT be called since dimensions haven't changed
       expect(mockTerminal?.resize).not.toHaveBeenCalled();
@@ -629,26 +634,23 @@ describe('Terminal', () => {
         clientWidth: 800, // Would result in 100 cols (minus 1 for scrollbar prevention)
         clientHeight: 600, // Let fitTerminal calculate the actual rows
       };
-      // @ts-expect-error: accessing private property for testing
-      element.container = mockContainer;
+      (element as TestTerminal).container = mockContainer;
 
       // Mock character width measurement
-      // @ts-expect-error: accessing private method for testing
-      vi.spyOn(element, 'measureCharacterWidth').mockReturnValue(8);
+      vi.spyOn(element as TestTerminal, 'measureCharacterWidth').mockReturnValue(8);
 
       // Spy on dispatchEvent
       const dispatchEventSpy = vi.spyOn(element, 'dispatchEvent');
 
       // Call fitTerminal
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
+      (element as TestTerminal).fitTerminal();
 
       // Terminal resize SHOULD be called - verify it was called
       expect(mockTerminal?.resize).toHaveBeenCalled();
 
       // Get the actual values it was called with
-      if (!mockTerminal) throw new Error('mockTerminal is undefined');
-      const [cols, rows] = mockTerminal.resize.mock.calls[0];
+      const resizeCall = mockTerminal?.resize.mock.calls[0];
+      const [cols, rows] = resizeCall || [0, 0];
 
       // Verify cols is different from original (80)
       expect(cols).toBe(99); // (800/8) - 1 = 99
@@ -684,19 +686,14 @@ describe('Terminal', () => {
         clientWidth: (currentCols + 1) * 8,
         clientHeight: currentRows * lineHeight,
       };
-      // @ts-expect-error: accessing private property for testing
-      element.container = mockContainer;
+      (element as TestTerminal).container = mockContainer;
 
-      // @ts-expect-error: accessing private method for testing
-      vi.spyOn(element, 'measureCharacterWidth').mockReturnValue(8);
+      vi.spyOn(element as TestTerminal, 'measureCharacterWidth').mockReturnValue(8);
 
       // Call fitTerminal multiple times
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
+      (element as TestTerminal).fitTerminal();
+      (element as TestTerminal).fitTerminal();
+      (element as TestTerminal).fitTerminal();
 
       // Resize should not be called at all (dimensions unchanged)
       expect(mockTerminal?.resize).not.toHaveBeenCalled();
@@ -719,15 +716,12 @@ describe('Terminal', () => {
         clientHeight: 480,
         style: { fontSize: '14px' },
       };
-      // @ts-expect-error: accessing private property for testing
-      element.container = mockContainer;
+      (element as TestTerminal).container = mockContainer;
 
-      // @ts-expect-error: accessing private method for testing
-      vi.spyOn(element, 'measureCharacterWidth').mockReturnValue(8);
+      vi.spyOn(element as TestTerminal, 'measureCharacterWidth').mockReturnValue(8);
 
       // Call fitTerminal
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
+      (element as TestTerminal).fitTerminal();
 
       // In fitHorizontally mode, terminal should maintain its column count
       expect(element.cols).toBe(80);
@@ -755,20 +749,17 @@ describe('Terminal', () => {
         clientWidth: 1000, // Would result in 125 cols without constraint
         clientHeight: 480,
       };
-      // @ts-expect-error: accessing private property for testing
-      element.container = mockContainer;
+      (element as TestTerminal).container = mockContainer;
 
-      // @ts-expect-error: accessing private method for testing
-      vi.spyOn(element, 'measureCharacterWidth').mockReturnValue(8);
+      vi.spyOn(element as TestTerminal, 'measureCharacterWidth').mockReturnValue(8);
 
       // Call fitTerminal
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
+      (element as TestTerminal).fitTerminal();
 
       // Terminal should resize respecting maxCols constraint
       expect(mockTerminal?.resize).toHaveBeenCalled();
-      if (!mockTerminal) throw new Error('mockTerminal is undefined');
-      const [cols] = mockTerminal.resize.mock.calls[0];
+      const resizeCall = mockTerminal?.resize.mock.calls[0];
+      const [cols] = resizeCall || [0];
       expect(cols).toBe(100); // Should be limited to maxCols
     });
 
@@ -778,7 +769,7 @@ describe('Terminal', () => {
       element.initialCols = 120;
       element.initialRows = 30;
       element.maxCols = 0; // No manual width selection
-      element.userOverrideWidth = false;
+      (element as TestTerminal).userOverrideWidth = false;
 
       // Set terminal's current dimensions (different from initial)
       if (mockTerminal) {
@@ -791,20 +782,17 @@ describe('Terminal', () => {
         clientWidth: 1200, // Would result in 150 cols without constraint
         clientHeight: 600,
       };
-      // @ts-expect-error: accessing private property for testing
-      element.container = mockContainer;
+      (element as TestTerminal).container = mockContainer;
 
-      // @ts-expect-error: accessing private method for testing
-      vi.spyOn(element, 'measureCharacterWidth').mockReturnValue(8);
+      vi.spyOn(element as TestTerminal, 'measureCharacterWidth').mockReturnValue(8);
 
       // Call fitTerminal
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
+      (element as TestTerminal).fitTerminal();
 
       // Terminal should be limited to initial cols for tunneled sessions
       expect(mockTerminal?.resize).toHaveBeenCalled();
-      if (!mockTerminal) throw new Error('mockTerminal is undefined');
-      const [cols] = mockTerminal.resize.mock.calls[0];
+      const resizeCall = mockTerminal?.resize.mock.calls[0];
+      const [cols] = resizeCall || [0];
       expect(cols).toBe(120); // Should be limited to initialCols
     });
 
@@ -814,7 +802,7 @@ describe('Terminal', () => {
       element.initialCols = 120;
       element.initialRows = 30;
       element.maxCols = 0;
-      element.userOverrideWidth = false;
+      (element as TestTerminal).userOverrideWidth = false;
 
       // Set terminal's current dimensions
       if (mockTerminal) {
@@ -827,21 +815,18 @@ describe('Terminal', () => {
         clientWidth: 1200,
         clientHeight: 600,
       };
-      // @ts-expect-error: accessing private property for testing
-      element.container = mockContainer;
+      (element as TestTerminal).container = mockContainer;
 
-      // @ts-expect-error: accessing private method for testing
-      vi.spyOn(element, 'measureCharacterWidth').mockReturnValue(8);
+      vi.spyOn(element as TestTerminal, 'measureCharacterWidth').mockReturnValue(8);
 
       // Call fitTerminal
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
+      (element as TestTerminal).fitTerminal();
 
       // Terminal should NOT be limited by initial dimensions for frontend sessions
       // Should use calculated width: (1200/8) - 1 = 149
       expect(mockTerminal?.resize).toHaveBeenCalled();
-      if (!mockTerminal) throw new Error('mockTerminal is undefined');
-      const [cols] = mockTerminal.resize.mock.calls[0];
+      const resizeCall = mockTerminal?.resize.mock.calls[0];
+      const [cols] = resizeCall || [0];
       expect(cols).toBe(149); // Should use full calculated width
     });
 
@@ -862,18 +847,15 @@ describe('Terminal', () => {
         clientWidth: 808, // (100 + 1) * 8 = 808 (accounting for the -1 in calculation)
         clientHeight: 30 * lineHeight,
       };
-      // @ts-expect-error: accessing private property for testing
-      element.container = mockContainer;
+      (element as TestTerminal).container = mockContainer;
 
-      // @ts-expect-error: accessing private method for testing
-      vi.spyOn(element, 'measureCharacterWidth').mockReturnValue(8);
+      vi.spyOn(element as TestTerminal, 'measureCharacterWidth').mockReturnValue(8);
 
       // Clear previous calls
       mockTerminal?.resize.mockClear();
 
       // Call fitTerminal
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
+      (element as TestTerminal).fitTerminal();
 
       // Resize should NOT be called since calculated dimensions match current
       expect(mockTerminal?.resize).not.toHaveBeenCalled();
@@ -891,20 +873,17 @@ describe('Terminal', () => {
         clientWidth: 100,
         clientHeight: 50,
       };
-      // @ts-expect-error: accessing private property for testing
-      element.container = mockContainer;
+      (element as TestTerminal).container = mockContainer;
 
-      // @ts-expect-error: accessing private method for testing
-      vi.spyOn(element, 'measureCharacterWidth').mockReturnValue(8);
+      vi.spyOn(element as TestTerminal, 'measureCharacterWidth').mockReturnValue(8);
 
       // Call fitTerminal
-      // @ts-expect-error: accessing private method for testing
-      element.fitTerminal();
+      (element as TestTerminal).fitTerminal();
 
       // Should resize to minimum allowed dimensions
       expect(mockTerminal?.resize).toHaveBeenCalled();
-      if (!mockTerminal) throw new Error('mockTerminal is undefined');
-      const [cols, rows] = mockTerminal.resize.mock.calls[0];
+      const resizeCall = mockTerminal?.resize.mock.calls[0];
+      const [cols, rows] = resizeCall || [0, 0];
 
       // The calculation is: Math.max(20, Math.floor(100 / 8) - 1) = Math.max(20, 11) = 20
       // But if we're getting 19, it might be due to some other factor

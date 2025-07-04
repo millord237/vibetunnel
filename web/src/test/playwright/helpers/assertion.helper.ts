@@ -6,9 +6,9 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export async function assertSessionInList(
   page: Page,
   sessionName: string,
-  options: { timeout?: number; status?: 'RUNNING' | 'EXITED' | 'KILLED' } = {}
+  options: { timeout?: number; status?: 'running' | 'exited' } = {}
 ): Promise<void> {
-  const { timeout = 15000, status } = options;
+  const { timeout = 5000, status } = options;
 
   // Ensure we're on the session list page
   if (page.url().includes('?session=')) {
@@ -37,16 +37,16 @@ export async function assertSessionInList(
   // If status is provided, look for sessions with that status first
   let sessionCard: Locator;
   if (status) {
-    // Look for session cards with the specific status
+    // Look for session cards with the specific status using data-status attribute
     sessionCard = page
       .locator(
-        `session-card:has-text("${sessionName}"):has(span:text-is("${status.toLowerCase()}"))`
+        `session-card:has-text("${sessionName}"):has(span[data-status="${status.toLowerCase()}"])`
       )
       .first();
   } else {
     // Just find any session with the name, preferring running sessions
     const runningCard = page
-      .locator(`session-card:has-text("${sessionName}"):has(span:text-is("running"))`)
+      .locator(`session-card:has-text("${sessionName}"):has(span[data-status="running"])`)
       .first();
     const anyCard = page.locator(`session-card:has-text("${sessionName}")`).first();
 
@@ -83,7 +83,7 @@ export async function assertSessionInList(
       }
 
       // If status is RUNNING but shows "waiting", that's also acceptable
-      if (status === 'RUNNING' && statusText?.toLowerCase().includes('waiting')) {
+      if (status === 'running' && statusText?.toLowerCase().includes('waiting')) {
         return;
       }
 
@@ -108,7 +108,7 @@ export async function assertSessionInList(
           if (
             text &&
             (text.toUpperCase().includes(status) ||
-              (status === 'RUNNING' && text.toLowerCase().includes('waiting')))
+              (status === 'running' && text.toLowerCase().includes('waiting')))
           ) {
             return;
           }
@@ -120,8 +120,8 @@ export async function assertSessionInList(
       // Final fallback: check if the status text exists anywhere in the card
       const cardText = await sessionCard.textContent();
       if (
-        !cardText?.toUpperCase().includes(status) &&
-        !(status === 'RUNNING' && cardText?.toLowerCase().includes('waiting'))
+        !cardText?.toUpperCase().includes(status.toUpperCase()) &&
+        !(status === 'running' && cardText?.toLowerCase().includes('waiting'))
       ) {
         throw new Error(
           `Could not find status "${status}" in session card. Card text: "${cardText}"`

@@ -356,51 +356,40 @@ async function main() {
       console.warn('Warning: Using current time for build - output will not be reproducible');
     }
 
-    // Build command array for cross-platform compatibility
-    const esbuildArgs = [
-      'src/cli.ts',
-      '--bundle',
-      '--platform=node',
-      '--target=node20',
-      '--outfile=build/bundle.js',
-      '--format=cjs',
-      '--keep-names',
-      '--external:authenticate-pam',
-      '--external:../build/Release/pty.node',
-      '--external:./build/Release/pty.node',
-      `--define:process.env.BUILD_DATE='"${buildDate}"'`,
-      `--define:process.env.BUILD_TIMESTAMP='"${buildTimestamp}"'`,
-      '--define:process.env.VIBETUNNEL_SEA=\'"true"\''
-    ];
+    let esbuildCmd = `NODE_NO_WARNINGS=1 npx esbuild src/cli.ts \\
+      --bundle \\
+      --platform=node \\
+      --target=node20 \\
+      --outfile=build/bundle.js \\
+      --format=cjs \\
+      --keep-names \\
+      --external:authenticate-pam \\
+      --external:../build/Release/pty.node \\
+      --external:./build/Release/pty.node \\
+      --define:process.env.BUILD_DATE='"${buildDate}"' \\
+      --define:process.env.BUILD_TIMESTAMP='"${buildTimestamp}"' \\
+      --define:process.env.VIBETUNNEL_SEA='"true"'`;
     
     // Also inject git commit hash for version tracking
     try {
       const gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
-      esbuildArgs.push(`--define:process.env.GIT_COMMIT='"${gitCommit}"'`);
+      esbuildCmd += ` \\\n      --define:process.env.GIT_COMMIT='"${gitCommit}"'`;
     } catch (e) {
-      esbuildArgs.push('--define:process.env.GIT_COMMIT=\'"unknown"\'');
+      esbuildCmd += ` \\\n      --define:process.env.GIT_COMMIT='"unknown"'`;
     }
 
     if (includeSourcemaps) {
-      esbuildArgs.push('--sourcemap=inline', '--source-root=/');
+      esbuildCmd += ' \\\n      --sourcemap=inline \\\n      --source-root=/';
     }
 
-    console.log('Running: npx esbuild', esbuildArgs.join(' '));
-    
-    // Use spawn for better cross-platform compatibility
-    const { spawnSync } = require('child_process');
-    const result = spawnSync('npx', ['esbuild', ...esbuildArgs], {
+    console.log('Running:', esbuildCmd);
+    execSync(esbuildCmd, { 
       stdio: 'inherit',
       env: {
         ...process.env,
         NODE_NO_WARNINGS: '1'
-      },
-      shell: process.platform === 'win32'
+      }
     });
-    
-    if (result.status !== 0) {
-      throw new Error(`esbuild failed with exit code ${result.status}`);
-    }
 
     // 2b. Post-process bundle to ensure VIBETUNNEL_SEA is properly set
     console.log('\nPost-processing bundle for SEA compatibility...');

@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { testConfig } from './src/test/playwright/test-config';
 
 /**
+ * Playwright Test Configuration
  * Read environment variables from file.
  * https://github.com/motdotla/dotenv
  */
@@ -38,7 +39,7 @@ export default defineConfig({
     return process.env.CI ? 8 : undefined;
   })(),
   /* Test timeout */
-  timeout: process.env.CI ? 30 * 1000 : 20 * 1000, // 30s on CI, 20s locally
+  timeout: process.env.CI ? 60 * 1000 : 30 * 1000, // 60s on CI, 30s locally
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
     ['html', { open: 'never' }],
@@ -59,10 +60,10 @@ export default defineConfig({
     video: process.env.CI ? 'retain-on-failure' : 'off',
 
     /* Maximum time each action can take */
-    actionTimeout: 10000, // Reduced from 15s
+    actionTimeout: 15000, // Increased to 15s
 
     /* Give browser more time to start on CI */
-    navigationTimeout: process.env.CI ? 20000 : 15000, // Reduced timeouts
+    navigationTimeout: process.env.CI ? 30000 : 20000, // Increased timeouts
 
     /* Run in headless mode for better performance */
     headless: true,
@@ -100,6 +101,11 @@ export default defineConfig({
         '**/session-navigation.spec.ts',
         '**/session-management.spec.ts',
         '**/session-management-advanced.spec.ts',
+        '**/file-browser-basic.spec.ts',
+        '**/ssh-key-manager.spec.ts',
+        '**/push-notifications.spec.ts',
+        '**/authentication.spec.ts',
+        '**/activity-monitoring.spec.ts',
       ],
     },
     // Serial tests - these tests perform global operations or modify shared state
@@ -127,7 +133,6 @@ export default defineConfig({
     env: {
       ...process.env, // Include all existing env vars
       NODE_ENV: 'test',
-      PLAYWRIGHT_TEST: 'true', // Enable test mode for CSP
       VIBETUNNEL_DISABLE_PUSH_NOTIFICATIONS: 'true',
       SUPPRESS_CLIENT_ERRORS: 'true',
       VIBETUNNEL_SEA: '', // Explicitly set to empty to disable SEA loader

@@ -122,11 +122,13 @@ export class TestSessionManager {
 
     try {
       // Wait for page to be ready - either session cards or "no sessions" message
-      await this.page.waitForSelector(
-        'session-card, .text-dark-text-muted:has-text("No terminal sessions")',
-        {
-          timeout: 5000,
-        }
+      await this.page.waitForFunction(
+        () => {
+          const cards = document.querySelectorAll('session-card');
+          const noSessionsMsg = document.querySelector('.text-dark-text-muted');
+          return cards.length > 0 || noSessionsMsg?.textContent?.includes('No terminal sessions');
+        },
+        { timeout: 5000 }
       );
 
       // Check if session exists
