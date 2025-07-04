@@ -753,6 +753,35 @@ pub async fn show_welcome_window(state: State<'_, AppState>) -> Result<(), Strin
     welcome_manager.show_welcome_window().await
 }
 
+#[tauri::command]
+pub fn open_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    
+    Ok(())
+}
+
 // Advanced Settings Commands
 
 #[tauri::command]
@@ -1004,6 +1033,30 @@ pub async fn get_permission_stats(
     };
 
     Ok(stats)
+}
+
+#[tauri::command]
+pub async fn register_permission_monitoring(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.permissions_manager.register_for_monitoring().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn unregister_permission_monitoring(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.permissions_manager.unregister_from_monitoring().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn show_permission_alert(
+    state: State<'_, AppState>,
+    permission_type: crate::permissions::PermissionType,
+) -> Result<(), String> {
+    state.permissions_manager.show_permission_alert(permission_type).await
 }
 
 // Update Manager Commands
@@ -2072,22 +2125,26 @@ pub struct ServerLog {
 
 #[tauri::command]
 pub async fn get_server_logs(limit: usize) -> Result<Vec<ServerLog>, String> {
-    // TODO: Implement actual log collection from the server
-    // For now, return dummy logs for the UI
-    let logs = vec![
-        ServerLog {
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            level: "info".to_string(),
-            message: "Server started on port 4022".to_string(),
-        },
-        ServerLog {
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            level: "info".to_string(),
-            message: "Health check endpoint accessed".to_string(),
-        },
-    ];
+    let logs = crate::log_collector::SERVER_LOG_COLLECTOR.get_logs().await;
+    
+    // Convert LogEntry to ServerLog
+    let server_logs: Vec<ServerLog> = logs
+        .into_iter()
+        .take(limit)
+        .map(|entry| ServerLog {
+            timestamp: entry.timestamp,
+            level: entry.level,
+            message: entry.message,
+        })
+        .collect();
+    
+    Ok(server_logs)
+}
 
-    Ok(logs.into_iter().take(limit).collect())
+#[tauri::command]
+pub async fn clear_server_logs() -> Result<(), String> {
+    crate::log_collector::SERVER_LOG_COLLECTOR.clear().await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2353,6 +2410,209 @@ pub async fn finish_welcome(state: State<'_, AppState>) -> Result<(), String> {
     settings.save()?;
     
     Ok(())
+}
+
+// Tailscale commands
+#[tauri::command]
+pub async fn get_tailscale_status(state: State<'_, AppState>) -> Result<crate::tailscale::TailscaleStatus, String> {
+    Ok(state.tailscale_service.check_tailscale_status().await)
+}
+
+#[tauri::command]
+pub async fn start_tailscale_monitoring(state: State<'_, AppState>) -> Result<(), String> {
+    state.tailscale_service.start_monitoring().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_tailscale_app() -> Result<(), String> {
+    crate::tailscale::TailscaleService::open_tailscale_app()
+}
+
+#[tauri::command]
+pub async fn open_tailscale_download() -> Result<(), String> {
+    crate::tailscale::TailscaleService::open_download_page()
+}
+
+#[tauri::command]
+pub async fn open_tailscale_setup_guide() -> Result<(), String> {
+    crate::tailscale::TailscaleService::open_setup_guide()
+}
+
+// Window tracking commands
+#[tauri::command]
+pub async fn register_terminal_window(
+    session_id: String,
+    terminal_app: String,
+    tab_reference: Option<String>,
+    tab_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.window_tracker
+        .register_window(session_id, terminal_app, tab_reference, tab_id)
+        .await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn unregister_terminal_window(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.window_tracker.unregister_window(&session_id).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn focus_terminal_window(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.window_tracker.focus_window(&session_id).await
+}
+
+#[tauri::command]
+pub async fn get_terminal_window_info(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<crate::window_tracker::WindowInfo>, String> {
+    Ok(state.window_tracker.window_info(&session_id).await)
+}
+
+#[tauri::command]
+pub async fn update_window_tracking(state: State<'_, AppState>) -> Result<(), String> {
+    let sessions = state.api_client.list_sessions().await?;
+    state.window_tracker.update_from_sessions(&sessions).await;
+    Ok(())
+}
+
+// AppleScript commands (macOS only)
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn run_applescript(script: String) -> Result<String, String> {
+    crate::applescript::AppleScriptRunner::run_script(&script)
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn launch_terminal_with_applescript(
+    terminal_type: String,
+    session_id: String,
+    command: Option<String>,
+    working_directory: Option<String>,
+) -> Result<String, String> {
+    crate::applescript::AppleScriptTerminalLauncher::launch_terminal(
+        &terminal_type,
+        &session_id,
+        command.as_deref(),
+        working_directory.as_deref(),
+    ).await
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn focus_terminal_with_applescript(
+    terminal_type: String,
+    window_info: String,
+) -> Result<(), String> {
+    crate::applescript::AppleScriptTerminalLauncher::focus_terminal_window(
+        &terminal_type,
+        &window_info,
+    ).await
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn get_terminal_windows_applescript() -> Result<Vec<(u32, String)>, String> {
+    crate::applescript::AppleScriptRunner::get_terminal_windows()
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn is_app_running_applescript(app_name: String) -> Result<bool, String> {
+    crate::applescript::AppleScriptRunner::is_app_running(&app_name)
+}
+
+// Git commands
+#[tauri::command]
+pub async fn get_git_repository(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<Option<crate::git_repository::GitRepository>, String> {
+    Ok(state
+        .git_monitor
+        .find_repository(&file_path)
+        .await)
+}
+
+#[tauri::command]
+pub async fn get_cached_git_repository(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<Option<crate::git_repository::GitRepository>, String> {
+    Ok(state.git_monitor.get_cached_repository(&file_path).await)
+}
+
+#[tauri::command]
+pub async fn clear_git_cache(state: State<'_, AppState>) -> Result<(), String> {
+    state.git_monitor.clear_cache().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn start_git_monitoring(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+    state.git_monitor.start_monitoring(app).await;
+    Ok(())
+}
+
+// Dock Manager Commands
+#[tauri::command]
+pub fn set_dock_visible(state: State<'_, AppState>, visible: bool) -> Result<(), String> {
+    super::dock_manager::set_dock_visible(state, visible)
+}
+
+#[tauri::command]
+pub fn get_dock_visible(state: State<'_, AppState>) -> bool {
+    super::dock_manager::get_dock_visible(state)
+}
+
+#[tauri::command]
+pub fn update_dock_visibility(state: State<'_, AppState>) -> Result<(), String> {
+    super::dock_manager::update_dock_visibility(state)
+}
+
+// Status Indicator Commands  
+#[tauri::command]
+pub async fn update_status_indicator(
+    state: State<'_, AppState>,
+    server_running: bool,
+    active_sessions: usize,
+    total_sessions: usize,
+) -> Result<(), String> {
+    super::status_indicator::update_status_indicator(state, server_running, active_sessions, total_sessions).await
+}
+
+#[tauri::command]
+pub async fn flash_activity_indicator(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    super::status_indicator::flash_activity_indicator(state).await
+}
+
+// Power Manager Commands
+#[tauri::command]
+pub fn prevent_sleep(state: State<'_, AppState>) -> Result<(), String> {
+    super::power_manager::prevent_sleep(state)
+}
+
+#[tauri::command]
+pub fn allow_sleep(state: State<'_, AppState>) -> Result<(), String> {
+    super::power_manager::allow_sleep(state)
+}
+
+#[tauri::command]
+pub fn is_sleep_prevented(state: State<'_, AppState>) -> bool {
+    super::power_manager::is_sleep_prevented(state)
 }
 
 #[cfg(test)]

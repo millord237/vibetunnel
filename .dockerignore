@@ -1,0 +1,43 @@
+# Ignore build artifacts
+target/
+dist/
+build/
+*.log
+web/native/vibetunnel
+web/native/*.node
+web/native/spawn-helper
+web/public/bundle/
+
+# Ignore node_modules - CRITICAL for cross-platform builds
+node_modules/
+**/node_modules/
+web/node_modules/
+tauri/node_modules/
+mac/node_modules/
+ios/node_modules/
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore macOS files
+.DS_Store
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore test files
+*.test.*
+*.spec.*
+
+# Ignore documentation
+*.md
+docs/
+
+# Ignore cache directories
+.cache/
+.npm/
+.pnpm-store/

@@ -16,8 +16,10 @@ let nodePtyPath;
 try {
   nodePtyPath = require.resolve('node-pty/package.json');
 } catch (e) {
-  console.error('Could not find node-pty module');
-  process.exit(1);
+  console.log('Could not find node-pty module');
+  // In CI or during initial install, node-pty might not be installed yet
+  // This is expected behavior, so exit successfully
+  process.exit(0);
 }
 
 const nodePtyDir = path.dirname(nodePtyPath);

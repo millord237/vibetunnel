@@ -3,10 +3,15 @@ use crate::api_testing::APITestingManager;
 use crate::auth_cache::AuthCacheManager;
 use crate::backend_manager::BackendManager;
 use crate::debug_features::DebugFeaturesManager;
+use crate::dock_manager::DockManager;
+use crate::git_monitor::GitMonitor;
 use crate::ngrok::NgrokManager;
 use crate::notification_manager::NotificationManager;
 use crate::permissions::PermissionsManager;
+use crate::power_manager::PowerManager;
 use crate::session_monitor::SessionMonitor;
+use crate::status_indicator::StatusIndicator;
+use crate::tailscale::TailscaleService;
 use crate::terminal::TerminalManager;
 use crate::terminal_integrations::TerminalIntegrationsManager;
 use crate::terminal_spawn_service::TerminalSpawnService;
@@ -15,8 +20,10 @@ use crate::tty_forward::TTYForwardManager;
 use crate::unix_socket_server::UnixSocketServer;
 use crate::updater::UpdateManager;
 use crate::welcome::WelcomeManager;
+use crate::window_tracker::WindowTracker;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use tauri::AppHandle;
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
@@ -38,6 +45,13 @@ pub struct AppState {
     pub auth_cache_manager: Arc<AuthCacheManager>,
     pub terminal_integrations_manager: Arc<TerminalIntegrationsManager>,
     pub terminal_spawn_service: Arc<TerminalSpawnService>,
+    pub git_monitor: Arc<GitMonitor>,
+    pub tailscale_service: Arc<TailscaleService>,
+    pub window_tracker: Arc<WindowTracker>,
+    pub dock_manager: Arc<DockManager>,
+    pub status_indicator: Arc<StatusIndicator>,
+    pub power_manager: Arc<PowerManager>,
+    app_handle: Arc<RwLock<Option<AppHandle>>>,
     #[cfg(unix)]
     pub unix_socket_server: Arc<UnixSocketServer>,
 }
@@ -104,9 +118,26 @@ impl AppState {
             auth_cache_manager: Arc::new(auth_cache_manager),
             terminal_integrations_manager,
             terminal_spawn_service,
+            git_monitor: Arc::new(GitMonitor::new()),
+            tailscale_service: Arc::new(TailscaleService::new()),
+            window_tracker: Arc::new(WindowTracker::new()),
+            dock_manager: Arc::new(DockManager::new()),
+            status_indicator: Arc::new(StatusIndicator::new()),
+            power_manager: Arc::new(PowerManager::new()),
+            app_handle: Arc::new(RwLock::new(None)),
             #[cfg(unix)]
             unix_socket_server,
         }
+    }
+
+    /// Set the app handle for managers that need it
+    pub async fn set_app_handle(&self, app_handle: AppHandle) {
+        *self.app_handle.write().await = Some(app_handle);
+    }
+
+    /// Get the app handle if available
+    pub fn get_app_handle(&self) -> Option<AppHandle> {
+        self.app_handle.blocking_read().clone()
     }
 }
 
@@ -135,6 +166,12 @@ mod tests {
         assert!(Arc::strong_count(&state.terminal_integrations_manager) >= 1);
         assert!(Arc::strong_count(&state.terminal_spawn_service) >= 1);
         assert!(Arc::strong_count(&state.tty_forward_manager) >= 1);
+        assert!(Arc::strong_count(&state.git_monitor) >= 1);
+        assert!(Arc::strong_count(&state.tailscale_service) >= 1);
+        assert!(Arc::strong_count(&state.window_tracker) >= 1);
+        assert!(Arc::strong_count(&state.dock_manager) >= 1);
+        assert!(Arc::strong_count(&state.status_indicator) >= 1);
+        assert!(Arc::strong_count(&state.power_manager) >= 1);
 
         #[cfg(unix)]
         assert!(Arc::strong_count(&state.unix_socket_server) >= 1);
