@@ -2,7 +2,6 @@ import SwiftUI
 import UIKit
 
 /// Design system for the VibeTunnel app.
-///
 /// Centralizes all visual styling including colors, typography,
 /// spacing, corner radii, and animations for consistent UI.
 enum Theme {
@@ -10,7 +9,7 @@ enum Theme {
 
     /// Color palette for the app with automatic light/dark mode support.
     enum Colors {
-        // Background colors
+        /// Background colors
         static let terminalBackground = Color(light: Color(hex: "FFFFFF"), dark: Color(hex: "0A0E14"))
         static let cardBackground = Color(light: Color(hex: "F8F9FA"), dark: Color(hex: "0D1117"))
         static let headerBackground = Color(light: Color(hex: "FFFFFF"), dark: Color(hex: "010409"))
@@ -21,7 +20,7 @@ enum Theme {
         /// Text colors
         static let terminalForeground = Color(light: Color(hex: "24292E"), dark: Color(hex: "B3B1AD"))
 
-        // Accent colors (same for both modes)
+        /// Accent colors (same for both modes)
         static let primaryAccent = Color(hex: "007AFF") // iOS system blue
         static let secondaryAccent = Color(hex: "59C2FF")
         static let successAccent = Color(hex: "AAD94C")
@@ -34,19 +33,19 @@ enum Theme {
         /// Overlay colors
         static let overlayBackground = Color(light: Color.black.opacity(0.5), dark: Color.black.opacity(0.7))
 
-        // Additional UI colors
+        /// Additional UI colors
         static let secondaryText = Color(light: Color(hex: "6E7781"), dark: Color(hex: "8B949E"))
         static let secondaryBackground = Color(light: Color(hex: "F6F8FA"), dark: Color(hex: "161B22"))
         static let success = successAccent
         static let error = errorAccent
 
-        // Additional UI colors for FileBrowser
+        /// Additional UI colors for FileBrowser
         static let terminalAccent = primaryAccent
         static let terminalGray = Color(light: Color(hex: "586069"), dark: Color(hex: "8B949E"))
         static let terminalDarkGray = Color(light: Color(hex: "F6F8FA"), dark: Color(hex: "161B22"))
         static let terminalWhite = Color(light: Color(hex: "000000"), dark: Color.white)
 
-        // Terminal ANSI colors - using slightly adjusted colors for light mode
+        /// Terminal ANSI colors - using slightly adjusted colors for light mode
         static let ansiBlack = Color(light: Color(hex: "24292E"), dark: Color(hex: "01060E"))
         static let ansiRed = Color(light: Color(hex: "D73A49"), dark: Color(hex: "EA6C73"))
         static let ansiGreen = Color(light: Color(hex: "28A745"), dark: Color(hex: "91B362"))
@@ -56,7 +55,7 @@ enum Theme {
         static let ansiCyan = Color(light: Color(hex: "0598BC"), dark: Color(hex: "90E1C6"))
         static let ansiWhite = Color(light: Color(hex: "586069"), dark: Color(hex: "C7C7C7"))
 
-        // Bright ANSI colors
+        /// Bright ANSI colors
         static let ansiBrightBlack = Color(light: Color(hex: "959DA5"), dark: Color(hex: "686868"))
         static let ansiBrightRed = Color(light: Color(hex: "CB2431"), dark: Color(hex: "F07178"))
         static let ansiBrightGreen = Color(light: Color(hex: "22863A"), dark: Color(hex: "C2D94C"))
@@ -66,7 +65,7 @@ enum Theme {
         static let ansiBrightCyan = Color(light: Color(hex: "0598BC"), dark: Color(hex: "95E6CB"))
         static let ansiBrightWhite = Color(light: Color(hex: "24292E"), dark: Color(hex: "FFFFFF"))
 
-        // File type colors
+        /// File type colors
         static let fileTypeJS = Color(light: Color(hex: "B08800"), dark: Color(hex: "FFB454"))
         static let fileTypeTS = Color(light: Color(hex: "0366D6"), dark: Color(hex: "007ACC"))
         static let fileTypeJSON = Color(light: Color(hex: "E36209"), dark: Color(hex: "FF8C42"))
@@ -164,6 +163,8 @@ enum Theme {
 
 // MARK: - Color Extensions
 
+/// Color extension for hex initialization and dark mode support.
+/// Provides convenience initializers for creating colors from hex strings and adaptive colors.
 extension Color {
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
@@ -205,6 +206,8 @@ extension Color {
 
 // MARK: - View Modifiers
 
+/// View extension for terminal UI styling.
+/// Provides pre-configured modifiers for consistent terminal app appearance.
 extension View {
     func terminalCard() -> some View {
         self
@@ -246,6 +249,8 @@ extension View {
 
 // MARK: - Haptic Feedback
 
+/// Protocol for haptic feedback functionality.
+/// Provides methods for various types of tactile feedback.
 @MainActor
 protocol HapticFeedbackProtocol {
     func impact(_ style: HapticFeedback.ImpactStyle)
@@ -253,10 +258,12 @@ protocol HapticFeedbackProtocol {
     func notification(_ type: HapticFeedback.NotificationType)
 }
 
+/// Provides haptic feedback for user interactions.
+/// Wraps UIKit haptic generators with a SwiftUI-friendly API.
 @MainActor
 struct HapticFeedback: HapticFeedbackProtocol {
-    static let shared: HapticFeedbackProtocol = HapticFeedback()
-    
+    static let shared: HapticFeedbackProtocol = Self()
+
     func impact(_ style: ImpactStyle) {
         let generator = UIImpactFeedbackGenerator(style: style.uiKitStyle)
         generator.impactOccurred()
@@ -271,7 +278,7 @@ struct HapticFeedback: HapticFeedbackProtocol {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(type.uiKitType)
     }
-    
+
     static func impact(_ style: ImpactStyle) {
         shared.impact(style)
     }
@@ -283,7 +290,6 @@ struct HapticFeedback: HapticFeedbackProtocol {
     static func notification(_ type: NotificationType) {
         shared.notification(type)
     }
-    
 
     /// SwiftUI-native style enums
     enum ImpactStyle {

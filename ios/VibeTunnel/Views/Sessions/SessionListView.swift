@@ -10,8 +10,8 @@ struct SessionListView: View {
     @Environment(NavigationManager.self)
     var navigationManager
     @State private var viewModel: SessionListViewModel
-    
-    // Inject ViewModel directly - clean separation
+
+    /// Inject ViewModel directly - clean separation
     init(viewModel: SessionListViewModel = SessionListViewModel()) {
         _viewModel = State(initialValue: viewModel)
     }
@@ -356,6 +356,8 @@ struct SessionListView: View {
 }
 
 /// Protocol defining the interface for session list view model
+/// Protocol defining the interface for session list view models.
+/// Ensures testability and separation of concerns for session management.
 @MainActor
 protocol SessionListViewModelProtocol: Observable {
     var sessions: [Session] { get }
@@ -365,8 +367,7 @@ protocol SessionListViewModelProtocol: Observable {
     var showExitedSessions: Bool { get set }
     var searchText: String { get set }
     var isNetworkConnected: Bool { get }
-    
-    
+
     func loadSessions() async
     func killSession(_ sessionId: String) async
     func cleanupSession(_ sessionId: String) async
@@ -375,6 +376,8 @@ protocol SessionListViewModelProtocol: Observable {
 }
 
 /// View model for managing session list state and operations.
+/// View model managing terminal session state and operations.
+/// Handles session creation, deletion, and real-time updates via WebSocket.
 @MainActor
 @Observable
 class SessionListViewModel: SessionListViewModelProtocol {
@@ -383,14 +386,14 @@ class SessionListViewModel: SessionListViewModelProtocol {
     var errorMessage: String?
     var showExitedSessions = true
     var searchText = ""
-    
+
     var filteredSessions: [Session] {
         let visibleSessions = sessions.filter { showExitedSessions || $0.isRunning }
-        
+
         if searchText.isEmpty {
             return visibleSessions
         }
-        
+
         return visibleSessions.filter { session in
             // Search in session name
             if let name = session.name, name.localizedCaseInsensitiveContains(searchText) {
@@ -411,11 +414,11 @@ class SessionListViewModel: SessionListViewModelProtocol {
             return false
         }
     }
-    
+
     var isNetworkConnected: Bool {
         networkMonitor.isConnected
     }
-    
+
     // UI State
     var showingCreateSession = false
     var selectedSession: Session?
@@ -439,7 +442,7 @@ class SessionListViewModel: SessionListViewModelProtocol {
         self.networkMonitor = networkMonitor
         self.connectionManager = connectionManager
     }
-    
+
     func disconnect() async {
         await connectionManager.disconnect()
     }
@@ -502,6 +505,8 @@ class SessionListViewModel: SessionListViewModelProtocol {
 
 // MARK: - Extracted Components
 
+/// Header component displaying session list title and actions.
+/// Shows session count and provides quick access to create new sessions.
 struct SessionHeaderView: View {
     let sessions: [Session]
     @Binding var showExitedSessions: Bool
@@ -551,6 +556,8 @@ struct SessionHeaderView: View {
     }
 }
 
+/// Badge component showing the total number of sessions.
+/// Displays count with consistent styling across the app.
 struct SessionCountBadge: View {
     let label: String
     let count: Int

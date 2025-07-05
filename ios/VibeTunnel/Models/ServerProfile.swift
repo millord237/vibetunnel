@@ -1,6 +1,7 @@
 import Foundation
 
-/// A saved server configuration profile
+/// A saved server configuration profile.
+/// Stores persistent server connection details with metadata for easy management.
 struct ServerProfile: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
@@ -42,6 +43,13 @@ struct ServerProfile: Identifiable, Codable, Equatable {
             return nil
         }
 
+        // Clean up the host - remove brackets from IPv6 addresses
+        // URLComponents includes brackets in the host for IPv6, but we want clean IPs
+        var cleanHost = host
+        if cleanHost.hasPrefix("[") && cleanHost.hasSuffix("]") {
+            cleanHost = String(cleanHost.dropFirst().dropLast())
+        }
+
         // Determine default port based on scheme
         let defaultPort: Int = if let scheme = urlComponents.scheme?.lowercased() {
             scheme == "https" ? 443 : 80
@@ -52,7 +60,7 @@ struct ServerProfile: Identifiable, Codable, Equatable {
         let port = urlComponents.port ?? defaultPort
 
         return ServerConfig(
-            host: host,
+            host: cleanHost,
             port: port,
             name: name
         )

@@ -88,7 +88,7 @@ struct SessionCardView: View {
                                     Text("Session exited")
                                         .font(Theme.Typography.terminalSystem(size: 12))
                                         .foregroundColor(Theme.Colors.errorAccent)
-                                    
+
                                     Text("Exit code: \(session.exitCode ?? 0)")
                                         .font(Theme.Typography.terminalSystem(size: 10))
                                         .foregroundColor(Theme.Colors.terminalForeground.opacity(0.6))
@@ -186,7 +186,6 @@ struct SessionCardView: View {
         }
     }
 
-
     private func animateKill() {
         guard !isKilling else { return }
         isKilling = true
@@ -259,5 +258,4 @@ struct SessionCardView: View {
         }
         .padding(Theme.Spacing.small)
     }
-
 }

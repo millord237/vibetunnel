@@ -1,60 +1,73 @@
 import Foundation
+import OSLog
 
-/// Simple logger for VibeTunnel iOS app
-enum LogLevel: Int {
+/// Log level enumeration for filtering log output
+enum LogLevel: Int, Comparable {
     case verbose = 0
     case debug = 1
     case info = 2
     case warning = 3
     case error = 4
-
+    
+    /// Emoji prefix for each log level
     var prefix: String {
         switch self {
-        case .verbose: "🔍"
-        case .debug: "🐛"
-        case .info: "ℹ️"
-        case .warning: "⚠️"
-        case .error: "❌"
+        case .verbose: return "🔍"
+        case .debug: return "🐛"
+        case .info: return "ℹ️"
+        case .warning: return "⚠️"
+        case .error: return "❌"
         }
+    }
+    
+    static func < (lhs: LogLevel, rhs: LogLevel) -> Bool {
+        lhs.rawValue < rhs.rawValue
     }
 }
 
+/// Simple logging utility for debugging and diagnostics using the unified logging system.
+/// Provides category-based logging that integrates with Console.app and log stream.
 struct Logger {
+    private let osLogger: os.Logger
     private let category: String
-
-    // Global log level - only messages at this level or higher will be printed
-    #if DEBUG
-        nonisolated(unsafe) static var globalLevel: LogLevel = .info // Default to info level in debug builds
-    #else
-        nonisolated(unsafe) static var globalLevel: LogLevel = .warning // Only warnings and errors in release
-    #endif
+    
+    /// Global log level threshold - only messages at this level or higher will be logged
+    nonisolated(unsafe) static var globalLevel: LogLevel = {
+        #if DEBUG
+        return .info
+        #else
+        return .warning
+        #endif
+    }()
 
     init(category: String) {
         self.category = category
+        // Use the same subsystem as the Mac app for consistency
+        self.osLogger = os.Logger(subsystem: "sh.vibetunnel.vibetunnel", category: category)
     }
 
     func verbose(_ message: String) {
-        log(message, level: .verbose)
+        guard LogLevel.verbose >= Self.globalLevel else { return }
+        osLogger.trace("\(message, privacy: .public)")
     }
 
     func debug(_ message: String) {
-        log(message, level: .debug)
+        guard LogLevel.debug >= Self.globalLevel else { return }
+        osLogger.debug("\(message, privacy: .public)")
     }
 
     func info(_ message: String) {
-        log(message, level: .info)
+        guard LogLevel.info >= Self.globalLevel else { return }
+        osLogger.info("\(message, privacy: .public)")
     }
 
     func warning(_ message: String) {
-        log(message, level: .warning)
+        guard LogLevel.warning >= Self.globalLevel else { return }
+        osLogger.warning("\(message, privacy: .public)")
     }
 
     func error(_ message: String) {
-        log(message, level: .error)
-    }
-
-    private func log(_ message: String, level: LogLevel) {
-        guard level.rawValue >= Self.globalLevel.rawValue else { return }
-        print("\(level.prefix) [\(category)] \(message)")
+        guard LogLevel.error >= Self.globalLevel else { return }
+        osLogger.error("\(message, privacy: .public)")
     }
 }

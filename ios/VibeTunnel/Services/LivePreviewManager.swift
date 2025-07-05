@@ -21,8 +21,7 @@ final class LivePreviewManager {
     /// Update interval for previews (in seconds)
     private let updateInterval: TimeInterval = 1.0
 
-    private init() {
-    }
+    private init() {}
 
     /// Subscribe to live updates for a session.
     func subscribe(to sessionId: String) -> LivePreviewSubscription {
@@ -147,6 +146,7 @@ final class LivePreviewSubscription {
 }
 
 /// SwiftUI view modifier for managing live preview subscriptions.
+/// Automatically handles subscription lifecycle based on view appearance.
 struct LivePreviewModifier: ViewModifier {
     let sessionId: String
     let isEnabled: Bool
@@ -170,7 +170,8 @@ struct LivePreviewModifier: ViewModifier {
     }
 }
 
-/// Environment key for passing subscription down the view hierarchy
+/// Environment key for passing subscription down the view hierarchy.
+/// Enables child views to access the live preview subscription.
 private struct LivePreviewSubscriptionKey: EnvironmentKey {
     static let defaultValue: LivePreviewSubscription? = nil
 }

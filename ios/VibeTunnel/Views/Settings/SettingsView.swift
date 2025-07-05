@@ -84,7 +84,8 @@ struct SettingsView: View {
     }
 }
 
-/// General settings tab content
+/// General settings tab content.
+/// Provides options for basic app configuration and preferences.
 struct GeneralSettingsView: View {
     @AppStorage("defaultFontSize")
     private var defaultFontSize: Double = 14
@@ -98,12 +99,12 @@ struct GeneralSettingsView: View {
     private var enableLivePreviews = true
     @AppStorage("colorSchemePreference")
     private var colorSchemePreferenceRaw = "system"
-    
+
     enum ColorSchemePreference: String, CaseIterable {
         case system = "system"
         case light = "light"
         case dark = "dark"
-        
+
         var displayName: String {
             switch self {
             case .system: "System"
@@ -112,7 +113,7 @@ struct GeneralSettingsView: View {
             }
         }
     }
-    
+
     private var colorSchemePreference: ColorSchemePreference {
         ColorSchemePreference(rawValue: colorSchemePreferenceRaw) ?? .system
     }
@@ -246,6 +247,8 @@ struct GeneralSettingsView: View {
 }
 
 /// Advanced settings tab content
+/// Advanced settings tab content.
+/// Offers technical configuration options for power users.
 struct AdvancedSettingsView: View {
     @AppStorage("verboseLogging")
     private var verboseLogging = false
@@ -392,6 +395,8 @@ struct AdvancedSettingsView: View {
 }
 
 /// About settings tab content
+/// About settings tab content.
+/// Displays app information, version details, and external links.
 struct AboutSettingsView: View {
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
@@ -472,6 +477,8 @@ struct AboutSettingsView: View {
     }
 }
 
+/// Reusable row component for external links.
+/// Displays a link with icon and opens URLs in the default browser.
 struct LinkRow: View {
     let icon: String
     let title: String

@@ -2,6 +2,7 @@ import Observation
 import SwiftUI
 
 /// Main entry point for the VibeTunnel iOS application.
+/// Manages app lifecycle, scene configuration, and URL handling.
 @main
 struct VibeTunnelApp: App {
     @State private var connectionManager = ConnectionManager.shared
@@ -43,10 +44,10 @@ struct VibeTunnelApp: App {
     }
 
     #if targetEnvironment(macCatalyst)
-    private func getStoredWindowStyle() -> MacWindowStyle {
-        let styleRaw = UserDefaults.standard.string(forKey: "macWindowStyle") ?? "standard"
-        return styleRaw == "inline" ? .inline : .standard
-    }
+        private func getStoredWindowStyle() -> MacWindowStyle {
+            let styleRaw = UserDefaults.standard.string(forKey: "macWindowStyle") ?? "standard"
+            return styleRaw == "inline" ? .inline : .standard
+        }
     #endif
 
     private func handleURL(_ url: URL) {

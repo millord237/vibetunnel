@@ -1,6 +1,7 @@
 import Foundation
 
 /// Terminal event types that match the server's output.
+/// Represents various events that can occur during terminal interaction.
 enum TerminalWebSocketEvent {
     case header(width: Int, height: Int)
     case output(timestamp: Double, data: String)
@@ -11,7 +12,8 @@ enum TerminalWebSocketEvent {
     case alert(title: String?, message: String)
 }
 
-/// Binary buffer snapshot data
+/// Binary buffer snapshot data.
+/// Contains the complete terminal buffer state including cells, cursor position, and viewport.
 struct BufferSnapshot {
     let cols: Int
     let rows: Int
@@ -21,7 +23,8 @@ struct BufferSnapshot {
     let cells: [[BufferCell]]
 }
 
-/// Individual cell data
+/// Individual cell data.
+/// Represents a single character cell in the terminal with its styling attributes.
 struct BufferCell {
     let char: String
     let width: Int
@@ -85,9 +88,9 @@ class BufferWebSocketClient: NSObject {
     }
 
     func connect() {
-        guard !isConnecting else { 
+        guard !isConnecting else {
             logger.warning("Already connecting, ignoring connect() call")
-            return 
+            return
         }
         guard !isConnected else {
             logger.warning("Already connected, ignoring connect() call")
@@ -105,7 +108,7 @@ class BufferWebSocketClient: NSObject {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         components?.scheme = baseURL.scheme == "https" ? "wss" : "ws"
         components?.path = "/buffers"
-        
+
         // Add authentication token as query parameter (not header)
         if let token = authenticationService?.getTokenForQuery() {
             components?.queryItems = [URLQueryItem(name: "token", value: token)]
@@ -634,10 +637,10 @@ class BufferWebSocketClient: NSObject {
     func subscribe(to sessionId: String, handler: @escaping (TerminalWebSocketEvent) -> Void) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            
+
             // Store the handler
             self.subscriptions[sessionId] = handler
-            
+
             // Send subscription message immediately if connected
             if self.isConnected {
                 try? await self.sendMessage(["type": "subscribe", "sessionId": sessionId])
@@ -652,10 +655,10 @@ class BufferWebSocketClient: NSObject {
     func unsubscribe(from sessionId: String) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            
+
             // Remove the handler
             self.subscriptions.removeValue(forKey: sessionId)
-            
+
             // Send unsubscribe message immediately if connected
             if self.isConnected {
                 try? await self.sendMessage(["type": "unsubscribe", "sessionId": sessionId])
@@ -758,7 +761,7 @@ extension BufferWebSocketClient: WebSocketDelegate {
         // Re-subscribe to all sessions that have handlers
         Task { @MainActor [weak self] in
             guard let self else { return }
-            
+
             let sessionIds = Array(self.subscriptions.keys)
             for sessionId in sessionIds {
                 try? await self.sendMessage(["type": "subscribe", "sessionId": sessionId])

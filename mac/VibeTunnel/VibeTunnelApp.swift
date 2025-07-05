@@ -161,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         // Register default values
         UserDefaults.standard.register(defaults: [
-            "showInDock": true  // Default to showing in dock
+            "showInDock": true // Default to showing in dock
         ])
 
         // Initialize Sparkle updater manager

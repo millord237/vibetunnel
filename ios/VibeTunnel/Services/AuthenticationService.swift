@@ -6,22 +6,23 @@ enum AuthenticationError: LocalizedError {
     case invalidCredentials
     case tokenExpired
     case serverError(String)
-    
+
     var errorDescription: String? {
         switch self {
         case .credentialsNotFound:
-            return "No stored credentials found"
+            "No stored credentials found"
         case .invalidCredentials:
-            return "Invalid username or password"
+            "Invalid username or password"
         case .tokenExpired:
-            return "Authentication token has expired"
+            "Authentication token has expired"
         case .serverError(let message):
-            return "Server error: \(message)"
+            "Server error: \(message)"
         }
     }
 }
 
-/// Authentication service for managing JWT token-based authentication
+/// Authentication service for managing JWT token-based authentication.
+/// Handles login, token storage, and authentication state management.
 @MainActor
 final class AuthenticationService: ObservableObject {
     private let logger = Logger(category: "AuthenticationService")
@@ -35,18 +36,24 @@ final class AuthenticationService: ObservableObject {
 
     // MARK: - Types
 
+    /// Supported authentication methods.
+    /// Defines the different ways users can authenticate with the server.
     enum AuthMethod: String, Codable {
         case password = "password"
         case sshKey = "ssh-key"
         case noAuth = "no-auth"
     }
 
+    /// Server authentication configuration.
+    /// Describes which authentication methods are enabled on the server.
     struct AuthConfig: Codable {
         let noAuth: Bool
         let enableSSHKeys: Bool
         let disallowUserPassword: Bool
     }
 
+    /// Authentication response from the server.
+    /// Contains authentication result and optional token/error information.
     struct AuthResponse: Codable {
         let success: Bool
         let token: String?
@@ -55,6 +62,8 @@ final class AuthenticationService: ObservableObject {
         let error: String?
     }
 
+    /// User authentication data stored locally.
+    /// Persists user information and login metadata.
     struct UserData: Codable {
         let userId: String
         let authMethod: String
@@ -72,7 +81,11 @@ final class AuthenticationService: ObservableObject {
 
     // MARK: - Initialization
 
-    init(apiClient: APIClient, serverConfig: ServerConfig, keychainService: KeychainServiceProtocol = KeychainService()) {
+    init(
+        apiClient: APIClient,
+        serverConfig: ServerConfig,
+        keychainService: KeychainServiceProtocol = KeychainService()
+    ) {
         self.apiClient = apiClient
         self.serverConfig = serverConfig
         self.keychainService = keychainService
@@ -220,9 +233,12 @@ final class AuthenticationService: ObservableObject {
 
     /// Attempt automatic login using stored credentials for a server profile
     func attemptAutoLogin(profile: ServerProfile) async throws {
-        logger.debug("attemptAutoLogin called for profile: \(profile.name) (id: \(profile.id)), isAuthenticated: \(isAuthenticated)")
+        logger
+            .debug(
+                "attemptAutoLogin called for profile: \(profile.name) (id: \(profile.id)), isAuthenticated: \(isAuthenticated)"
+            )
         logger.debug("Profile requiresAuth: \(profile.requiresAuth), username: \(profile.username ?? "nil")")
-        
+
         // Check if we already have valid authentication
         if isAuthenticated {
             let tokenValid = await verifyToken()
@@ -233,27 +249,30 @@ final class AuthenticationService: ObservableObject {
                 logger.warning("Token verification failed, will attempt fresh login")
             }
         }
-        
+
         // Check if profile requires authentication
         if !profile.requiresAuth {
-            logger.debug("Profile does not require authentication, but server requires it - treating as credentials not found")
+            logger
+                .debug(
+                    "Profile does not require authentication, but server requires it - treating as credentials not found"
+                )
             throw AuthenticationError.credentialsNotFound
         }
-        
+
         // Get stored password from keychain
         do {
             let password = try keychainService.getPassword(for: profile.id)
             logger.debug("Successfully retrieved password from keychain for profile: \(profile.name)")
             logger.debug("Password length: \(password.count) characters")
-            
+
             // Get username from profile or use default
             guard let username = profile.username else {
                 logger.error("No username configured for profile: \(profile.name)")
                 throw AuthenticationError.credentialsNotFound
             }
-            
+
             logger.debug("Attempting authentication with username: \(username)")
-            
+
             // Attempt authentication with stored credentials
             do {
                 try await authenticateWithPassword(username: username, password: password)
@@ -272,10 +291,13 @@ final class AuthenticationService: ObservableObject {
                 }
                 throw AuthenticationError.invalidCredentials
             }
-        } catch let keychainError {
-            logger.error("Failed to retrieve password from keychain for profile: \(profile.name), error: \(keychainError)")
+        } catch {
+            logger
+                .error(
+                    "Failed to retrieve password from keychain for profile: \(profile.name), error: \(error)"
+                )
             logger.debug("Looking for keychain item with account: server-\(profile.id)")
-            if let keychainErr = keychainError as? KeychainService.KeychainError {
+            if let keychainErr = error as? KeychainService.KeychainError {
                 switch keychainErr {
                 case .itemNotFound:
                     logger.debug("Keychain item not found for profile id: \(profile.id)")

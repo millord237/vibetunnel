@@ -47,8 +47,9 @@ struct WelcomeView: View {
                             ForEach(0..<5) { index in
                                 Circle()
                                     .fill(index == currentPage ?
-                                          Theme.Colors.primaryAccent :
-                                          Theme.Colors.secondaryText.opacity(0.3))
+                                        Theme.Colors.primaryAccent :
+                                        Theme.Colors.secondaryText.opacity(0.3)
+                                    )
                                     .frame(width: 8, height: 8)
                                     .animation(.easeInOut, value: currentPage)
                             }
@@ -133,6 +134,8 @@ struct WelcomeView: View {
 
 // MARK: - Individual Page Views
 
+/// First welcome page introducing VibeTunnel.
+/// Displays app icon and brief description of core functionality.
 struct WelcomePageView: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.xlarge) {
@@ -175,6 +178,8 @@ struct WelcomePageView: View {
     }
 }
 
+/// Welcome page explaining server connection.
+/// Shows how to connect to a VibeTunnel server from the iOS app.
 struct ConnectServerPageView: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.xlarge) {
@@ -215,6 +220,8 @@ struct ConnectServerPageView: View {
     }
 }
 
+/// Welcome page showcasing terminal features.
+/// Highlights key terminal capabilities and iOS-specific functionality.
 struct TerminalFeaturesPageView: View {
     @Binding var selectedTheme: TerminalTheme
 
@@ -260,6 +267,8 @@ struct TerminalFeaturesPageView: View {
     }
 }
 
+/// Welcome page demonstrating mobile controls.
+/// Explains touch gestures and iOS-optimized interface elements.
 struct MobileControlsPageView: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.xlarge) {

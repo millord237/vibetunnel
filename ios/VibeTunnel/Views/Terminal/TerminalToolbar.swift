@@ -215,7 +215,7 @@ struct TerminalToolbar: View {
 
                         Spacer()
                     }
-                    
+
                     // Sixth row - custom Ctrl key input
                     HStack(spacing: Theme.Spacing.extraSmall) {
                         Text("CTRL +")
@@ -262,6 +262,8 @@ struct TerminalToolbar: View {
     }
 }
 
+/// Individual button component for the terminal toolbar.
+/// Provides consistent styling and haptic feedback for toolbar actions.
 struct ToolbarButton: View {
     let label: String?
     let systemImage: String?
