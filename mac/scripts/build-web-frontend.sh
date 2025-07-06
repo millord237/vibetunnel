@@ -62,17 +62,9 @@ fi
 
 echo "Building web frontend..."
 
-# Setup PATH for Node.js
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-
-# Load NVM if available
-if [ -s "$HOME/.nvm/nvm.sh" ]; then
-    export NVM_DIR="$HOME/.nvm"
-    . "$NVM_DIR/nvm.sh"
-fi
-
-# Put volta on the path if it exists
-export PATH="$HOME/.volta/bin:$PATH"
+# Setup Node.js PATH (Homebrew, nvm, Volta, fnm)
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+source "${SCRIPT_DIR}/node-path-setup.sh"
 
 # Export CI to prevent interactive prompts
 export CI=true
