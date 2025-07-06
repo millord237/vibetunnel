@@ -54,7 +54,7 @@ struct RequestPermissionsPageView: View {
                     .fontWeight(.semibold)
 
                 Text(
-                    "VibeTunnel needs these permissions:\n• Automation to start terminal sessions\n• Accessibility to send commands\n• Screen Recording for screen capture"
+                    "VibeTunnel needs permissions for automation to start terminal sessions, accessibility to send commands, and screen recording for screen capture."
                 )
                 .font(.body)
                 .foregroundColor(.secondary)
@@ -109,7 +109,7 @@ struct RequestPermissionsPageView: View {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
-                            Text("Screen Recording permission granted")
+                            Text("Screen Recording granted")
                                 .foregroundColor(.secondary)
                         }
                         .font(.body)
