@@ -17,7 +17,6 @@ fi
 echo "Checking for Node.js..."
 
 # Load Node.js environment managers (Homebrew, nvm, Volta, fnm)
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]:-}" )" && pwd )"
 source "${SCRIPT_DIR}/node-path-setup.sh"
 
 # Check if Node.js is available
