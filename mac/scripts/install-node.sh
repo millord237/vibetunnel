@@ -16,27 +16,9 @@ fi
 
 echo "Checking for Node.js..."
 
-# Add common Node.js installation paths to PATH
-# Homebrew on Apple Silicon
-if [ -d "/opt/homebrew/bin" ]; then
-    export PATH="/opt/homebrew/bin:$PATH"
-fi
-
-# Homebrew on Intel Macs
-if [ -d "/usr/local/bin" ]; then
-    export PATH="/usr/local/bin:$PATH"
-fi
-
-# NVM default location
-if [ -s "$HOME/.nvm/nvm.sh" ]; then
-    export NVM_DIR="$HOME/.nvm"
-    . "$NVM_DIR/nvm.sh"
-fi
-
-# Volta
-if [ -d "$HOME/.volta/bin" ]; then
-    export PATH="$HOME/.volta/bin:$PATH"
-fi
+# Load Node.js environment managers (Homebrew, nvm, Volta, fnm)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]:-}" )" && pwd )"
+source "${SCRIPT_DIR}/node-path-setup.sh"
 
 # Check if Node.js is available
 if command -v node &> /dev/null; then
@@ -72,6 +54,7 @@ else
     echo "  - Download from: https://nodejs.org/"
     echo "  - Using nvm: nvm install 20"
     echo "  - Using volta: volta install node@20"
+    echo "  - Using fnm: fnm install 20"
     echo ""
     echo "PATH checked: $PATH"
     exit 1
