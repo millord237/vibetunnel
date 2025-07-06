@@ -1,118 +1,113 @@
 # Changelog
 
-## [1.0.0-beta.7] - 2025-07-03
+## [1.0.0-beta.7] - 2025-07-06
 
-### ✨ New Features
+### 🎯 Major Features
 
-**Magic Wand for AI Assistants**
-- **Instant Terminal Title Updates** - New magic wand button (🪄) appears when hovering over AI assistant sessions
-- **Universal AI Support** - Works with Claude, Gemini, GPT, and other AI command-line tools - not just Claude anymore
-- **One-Click Status Updates** - Clicking the wand prompts your AI assistant to update the terminal title with what it's currently working on
-- **Smart Detection** - Automatically detects AI sessions by recognizing common command names
+#### 🖥️ **Remote Screen Sharing**
+- Share your Mac screen remotely through any web browser - perfect for demonstrations, pair programming, or remote support
+- Ultra-low latency with WebRTC and automatic quality adjustment based on network conditions
+- Privacy-focused with explicit permissions and clear sharing indicators when active
 
-**Window Highlight Live Preview**
-- **See Before You Save** - Window highlight settings now show a live preview on the Settings window itself
-- **Instant Feedback** - Preview updates immediately as you change highlight styles or colors
-- **Try Before Apply** - Test different highlight styles (Default, Subtle, Neon, Custom) without leaving settings
+#### 🪄 **Magic Wand for AI Sessions**
+- Instantly inject helpful context into Claude.ai sessions with a single click
+- Automatically detects Claude windows and adds project information
+- Includes git repository details, current branch, and recent changes
+- Configurable prompts to match your workflow
 
-**Enhanced Terminal Support**
-- **Ghostty Integration** - Added full support for Ghostty terminal - windows now close automatically when sessions end
-- **Complete Terminal Coverage** - VibeTunnel now supports automatic window management for Terminal.app, iTerm2, and Ghostty
+### 🌐 Web Interface Improvements
+
+#### **Performance & Stability**
+- **FIXED**: Infinite scroll loop in terminal output that could freeze the browser
+- **FIXED**: Modal backdrop pointer-events issues preventing interaction
+- Improved terminal rendering performance with large outputs
+- Better memory management for long-running sessions
 
 ### 🐛 Bug Fixes
 
-**Window Management**
-- **Accurate Window Focus** - Fixed issues where the wrong terminal window would be highlighted when switching sessions
-- **Better Multi-Display Support** - Window highlights now position correctly on external monitors
-- **Consistent Green Highlights** - Changed highlight color from purple to green to match the web interface
-- **Auto-Close Fixed** - Terminal windows now properly close when sessions exit naturally (not just when manually stopped)
+- **FIXED**: Race conditions in terminal output handling causing corrupted text
+- **FIXED**: Session state synchronization issues between web and native clients
+- **FIXED**: Memory leaks in long-running sessions
+- **FIXED**: Various UI glitches and visual artifacts
+- **FIXED**: Connection timeout issues on slower networks
 
-**Magic Wand Reliability**
-- **Proper Command Submission** - Fixed magic wand commands not being executed properly - now sends both the prompt and Enter key correctly
-- **No More Race Conditions** - Added input queue protection to ensure commands are sent in the correct order
-- **Works Every Time** - Magic wand prompts now reliably trigger terminal title updates
+## [1.0.0-beta.6] - 2025-07-03
 
-**General Improvements**
-- **Quieter Logs** - Reduced verbosity of terminal title update logs - less noise in debug output
-- **Swift 6 Compatibility** - Fixed all concurrency and syntax errors for latest Swift compiler
-- **Cleaner UI** - Reorganized settings to put Window Highlight options in a more logical location
+### ✨ New Features
 
-## [1.0.0-beta.5] - upcoming
+#### **Git Repository Monitoring** 🆕
+- **Real-time Git Status** - Session rows now display git information including branch name and change counts
+- **Visual Indicators** - Color-coded status: orange for branches, yellow for uncommitted changes
+- **Quick Navigation** - Click folder icons to open repositories in Finder
+- **GitHub Integration** - Context menu option to open repositories directly on GitHub
+- **Smart Caching** - 5-second cache prevents excessive git commands while keeping info fresh
+- **Repository Detection** - Automatically finds git repositories in parent directories
 
-### 🎯 Features
+#### **Enhanced Command-Line Tool**
+- **Terminal Title Management** - `vt title` can set the title of your Terminal. Even Claude can use it!
+- **Version Information** - `vt help` now displays binary path, version, build date, and platform information for easier troubleshooting
+- **Apple Silicon Support** - Automatic detection of Homebrew installations on ARM Macs (/opt/homebrew path)
 
-**Real-time Claude Activity Monitoring**
-- **See Claude's live status directly in the VibeTunnel sidebar** - Know exactly what Claude is "Thinking", "Crafting", or "Searching" with real-time progress indicators showing duration and token counts.
-- **Activity status persists across browser refreshes** - Works seamlessly with external terminal sessions.
-- **Faster sidebar updates** - Sidebar now refreshes every second (previously 3 seconds) for more responsive activity tracking.
+#### **Menu Bar Enhancements**
+- **Rich Session Interface** - Powerful new menu bar with visual activity indicators and real-time status tracking
+- **Native Session Overview** - See all open terminal sessions and even Claude Code status right from the menu bar.
+- **Sleep Prevention** - Mac stays awake when running terminal sessions
 
-**Comprehensive Terminal Title Management**
-- **Dynamic, context-aware terminal titles** - Terminal windows display your current directory, running command, and live activity status.
-- **Choose your title mode** - Select between static titles (path + command) or dynamic titles that include real-time activity indicators.
-- **Automatic directory tracking** - Terminal titles update automatically when you change directories with `cd` commands.
-- **Session name integration** - Custom session names are reflected in terminal titles for better organization.
+#### **Web Interface Improvements**
+- **Modern Visual Design** - Complete UI overhaul with improved color scheme, animations, and visual hierarchy
+- **Collapsible Sidebar** - New toggle button to maximize terminal viewing space (preference is remembered)
+- **Better Session Loading** - Fixed race conditions that caused sessions to appear as "missing"
+- **Responsive Enhancements** - Improved adaptation to different screen sizes with better touch targets
 
-### 🌏 International Input Support
-- **Fixed Japanese/CJK input duplication on iOS** - Typing Japanese, Chinese, or Korean text on mobile browsers no longer produces duplicate characters. IME composition is now handled correctly.
+### 🚀 Performance & Stability
 
-### ⌨️ Enhanced Terminal Experience
-- **Shell aliases now work properly** - Commands like `claude`, `ll`, and other custom aliases from your `.zshrc`/`.bashrc` are now recognized when launching terminals through VibeTunnel.
-- **Prevented recursive VibeTunnel sessions** - Running `vt` inside a VibeTunnel session now shows a helpful error instead of creating confusing nested sessions.
-- **Fixed critical race condition in terminal output** - Terminal sessions now handle high-volume output without corruption or out-of-order text.
+#### **Terminal Output Reliability**
+- **Fixed Output Corruption** - Resolved race conditions causing out-of-order or corrupted terminal output
+- **Stable Title Updates** - Terminal titles now update smoothly without flickering or getting stuck
 
-### 🤖 Claude Code Integration
-- **Added Shift+Tab support** - Full support for Claude Code's mode switching (regular/planning/autoaccept modes) on both desktop and mobile.
-- **Mobile quick keyboard enhancement** - Added dedicated Shift+Tab button (⇤) to the mobile keyboard for easy mode switching.
-- **Fixed keyboard input conflicts** - Typing in Monaco Editor or other code editors no longer triggers unintended shortcuts.
+#### **Server Improvements**
+- **Logger Fix** - Fixed double initialization that was deleting log files
+- **Better Resource Cleanup** - Improved PTY manager cleanup and timer management
+- **Enhanced Error Handling** - More robust error handling throughout the server stack
 
-### 🚀 Quick Start Enhancements
-- **Added Gemini as quickstart entry** - Google's Gemini AI assistant is now available as a one-click option when creating new terminal sessions, alongside Claude and other common commands.
+#### **Simplified Tailscale Setup**
+- Switched to Tailscale's local API for easier configuration
+- Removed manual token management requirements
+- Streamlined connection UI for minimal setup
 
-## [1.0.0-beta.4] - 2025-06-27
+## [1.0.0-beta.5] - 2025-01-29
 
-### 🔐 Security & Authentication
-- **Comprehensive authentication system** - Choose between password-only, SSH key-only, both, or no authentication based on your security needs.
-- **Browser-based SSH key management** - Generate, import, and manage Ed25519 SSH keys directly in your browser. Keys are encrypted and stored locally.
-- **24-hour session tokens** - Stay logged in longer with JWT-based authentication.
-- **macOS profile integration** - See your system profile picture on the login screen.
+### 🎨 UI Improvements
+- **Version Display** - Web interface now shows full version including beta suffix (e.g., v1.0.0-beta.5)
+- **Build Filtering** - Cleaner build output by filtering non-actionable Xcode warnings
+- **Mobile Scrolling** - Fixed scrolling issues on mobile web browsers
 
-### 🎨 Revolutionary UI Design
-- **Arc-style vertical tabs** - Modern sidebar interface inspired by Arc browser makes better use of widescreen displays.
-- **Persistent session management** - All active sessions visible at a glance in a resizable sidebar (240-600px).
-- **Mobile-optimized interface** - Responsive design with slide-out sidebar and proper touch targets.
-- **Smooth animations** - Polished transitions and no layout shifts for a premium feel.
+### 🔧 Infrastructure
+- **Single Source of Truth** - Web version now automatically reads from package.json at build time
+- **Version Sync Validation** - Build process validates version consistency between macOS and web
+- **CI Optimization** - Tests only run when relevant files change (iOS/Mac/Web)
+- **E2E Test Suite** - Comprehensive Playwright tests for web frontend reliability
 
-### 📱 Mobile Terminal Excellence
-- **Dedicated terminal keyboard** - Custom on-screen keyboard with Escape, Tab, arrows, function keys, and common terminal shortcuts (Ctrl+C, Ctrl+Z, etc.).
-- **Essential special characters** - Quick access to pipes, backticks, tildes, and brackets without keyboard switching.
-- **Fixed wrapped URL detection** - Long URLs that span multiple lines are now properly clickable on mobile.
-- **Fixed terminal scrolling on mobile** - Touch scrolling now works properly with the QuickKeyboard active. The hidden input no longer blocks scroll gestures ([#129](https://github.com/amantus-ai/vibetunnel/pull/129)).
+### 🐛 Bug Fixes
+- **No-Auth Mode** - Fixed authentication-related error messages when running with `--no-auth`
+- **Log Streaming** - Fixed frontend log streaming in no-auth mode
+- **Test Reliability** - Resolved flaky tests and improved test infrastructure
 
-### ⚡ Performance & Reliability
-- **Upgraded to Microsoft node-pty v1.1.0** - Latest terminal emulation library for better performance and compatibility.
-- **Fixed large paste operations** - Paste massive logs or code files without the terminal hanging.
-- **Improved backpressure handling** - Terminal gracefully manages data flow during high-volume operations.
-- **Ultra-low-latency WebSocket input** - New WebSocket-based input system eliminates keystroke lag with direct PTY writes. Enable with `?socket_input` URL parameter ([#115](https://github.com/amantus-ai/vibetunnel/pull/115)).
+### 📝 Developer Experience
+- **Release Documentation** - Enhanced release process documentation with version sync requirements
+- **Test Improvements** - Better test fixtures, helpers, and debugging capabilities
+- **Error Suppression** - Cleaner logs when running in development mode
 
-### 🗂️ File Management
-- **Symlink support in file browser** - Navigate through symbolic links with visual indicators showing link targets.
-- **Better directory detection** - File browser correctly identifies whether symlinks point to files or directories.
+## [1.0.0-beta.4] - 2025-06-25
 
-### 🐛 Bug Fixes & Improvements
-- **Fixed session status detection** - Terminal status (running/exited) now updates reliably.
-- **Eliminated double button rendering** - UI cleanup for cleaner interface.
-- **Fixed Monaco editor integration** - Code editing now works smoothly within VibeTunnel.
-- **Improved error handling** - Better error messages and recovery from edge cases (including fixes for Terminal.app)
-- **Enhanced test infrastructure** - Comprehensive test suite for improved stability.
-- **Fixed URL detection for numbered lists** - Terminal no longer incorrectly highlights numbered lists (like "1. Item") as clickable URLs ([#122](https://github.com/amantus-ai/vibetunnel/pull/122)).
-- **Fixed mobile header truncation** - Headers now display correctly on mobile devices without being cut off ([#117](https://github.com/amantus-ai/vibetunnel/pull/117)).
-
-### 🔧 Developer Experience
-- **No-auth mode for development** - Run VibeTunnel without authentication for local development.
-- **Improved logging** - Better debugging information for troubleshooting.
-- **Alias resolution for commands** - Terminal commands resolve through proper shell initialization.
-- **Dynamic home directory display** - Cross-platform path formatting with proper ~/ shorthand for home directories on macOS, Linux, and Windows ([#117](https://github.com/amantus-ai/vibetunnel/pull/117)).
-- **Enhanced CI/CD workflows** - Parallel code quality checks and better handling of external contributor permissions ([#117](https://github.com/amantus-ai/vibetunnel/pull/117)).
+- We replaced HTTP Basic auth with System Login or SSH Keys for better security.
+- Sessions now show exited terminals by default - no more hunting for terminated sessions
+- Reorganized sidebar with cleaner, more compact header and better button placement
+- Added user menu in sidebar for quick access to settings and logout
+- Enhanced responsive design with better adaptation to different screen sizes
+- Improved touch targets and spacing for mobile users
+- Leverages View Transitions API for smoother animations with CSS fallbacks
+- More intuitive default settings for better out-of-box experience
 
 ## [1.0.0-beta.3] - 2025-06-23
 
