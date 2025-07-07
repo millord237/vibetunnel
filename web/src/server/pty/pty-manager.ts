@@ -221,9 +221,6 @@ export class PtyManager extends EventEmitter {
       const { command: finalCommand, args: finalArgs } = resolved;
       const resolvedCommand = [finalCommand, ...finalArgs];
 
-      // Note: Fish shell expansion was removed for simplicity
-      // Only basic tab completion is supported via getFishCompletions()
-
       // Log resolution details
       if (resolved.resolvedFrom === 'alias') {
         logger.log(
