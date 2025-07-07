@@ -61,7 +61,7 @@ describe('MDNSService', () => {
       // Then
       expect(mockBonjour.publish).toHaveBeenCalledWith({
         name: 'test-hostname',
-        type: 'vibetunnel',
+        type: '_vibetunnel._tcp',
         port: port,
         txt: {
           version: '1.0',
@@ -148,7 +148,7 @@ describe('MDNSService', () => {
       // Then
       expect(mockBonjour.publish).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'vibetunnel',
+          type: '_vibetunnel._tcp',
         })
       );
     });

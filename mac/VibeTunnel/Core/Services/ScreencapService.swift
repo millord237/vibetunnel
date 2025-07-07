@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import CoreGraphics
 import CoreImage
 @preconcurrency import CoreMedia
@@ -16,6 +17,11 @@ public final class ScreencapService: NSObject {
     // MARK: - Singleton
 
     static let shared = ScreencapService()
+
+    /// Check if the service has been initialized
+    static var isInitialized: Bool {
+        true // Singleton is always initialized
+    }
 
     // MARK: - WebSocket Connection State
 
@@ -63,6 +69,7 @@ public final class ScreencapService: NSObject {
         case invalidCoordinates(x: Double, y: Double)
         case invalidKeyInput(String)
         case failedToGetContent(Error)
+        case permissionDenied
         case invalidWindowIndex
         case invalidApplicationIndex
         case invalidCaptureType
@@ -91,6 +98,8 @@ public final class ScreencapService: NSObject {
                 "Invalid key input: \(key)"
             case .failedToGetContent(let error):
                 "Failed to get shareable content: \(error.localizedDescription)"
+            case .permissionDenied:
+                "Screen recording permission is required. Please grant permission in System Settings > Privacy & Security > Screen Recording > VibeTunnel"
             case .invalidWindowIndex:
                 "Invalid window index"
             case .invalidApplicationIndex:
@@ -144,7 +153,7 @@ public final class ScreencapService: NSObject {
 
     override init() {
         super.init()
-        logger.info("🚀 ScreencapService initialized, setting up WebSocket connection...")
+        logger.info("🚀 ScreencapService initialized")
 
         // Register for display configuration changes
         setupDisplayNotifications()
@@ -152,9 +161,21 @@ public final class ScreencapService: NSObject {
         // Set up state machine callbacks
         setupStateMachine()
 
-        // Connect to WebSocket for API handling when service is created
-        Task {
-            await setupWebSocketForAPIHandling()
+        // Initialize WebRTCManager, which will register itself as a handler
+        // for screencap messages on the shared socket.
+        initializeWebRTCManager()
+    }
+
+    /// Initialize WebRTCManager for API handling without triggering screen recording permission
+    private func initializeWebRTCManager() {
+        let serverPort = UserDefaults.standard.string(forKey: "serverPort") ?? "4020"
+        let serverURLString = ProcessInfo.processInfo
+            .environment["VIBETUNNEL_SERVER_URL"] ?? "http://localhost:\(serverPort)"
+        if let serverURL = URL(string: serverURLString) {
+            webRTCManager = WebRTCManager(serverURL: serverURL, screencapService: self)
+            logger.info("✅ WebRTCManager initialized for API handling")
+        } else {
+            logger.error("Invalid server URL for WebRTCManager: \(serverURLString)")
         }
     }
 
@@ -163,233 +184,43 @@ public final class ScreencapService: NSObject {
         NotificationCenter.default.removeObserver(self)
     }
 
-    /// Setup WebSocket connection for handling API requests
-    private func setupWebSocketForAPIHandling() async {
-        // Check if already connected or connecting
-        if isWebSocketConnected {
-            logger.debug("WebSocket already connected")
-            return
-        }
-
-        if isWebSocketConnecting {
-            logger.debug("WebSocket connection already in progress, waiting...")
-            // Wait for existing connection attempt
-            try? await withCheckedThrowingContinuation { continuation in
-                webSocketConnectionContinuations.append(continuation)
-            }
-            return
-        }
-
-        isWebSocketConnecting = true
-
-        // Transition to connecting state only if not already connected/capturing
-        switch stateMachine.currentState {
-        case .idle, .error:
-            stateMachine.processEvent(.connect)
-        case .capturing, .ready:
-            // Already connected, this is a reconnection
-            logger.info("🔄 Reconnecting WebSocket while in \(self.stateMachine.currentState) state")
-        default:
-            logger.warning("⚠️ Unexpected state when starting WebSocket connection: \(self.stateMachine.currentState)")
-        }
-
-        // Get server URL from environment or use default
-        let serverPort = UserDefaults.standard.string(forKey: "serverPort") ?? "4020"
-        let serverURLString = ProcessInfo.processInfo
-            .environment["VIBETUNNEL_SERVER_URL"] ?? "http://localhost:\(serverPort)"
-        logger.info("📍 Using server URL: \(serverURLString)")
-        guard let serverURL = URL(string: serverURLString) else {
-            logger.error("Invalid server URL: \(serverURLString)")
-            isWebSocketConnecting = false
-
-            // Transition to error state
-            stateMachine.processEvent(.connectionFailed(ScreencapError.invalidServerURL))
-
-            // Fail all waiting continuations
-            for continuation in webSocketConnectionContinuations {
-                continuation.resume(throwing: ScreencapError.invalidServerURL)
-            }
-            webSocketConnectionContinuations.removeAll()
-            return
-        }
-
-        // Create WebRTC manager which handles WebSocket API requests
-        if webRTCManager == nil {
-            // Check if authentication is disabled
-            let authMode = UserDefaults.standard.string(forKey: "authenticationMode") ?? "os"
-            let isNoAuth = authMode == "none"
-
-            if isNoAuth {
-                // Authentication is disabled, create WebRTC manager without token
-                logger.info("🔓 Authentication disabled, creating WebRTC manager without token")
-                webRTCManager = WebRTCManager(serverURL: serverURL, screencapService: self, localAuthToken: nil)
-            } else {
-                // Get local auth token from ServerManager - this might be nil if server isn't started yet
-                let localAuthToken = ServerManager.shared.bunServer?.localToken
-                if localAuthToken == nil {
-                    logger.warning("⚠️ No local auth token available yet - server might not be started")
-                    logger.warning("⚠️ Will retry connection when auth token becomes available")
-                    // Schedule a retry
-                    scheduleReconnection()
-
-                    // Transition to error state temporarily
-                    stateMachine.processEvent(.connectionFailed(ScreencapError.webSocketNotConnected))
-                    isWebSocketConnecting = false
-
-                    // Fail waiting continuations
-                    for continuation in webSocketConnectionContinuations {
-                        continuation.resume(throwing: ScreencapError.webSocketNotConnected)
-                    }
-                    webSocketConnectionContinuations.removeAll()
-                    return
-                }
-                webRTCManager = WebRTCManager(
-                    serverURL: serverURL,
-                    screencapService: self,
-                    localAuthToken: localAuthToken
-                )
-            }
-        } else if webRTCManager?.localAuthToken == nil {
-            // Check if authentication is disabled
-            let authMode = UserDefaults.standard.string(forKey: "authenticationMode") ?? "os"
-            let isNoAuth = authMode == "none"
-
-            if !isNoAuth {
-                // Update auth token if it wasn't available during initial creation
-                let localAuthToken = ServerManager.shared.bunServer?.localToken
-                if let localAuthToken {
-                    logger.info("🔑 Updating WebRTC manager with newly available auth token")
-                    // Recreate WebRTC manager with auth token
-                    webRTCManager = WebRTCManager(
-                        serverURL: serverURL,
-                        screencapService: self,
-                        localAuthToken: localAuthToken
-                    )
-                }
-            }
-        }
-
-        // Connect to signaling server for API handling
-        // This allows the browser to make API requests immediately
-        do {
-            // Ensure WebRTC manager exists
-            guard let webRTCManager = self.webRTCManager else {
-                logger.error("❌ WebRTC manager not available - cannot connect for API handling")
-                throw ScreencapError.webSocketNotConnected
-            }
-
-            try await webRTCManager.connectForAPIHandling()
-            logger.info("✅ Connected to WebSocket for screencap API handling")
-            isWebSocketConnected = true
-            isWebSocketConnecting = false
-
-            // Transition to ready state - check current state
-            switch stateMachine.currentState {
-            case .error:
-                stateMachine.processEvent(.errorRecovered)
-            case .connecting:
-                stateMachine.processEvent(.connectionEstablished)
-            case .capturing, .ready:
-                // Already in a good state, no transition needed
-                logger.info("🔄 WebSocket reconnected while in \(self.stateMachine.currentState) state")
-            default:
-                logger.warning("⚠️ Unexpected state during WebSocket connection: \(self.stateMachine.currentState)")
-            }
-
-            // Resume all waiting continuations
-            for continuation in webSocketConnectionContinuations {
-                continuation.resume()
-            }
-            webSocketConnectionContinuations.removeAll()
-
-            // Start monitoring connection
-            startConnectionMonitor()
-        } catch {
-            logger.error("Failed to connect WebSocket for API: \(error)")
-            isWebSocketConnecting = false
-            isWebSocketConnected = false
-
-            // Transition to error state
-            stateMachine.processEvent(.connectionFailed(error))
-
-            // Fail all waiting continuations
-            for continuation in webSocketConnectionContinuations {
-                continuation.resume(throwing: error)
-            }
-            webSocketConnectionContinuations.removeAll()
-
-            // Schedule reconnection
-            scheduleReconnection()
-        }
-    }
-
-    /// Start monitoring the WebSocket connection
-    private func startConnectionMonitor() {
-        // Cancel any existing monitor
-        reconnectTask?.cancel()
-
-        reconnectTask = Task { [weak self] in
-            guard let self else { return }
-
-            while !Task.isCancelled && shouldReconnect {
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-
-                // Check if still connected
-                if let webRTCManager = self.webRTCManager {
-                    let connected = webRTCManager.isConnected
-                    if !connected && self.isWebSocketConnected {
-                        logger.warning("⚠️ WebSocket disconnected, marking as disconnected")
-                        self.isWebSocketConnected = false
-                        self.scheduleReconnection()
-                    }
-                }
-            }
-        }
-    }
-
-    /// Schedule a reconnection attempt
-    private func scheduleReconnection() {
-        guard shouldReconnect else { return }
-
-        Task { [weak self] in
-            guard let self else { return }
-
-            // Wait before reconnecting (exponential backoff could be added here)
-            logger.info("⏳ Scheduling reconnection in 2 seconds...")
-            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-
-            if !self.isWebSocketConnected && self.shouldReconnect {
-                logger.info("🔄 Attempting to reconnect WebSocket...")
-                await self.setupWebSocketForAPIHandling()
-            }
-        }
-    }
-
     // MARK: - Public Methods
 
-    /// Handle WebSocket disconnection notification
-    public func handleWebSocketDisconnection() async {
-        logger.warning("⚠️ WebSocket disconnected, will attempt to reconnect")
-        isWebSocketConnected = false
-        scheduleReconnection()
+    /// Ensure the service is ready for API handling.
+    public func connectForApiHandling() async throws {
+        // The connection is now managed by SharedUnixSocketManager. We just need to
+        // ensure that the WebRTCManager (and its handlers) has been initialized.
+        guard webRTCManager != nil else {
+            logger.error("WebRTCManager not initialized. ScreencapService is not ready.")
+            throw ScreencapError.serviceNotReady
+        }
+        // Also check if the underlying shared socket is connected.
+        guard SharedUnixSocketManager.shared.isConnected else {
+            logger.error("Shared socket is not connected. ScreencapService is not ready.")
+            throw ScreencapError.webSocketNotConnected
+        }
+
+        // Transition state machine to ready if we're still idle
+        if stateMachine.currentState == .idle {
+            stateMachine.processEvent(.connect)
+            // The socket is already connected, so immediately transition to ready
+            stateMachine.processEvent(.connectionEstablished)
+        }
+
+        logger.info("ScreencapService is ready for API handling.")
     }
 
-    /// Ensure WebSocket connection is established
-    public func ensureWebSocketConnected() async throws {
-        if !isWebSocketConnected && !isWebSocketConnecting {
-            await setupWebSocketForAPIHandling()
-        }
+    /// Notify the service that the WebRTC connection is ready
+    func notifyConnectionReady() {
+        logger.info("🔌 WebRTC connection ready notification received")
 
-        // Wait for connection to complete if still connecting
-        if isWebSocketConnecting && !isWebSocketConnected {
-            try await withCheckedThrowingContinuation { continuation in
-                webSocketConnectionContinuations.append(continuation)
-            }
-        }
-
-        // Verify we're actually connected now
-        guard isWebSocketConnected else {
-            throw ScreencapError.webSocketNotConnected
+        // Transition to ready state if we're in connecting state
+        if stateMachine.currentState == .connecting {
+            stateMachine.processEvent(.connectionEstablished)
+        } else if stateMachine.currentState == .idle {
+            // If we're still idle, transition through connecting to ready
+            stateMachine.processEvent(.connect)
+            stateMachine.processEvent(.connectionEstablished)
         }
     }
 
@@ -445,6 +276,16 @@ public final class ScreencapService: NSObject {
     /// Get all available displays
     func getDisplays() async throws -> [DisplayInfo] {
         logger.info("🔍 getDisplays() called")
+
+        // First check screen recording permission
+        let hasPermission = await isScreenRecordingAllowed()
+        logger.info("🔍 Screen recording permission check: \(hasPermission)")
+
+        // If no permission, throw an error instead of continuing
+        guard hasPermission else {
+            logger.warning("❌ No screen recording permission for getDisplays")
+            throw ScreencapError.permissionDenied
+        }
 
         // First check NSScreen to see what the system reports
         let nsScreens = NSScreen.screens
@@ -585,6 +426,12 @@ public final class ScreencapService: NSObject {
         // First check screen recording permission
         let hasPermission = await isScreenRecordingAllowed()
         logger.info("🔍 Screen recording permission check: \(hasPermission)")
+
+        // If no permission, throw an error instead of continuing
+        guard hasPermission else {
+            logger.warning("❌ No screen recording permission for getProcessGroups")
+            throw ScreencapError.permissionDenied
+        }
 
         // Add timeout to detect if SCShareableContent is hanging
         let startTime = Date()
@@ -735,7 +582,6 @@ public final class ScreencapService: NSObject {
 
     /// Check if screen recording permission is granted
     private func isScreenRecordingAllowed() async -> Bool {
-        // Use ScreenCaptureKit to check permission instead of deprecated CGDisplayCreateImage
         do {
             // Try to get shareable content - this will fail if no permission
             _ = try await SCShareableContent.current
@@ -817,12 +663,26 @@ public final class ScreencapService: NSObject {
         // Stop any existing capture first to ensure clean state
         await stopCapture()
 
-        // Ensure WebSocket is connected first
-        try await ensureWebSocketConnected()
+        // If we're still idle, try to connect first
+        if stateMachine.currentState == .idle {
+            logger.info("📊 Service in idle state, attempting to connect first")
+            try await connectForApiHandling()
+        }
+
+        // Wait for state machine to settle if we just stopped
+        if stateMachine.currentState == .stopping {
+            logger.info("📊 Waiting for stop to complete...")
+            var attempts = 0
+            while stateMachine.currentState == .stopping && attempts < 20 {
+                try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                attempts += 1
+            }
+        }
 
         // Check if we can start capture
         guard stateMachine.canPerformAction(.startCapture) else {
             logger.error("Cannot start capture in state: \(self.stateMachine.currentState)")
+            logger.error("📊 Current state description: \(self.stateMachine.stateDescription())")
             throw ScreencapError.serviceNotReady
         }
 
@@ -860,6 +720,13 @@ public final class ScreencapService: NSObject {
             throw ScreencapError.failedToGetContent(error)
         }
 
+        // Create configuration builder with the shareable content
+        let configBuilder = CaptureConfigurationBuilder(shareableContent: content)
+            .setFrameRate(30)
+            .setShowsCursor(true)
+            .setCapturesAudio(false)
+            .setUse8K(use8k)
+
         // Determine capture mode
         switch type {
         case "desktop":
@@ -872,18 +739,10 @@ public final class ScreencapService: NSObject {
 
                 self.captureMode = .allDisplays
                 currentDisplayIndex = -1
-
+                configBuilder.setCaptureMode(.allDisplays)
                 logger.info("🖥️ Setting up all displays capture mode")
                 logger.info("  Primary display: size=\(primaryDisplay.width)x\(primaryDisplay.height)")
                 logger.info("  Total displays: \(content.displays.count)")
-
-                // For all displays, capture everything including menu bar
-                logger.info("🔍 Creating content filter for all displays including menu bar")
-
-                // Create filter that includes the entire display content.
-                captureFilter = SCContentFilter(display: primaryDisplay, excludingWindows: [])
-
-                logger.info("✅ Created content filter for all displays capture including system UI")
             } else {
                 // Single display capture
                 let displayIndex = index < content.displays.count ? index : 0
@@ -893,15 +752,13 @@ public final class ScreencapService: NSObject {
                 let display = content.displays[displayIndex]
                 self.captureMode = .desktop(displayIndex: displayIndex)
                 currentDisplayIndex = displayIndex
+                configBuilder.setCaptureMode(.desktop(displayIndex: displayIndex))
 
                 // Log display selection for debugging
                 logger
                     .info(
                         "📺 Capturing display \(displayIndex) of \(content.displays.count) - size: \(display.width)x\(display.height)"
                     )
-
-                // Create filter to capture entire display including menu bar
-                captureFilter = SCContentFilter(display: display, excludingWindows: [])
             }
 
         case "window":
@@ -911,25 +768,12 @@ public final class ScreencapService: NSObject {
             let window = content.windows[index]
             selectedWindow = window
             self.captureMode = .window(window)
+            configBuilder.setCaptureMode(.window(window))
 
             logger
                 .info(
                     "🪟 Capturing window: '\(window.title ?? "Untitled")' - size: \(window.frame.width)x\(window.frame.height)"
                 )
-
-            // For window capture, we need to find which display contains this window
-            let windowDisplay = content.displays.first { display in
-                // Check if window's frame intersects with display's frame
-                display.frame.intersects(window.frame)
-            } ?? content.displays.first
-
-            guard let display = windowDisplay else {
-                throw ScreencapError.noDisplay
-            }
-
-            // Create a filter that includes just the single window on its display.
-            // This is the most reliable way to capture a single window.
-            captureFilter = SCContentFilter(display: display, including: [window])
 
         case "application":
             guard index < content.applications.count else {
@@ -937,6 +781,7 @@ public final class ScreencapService: NSObject {
             }
             let app = content.applications[index]
             self.captureMode = .application(app)
+            configBuilder.setCaptureMode(.application(app))
 
             // Get all windows for this application
             let appWindows = content.windows.filter { window in
@@ -949,24 +794,17 @@ public final class ScreencapService: NSObject {
                 throw ScreencapError.windowNotFound(0)
             }
 
-            // Determine which display to use. Find the display that contains the largest window of the app.
-            let largestWindow = appWindows.max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
-            let displayForCapture = content.displays.first { $0.frame.intersects(largestWindow?.frame ?? .zero) }
-
-            guard let display = displayForCapture else {
-                throw ScreencapError.noDisplay
-            }
-
-            // Create a filter that includes all windows of the application on the chosen display.
-            captureFilter = SCContentFilter(display: display, including: appWindows)
             logger
                 .info(
-                    "Capturing application \(app.applicationName) with \(appWindows.count) windows on display \(display.displayID)"
+                    "Capturing application \(app.applicationName) with \(appWindows.count) windows"
                 )
 
         default:
             throw ScreencapError.invalidCaptureType
         }
+
+        // Build filter using CaptureConfigurationBuilder
+        captureFilter = try configBuilder.buildFilter()
 
         // Configure stream
         guard let filter = captureFilter else {
@@ -974,122 +812,18 @@ public final class ScreencapService: NSObject {
             throw ScreencapError.invalidConfiguration
         }
 
-        let streamConfig = SCStreamConfiguration()
+        // Build configuration using CaptureConfigurationBuilder
+        let streamConfig = try configBuilder.buildConfiguration(for: filter)
 
-        // For all displays mode, calculate the combined dimensions
-        if case .allDisplays = captureMode {
-            // Calculate the bounding rectangle that encompasses all displays
-            var minX = CGFloat.greatestFiniteMagnitude
-            var minY = CGFloat.greatestFiniteMagnitude
-            var maxX: CGFloat = -CGFloat.greatestFiniteMagnitude
-            var maxY: CGFloat = -CGFloat.greatestFiniteMagnitude
-
-            logger.info("🖥️ Calculating bounds for \(content.displays.count) displays:")
-            for (index, display) in content.displays.enumerated() {
-                logger
-                    .info(
-                        "  Display \(index): origin=(\(display.frame.origin.x), \(display.frame.origin.y)), size=\(display.frame.width)x\(display.frame.height)"
-                    )
-                minX = min(minX, display.frame.origin.x)
-                minY = min(minY, display.frame.origin.y)
-                maxX = max(maxX, display.frame.origin.x + display.frame.width)
-                maxY = max(maxY, display.frame.origin.y + display.frame.height)
-            }
-
-            let totalWidth = maxX - minX
-            let totalHeight = maxY - minY
-
-            logger.info("📐 Combined display bounds: origin=(\(minX), \(minY)), size=\(totalWidth)x\(totalHeight)")
-
-            streamConfig.width = Int(totalWidth)
-            streamConfig.height = Int(totalHeight)
-            streamConfig.sourceRect = CGRect(x: minX, y: minY, width: totalWidth, height: totalHeight)
-            streamConfig.destinationRect = CGRect(x: 0, y: 0, width: totalWidth, height: totalHeight)
-
-            logger
-                .info(
-                    "📐 Stream config: sourceRect = (\(minX), \(minY), \(totalWidth), \(totalHeight)), destinationRect = (0, 0, \(totalWidth), \(totalHeight))"
-                )
-        } else if case .window(let window) = captureMode {
-            // For window capture, use the window's bounds
-            // Note: The window frame might need to be scaled for Retina displays
-            let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
-            streamConfig.width = Int(window.frame.width * scaleFactor)
-            streamConfig.height = Int(window.frame.height * scaleFactor)
-            logger
-                .info(
-                    "🪟 Window stream config - size: \(streamConfig.width)x\(streamConfig.height) (scale: \(scaleFactor))"
-                )
-        } else if case .desktop(let displayIndex) = captureMode {
-            // For desktop capture, use the display dimensions and set proper rects
-            if displayIndex >= 0 && displayIndex < content.displays.count {
-                let display = content.displays[displayIndex]
-                streamConfig.width = Int(display.width)
-                streamConfig.height = Int(display.height)
-
-                // Set source rect to capture the entire display including menu bar and dock
-                streamConfig.sourceRect = CGRect(x: 0, y: 0, width: display.width, height: display.height)
-                streamConfig.destinationRect = CGRect(x: 0, y: 0, width: display.width, height: display.height)
-
-                let sourceRectStr = String(describing: streamConfig.sourceRect)
-                let destRectStr = String(describing: streamConfig.destinationRect)
-                logger
-                    .info(
-                        "🖥️ Desktop stream config - display: \(streamConfig.width)x\(streamConfig.height), sourceRect: \(sourceRectStr), destRect: \(destRectStr)"
-                    )
-            } else {
-                streamConfig.width = Int(filter.contentRect.width)
-                streamConfig.height = Int(filter.contentRect.height)
-            }
-        } else if case .application(let app) = captureMode {
-            // For application capture, calculate the bounding box of all its windows.
-            let appWindows = content.windows
-                .filter { $0.owningApplication?.processID == app.processID && $0.isOnScreen }
-            if !appWindows.isEmpty {
-                var unionRect = CGRect.null
-                for window in appWindows {
-                    unionRect = unionRect.union(window.frame)
-                }
-
-                // Set the stream to capture the exact bounding box of the application's windows.
-                streamConfig.sourceRect = unionRect
-                streamConfig.width = Int(unionRect.width)
-                streamConfig.height = Int(unionRect.height)
-                logger
-                    .info(
-                        "App capture rect: origin=(\(unionRect.origin.x), \(unionRect.origin.y)), size=(\(unionRect.width)x\(unionRect.height))"
-                    )
-            } else {
-                // Fallback if no windows are found, though we've checked this already.
-                streamConfig.width = 1
-                streamConfig.height = 1
-            }
-        }
-
-        // Basic configuration
-        streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: 30) // 30 FPS
-        streamConfig.queueDepth = 5
-        streamConfig.showsCursor = true
-        streamConfig.capturesAudio = false
-
-        // CRITICAL: Set pixel format to get raw frames
-        streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
-
-        // Configure scaling behavior
-        if case .allDisplays = captureMode {
-            // For all displays, we want to capture the full virtual desktop
-            streamConfig.scalesToFit = true
-            streamConfig.preservesAspectRatio = true
-            logger.info("📐 All displays mode: scalesToFit=true, preservesAspectRatio=true")
-        } else {
-            // No scaling for single display/window
-            streamConfig.scalesToFit = false
-        }
-
-        // Color space
-        streamConfig.colorSpaceName = CGColorSpace.sRGB
-
-        logger.info("Stream config - size: \(streamConfig.width)x\(streamConfig.height), fps: 30")
+        // Log final stream configuration for debugging
+        logger.info("📊 Final stream configuration:")
+        logger.info("  - Output size: \(streamConfig.width)x\(streamConfig.height) pixels")
+        logger.info("  - Pixel format: \(streamConfig.pixelFormat) (32BGRA = \(kCVPixelFormatType_32BGRA))")
+        logger.info("  - Source rect: \(String(describing: streamConfig.sourceRect))")
+        logger.info("  - Destination rect: \(String(describing: streamConfig.destinationRect))")
+        logger.info("  - Scales to fit: \(streamConfig.scalesToFit)")
+        logger.info("  - Shows cursor: \(streamConfig.showsCursor)")
+        logger.info("  - FPS: 30")
 
         // Create and start stream
         let stream = SCStream(filter: filter, configuration: streamConfig, delegate: self)
@@ -1139,6 +873,29 @@ public final class ScreencapService: NSObject {
         // Stop any existing capture
         await stopCapture()
 
+        // If we're still idle, try to connect first
+        if stateMachine.currentState == .idle {
+            logger.info("📊 Service in idle state, attempting to connect first")
+            try await connectForApiHandling()
+        }
+
+        // Wait for state machine to settle if we just stopped
+        if stateMachine.currentState == .stopping {
+            logger.info("📊 Waiting for stop to complete...")
+            var attempts = 0
+            while stateMachine.currentState == .stopping && attempts < 20 {
+                try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                attempts += 1
+            }
+        }
+
+        // Check if we can start capture
+        guard stateMachine.canPerformAction(.startCapture) else {
+            logger.error("Cannot start window capture in state: \(self.stateMachine.currentState)")
+            logger.error("📊 Current state description: \(self.stateMachine.stateDescription())")
+            throw ScreencapError.serviceNotReady
+        }
+
         logger.debug("Requesting shareable content...")
         let content: SCShareableContent
         do {
@@ -1161,51 +918,39 @@ public final class ScreencapService: NSObject {
         selectedWindow = window
         self.captureMode = .window(window)
 
+        // Transition to starting state
+        stateMachine.processEvent(.startCapture(mode: .window(window), useWebRTC: useWebRTC))
+
         logger
             .info(
                 "🪟 Capturing window: '\(window.title ?? "Untitled")' - size: \(window.frame.width)x\(window.frame.height)"
             )
 
-        // Create filter for single window - use a simpler approach
-        logger.info("📱 Creating filter for window on display")
+        // Create configuration builder
+        let configBuilder = CaptureConfigurationBuilder(shareableContent: content)
+            .setFrameRate(30)
+            .setShowsCursor(true)
+            .setCapturesAudio(false)
+            .setUse8K(use8k)
+            .setCaptureMode(.window(window))
 
-        // Create a filter with just the single window
-        captureFilter = SCContentFilter(
-            desktopIndependentWindow: window
-        )
+        // Build filter and configuration
+        captureFilter = try configBuilder.buildFilter()
 
-        // Configure stream
         guard let filter = captureFilter else {
             logger.error("Capture filter is nil")
             throw ScreencapError.invalidConfiguration
         }
 
-        let streamConfig = SCStreamConfiguration()
+        let streamConfig = try configBuilder.buildConfiguration(for: filter)
 
-        // For window capture, use the window's bounds
-        // Note: The window frame might need to be scaled for Retina displays
-        let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
-        streamConfig.width = Int(window.frame.width * scaleFactor)
-        streamConfig.height = Int(window.frame.height * scaleFactor)
-        logger
-            .info("🪟 Window stream config - size: \(streamConfig.width)x\(streamConfig.height) (scale: \(scaleFactor))")
-
-        // Basic configuration
-        streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: 30) // 30 FPS
-        streamConfig.queueDepth = 5
-        streamConfig.showsCursor = true
-        streamConfig.capturesAudio = false
-
-        // CRITICAL: Set pixel format to get raw frames
-        streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
-
-        // No scaling for single window
-        streamConfig.scalesToFit = false
-
-        // Color space
-        streamConfig.colorSpaceName = CGColorSpace.sRGB
-
-        logger.info("Stream config - size: \(streamConfig.width)x\(streamConfig.height), fps: 30")
+        // Log final stream configuration for debugging
+        logger.info("📊 Final stream configuration:")
+        logger.info("  - Output size: \(streamConfig.width)x\(streamConfig.height) pixels")
+        // Source and destination rectangles are handled by the content filter
+        logger.info("  - Scales to fit: \(streamConfig.scalesToFit)")
+        logger.info("  - Shows cursor: \(streamConfig.showsCursor)")
+        logger.info("  - FPS: 30")
 
         // Create and start stream
         let stream = SCStream(filter: filter, configuration: streamConfig, delegate: self)
@@ -1224,6 +969,9 @@ public final class ScreencapService: NSObject {
             isCapturing = true
             logger.info("✅ Successfully started window capture")
 
+            // Transition to capturing state
+            stateMachine.processEvent(.captureStarted)
+
             // Start WebRTC if enabled
             if useWebRTC {
                 logger.info("🌐 Starting WebRTC capture...")
@@ -1234,6 +982,10 @@ public final class ScreencapService: NSObject {
         } catch {
             logger.error("Failed to start capture: \(error)")
             captureStream = nil
+
+            // Transition to error state
+            stateMachine.processEvent(.captureFailure(error))
+
             throw ScreencapError.failedToStartCapture(error)
         }
     }
@@ -1241,24 +993,8 @@ public final class ScreencapService: NSObject {
     private func startWebRTCCapture(use8k: Bool) async {
         logger.info("🌐 startWebRTCCapture called")
         do {
-            // Get server URL from environment or use default
-            let serverPort = UserDefaults.standard.string(forKey: "serverPort") ?? "4020"
-            let serverURLString = ProcessInfo.processInfo
-                .environment["VIBETUNNEL_SERVER_URL"] ?? "http://localhost:\(serverPort)"
-            guard let serverURL = URL(string: serverURLString) else {
-                logger.error("Invalid server URL: \(serverURLString)")
-                return
-            }
-
-            // Check if authentication is disabled
-            let authMode = UserDefaults.standard.string(forKey: "authenticationMode") ?? "os"
-            let isNoAuth = authMode == "none"
-
-            // Create WebRTC manager with appropriate auth token
-            let localAuthToken = isNoAuth ? nil : ServerManager.shared.bunServer?.localToken
-            webRTCManager = WebRTCManager(serverURL: serverURL, screencapService: self, localAuthToken: localAuthToken)
-
-            // Set quality before starting
+            // The WebRTC manager is already initialized.
+            // We just need to set the quality and start the capture.
             webRTCManager?.setQuality(use8k: use8k)
 
             // Start WebRTC capture
@@ -1298,19 +1034,17 @@ public final class ScreencapService: NSObject {
 
         // Store references before clearing
         let stream = captureStream
-        let webRTC = webRTCManager
 
         // Clear references
         captureStream = nil
         currentFrame = nil
-        webRTCManager = nil
         frameCounter = 0
 
         // Wait a bit for any in-flight frames to complete
         try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         // Stop WebRTC if active
-        if let webRTC {
+        if let webRTC = webRTCManager {
             await webRTC.stopCapture()
         }
 
@@ -1326,6 +1060,9 @@ public final class ScreencapService: NSObject {
 
         // Transition to stopped state
         stateMachine.processEvent(.captureStopped)
+
+        // Give the state machine time to complete the transition
+        try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
     }
 
     /// Get current captured frame as JPEG data
@@ -1375,6 +1112,18 @@ public final class ScreencapService: NSObject {
     ///   - y: Y coordinate in 0-1000 normalized range
     ///   - cgWindowID: Optional window ID for window-specific clicks
     func sendClick(x: Double, y: Double, cgWindowID: Int? = nil) async throws {
+        // Check accessibility permission first
+        let hasAccessibility = AXIsProcessTrusted()
+        logger.info("🔐 [DEBUG] Accessibility permission status: \(hasAccessibility)")
+
+        if !hasAccessibility {
+            logger.error("❌ Cannot send mouse click - Accessibility permission not granted")
+            logger
+                .error("💡 Please grant Accessibility permission in System Settings > Privacy & Security > Accessibility"
+                )
+            throw ScreencapError.permissionDenied
+        }
+
         // Validate coordinate boundaries
         guard x >= 0 && x <= 1_000 && y >= 0 && y <= 1_000 else {
             logger.error("⚠️ Invalid click coordinates: (\(x), \(y)) - must be in range 0-1000")
@@ -1464,17 +1213,64 @@ public final class ScreencapService: NSObject {
             pixelY = filter.contentRect.origin.y + (normalizedY * filter.contentRect.height)
         }
 
-        // CGEvent uses screen coordinates which have top-left origin, same as our pixel coordinates
-        let clickLocation = CGPoint(x: pixelX, y: pixelY)
+        // CGEvent uses NSScreen coordinates (bottom-left origin)
+        // But SCDisplay uses top-left origin, so we need to flip Y
+        let screenHeight = NSScreen.screens.first?.frame.height ?? 1_080
+        let flippedY = screenHeight - pixelY
+        let clickLocation = CGPoint(x: pixelX, y: flippedY)
+
+        // Log the current mouse position for debugging
+        let currentMouseLocation = NSEvent.mouseLocation
+        logger
+            .info(
+                "🖱️ Current mouse position: (\(String(format: "%.1f", currentMouseLocation.x)), \(String(format: "%.1f", currentMouseLocation.y)))"
+            )
+
+        // Also log screen information for debugging
+        if let mainScreen = NSScreen.main {
+            logger
+                .info(
+                    "🖥️ Main screen frame: origin=(\(mainScreen.frame.origin.x), \(mainScreen.frame.origin.y)), size=(\(mainScreen.frame.width)x\(mainScreen.frame.height)) (backing scale: \(mainScreen.backingScaleFactor))"
+                )
+        }
 
         logger
             .info(
-                "🎯 Final click location: (\(String(format: "%.1f", clickLocation.x)), \(String(format: "%.1f", clickLocation.y)))"
+                "🎯 Final click location: (\(String(format: "%.1f", clickLocation.x)), \(String(format: "%.1f", clickLocation.y))) [original Y: \(String(format: "%.1f", pixelY)), flipped Y: \(String(format: "%.1f", flippedY))]"
+            )
+
+        // Create an event source for better compatibility
+        let eventSource = CGEventSource(stateID: .hidSystemState)
+
+        // IMPORTANT: First move the mouse cursor to the target position
+        // This ensures the cursor is at the correct location before clicking
+        logger.info("🖱️ [DEBUG] Moving mouse cursor to position before clicking...")
+
+        guard let mouseMove = CGEvent(
+            mouseEventSource: eventSource,
+            mouseType: .mouseMoved,
+            mouseCursorPosition: clickLocation,
+            mouseButton: .left
+        ) else {
+            throw ScreencapError.failedToCreateEvent
+        }
+
+        // Post the mouse move event
+        mouseMove.post(tap: .cghidEventTap)
+
+        // Small delay to ensure the move is processed
+        try await Task.sleep(nanoseconds: 10_000_000) // 10ms delay
+
+        // Verify the mouse actually moved
+        let newMouseLocation = NSEvent.mouseLocation
+        logger
+            .info(
+                "🖱️ [DEBUG] Mouse position after move: (\(String(format: "%.1f", newMouseLocation.x)), \(String(format: "%.1f", newMouseLocation.y)))"
             )
 
         // Create mouse down event
         guard let mouseDown = CGEvent(
-            mouseEventSource: nil,
+            mouseEventSource: eventSource,
             mouseType: .leftMouseDown,
             mouseCursorPosition: clickLocation,
             mouseButton: .left
@@ -1484,13 +1280,17 @@ public final class ScreencapService: NSObject {
 
         // Create mouse up event
         guard let mouseUp = CGEvent(
-            mouseEventSource: nil,
+            mouseEventSource: eventSource,
             mouseType: .leftMouseUp,
             mouseCursorPosition: clickLocation,
             mouseButton: .left
         ) else {
             throw ScreencapError.failedToCreateEvent
         }
+
+        // Set the click count to 1 for both events
+        mouseDown.setIntegerValueField(.mouseEventClickState, value: 1)
+        mouseUp.setIntegerValueField(.mouseEventClickState, value: 1)
 
         // Post events
         mouseDown.post(tap: .cghidEventTap)
@@ -1520,15 +1320,21 @@ public final class ScreencapService: NSObject {
         // Calculate pixel coordinates (reuse the conversion logic)
         let clickLocation = try await calculateClickLocation(x: x, y: y)
 
+        // Create an event source for better compatibility
+        let eventSource = CGEventSource(stateID: .hidSystemState)
+
         // Create mouse down event
         guard let mouseDown = CGEvent(
-            mouseEventSource: nil,
+            mouseEventSource: eventSource,
             mouseType: .leftMouseDown,
             mouseCursorPosition: clickLocation,
             mouseButton: .left
         ) else {
             throw ScreencapError.failedToCreateEvent
         }
+
+        // Set the click state
+        mouseDown.setIntegerValueField(.mouseEventClickState, value: 1)
 
         // Post event
         mouseDown.post(tap: .cghidEventTap)
@@ -1550,9 +1356,12 @@ public final class ScreencapService: NSObject {
         // Calculate pixel coordinates
         let moveLocation = try await calculateClickLocation(x: x, y: y)
 
+        // Create an event source for better compatibility
+        let eventSource = CGEventSource(stateID: .hidSystemState)
+
         // Create mouse dragged event
         guard let mouseDrag = CGEvent(
-            mouseEventSource: nil,
+            mouseEventSource: eventSource,
             mouseType: .leftMouseDragged,
             mouseCursorPosition: moveLocation,
             mouseButton: .left
@@ -1584,15 +1393,21 @@ public final class ScreencapService: NSObject {
         // Calculate pixel coordinates
         let clickLocation = try await calculateClickLocation(x: x, y: y)
 
+        // Create an event source for better compatibility
+        let eventSource = CGEventSource(stateID: .hidSystemState)
+
         // Create mouse up event
         guard let mouseUp = CGEvent(
-            mouseEventSource: nil,
+            mouseEventSource: eventSource,
             mouseType: .leftMouseUp,
             mouseCursorPosition: clickLocation,
             mouseButton: .left
         ) else {
             throw ScreencapError.failedToCreateEvent
         }
+
+        // Set the click state
+        mouseUp.setIntegerValueField(.mouseEventClickState, value: 1)
 
         // Post event
         mouseUp.post(tap: .cghidEventTap)
@@ -1607,9 +1422,26 @@ public final class ScreencapService: NSObject {
             throw ScreencapError.notCapturing
         }
 
+        // Check environment variable to control Y-coordinate flipping
+        let shouldFlipY = ProcessInfo.processInfo.environment["VIBETUNNEL_FLIP_Y"] != "false"
+        let useWarpCursor = ProcessInfo.processInfo.environment["VIBETUNNEL_USE_WARP"] == "true"
+
+        logger.info("🔍 [DEBUG] calculateClickLocation - Input: x=\(x), y=\(y)")
+        logger.info("🔍 [DEBUG] Capture mode: \(String(describing: self.captureMode))")
+        logger
+            .info(
+                "🔍 [DEBUG] Filter content rect: origin=(\(filter.contentRect.origin.x), \(filter.contentRect.origin.y)), size=(\(filter.contentRect.width)x\(filter.contentRect.height))"
+            )
+        logger.info("🔍 [DEBUG] Configuration: shouldFlipY=\(shouldFlipY), useWarpCursor=\(useWarpCursor)")
+
         // Convert from 0-1000 normalized coordinates to actual pixel coordinates
         let normalizedX = x / 1_000.0
         let normalizedY = y / 1_000.0
+
+        logger
+            .info(
+                "🔍 [DEBUG] Normalized coordinates: x=\(String(format: "%.4f", normalizedX)), y=\(String(format: "%.4f", normalizedY))"
+            )
 
         var pixelX: Double
         var pixelY: Double
@@ -1620,11 +1452,26 @@ public final class ScreencapService: NSObject {
             // Get SCShareableContent to ensure consistency
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
 
+            logger
+                .info(
+                    "🔍 [DEBUG] Desktop capture mode - Display index: \(displayIndex), Total displays: \(content.displays.count)"
+                )
+
             if displayIndex >= 0 && displayIndex < content.displays.count {
                 let display = content.displays[displayIndex]
+                logger
+                    .info(
+                        "🔍 [DEBUG] Display frame: origin=(\(display.frame.origin.x), \(display.frame.origin.y)), size=(\(display.frame.width)x\(display.frame.height))"
+                    )
+
                 // Convert normalized to pixel coordinates within the display
                 pixelX = display.frame.origin.x + (normalizedX * display.frame.width)
                 pixelY = display.frame.origin.y + (normalizedY * display.frame.height)
+
+                logger
+                    .info(
+                        "🔍 [DEBUG] Calculated pixel coords: x=\(String(format: "%.1f", pixelX)), y=\(String(format: "%.1f", pixelY))"
+                    )
             } else {
                 throw ScreencapError.noDisplay
             }
@@ -1633,6 +1480,8 @@ public final class ScreencapService: NSObject {
             // For all displays, we need to calculate based on the combined bounds
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
 
+            logger.info("🔍 [DEBUG] All displays capture mode - Total displays: \(content.displays.count)")
+
             // Calculate the bounding rectangle
             var minX = CGFloat.greatestFiniteMagnitude
             var minY = CGFloat.greatestFiniteMagnitude
@@ -1640,6 +1489,10 @@ public final class ScreencapService: NSObject {
             var maxY: CGFloat = -CGFloat.greatestFiniteMagnitude
 
             for display in content.displays {
+                logger
+                    .info(
+                        "🔍 [DEBUG] Display: origin=(\(display.frame.origin.x), \(display.frame.origin.y)), size=(\(display.frame.width)x\(display.frame.height))"
+                    )
                 minX = min(minX, display.frame.origin.x)
                 minY = min(minY, display.frame.origin.y)
                 maxX = max(maxX, display.frame.origin.x + display.frame.width)
@@ -1649,23 +1502,142 @@ public final class ScreencapService: NSObject {
             let totalWidth = maxX - minX
             let totalHeight = maxY - minY
 
+            logger
+                .info(
+                    "🔍 [DEBUG] Combined bounds: min=(\(minX), \(minY)), max=(\(maxX), \(maxY)), size=(\(totalWidth)x\(totalHeight))"
+                )
+
             // Convert normalized to pixel coordinates within the combined bounds
             pixelX = minX + (normalizedX * totalWidth)
             pixelY = minY + (normalizedY * totalHeight)
 
+            logger
+                .info(
+                    "🔍 [DEBUG] Calculated pixel coords: x=\(String(format: "%.1f", pixelX)), y=\(String(format: "%.1f", pixelY))"
+                )
+
         case .window(let window):
             // For window capture, use the window's frame
+            logger
+                .info(
+                    "🔍 [DEBUG] Window capture mode - Window frame: origin=(\(window.frame.origin.x), \(window.frame.origin.y)), size=(\(window.frame.width)x\(window.frame.height))"
+                )
+
             pixelX = window.frame.origin.x + (normalizedX * window.frame.width)
             pixelY = window.frame.origin.y + (normalizedY * window.frame.height)
 
+            logger
+                .info(
+                    "🔍 [DEBUG] Calculated pixel coords: x=\(String(format: "%.1f", pixelX)), y=\(String(format: "%.1f", pixelY))"
+                )
+
         case .application:
             // For application capture, use the filter's content rect
+            logger
+                .info(
+                    "🔍 [DEBUG] Application capture mode - Filter content rect: origin=(\(filter.contentRect.origin.x), \(filter.contentRect.origin.y)), size=(\(filter.contentRect.width)x\(filter.contentRect.height))"
+                )
+
             pixelX = filter.contentRect.origin.x + (normalizedX * filter.contentRect.width)
             pixelY = filter.contentRect.origin.y + (normalizedY * filter.contentRect.height)
+
+            logger
+                .info(
+                    "🔍 [DEBUG] Calculated pixel coords: x=\(String(format: "%.1f", pixelX)), y=\(String(format: "%.1f", pixelY))"
+                )
         }
 
-        // CGEvent uses screen coordinates which have top-left origin, same as our pixel coordinates
-        return CGPoint(x: pixelX, y: pixelY)
+        // Log coordinate system information
+        logger.info("🔍 [DEBUG] Coordinate system information:")
+        logger.info("🔍 [DEBUG] SCDisplay uses top-left origin, NSEvent/CGEvent uses bottom-left origin")
+        logger.info("🔍 [DEBUG] shouldFlipY=\(shouldFlipY) (set VIBETUNNEL_FLIP_Y=false to disable)")
+        logger.info("🔍 [DEBUG] useWarpCursor=\(useWarpCursor) (set VIBETUNNEL_USE_WARP=true to enable)")
+
+        // Log all screen information
+        for (index, screen) in NSScreen.screens.enumerated() {
+            logger
+                .info(
+                    "🔍 [DEBUG] Screen \(index): frame=origin(\(screen.frame.origin.x), \(screen.frame.origin.y)), size=(\(screen.frame.width)x\(screen.frame.height)), backing scale=\(screen.backingScaleFactor)"
+                )
+        }
+
+        var finalX = pixelX
+        var finalY = pixelY
+
+        if shouldFlipY {
+            // IMPORTANT: For multi-monitor setups, we need to find the screen that contains our click point
+            var targetScreen: NSScreen?
+            for screen in NSScreen.screens {
+                let screenFrame = screen.frame
+                if pixelX >= screenFrame.origin.x && pixelX <= screenFrame.origin.x + screenFrame.width &&
+                    pixelY >= screenFrame.origin.y && pixelY <= screenFrame.origin.y + screenFrame.height
+                {
+                    targetScreen = screen
+                    logger
+                        .info(
+                            "🔍 [DEBUG] Found target screen containing click point: frame=(\(screenFrame.origin.x), \(screenFrame.origin.y), \(screenFrame.width), \(screenFrame.height))"
+                        )
+                    break
+                }
+            }
+
+            // If no screen found, use the main screen
+            if targetScreen == nil {
+                targetScreen = NSScreen.main ?? NSScreen.screens.first
+                logger.warning("⚠️ [DEBUG] No screen contains click point, using main screen")
+            }
+
+            guard let screen = targetScreen else {
+                logger.error("❌ [DEBUG] No screen available")
+                throw ScreencapError.noDisplay
+            }
+
+            // Calculate the correct Y coordinate flip relative to the target screen
+            let screenHeight = screen.frame.height
+            let screenOriginY = screen.frame.origin.y
+
+            // For NSScreen coordinates, we need to flip Y relative to the screen's coordinate system
+            // SCDisplay uses top-left origin, NSEvent uses bottom-left origin
+            let relativeY = pixelY - screenOriginY // Y position relative to the screen's top
+            let flippedY = screenOriginY + (screenHeight - relativeY) // Flip Y within the screen
+
+            finalY = flippedY
+
+            logger
+                .info(
+                    "🔍 [DEBUG] Y-flip calculation: screenHeight=\(screenHeight), screenOriginY=\(screenOriginY), relativeY=\(relativeY)"
+                )
+            logger
+                .info(
+                    "📐 [DEBUG] Y-coordinate flipping: pixel Y: \(String(format: "%.1f", pixelY)) → flipped Y: \(String(format: "%.1f", flippedY))"
+                )
+        } else {
+            logger.info("🔍 [DEBUG] Y-coordinate flipping DISABLED - using pixel coordinates directly")
+            logger
+                .info(
+                    "🔍 [DEBUG] Direct pixel coordinates: x=\(String(format: "%.1f", pixelX)), y=\(String(format: "%.1f", pixelY))"
+                )
+        }
+
+        logger
+            .info(
+                "🎯 [DEBUG] Final coordinates: x=\(String(format: "%.1f", finalX)), y=\(String(format: "%.1f", finalY))"
+            )
+
+        // Test CGWarpMouseCursorPosition if enabled
+        if useWarpCursor {
+            logger
+                .info(
+                    "🔍 [DEBUG] Testing CGWarpMouseCursorPosition with coordinates: x=\(String(format: "%.1f", finalX)), y=\(String(format: "%.1f", finalY))"
+                )
+            let warpResult = CGWarpMouseCursorPosition(CGPoint(x: finalX, y: finalY))
+            logger
+                .info(
+                    "🔍 [DEBUG] CGWarpMouseCursorPosition result: \(warpResult == CGError.success ? "SUCCESS" : "FAILED with error \(warpResult.rawValue)")"
+                )
+        }
+
+        return CGPoint(x: finalX, y: finalY)
     }
 
     /// Send keyboard input
@@ -1733,11 +1705,15 @@ public final class ScreencapService: NSObject {
             // Notify WebRTC manager of state changes
             if let webRTCManager = self.webRTCManager {
                 Task {
-                    await webRTCManager.sendSignalMessage([
-                        "type": "state-change",
-                        "state": newState.rawValue,
-                        "previousState": previousState?.rawValue as Any
-                    ])
+                    let message = ControlProtocol.createEvent(
+                        category: .screencap,
+                        action: "state-change",
+                        payload: [
+                            "state": newState.rawValue,
+                            "previousState": previousState?.rawValue as Any
+                        ]
+                    )
+                    await webRTCManager.sendControlMessage(message)
                 }
             }
         }
@@ -1850,20 +1826,24 @@ public final class ScreencapService: NSObject {
     /// Notify connected clients that display was disconnected
     private func notifyDisplayDisconnected() async {
         if let webRTCManager {
-            await webRTCManager.sendSignalMessage([
-                "type": "display-disconnected",
-                "message": "Display disconnected during capture"
-            ])
+            let message = ControlProtocol.createEvent(
+                category: .screencap,
+                action: "display-disconnected",
+                payload: ["message": "Display disconnected during capture"]
+            )
+            await webRTCManager.sendControlMessage(message)
         }
     }
 
     /// Notify connected clients that window was disconnected
     private func notifyWindowDisconnected() async {
         if let webRTCManager {
-            await webRTCManager.sendSignalMessage([
-                "type": "window-disconnected",
-                "message": "Window closed or became unavailable"
-            ])
+            let message = ControlProtocol.createEvent(
+                category: .screencap,
+                action: "window-disconnected",
+                payload: ["message": "Window closed or became unavailable"]
+            )
+            await webRTCManager.sendControlMessage(message)
         }
     }
 
@@ -2089,52 +2069,6 @@ extension ScreencapService: SCStreamOutput {
         // Log only every 300 frames (10 seconds at 30fps) to reduce noise
         if frameCount.isMultiple(of: 300) {
             logger.info("📹 Frame \(frameCount) received")
-        }
-    }
-}
-
-// MARK: - Error Types
-
-enum ScreencapError: LocalizedError {
-    case noDisplay
-    case invalidWindowIndex
-    case invalidApplicationIndex
-    case invalidCaptureType
-    case failedToCreateEvent
-    case notCapturing
-    case failedToGetContent(Error)
-    case invalidConfiguration
-    case failedToStartCapture(Error)
-    case invalidCoordinates(x: Double, y: Double)
-    case invalidKeyInput(String)
-    case serviceNotReady
-
-    var errorDescription: String? {
-        switch self {
-        case .noDisplay:
-            "No display available"
-        case .invalidWindowIndex:
-            "Invalid window index"
-        case .invalidApplicationIndex:
-            "Invalid application index"
-        case .invalidCaptureType:
-            "Invalid capture type"
-        case .failedToCreateEvent:
-            "Failed to create input event"
-        case .notCapturing:
-            "Not currently capturing"
-        case .failedToGetContent(let error):
-            "Failed to get screen content: \(error.localizedDescription)"
-        case .invalidConfiguration:
-            "Invalid capture configuration"
-        case .failedToStartCapture(let error):
-            "Failed to start capture: \(error.localizedDescription)"
-        case .invalidCoordinates(let x, let y):
-            "Invalid coordinates (\(x), \(y)) - must be in range 0-1000"
-        case .invalidKeyInput(let key):
-            "Invalid key input: '\(key)' - must be non-empty and <= 20 characters"
-        case .serviceNotReady:
-            "Screen capture service is not ready. Connection may still be initializing."
         }
     }
 }

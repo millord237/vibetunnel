@@ -2,43 +2,16 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('screencap-websocket');
 
-interface ApiRequest {
-  type: 'api-request';
-  requestId: string;
-  method: string;
-  endpoint: string;
-  params?: unknown;
+// This interface should align with the backend's ControlMessage protocol
+interface ControlMessage {
+  id: string;
+  type: 'request' | 'response' | 'event';
+  category: 'screencap';
+  action: string;
+  payload?: unknown;
   sessionId?: string;
-}
-
-interface SignalMessage {
-  type:
-    | 'start-capture'
-    | 'offer'
-    | 'answer'
-    | 'ice-candidate'
-    | 'error'
-    | 'ready'
-    | 'api-response'
-    | 'bitrate-adjustment';
-  data?: unknown;
-  requestId?: string;
-  result?: unknown;
   error?: string;
-  sessionId?: string;
-  mode?: string;
-  windowId?: number;
-  displayIndex?: number;
-  browser?: string;
-  browserVersion?: number;
-  preferH265?: boolean;
-  codecSupport?: {
-    h265: boolean;
-    h264: boolean;
-  };
 }
-
-type WebSocketMessage = ApiRequest | SignalMessage;
 
 export class ScreencapWebSocketClient {
   private ws: WebSocket | null = null;
@@ -57,49 +30,77 @@ export class ScreencapWebSocketClient {
   public onError?: (error: string) => void;
   public onReady?: () => void;
 
-  constructor(private wsUrl: string) {}
+  constructor(private wsUrl: string) {
+    logger.log(`📡 ScreencapWebSocketClient created with URL: ${wsUrl}`);
+  }
 
   private async connect(): Promise<void> {
-    if (this.isConnected) return;
-    if (this.connectionPromise) return this.connectionPromise;
+    logger.log(
+      `🔌 Connect called - isConnected: ${this.isConnected}, hasPromise: ${!!this.connectionPromise}`
+    );
+
+    if (this.isConnected) {
+      logger.log('✅ Already connected, returning');
+      return;
+    }
+    if (this.connectionPromise) {
+      logger.log('⏳ Connection already in progress, returning existing promise');
+      return this.connectionPromise;
+    }
 
     this.connectionPromise = new Promise((resolve, reject) => {
       try {
+        logger.log(`🚀 Creating new WebSocket connection to: ${this.wsUrl}`);
         this.ws = new WebSocket(this.wsUrl);
 
+        logger.log(`📊 WebSocket readyState after creation: ${this.ws.readyState}`);
+        logger.log('📊 WebSocket readyState values: CONNECTING=0, OPEN=1, CLOSING=2, CLOSED=3');
+
         this.ws.onopen = () => {
-          logger.log('WebSocket connected');
+          logger.log('✅ WebSocket onopen fired - connection established');
+          logger.log(`📊 WebSocket readyState in onopen: ${this.ws?.readyState}`);
           this.isConnected = true;
           resolve();
         };
 
         this.ws.onmessage = (event) => {
+          logger.log(`📨 WebSocket message received, data length: ${event.data.length}`);
           try {
-            const message = JSON.parse(event.data) as WebSocketMessage;
-            logger.log('📥 Received message:', message);
+            const message = JSON.parse(event.data) as ControlMessage;
+            logger.log('📥 Parsed message:', message);
             this.handleMessage(message);
           } catch (error) {
-            logger.error('Failed to parse WebSocket message:', error);
+            logger.error('❌ Failed to parse WebSocket message:', error);
+            logger.error('📄 Raw message data:', event.data);
           }
         };
 
         this.ws.onerror = (error) => {
-          logger.error('WebSocket error:', error);
+          logger.error('❌ WebSocket error event fired:', error);
+          logger.error(`📊 WebSocket readyState on error: ${this.ws?.readyState}`);
           this.isConnected = false;
           reject(error);
         };
 
         this.ws.onclose = (event) => {
-          logger.log(`WebSocket closed - code: ${event.code}, reason: ${event.reason}`);
+          logger.log(
+            `🔒 WebSocket closed - code: ${event.code}, reason: ${event.reason || '(no reason)'}`
+          );
+          logger.log('📊 Close codes: 1000=Normal, 1001=Going Away, 1006=Abnormal');
+          logger.log(`📊 WebSocket readyState on close: ${this.ws?.readyState}`);
           this.isConnected = false;
           this.connectionPromise = null;
           // Reject all pending requests
+          logger.log(`🗑️ Clearing ${this.pendingRequests.size} pending requests`);
           this.pendingRequests.forEach((pending) => {
-            pending.reject(new Error('WebSocket connection closed'));
+            pending.reject(new Error(`WebSocket closed: ${event.code} ${event.reason || ''}`));
           });
           this.pendingRequests.clear();
         };
+
+        logger.log('✅ WebSocket event handlers attached, waiting for connection...');
       } catch (error) {
+        logger.error('❌ Exception while creating WebSocket:', error);
         reject(error);
       }
     });
@@ -107,100 +108,157 @@ export class ScreencapWebSocketClient {
     return this.connectionPromise;
   }
 
-  private handleMessage(message: WebSocketMessage) {
-    switch (message.type) {
-      case 'ready':
-        logger.log('Server ready');
-        if (this.onReady) this.onReady();
-        break;
+  private handleMessage(message: ControlMessage) {
+    // Handle event messages from server
+    if (message.type === 'event') {
+      switch (message.action) {
+        case 'ready':
+          logger.log('Server ready');
+          if (this.onReady) this.onReady();
+          break;
 
-      case 'offer':
-        if (this.onOffer && message.data) {
-          this.onOffer(message.data as RTCSessionDescriptionInit);
-        }
-        break;
-
-      case 'answer':
-        if (this.onAnswer && message.data) {
-          this.onAnswer(message.data as RTCSessionDescriptionInit);
-        }
-        break;
-
-      case 'ice-candidate':
-        if (this.onIceCandidate && message.data) {
-          this.onIceCandidate(message.data as RTCIceCandidateInit);
-        }
-        break;
-
-      case 'error':
-        if (this.onError && typeof message.data === 'string') {
-          this.onError(message.data);
-        }
-        break;
-
-      case 'api-response':
-        if (message.requestId) {
-          const pending = this.pendingRequests.get(message.requestId);
-          if (pending) {
-            this.pendingRequests.delete(message.requestId);
-            if (message.error) {
-              // Handle error objects properly
-              let errorMessage = 'Unknown error';
-              if (typeof message.error === 'string') {
-                errorMessage = message.error;
-              } else if (typeof message.error === 'object' && message.error !== null) {
-                // Cast to unknown then check for message property
-                const err = message.error as unknown as {
-                  message?: string;
-                  error?: string;
-                  code?: string;
-                };
-                // Extract message from error object
-                if (err.message) {
-                  errorMessage = String(err.message);
-                } else if ('error' in err) {
-                  errorMessage = String(err.error);
-                } else if ('code' in err) {
-                  errorMessage = `Error code: ${err.code}`;
-                } else {
-                  // Try to stringify the error object for debugging
-                  try {
-                    errorMessage = JSON.stringify(err);
-                  } catch {
-                    errorMessage = 'Unknown error (could not serialize)';
-                  }
-                }
+        case 'offer':
+          if (this.onOffer && typeof message.payload === 'string') {
+            try {
+              const decodedPayload = JSON.parse(atob(message.payload));
+              const offerData = decodedPayload.data as RTCSessionDescriptionInit;
+              if (offerData?.type && offerData.sdp) {
+                this.onOffer(offerData);
+              } else {
+                logger.error('Invalid offer payload structure after decoding:', decodedPayload);
               }
-              pending.reject(new Error(errorMessage));
-            } else {
-              pending.resolve(message.result);
+            } catch (e) {
+              logger.error(
+                'Failed to decode or parse offer payload:',
+                e,
+                'Payload was:',
+                message.payload
+              );
             }
           }
+          break;
+
+        case 'answer':
+          if (this.onAnswer && typeof message.payload === 'string') {
+            try {
+              const decodedPayload = JSON.parse(atob(message.payload));
+              const answerData = decodedPayload.data as RTCSessionDescriptionInit;
+              if (answerData?.type && answerData.sdp) {
+                this.onAnswer(answerData);
+              } else {
+                logger.error('Invalid answer payload structure after decoding:', decodedPayload);
+              }
+            } catch (e) {
+              logger.error(
+                'Failed to decode or parse answer payload:',
+                e,
+                'Payload was:',
+                message.payload
+              );
+            }
+          }
+          break;
+
+        case 'ice-candidate':
+          if (this.onIceCandidate && typeof message.payload === 'string') {
+            try {
+              const decodedPayload = JSON.parse(atob(message.payload));
+              const candidateData = decodedPayload.data as RTCIceCandidateInit;
+              if (candidateData) {
+                this.onIceCandidate(candidateData);
+              } else {
+                logger.error(
+                  'Invalid ICE candidate payload structure after decoding:',
+                  decodedPayload
+                );
+              }
+            } catch (e) {
+              logger.error(
+                'Failed to decode or parse ICE candidate payload:',
+                e,
+                'Payload was:',
+                message.payload
+              );
+            }
+          }
+          break;
+
+        case 'error':
+          if (this.onError && message.payload) {
+            this.onError(String(message.payload));
+          }
+          break;
+      }
+    }
+
+    // Handle response messages
+    if (message.type === 'response' && message.id) {
+      const pending = this.pendingRequests.get(message.id);
+      if (pending) {
+        this.pendingRequests.delete(message.id);
+        if (message.error) {
+          // Handle error as a string
+          pending.reject(new Error(message.error));
+        } else {
+          // Handle payload - it might be base64 encoded if it's from Swift ControlProtocol
+          let payload = message.payload;
+
+          // Check if payload is a base64-encoded string (from Swift ControlProtocol)
+          if (typeof payload === 'string') {
+            try {
+              // Try to decode base64
+              const decoded = atob(payload);
+              payload = JSON.parse(decoded);
+              logger.log('📦 Decoded base64 payload:', payload);
+            } catch {
+              // Not base64 or not JSON, use as-is
+              logger.log('📦 Payload is plain string, not base64');
+            }
+          }
+
+          logger.log('📦 Resolving request with payload:', payload);
+          logger.log('📦 Payload type:', typeof payload);
+          logger.log('📦 Payload keys:', payload ? Object.keys(payload) : 'null');
+          pending.resolve(payload);
         }
-        break;
+      }
     }
   }
 
   async request<T = unknown>(method: string, endpoint: string, params?: unknown): Promise<T> {
-    await this.connect();
+    logger.log(`📤 Request called: ${method} ${endpoint}`, params);
+
+    try {
+      logger.log('🔌 Ensuring WebSocket connection...');
+      await this.connect();
+      logger.log('✅ Connection ensured');
+    } catch (error) {
+      logger.error('❌ Failed to connect:', error);
+      throw error;
+    }
 
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      logger.error(`WebSocket not ready - state: ${this.ws?.readyState}`);
+      logger.error(`❌ WebSocket not ready - state: ${this.ws?.readyState}`);
+      logger.error(`📊 WebSocket object exists: ${!!this.ws}`);
       throw new Error('WebSocket not connected');
     }
 
-    // Generate request ID
-    const requestId =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    logger.log(`✅ WebSocket is open and ready`);
 
-    const request: ApiRequest = {
-      type: 'api-request',
-      requestId,
-      method,
-      endpoint,
-      params,
+    // Generate request ID
+    const requestId = crypto.randomUUID();
+
+    const request: ControlMessage = {
+      id: requestId,
+      type: 'request',
+      category: 'screencap',
+      action: 'api-request',
+      payload: {
+        method,
+        endpoint,
+        params,
+        requestId, // Include original requestId in payload for mac-side compatibility
+      },
       sessionId: this.sessionId || undefined,
     };
 
@@ -223,17 +281,21 @@ export class ScreencapWebSocketClient {
     });
   }
 
-  async sendSignal(message: Partial<SignalMessage>) {
+  async sendSignal(action: string, data?: unknown) {
     await this.connect();
 
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket not connected');
     }
 
-    // Add session ID to signaling messages if available
-    if (this.sessionId && !message.sessionId) {
-      message.sessionId = this.sessionId;
-    }
+    const message: ControlMessage = {
+      id: crypto.randomUUID(),
+      type: 'event',
+      category: 'screencap',
+      action,
+      payload: data,
+      sessionId: this.sessionId || undefined,
+    };
 
     logger.log(`📤 Sending signal:`, message);
     this.ws.send(JSON.stringify(message));
@@ -251,10 +313,7 @@ export class ScreencapWebSocketClient {
   async startCapture(params: { type: string; index: number; webrtc?: boolean; use8k?: boolean }) {
     // Generate a session ID for this capture session if not present
     if (!this.sessionId) {
-      this.sessionId =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      this.sessionId = crypto.randomUUID();
       logger.log(`Generated session ID: ${this.sessionId}`);
     }
     return this.request('POST', '/capture', params);
@@ -263,10 +322,7 @@ export class ScreencapWebSocketClient {
   async captureWindow(params: { cgWindowID: number; webrtc?: boolean; use8k?: boolean }) {
     // Generate a session ID for this capture session if not present
     if (!this.sessionId) {
-      this.sessionId =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      this.sessionId = crypto.randomUUID();
       logger.log(`Generated session ID: ${this.sessionId}`);
     }
     return this.request('POST', '/capture-window', params);

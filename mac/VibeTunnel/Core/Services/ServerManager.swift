@@ -243,28 +243,16 @@ class ServerManager {
 
             logger.info("Started server on port \(self.port)")
 
-            // Screencap is now handled via WebSocket API (no separate HTTP server)
-            // Always initialize the service if enabled, regardless of permission
-            // The service will handle permission checks internally
+            // This allows the screencap API to be available for queries (like listing
+            // windows/displays) without triggering the permission dialog. The permission
+            // dialog only appears when the user actually starts screen capture.
             if AppConstants.boolValue(for: AppConstants.UserDefaultsKeys.enableScreencapService) {
-                logger.info("📸 Screencap service enabled, initializing...")
-
-                // Initialize ScreencapService singleton and ensure WebSocket is connected
-                let screencapService = ScreencapService.shared
-
-                // Skip permission check at startup - it will be checked when actually needed
-                logger.info("📸 Deferring screen recording permission check until first use")
-
-                // Connect WebSocket regardless of permission status
-                // This allows the API to respond with appropriate errors
-                do {
-                    try await screencapService.ensureWebSocketConnected()
-                    logger.info("✅ ScreencapService WebSocket connected successfully")
-                } catch {
-                    logger.error("❌ Failed to connect ScreencapService WebSocket: \(error)")
-                }
+                self.logger.info("Screencap service enabled, initializing...")
+                // Ensure the singleton is created and ready to receive messages.
+                // This will in turn initialize the WebRTCManager and register its handlers.
+                _ = ScreencapService.shared
             } else {
-                logger.info("Screencap service disabled by user preference")
+                self.logger.info("Screencap service disabled by user preference")
             }
 
             // Pass the local auth token to SessionMonitor

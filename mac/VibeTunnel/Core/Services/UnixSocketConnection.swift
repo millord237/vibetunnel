@@ -65,7 +65,7 @@ final class UnixSocketConnection {
     init(socketPath: String? = nil) {
         // Use socket path in user's home directory to avoid /tmp issues
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        self.socketPath = socketPath ?? "\(home)/.vibetunnel/screencap.sock"
+        self.socketPath = socketPath ?? "\(home)/.vibetunnel/control.sock"
         logger.info("Unix socket initialized with path: \(self.socketPath)")
     }
 
@@ -84,12 +84,20 @@ final class UnixSocketConnection {
     func connect() {
         logger.info("🔌 Connecting to UNIX socket at \(self.socketPath)")
 
-        // Reset reconnection state
-        shouldReconnect = true
-        isReconnecting = false
+        guard !isConnecting else {
+            logger.debug("Connection attempt already in progress.")
+            return
+        }
 
-        // Notify state change
-        onStateChange?(.setup)
+        // Reset reconnection state if this is a new top-level call
+        if !isReconnecting {
+            shouldReconnect = true
+            reconnectDelay = initialReconnectDelay
+            consecutiveFailures = 0
+        }
+
+        isConnecting = true
+        onStateChange?(.preparing)
 
         // Connect on background queue
         queue.async { [weak self] in
@@ -99,10 +107,6 @@ final class UnixSocketConnection {
 
     /// Establish the actual connection using C socket API
     private nonisolated func establishConnection() {
-        Task { @MainActor in
-            self.onStateChange?(.preparing)
-        }
-
         // Close any existing socket
         if socketFD >= 0 {
             close(socketFD)
@@ -278,14 +282,16 @@ final class UnixSocketConnection {
 
     /// Send a message with automatic retry on failure
     func send(_ message: some Encodable) async throws {
+        logger.info("📤 Sending control message...")
         let encoder = JSONEncoder()
         let data = try encoder.encode(message)
 
-        // Add newline delimiter
-        var messageData = data
-        messageData.append("\n".data(using: .utf8)!)
+        // Log the message content for debugging
+        if let str = String(data: data, encoding: .utf8) {
+            logger.info("📤 Message content: \(String(str.prefix(500)))")
+        }
 
-        try await sendData(messageData)
+        try await sendData(data)
     }
 
     /// Serial queue for message sending to prevent concurrent writes
@@ -295,23 +301,7 @@ final class UnixSocketConnection {
     func sendMessage(_ dict: [String: Any]) async {
         do {
             let data = try JSONSerialization.data(withJSONObject: dict, options: [])
-            var messageData = data
-            messageData.append("\n".data(using: .utf8)!)
-
-            // Log message size for debugging
-            logger.debug("📤 Sending message of size: \(messageData.count) bytes")
-            if messageData.count > 65_536 {
-                logger.warning("⚠️ Large message: \(messageData.count) bytes - may cause issues")
-            }
-
-            // Queue message if not connected
-            guard isConnected, socketFD >= 0 else {
-                logger.warning("Socket not ready, queuing message (pending: \(self.pendingMessages.count))")
-                queueMessage(messageData)
-                return
-            }
-
-            await sendDataWithErrorHandling(messageData)
+            await sendDataWithErrorHandling(data)
         } catch {
             logger.error("Failed to serialize message: \(error)")
         }
@@ -336,11 +326,19 @@ final class UnixSocketConnection {
                     return
                 }
 
+                // Create message with 4-byte length header
+                let lengthValue = UInt32(data.count).bigEndian
+                var headerData = Data()
+                withUnsafeBytes(of: lengthValue) { bytes in
+                    headerData.append(contentsOf: bytes)
+                }
+                let fullData = headerData + data
+
                 // Send data in chunks if needed
                 var totalSent = 0
-                var remainingData = data
+                var remainingData = fullData
 
-                while totalSent < data.count {
+                while totalSent < fullData.count {
                     let result = remainingData.withUnsafeBytes { ptr in
                         Darwin.send(self.socketFD, ptr.baseAddress, remainingData.count, 0)
                     }
@@ -416,11 +414,19 @@ final class UnixSocketConnection {
                     return
                 }
 
+                // Create message with 4-byte length header
+                let lengthValue = UInt32(data.count).bigEndian
+                var headerData = Data()
+                withUnsafeBytes(of: lengthValue) { bytes in
+                    headerData.append(contentsOf: bytes)
+                }
+                let fullData = headerData + data
+
                 // Send data in chunks if needed
                 var totalSent = 0
-                var remainingData = data
+                var remainingData = fullData
 
-                while totalSent < data.count {
+                while totalSent < fullData.count {
                     let result = remainingData.withUnsafeBytes { ptr in
                         Darwin.send(self.socketFD, ptr.baseAddress, remainingData.count, 0)
                     }
@@ -572,14 +578,10 @@ final class UnixSocketConnection {
 
                 logger.info("🔁 Attempting reconnection...")
                 self.isReconnecting = false
-
-                // Connect on background queue
-                self.queue.async {
-                    self.establishConnection()
-                }
+                self.connect()
 
                 // Increase delay for next attempt (exponential backoff)
-                self.reconnectDelay = min(self.reconnectDelay * 2, self.maxReconnectDelay)
+                self.reconnectDelay = min(self.reconnectDelay * 1.5, self.maxReconnectDelay)
             } catch {
                 self.isReconnecting = false
                 if !Task.isCancelled {
@@ -636,12 +638,17 @@ final class UnixSocketConnection {
                             return
                         }
 
+                        // Create message with 4-byte length header
+                        var lengthHeader = UInt32(data.count).bigEndian
+                        let headerData = Data(bytes: &lengthHeader, count: 4)
+                        let fullData = headerData + data
+
                         // Send data in chunks if needed
                         var totalSent = 0
-                        var remainingData = data
+                        var remainingData = fullData
                         var sendError: Error?
 
-                        while totalSent < data.count && sendError == nil {
+                        while totalSent < fullData.count && sendError == nil {
                             let result = remainingData.withUnsafeBytes { ptr in
                                 Darwin.send(self.socketFD, ptr.baseAddress, remainingData.count, 0)
                             }
@@ -717,9 +724,15 @@ final class UnixSocketConnection {
             return
         }
 
-        let pingMessage = ["type": "ping", "timestamp": Date().timeIntervalSince1970] as [String: Any]
-        await sendMessage(pingMessage)
-        logger.debug("🏓 Sent keep-alive ping")
+        let pingMessage = ControlProtocol.createRequest(category: .system, action: "ping")
+        Task {
+            do {
+                try await send(pingMessage)
+                logger.debug("🏓 Sent keep-alive ping")
+            } catch {
+                logger.error("Failed to send keep-alive ping: \(error)")
+            }
+        }
     }
 
     /// Start continuous receive loop
@@ -759,7 +772,10 @@ final class UnixSocketConnection {
                 } else if bytesRead == 0 {
                     // Connection closed
                     Task { @MainActor in
-                        self.logger.warning("Connection closed by peer")
+                        self.logger.warning("⚠️ Connection closed by peer (recv returned 0)")
+                        self.logger.warning("  Socket FD: \(self.socketFD)")
+                        self.logger.warning("  Was connected: \(self.isConnected)")
+                        self.logger.warning("  Receive buffer had \(self.receiveBuffer.count) bytes")
                         self.handleConnectionError(UnixSocketError.connectionClosed)
                     }
                 } else {
@@ -786,62 +802,62 @@ final class UnixSocketConnection {
 
     /// Process received data with proper message framing
     private func processReceivedData(_ data: Data) {
-        // Append new data to buffer
+        logger.debug("📥 Received \(data.count) bytes of data")
         receiveBuffer.append(data)
+        logger.debug("📦 Buffer now contains \(self.receiveBuffer.count) bytes")
 
-        // Log buffer state for debugging
-        logger.debug("📥 Buffer after append: \(self.receiveBuffer.count) bytes")
-        if let str = String(data: receiveBuffer.prefix(200), encoding: .utf8) {
-            logger.debug("📋 Buffer content preview: \(str)")
-        }
+        // Process as many messages as we can from the buffer
+        while receiveBuffer.count >= 4 {
+            // Read the message length header (4 bytes, big-endian UInt32)
+            let messageLength = receiveBuffer.prefix(4)
+                .withUnsafeBytes { UInt32(bigEndian: $0.loadUnaligned(as: UInt32.self)) }
 
-        // Process complete messages (delimited by newlines)
-        while let newlineIndex = receiveBuffer.firstIndex(of: 0x0A) { // 0x0A is newline
-            // Calculate the offset from the start of the buffer
-            let newlineOffset = receiveBuffer.distance(from: receiveBuffer.startIndex, to: newlineIndex)
+            logger.debug("📏 Next message length from header: \(messageLength) bytes")
 
-            // Extract message up to the newline (not including it)
-            let messageData = receiveBuffer.prefix(newlineOffset)
-
-            // Calculate how much to remove (message + newline)
-            let bytesToRemove = newlineOffset + 1
-
-            logger
-                .debug(
-                    "🔍 Found newline at offset \(newlineOffset), message size: \(messageData.count), removing: \(bytesToRemove) bytes"
-                )
-
-            // Remove processed data from buffer (including newline)
-            receiveBuffer.removeFirst(bytesToRemove)
-            logger.debug("✅ Removed \(bytesToRemove) bytes, buffer now: \(self.receiveBuffer.count) bytes")
-
-            // Skip empty messages
-            if messageData.isEmpty {
-                logger.debug("⏭️ Skipping empty message")
-                continue
+            // Check against reasonable upper bound to guard against corrupted headers
+            guard messageLength < 10_000_000 else { // 10MB max message size (matching Node.js peer)
+                logger.error("Corrupted message header: length=\(messageLength)")
+                receiveBuffer.removeAll() // Clear corrupted buffer
+                break
             }
 
+            let needed = Int(messageLength) + 4
+            guard receiveBuffer.count >= needed else { break }
+
+            // Extract the complete message body (skip the 4-byte header)
+            let body = Data(receiveBuffer.dropFirst(4).prefix(Int(messageLength)))
+            receiveBuffer.removeFirst(needed)
+
             // Check for keep-alive pong
-            if let msgDict = try? JSONSerialization.jsonObject(with: messageData) as? [String: Any],
-               msgDict["type"] as? String == "pong"
+            if let msgDict = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+               let type = msgDict["type"] as? String,
+               type == "response",
+               let category = msgDict["category"] as? String,
+               category == "system",
+               let action = msgDict["action"] as? String,
+               action == "ping"
             {
                 lastPongTime = Date()
                 logger.debug("🏓 Received keep-alive pong")
                 continue
             }
 
-            // Log the message being delivered
-            if let msgStr = String(data: messageData, encoding: .utf8) {
-                logger.debug("📤 Delivering message: \(msgStr)")
+            // Deliver the complete message
+            logger.info("📨 Delivering message of size \(body.count) bytes")
+            if let str = String(data: body, encoding: .utf8) {
+                logger.info("📨 Message content: \(String(str.prefix(500)))")
             }
 
-            // Deliver the complete message
-            onMessage?(messageData)
+            if let handler = onMessage {
+                handler(body)
+            } else {
+                logger.warning("⚠️ No message handler registered - message will be dropped!")
+            }
         }
 
         // If buffer grows too large, clear it to prevent memory issues
-        if receiveBuffer.count > 1_024 * 1_024 { // 1MB limit
-            logger.warning("Receive buffer exceeded 1MB, clearing to prevent memory issues")
+        if receiveBuffer.count > 10 * 1_024 * 1_024 { // 10MB limit (matching Node.js peer)
+            logger.warning("Receive buffer exceeded 10MB, clearing to prevent memory issues")
             receiveBuffer.removeAll()
         }
     }

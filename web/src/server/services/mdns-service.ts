@@ -1,12 +1,15 @@
 import os from 'node:os';
-import type { Bonjour as BonjourType, Service } from 'bonjour-service';
-import Bonjour from 'bonjour-service';
+
+const BonjourLib = require('bonjour-service');
+
+import type { Service } from 'bonjour-service';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('mdns-service');
 
 export class MDNSService {
-  private bonjour: BonjourType | null = null;
+  // biome-ignore lint/suspicious/noExplicitAny: bonjour-service doesn't export proper types
+  private bonjour: any = null;
   private service: Service | null = null;
   private isAdvertising = false;
 
@@ -20,7 +23,7 @@ export class MDNSService {
     }
 
     try {
-      this.bonjour = Bonjour();
+      this.bonjour = new BonjourLib();
 
       // Use hostname or custom name as the instance name
       const name = instanceName || os.hostname() || 'VibeTunnel Server';

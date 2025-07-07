@@ -247,16 +247,12 @@ final class SystemPermissionManager {
     // MARK: - Screen Recording Permission
 
     private func checkScreenRecordingPermission() async -> Bool {
-        // Use ScreenCaptureKit to check permission status
-        // This is the modern API for macOS 14+
-
         do {
-            // Try to get shareable content - this will fail without permission
+            // This will trigger the permission prompt if needed
             _ = try await SCShareableContent.current
-            logger.debug("Screen recording permission verified through ScreenCaptureKit")
             return true
         } catch {
-            logger.debug("Screen recording permission check failed: \(error)")
+            logger.debug("Screen recording permission not granted: \(error)")
             return false
         }
     }

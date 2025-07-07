@@ -19,6 +19,7 @@ struct VibeTunnelApp: App {
     @State var permissionManager = SystemPermissionManager.shared
     @State var terminalLauncher = TerminalLauncher.shared
     @State var gitRepositoryMonitor = GitRepositoryMonitor()
+    @State var screencapService: ScreencapService?
 
     init() {
         // Connect the app delegate to this app instance
@@ -145,6 +146,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 processInfo.environment["__XCODE_BUILT_PRODUCTS_DIR_PATHS"] != nil
         #endif
 
+        // Kill other VibeTunnel instances FIRST, before any other initialization
+        // This ensures only the newest instance survives and prevents Unix socket conflicts
+        if !isRunningInTests && !isRunningInPreview {
+            ProcessKiller.killOtherInstances()
+        }
+
         // Handle single instance check before doing anything else
         #if DEBUG
         // Skip single instance check in debug builds
@@ -212,12 +219,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             object: nil
         )
 
-        // Start the terminal spawn service
-        TerminalSpawnService.shared.start()
+        // Initialize ScreencapService if enabled (must happen before socket connection)
+        let screencapEnabled = AppConstants.boolValue(for: AppConstants.UserDefaultsKeys.enableScreencapService)
+        logger.info("🎥 Screencap service enabled: \(screencapEnabled)")
+        if screencapEnabled {
+            logger.info("🎥 Initializing ScreencapService...")
+            let service = ScreencapService.shared
+            app?.screencapService = service
+            logger.info("🎥 ScreencapService initialized and retained")
+        } else {
+            logger.warning("🎥 Screencap service is disabled in settings")
+        }
 
-        // Initialize ScreencapService to enable screen sharing
-        _ = ScreencapService.shared
-        logger.info("Initialized ScreencapService for screen sharing")
+        // Start the terminal control handler (registers its handler)
+        TerminalControlHandler.shared.start()
+
+        // Start the shared unix socket manager after all handlers are registered
+        SharedUnixSocketManager.shared.connect()
 
         // Start Git monitoring early
         app?.gitRepositoryMonitor.startMonitoring()
@@ -403,8 +421,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return
         }
 
-        // Stop terminal spawn service
-        TerminalSpawnService.shared.stop()
+        // Terminal control is now handled via SharedUnixSocketManager
+        // No explicit stop needed as it's cleaned up with the socket manager
 
         // Stop HTTP server synchronously to ensure it completes before app exits
         if let serverManager = app?.serverManager {

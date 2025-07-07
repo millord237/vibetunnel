@@ -1,3 +1,6 @@
+// Install crypto polyfill first - must be before any code that uses crypto.randomUUID()
+import './utils/crypto-polyfill.js';
+
 // Suppress xterm.js errors globally - must be before any other imports
 import { suppressXtermErrors } from '../shared/suppress-xterm-errors.js';
 
@@ -1108,6 +1111,27 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private setupHotReload(): void {
+    // Skip hot reload in test environment
+    const isTestEnvironment =
+      // Check for NODE_ENV=test (set by CI build)
+      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') ||
+      window.location.search.includes('test=true') ||
+      navigator.userAgent.includes('HeadlessChrome') ||
+      navigator.userAgent.includes('Headless') ||
+      // Check if running in Playwright test context
+      (window as unknown as { __playwright?: unknown }).__playwright !== undefined ||
+      // Check for playwright-specific user agent
+      navigator.userAgent.includes('Playwright') ||
+      // Check for common headless indicators
+      navigator.webdriver === true ||
+      // Check if running on test port
+      window.location.port === '4022';
+
+    if (isTestEnvironment) {
+      logger.log('Hot reload disabled in test environment');
+      return;
+    }
+
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
       try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1120,8 +1144,12 @@ export class VibeTunnelApp extends LitElement {
             window.location.reload();
           }
         };
+        this.hotReloadWs.onerror = () => {
+          // Silently ignore errors - hot reload is optional
+          logger.debug('Hot reload WebSocket connection failed (this is normal in production)');
+        };
       } catch (error) {
-        logger.log('error setting up hot reload:', error);
+        logger.debug('Hot reload setup failed (this is normal in production):', error);
       }
     }
   }
