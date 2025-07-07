@@ -34,6 +34,7 @@ import {
 import { WriteQueue } from '../utils/write-queue.js';
 import { VERSION } from '../version.js';
 import { AsciinemaWriter } from './asciinema-writer.js';
+import { FishHandler } from './fish-handler.js';
 import { ProcessUtils } from './process-utils.js';
 import { SessionManager } from './session-manager.js';
 import {
@@ -219,6 +220,9 @@ export class PtyManager extends EventEmitter {
       const resolved = ProcessUtils.resolveCommand(command);
       const { command: finalCommand, args: finalArgs } = resolved;
       const resolvedCommand = [finalCommand, ...finalArgs];
+
+      // Note: Fish shell expansion was removed for simplicity
+      // Only basic tab completion is supported via getFishCompletions()
 
       // Log resolution details
       if (resolved.resolvedFrom === 'alias') {
@@ -881,6 +885,30 @@ export class PtyManager extends EventEmitter {
       logger.debug(`[IPC] Received title update for session ${session.id}: "${message.title}"`);
       logger.debug(`[IPC] Current session name before update: "${session.sessionInfo.name}"`);
       this.updateSessionName(session.id, message.title);
+    }
+  }
+
+  /**
+   * Get fish shell completions for a partial command
+   */
+  async getFishCompletions(sessionId: string, partial: string): Promise<string[]> {
+    try {
+      const session = this.sessions.get(sessionId);
+      if (!session) {
+        return [];
+      }
+
+      const userShell = ProcessUtils.getUserShell();
+      if (!FishHandler.isFishShell(userShell)) {
+        return [];
+      }
+
+      const { fishHandler } = await import('./fish-handler.js');
+      const cwd = session.currentWorkingDir || process.cwd();
+      return await fishHandler.getCompletions(partial, cwd);
+    } catch (error) {
+      logger.warn(`Fish completions failed: ${error}`);
+      return [];
     }
   }
 
