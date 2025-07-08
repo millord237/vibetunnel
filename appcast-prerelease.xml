@@ -6,6 +6,138 @@
         <description>VibeTunnel pre-release and beta updates feed</description>
         <language>en</language>
         <item>
+            <title>VibeTunnel 1.0.0-beta.7</title>
+            <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.7/VibeTunnel-1.0.0-beta.7.dmg</link>
+            <sparkle:version>170</sparkle:version>
+            <sparkle:shortVersionString>1.0.0-beta.7</sparkle:shortVersionString>
+            <description><![CDATA[
+                <h2>VibeTunnel 1.0.0-beta.7</h2>
+                <p><strong>Pre-release version</strong></p>
+                
+                <h3>🎯 Major Features</h3>
+                
+                <h4>🖥️ <strong>Remote Screen Sharing (Beta)</strong></h4>
+                <ul>
+                <li>Share your Mac screen remotely through any web browser - perfect for demonstrations, pair programming, or remote support</li>
+                <li>Ultra-low latency using WebRTC technology with automatic quality adjustment based on network conditions</li>
+                <li>Privacy-focused with deferred permission requests (only asks for screen recording when you actually start sharing)</li>
+                <li>Automatic 4K resolution capping for 5K+ displays to prevent web interface clipping</li>
+                <li>Clear visual indicators when screen sharing is active</li>
+                </ul>
+                
+                <h4>🪄 <strong>Magic Wand for AI Sessions</strong></h4>
+                <ul>
+                <li>Instantly inject helpful context into Claude.ai sessions with a single click</li>
+                <li>Automatically detects Claude browser windows and adds project information</li>
+                <li>Includes git repository details, current branch, and recent commit history</li>
+                <li>Configurable prompts to match your workflow</li>
+                <li>More forceful prompt injection to prevent AI from directly using the injected title</li>
+                </ul>
+                
+                <h3>🚀 Performance &amp; Stability Improvements</h3>
+                
+                <h4><strong>Terminal Performance</strong></h4>
+                <ul>
+                <li><strong>FIXED</strong>: Critical flow control issue that caused xterm.js buffer overflow and terminal freezing</li>
+                <li><strong>FIXED</strong>: Infinite scroll loop in terminal output that could freeze the browser</li>
+                <li><strong>FIXED</strong>: Race conditions in terminal output handling causing corrupted or out-of-order text</li>
+                <li>Improved memory management for long-running sessions</li>
+                <li>Better handling of high-volume terminal output</li>
+                </ul>
+                
+                <h4><strong>UI Performance</strong></h4>
+                <ul>
+                <li>Removed all UI animations that were causing 1-2 second delays when reopening sessions</li>
+                <li>Disabled View Transitions API for instant session navigation</li>
+                <li>Fixed modal backdrop pointer-events issues preventing interaction</li>
+                <li>Smoother menu bar UI without jumping when copy icon appears</li>
+                </ul>
+                
+                <h3>📱 Touch Device &amp; Mobile Improvements</h3>
+                
+                <h4><strong>iPad/Tablet Support</strong></h4>
+                <ul>
+                <li>Unified keyboard layout for all mobile devices (removed separate iPad layout)</li>
+                <li>Universal touch device detection for better keyboard mode handling</li>
+                <li>Inline-edit pencil now always visible on touch devices</li>
+                <li>Reorganized touch device layout with better button placement</li>
+                <li>Fixed touch interaction issues with modals and overlays</li>
+                </ul>
+                
+                <h4><strong>Mobile Keyboard</strong></h4>
+                <ul>
+                <li>New compact keyboard layout optimized for tablets</li>
+                <li>Better handling of keyboard shortcuts on touch devices</li>
+                <li>Improved responsiveness for mobile web browsers</li>
+                </ul>
+                
+                <h3>🐚 Shell Support Enhancements</h3>
+                
+                <h4><strong>Fish Shell Integration</strong></h4>
+                <ul>
+                <li>Full support for Fish shell command expansion and completions</li>
+                <li>Proper handling of Fish-specific syntax and features</li>
+                <li>Fixed shell configuration files not being loaded correctly</li>
+                </ul>
+                
+                <h3>🔧 Developer Experience</h3>
+                
+                <h4><strong>Build System Improvements</strong></h4>
+                <ul>
+                <li>Preserve Swift package resolution in build.sh for faster builds</li>
+                <li>Better Node.js detection that handles fnm/homebrew conflicts</li>
+                </ul>
+                
+                <h4><strong>Version Management</strong></h4>
+                <ul>
+                <li>Implemented hash-based vt script version detection</li>
+                <li>Delete old sessions automatically when VibeTunnel version changes</li>
+                <li>Better handling of version mismatches between components</li>
+                </ul>
+                
+                <h3>🐛 Bug Fixes</h3>
+                
+                <h4><strong>Session Management</strong></h4>
+                <ul>
+                <li>Fixed session state synchronization between web and native clients</li>
+                <li>Resolved memory leaks in long-running sessions</li>
+                <li>Fixed connection timeout issues on slower networks</li>
+                <li>Better cleanup of terminal processes and resources</li>
+                </ul>
+                
+                <h4><strong>UI/UX Fixes</strong></h4>
+                <ul>
+                <li>Fixed various UI glitches and visual artifacts</li>
+                <li>Resolved sidebar animation issues</li>
+                <li>Fixed file browser problems</li>
+                <li>Corrected ngrok documentation about free static domains</li>
+                </ul>
+                
+                <h3>🔍 Other Improvements</h3>
+                
+                <h4><strong>Control Protocol</strong></h4>
+                <ul>
+                <li>Unified control protocol for better terminal and screen sharing integration</li>
+                <li>Improved Unix socket handling with better error recovery</li>
+                <li>Enhanced WebRTC connection management</li>
+                </ul>
+                
+                <h4><strong>Documentation</strong></h4>
+                <ul>
+                <li>Updated ngrok docs to clarify one free static domain per user</li>
+                <li>Added comprehensive ScreenCaptureKit documentation</li>
+                <li>Removed outdated debug documentation</li>
+                </ul>
+            ]]></description>
+            <pubDate>Tue, 08 Jul 2025 02:35:00 +0100</pubDate>
+            <enclosure url="https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.7/VibeTunnel-1.0.0-beta.7.dmg" 
+                       sparkle:version="170" 
+                       sparkle:shortVersionString="1.0.0-beta.7" 
+                       length="33195103" 
+                       type="application/x-apple-diskimage" 
+                       sparkle:edSignature="T8R0fG2cY7zyKDIOVAEGk02Su+mj7JKk//dyGBHmMC4o8QtUVCL24ASbKZiRa1fVey79+MCWdIVs79DG+sb7AQ=="/>
+        </item>
+        <item>
             <title>VibeTunnel 1.0.0-beta.6</title>
             <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.6/VibeTunnel-1.0.0-beta.6.dmg</link>
             <sparkle:version>160</sparkle:version>
