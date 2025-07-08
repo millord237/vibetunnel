@@ -6,7 +6,7 @@ This document provides comprehensive documentation for VibeTunnel's automatic up
 
 VibeTunnel uses a sophisticated update system that combines:
 - **Sparkle Framework** - Industry-standard macOS update framework for automatic updates
-- **Stats.store** - Analytics and CDN proxy service for appcast files
+- **Stats.store** - Privacy-first analytics backend that proxies appcast requests
 - **GitHub Releases** - Hosts the actual DMG files and appcast XML files
 
 ## System Architecture
@@ -20,10 +20,11 @@ VibeTunnel App → Stats.store (Proxy) → GitHub (appcast.xml) → Stats.store 
 ```
 
 1. **App initiates update check**: VibeTunnel queries Stats.store endpoint
-2. **Stats.store proxies request**: Forwards to GitHub to fetch appcast.xml
-3. **Appcast returned**: Stats.store returns the appcast to the app
-4. **Signature verification**: Sparkle verifies the EdDSA signature
-5. **Direct download**: If valid, app downloads DMG directly from GitHub
+2. **Stats.store logs analytics**: Records anonymous data (OS version, CPU type, daily unique users)
+3. **Stats.store proxies request**: Fetches appcast.xml from GitHub
+4. **Appcast returned**: Stats.store returns the appcast to the app
+5. **Signature verification**: Sparkle verifies the EdDSA signature
+6. **Direct download**: If valid, app downloads DMG directly from GitHub (not through Stats.store)
 
 ### Update Endpoints
 
@@ -164,25 +165,28 @@ All signatures above are generated with the correct file-based private key and v
 
 ## Benefits of Stats.store
 
-1. **Analytics Dashboard**: 
-   - Track update adoption rates
-   - Monitor download statistics
-   - Identify update failures
+1. **Privacy-First Analytics**: 
+   - Track update adoption rates without collecting personal data
+   - Monitor OS version distribution and hardware stats
+   - Daily unique users via salted IP hashes (change daily)
+   - No IP tracking, device IDs, or fingerprinting
 
-2. **Geographic CDN**: 
-   - Faster downloads via edge servers
-   - Automatic failover
-   - Reduced GitHub bandwidth usage
+2. **Anonymous Data Collection**:
+   - macOS version and CPU architecture
+   - App version numbers
+   - Hardware info (RAM, Mac model, core count)
+   - System language (no location data)
 
-3. **Advanced Features**:
+3. **Technical Benefits**:
+   - Transparent proxy (doesn't host files)
+   - 1-minute appcast caching
+   - GitHub outage protection
+   - Free for open source projects
+
+4. **Future Features** (Planned):
    - A/B testing for gradual rollouts
    - Custom update channels
-   - Update scheduling
-
-4. **Reliability**:
-   - GitHub outage protection
-   - Request caching (1-minute TTL)
-   - Health monitoring
+   - Geographic CDN capabilities
 
 ## Troubleshooting Guide
 
