@@ -475,14 +475,9 @@ final class BunServer {
 
                 // Process accumulated data
                 if !buffer.isEmpty {
-                    if let output = String(data: buffer, encoding: .utf8) {
-                        Self.processOutputStatic(output, logHandler: logHandler, isError: false)
-                    } else {
-                        // If UTF-8 decoding fails, try to decode what we can
-                        // Use String(decoding:as:) for lossy conversion
-                        let output = String(decoding: buffer, as: UTF8.self)
-                        Self.processOutputStatic(output, logHandler: logHandler, isError: false)
-                    }
+                    // Simply use the built-in lossy conversion instead of manual filtering
+                    let output = String(decoding: buffer, as: UTF8.self)
+                    Self.processOutputStatic(output, logHandler: logHandler, isError: false)
                 }
             }
 
@@ -559,14 +554,9 @@ final class BunServer {
 
                 // Process accumulated data
                 if !buffer.isEmpty {
-                    if let output = String(data: buffer, encoding: .utf8) {
-                        Self.processOutputStatic(output, logHandler: logHandler, isError: true)
-                    } else {
-                        // If UTF-8 decoding fails, try to decode what we can
-                        // Use String(decoding:as:) for lossy conversion
-                        let output = String(decoding: buffer, as: UTF8.self)
-                        Self.processOutputStatic(output, logHandler: logHandler, isError: true)
-                    }
+                    // Simply use the built-in lossy conversion instead of manual filtering
+                    let output = String(decoding: buffer, as: UTF8.self)
+                    Self.processOutputStatic(output, logHandler: logHandler, isError: true)
                 }
             }
 

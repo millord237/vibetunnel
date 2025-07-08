@@ -22,7 +22,7 @@ struct MenuActionBar: View {
         HStack(spacing: 8) {
             Button(action: {
                 showingNewSession = true
-            }) {
+            }, label: {
                 Label("New Session", systemImage: "plus.circle")
                     .font(.system(size: 12))
                     .padding(.horizontal, 10)
@@ -35,7 +35,7 @@ struct MenuActionBar: View {
                             .scaleEffect(isHoveringNewSession ? 1.05 : 1.0)
                             .animation(.easeInOut(duration: 0.15), value: isHoveringNewSession)
                     )
-            }
+            })
             .buttonStyle(.plain)
             .foregroundColor(.primary)
             .onHover { hovering in
@@ -54,7 +54,7 @@ struct MenuActionBar: View {
 
             Button(action: {
                 SettingsOpener.openSettings()
-            }) {
+            }, label: {
                 Label("Settings", systemImage: "gearshape")
                     .font(.system(size: 12))
                     .padding(.horizontal, 10)
@@ -67,7 +67,7 @@ struct MenuActionBar: View {
                             .scaleEffect(isHoveringSettings ? 1.05 : 1.0)
                             .animation(.easeInOut(duration: 0.15), value: isHoveringSettings)
                     )
-            }
+            })
             .buttonStyle(.plain)
             .foregroundColor(.secondary)
             .onHover { hovering in
@@ -88,7 +88,7 @@ struct MenuActionBar: View {
 
             Button(action: {
                 NSApplication.shared.terminate(nil)
-            }) {
+            }, label: {
                 Label("Quit", systemImage: "power")
                     .font(.system(size: 12))
                     .padding(.horizontal, 10)
@@ -101,7 +101,7 @@ struct MenuActionBar: View {
                             .scaleEffect(isHoveringQuit ? 1.05 : 1.0)
                             .animation(.easeInOut(duration: 0.15), value: isHoveringQuit)
                     )
-            }
+            })
             .buttonStyle(.plain)
             .foregroundColor(.secondary)
             .onHover { hovering in
