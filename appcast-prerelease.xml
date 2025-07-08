@@ -6,6 +6,35 @@
         <description>VibeTunnel pre-release and beta updates feed</description>
         <language>en</language>
         <item>
+            <title>VibeTunnel 1.0.0-beta.8</title>
+            <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.8/VibeTunnel-1.0.0-beta.8.dmg</link>
+            <sparkle:version>171</sparkle:version>
+            <sparkle:shortVersionString>1.0.0-beta.8</sparkle:shortVersionString>
+            <description><![CDATA[
+                <h2>VibeTunnel 1.0.0-beta.8</h2>
+                <p><strong>Pre-release version</strong></p>
+                
+                <h4><strong>Homebrew Library Dependencies</strong></h4>
+                <ul>
+                <li><strong>FIXED</strong>: Release builds now correctly bundle all Homebrew library dependencies</li>
+                <li><strong>FIXED</strong>: App launches reliably on systems without developer tools installed</li>
+                <li>Updated build scripts to handle dynamic library dependencies properly</li>
+                </ul>
+                
+                <h4><strong>File Browser Enhancements</strong></h4>
+                <ul>
+                <li><strong>FIXED</strong>: File browser going dark due to event bubbling issues with modal handling</li>
+                </ul>
+            ]]></description>
+            <pubDate>Tue, 08 Jul 2025 10:18:00 +0100</pubDate>
+            <enclosure url="https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.8/VibeTunnel-1.0.0-beta.8.dmg" 
+                       sparkle:version="171" 
+                       sparkle:shortVersionString="1.0.0-beta.8" 
+                       length="44746643" 
+                       type="application/x-apple-diskimage" 
+                       sparkle:edSignature="tNbBdJmNaNbdNiq+0HX+BrscKh6xtxoN91vP/stcbzAHa1NF2qEyqTx7K/tRrOFZ9DwPXP/VavwZt4Ik59pZCQ=="/>
+        </item>
+        <item>
             <title>VibeTunnel 1.0.0-beta.7</title>
             <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.7/VibeTunnel-1.0.0-beta.7.dmg</link>
             <sparkle:version>170</sparkle:version>
