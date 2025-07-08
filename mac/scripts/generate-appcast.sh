@@ -28,9 +28,9 @@ fi
 # Try to extract from git remote if not set
 if [[ -z "${GITHUB_USERNAME:-}" ]] || [[ -z "${GITHUB_REPO:-}" ]]; then
     GIT_REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
-    if [[ "$GIT_REMOTE_URL" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
+    if [[ "$GIT_REMOTE_URL" =~ github\.com[:/]([^/]+)/([^/]+?)(\.git)?$ ]]; then
         GITHUB_USERNAME="${GITHUB_USERNAME:-${BASH_REMATCH[1]}}"
-        GITHUB_REPO="${GITHUB_REPO:-${BASH_REMATCH[2]}}"
+        GITHUB_REPO="${GITHUB_REPO:-${BASH_REMATCH[2]%.git}}"
     else
         GITHUB_USERNAME="${GITHUB_USERNAME:-amantus-ai}"
         GITHUB_REPO="${GITHUB_REPO:-vibetunnel}"
