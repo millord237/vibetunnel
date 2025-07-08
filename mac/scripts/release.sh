@@ -9,11 +9,14 @@
 # and appcast updates. It supports both stable and pre-release versions.
 #
 # USAGE:
-#   ./scripts/release.sh <type> [number]
+#   ./scripts/release.sh [--dry-run] <type> [number]
 #
 # ARGUMENTS:
 #   type     Release type: stable, beta, alpha, rc
 #   number   Pre-release number (required for beta/alpha/rc)
+#
+# OPTIONS:
+#   --dry-run   Preview what would be done without making changes
 #
 # IMPORTANT NOTES:
 #   - This script can take 10-15 minutes due to notarization
@@ -60,6 +63,8 @@
 #   ./scripts/release.sh beta 1         # Create beta.1 release
 #   ./scripts/release.sh alpha 2        # Create alpha.2 release
 #   ./scripts/release.sh rc 1           # Create rc.1 release
+#   ./scripts/release.sh --dry-run stable     # Preview stable release
+#   ./scripts/release.sh --dry-run beta 1     # Preview beta.1 release
 #
 # OUTPUT:
 #   - GitHub release at: https://github.com/amantus-ai/vibetunnel/releases
@@ -81,49 +86,129 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Parse arguments
-RELEASE_TYPE="${1:-}"
-PRERELEASE_NUMBER="${2:-}"
+# Parse arguments and flags
+DRY_RUN=false
+RELEASE_TYPE=""
+PRERELEASE_NUMBER=""
 
-# Validate arguments
-if [[ -z "$RELEASE_TYPE" ]]; then
-    echo -e "${RED}❌ Error: Release type required${NC}"
-    echo ""
+# Function to show usage
+show_usage() {
     echo "Usage:"
-    echo "  $0 stable             # Create stable release"
-    echo "  $0 beta <number>      # Create beta.N release"
-    echo "  $0 alpha <number>     # Create alpha.N release"
-    echo "  $0 rc <number>        # Create rc.N release"
+    echo "  $0 [--dry-run] <release-type> [number]"
+    echo ""
+    echo "Arguments:"
+    echo "  release-type    stable, beta, alpha, or rc"
+    echo "  number          Pre-release number (required for beta/alpha/rc)"
+    echo ""
+    echo "Options:"
+    echo "  --dry-run       Show what would be done without making changes"
     echo ""
     echo "Examples:"
-    echo "  $0 stable"
-    echo "  $0 beta 1"
-    echo "  $0 rc 3"
+    echo "  $0 stable                    # Create stable release"
+    echo "  $0 beta 1                    # Create beta.1 release"
+    echo "  $0 alpha 2                   # Create alpha.2 release"
+    echo "  $0 rc 3                      # Create rc.3 release"
+    echo "  $0 --dry-run stable          # Preview stable release"
+    echo "  $0 --dry-run beta 1          # Preview beta.1 release"
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        stable|beta|alpha|rc)
+            if [[ -n "$RELEASE_TYPE" ]]; then
+                echo -e "${RED}❌ Error: Release type already specified as '$RELEASE_TYPE'${NC}"
+                echo ""
+                show_usage
+                exit 1
+            fi
+            RELEASE_TYPE="$1"
+            shift
+            ;;
+        *)
+            # Check if this could be a pre-release number
+            if [[ -n "$RELEASE_TYPE" ]] && [[ "$RELEASE_TYPE" != "stable" ]] && [[ -z "$PRERELEASE_NUMBER" ]]; then
+                # This might be intended as a pre-release number
+                PRERELEASE_NUMBER="$1"
+                shift
+            else
+                echo -e "${RED}❌ Error: Unknown argument: $1${NC}"
+                echo ""
+                show_usage
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$RELEASE_TYPE" ]]; then
+    echo -e "${RED}❌ Error: Release type is required${NC}"
+    echo ""
+    show_usage
     exit 1
 fi
+
+# Validate release type
+case "$RELEASE_TYPE" in
+    stable|beta|alpha|rc)
+        # Valid release type
+        ;;
+    *)
+        echo -e "${RED}❌ Error: Invalid release type: $RELEASE_TYPE${NC}"
+        echo "Valid types are: stable, beta, alpha, rc"
+        echo ""
+        show_usage
+        exit 1
+        ;;
+esac
 
 # For pre-releases, validate number
 if [[ "$RELEASE_TYPE" != "stable" ]]; then
     if [[ -z "$PRERELEASE_NUMBER" ]]; then
-        echo -e "${RED}❌ Error: Pre-release number required for $RELEASE_TYPE${NC}"
+        echo -e "${RED}❌ Error: Pre-release number is required for $RELEASE_TYPE releases${NC}"
+        echo ""
         echo "Example: $0 $RELEASE_TYPE 1"
+        echo ""
+        show_usage
         exit 1
     fi
+    
+    # Validate that pre-release number is a positive integer
+    if ! [[ "$PRERELEASE_NUMBER" =~ ^[0-9]+$ ]] || [[ "$PRERELEASE_NUMBER" -eq 0 ]]; then
+        echo -e "${RED}❌ Error: Pre-release number must be a positive integer${NC}"
+        echo "Got: '$PRERELEASE_NUMBER'"
+        echo ""
+        show_usage
+        exit 1
+    fi
+elif [[ -n "$PRERELEASE_NUMBER" ]]; then
+    echo -e "${YELLOW}⚠️  Warning: Pre-release number ignored for stable releases${NC}"
+    PRERELEASE_NUMBER=""
 fi
 
 echo -e "${BLUE}🚀 VibeTunnel Automated Release${NC}"
 echo "=============================="
 echo ""
 
+# Show dry-run mode if enabled
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo -e "${YELLOW}🔍 DRY RUN MODE - No changes will be made${NC}"
+    echo ""
+fi
+
 # Additional strict pre-conditions before preflight check
 echo -e "${BLUE}🔍 Running strict pre-conditions...${NC}"
 
-# Check if CHANGELOG.md exists in mac directory
-if [[ ! -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
-    echo -e "${YELLOW}⚠️  Warning: CHANGELOG.md not found in mac/ directory${NC}"
-    echo "   The release script expects CHANGELOG.md to be in the mac/ directory"
-    echo "   You can copy it from the project root: cp ../CHANGELOG.md ."
-fi
+# CHANGELOG.md will be checked later with proper fallback logic
 
 # Clean up any stuck VibeTunnel volumes before starting
 echo "🧹 Cleaning up any stuck DMG volumes..."
@@ -189,19 +274,19 @@ if ! gh auth status >/dev/null 2>&1; then
     exit 1
 fi
 
-# Check if changelog file exists
-if [[ ! -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
-    echo -e "${YELLOW}⚠️  Warning: CHANGELOG.md not found in mac/ directory${NC}"
-    echo "   Looking for it in project root..."
-    if [[ -f "$PROJECT_ROOT/../CHANGELOG.md" ]]; then
-        echo "   Found CHANGELOG.md in project root"
-        CHANGELOG_PATH="$PROJECT_ROOT/../CHANGELOG.md"
-    else
-        echo "   CHANGELOG.md not found anywhere - release notes will be basic"
-        CHANGELOG_PATH=""
-    fi
-else
+# Check if changelog file exists - prefer project root location
+if [[ -f "$PROJECT_ROOT/../CHANGELOG.md" ]]; then
+    CHANGELOG_PATH="$PROJECT_ROOT/../CHANGELOG.md"
+elif [[ -f "$PROJECT_ROOT/CHANGELOG.md" ]]; then
+    # Fallback to mac/ directory if it exists there
     CHANGELOG_PATH="$PROJECT_ROOT/CHANGELOG.md"
+else
+    echo -e "${YELLOW}⚠️  Warning: CHANGELOG.md not found${NC}"
+    echo "   Searched in:"
+    echo "   - Project root: $PROJECT_ROOT/../CHANGELOG.md"
+    echo "   - Mac directory: $PROJECT_ROOT/CHANGELOG.md"
+    echo "   Release notes will be basic"
+    CHANGELOG_PATH=""
 fi
 
 # Check if we're up to date with origin/main
@@ -309,9 +394,6 @@ echo "✓ Cleaned all build artifacts"
 echo ""
 echo -e "${BLUE}📋 Step 3/8: Setting version...${NC}"
 
-# Backup version.xcconfig
-cp "$VERSION_CONFIG" "$VERSION_CONFIG.bak"
-
 # Determine the version string to set
 if [[ "$RELEASE_TYPE" == "stable" ]]; then
     # For stable releases, ensure MARKETING_VERSION doesn't have pre-release suffix
@@ -324,107 +406,161 @@ else
     VERSION_TO_SET="$RELEASE_VERSION"
 fi
 
-# Update MARKETING_VERSION in version.xcconfig
-echo "📝 Updating MARKETING_VERSION to: $VERSION_TO_SET"
-sed -i '' "s/MARKETING_VERSION = .*/MARKETING_VERSION = $VERSION_TO_SET/" "$VERSION_CONFIG"
-
-# Verify the update
-NEW_MARKETING_VERSION=$(grep 'MARKETING_VERSION' "$VERSION_CONFIG" | sed 's/.*MARKETING_VERSION = //')
-if [[ "$NEW_MARKETING_VERSION" != "$VERSION_TO_SET" ]]; then
-    echo -e "${RED}❌ Failed to update MARKETING_VERSION${NC}"
-    exit 1
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo "📝 Would update MARKETING_VERSION to: $VERSION_TO_SET"
+    echo "   Current value: $MARKETING_VERSION"
+    echo -e "${GREEN}✅ Version would be set to: $VERSION_TO_SET${NC}"
+else
+    # Backup version.xcconfig
+    cp "$VERSION_CONFIG" "$VERSION_CONFIG.bak"
+    
+    # Update MARKETING_VERSION in version.xcconfig
+    echo "📝 Updating MARKETING_VERSION to: $VERSION_TO_SET"
+    sed -i '' "s/MARKETING_VERSION = .*/MARKETING_VERSION = $VERSION_TO_SET/" "$VERSION_CONFIG"
+    
+    # Verify the update
+    NEW_MARKETING_VERSION=$(grep 'MARKETING_VERSION' "$VERSION_CONFIG" | sed 's/.*MARKETING_VERSION = //')
+    if [[ "$NEW_MARKETING_VERSION" != "$VERSION_TO_SET" ]]; then
+        echo -e "${RED}❌ Failed to update MARKETING_VERSION${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✅ Version updated to: $VERSION_TO_SET${NC}"
 fi
-
-echo -e "${GREEN}✅ Version updated to: $VERSION_TO_SET${NC}"
 
 # Check if Xcode project was modified and commit if needed
 if ! git diff --quiet "$PROJECT_ROOT/VibeTunnel-Mac.xcodeproj/project.pbxproj"; then
-    echo "📝 Committing Xcode project changes..."
-    git add "$PROJECT_ROOT/VibeTunnel-Mac.xcodeproj/project.pbxproj"
-    git commit -m "Update Xcode project for build $BUILD_NUMBER"
-    echo -e "${GREEN}✅ Xcode project changes committed${NC}"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "📝 Would commit Xcode project changes"
+        echo "   Commit message: Update Xcode project for build $BUILD_NUMBER"
+    else
+        echo "📝 Committing Xcode project changes..."
+        git add "$PROJECT_ROOT/VibeTunnel-Mac.xcodeproj/project.pbxproj"
+        git commit -m "Update Xcode project for build $BUILD_NUMBER"
+        echo -e "${GREEN}✅ Xcode project changes committed${NC}"
+    fi
 fi
 
 # Step 4: Build the app
 echo ""
 echo -e "${BLUE}📋 Step 4/8: Building universal application...${NC}"
 
-# Check for custom Node.js build
-echo ""
-echo "🔍 Checking for custom Node.js build..."
-WEB_DIR="$PROJECT_ROOT/../web"
-CUSTOM_NODE_PATH=$(find "$WEB_DIR/.node-builds" -name "node-v*-minimal" -type d 2>/dev/null | sort -V | tail -n1)/out/Release/node
-
-if [[ ! -f "$CUSTOM_NODE_PATH" ]]; then
-    echo -e "${YELLOW}⚠️  Custom Node.js not found. Building for optimal app size...${NC}"
-    echo "   This will take 10-20 minutes on first run."
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo "🔨 Would build ARM64 binary with:"
+    echo "   Configuration: Release"
+    echo "   IS_PRERELEASE_BUILD: $([ "$RELEASE_TYPE" != "stable" ] && echo "YES" || echo "NO")"
+    echo "   Command: $SCRIPT_DIR/build.sh --configuration Release"
+    echo ""
+    echo "   Would verify:"
+    echo "   - App exists at expected path"
+    echo "   - Build number matches $BUILD_NUMBER"
+    echo "   - Binary architecture is ARM64"
+    echo -e "${GREEN}✅ Build would be performed${NC}"
+else
+    # Check for custom Node.js build
+    echo ""
+    echo "🔍 Checking for custom Node.js build..."
+    WEB_DIR="$PROJECT_ROOT/../web"
+    CUSTOM_NODE_PATH=$(find "$WEB_DIR/.node-builds" -name "node-v*-minimal" -type d 2>/dev/null | sort -V | tail -n1)/out/Release/node
     
-    # Build custom Node.js
-    pushd "$WEB_DIR" > /dev/null
-    if node build-custom-node.js --latest; then
-        echo -e "${GREEN}✅ Custom Node.js built successfully${NC}"
-        CUSTOM_NODE_PATH=$(find "$WEB_DIR/.node-builds" -name "node-v*-minimal" -type d 2>/dev/null | sort -V | tail -n1)/out/Release/node
-        if [[ -f "$CUSTOM_NODE_PATH" ]]; then
-            CUSTOM_NODE_SIZE=$(ls -lh "$CUSTOM_NODE_PATH" | awk '{print $5}')
-            echo "   Size: $CUSTOM_NODE_SIZE (vs ~110MB for standard Node.js)"
+    if [[ ! -f "$CUSTOM_NODE_PATH" ]]; then
+        echo -e "${YELLOW}⚠️  Custom Node.js not found. Building for optimal app size...${NC}"
+        echo "   This will take 10-20 minutes on first run."
+        
+        # Build custom Node.js
+        pushd "$WEB_DIR" > /dev/null
+        if node build-custom-node.js --latest; then
+            echo -e "${GREEN}✅ Custom Node.js built successfully${NC}"
+            CUSTOM_NODE_PATH=$(find "$WEB_DIR/.node-builds" -name "node-v*-minimal" -type d 2>/dev/null | sort -V | tail -n1)/out/Release/node
+            if [[ -f "$CUSTOM_NODE_PATH" ]]; then
+                CUSTOM_NODE_SIZE=$(ls -lh "$CUSTOM_NODE_PATH" | awk '{print $5}')
+                echo "   Size: $CUSTOM_NODE_SIZE (vs ~110MB for standard Node.js)"
+            fi
+        else
+            echo -e "${RED}❌ Failed to build custom Node.js${NC}"
+            echo "   Continuing with standard Node.js (larger app size)"
         fi
+        popd > /dev/null
     else
-        echo -e "${RED}❌ Failed to build custom Node.js${NC}"
-        echo "   Continuing with standard Node.js (larger app size)"
+        CUSTOM_NODE_SIZE=$(ls -lh "$CUSTOM_NODE_PATH" | awk '{print $5}')
+        CUSTOM_NODE_VERSION=$("$CUSTOM_NODE_PATH" --version 2>/dev/null || echo "unknown")
+        echo -e "${GREEN}✅ Found custom Node.js${NC}"
+        echo "   Version: $CUSTOM_NODE_VERSION"
+        echo "   Size: $CUSTOM_NODE_SIZE"
     fi
-    popd > /dev/null
-else
-    CUSTOM_NODE_SIZE=$(ls -lh "$CUSTOM_NODE_PATH" | awk '{print $5}')
-    CUSTOM_NODE_VERSION=$("$CUSTOM_NODE_PATH" --version 2>/dev/null || echo "unknown")
-    echo -e "${GREEN}✅ Found custom Node.js${NC}"
-    echo "   Version: $CUSTOM_NODE_VERSION"
-    echo "   Size: $CUSTOM_NODE_SIZE"
-fi
-
-# For pre-release builds, set the environment variable
-if [[ "$RELEASE_TYPE" != "stable" ]]; then
-    echo "📝 Marking build as pre-release..."
-    export IS_PRERELEASE_BUILD=YES
-else
-    export IS_PRERELEASE_BUILD=NO
-fi
-
-# Build ARM64 binary
-echo ""
-echo "🔨 Building ARM64 binary..."
-"$SCRIPT_DIR/build.sh" --configuration Release
-
-# Verify build
-APP_PATH="$PROJECT_ROOT/build/Build/Products/Release/VibeTunnel.app"
-if [[ ! -d "$APP_PATH" ]]; then
-    echo -e "${RED}❌ Build failed - app not found${NC}"
-    exit 1
-fi
-
-# Verify build number
-BUILT_VERSION=$(defaults read "$APP_PATH/Contents/Info.plist" CFBundleVersion)
-if [[ "$BUILT_VERSION" != "$BUILD_NUMBER" ]]; then
-    echo -e "${RED}❌ Build number mismatch! Expected $BUILD_NUMBER but got $BUILT_VERSION${NC}"
-    exit 1
-fi
-
-# Verify it's an ARM64 binary
-APP_BINARY="$APP_PATH/Contents/MacOS/VibeTunnel"
-if [[ -f "$APP_BINARY" ]]; then
-    ARCH_INFO=$(lipo -info "$APP_BINARY" 2>/dev/null || echo "")
-    if [[ "$ARCH_INFO" == *"arm64"* ]]; then
-        echo "✅ ARM64 binary created"
+    
+    # For pre-release builds, set the environment variable
+    if [[ "$RELEASE_TYPE" != "stable" ]]; then
+        echo "📝 Marking build as pre-release..."
+        export IS_PRERELEASE_BUILD=YES
     else
-        echo -e "${RED}❌ Error: Binary is not ARM64: $ARCH_INFO${NC}"
+        export IS_PRERELEASE_BUILD=NO
+    fi
+    
+    # Build ARM64 binary
+    echo ""
+    echo "🔨 Building ARM64 binary..."
+    "$SCRIPT_DIR/build.sh" --configuration Release
+    
+    # Verify build
+    APP_PATH="$PROJECT_ROOT/build/Build/Products/Release/VibeTunnel.app"
+    if [[ ! -d "$APP_PATH" ]]; then
+        echo -e "${RED}❌ Build failed - app not found${NC}"
         exit 1
     fi
+    
+    # Verify build number
+    BUILT_VERSION=$(defaults read "$APP_PATH/Contents/Info.plist" CFBundleVersion)
+    if [[ "$BUILT_VERSION" != "$BUILD_NUMBER" ]]; then
+        echo -e "${RED}❌ Build number mismatch! Expected $BUILD_NUMBER but got $BUILT_VERSION${NC}"
+        exit 1
+    fi
+    
+    # Verify it's an ARM64 binary
+    APP_BINARY="$APP_PATH/Contents/MacOS/VibeTunnel"
+    if [[ -f "$APP_BINARY" ]]; then
+        ARCH_INFO=$(lipo -info "$APP_BINARY" 2>/dev/null || echo "")
+        if [[ "$ARCH_INFO" == *"arm64"* ]]; then
+            echo "✅ ARM64 binary created"
+        else
+            echo -e "${RED}❌ Error: Binary is not ARM64: $ARCH_INFO${NC}"
+            exit 1
+        fi
+    fi
+    
+    echo -e "${GREEN}✅ Build complete${NC}"
 fi
-
-echo -e "${GREEN}✅ Build complete${NC}"
 
 # Step 5: Sign and notarize
 echo ""
 echo -e "${BLUE}📋 Step 5/8: Signing and notarizing...${NC}"
+
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo "🔐 Would sign and notarize the application"
+    echo "   Command: $SCRIPT_DIR/sign-and-notarize.sh --sign-and-notarize"
+    echo -e "${GREEN}✅ Signing and notarization would be performed${NC}"
+    
+    # For dry run, we need to exit early since we don't have actual build artifacts
+    echo ""
+    echo -e "${BLUE}📋 Remaining steps (would be performed):${NC}"
+    echo "   6/8: Creating DMG and ZIP"
+    echo "   7/8: Creating GitHub release with tag $TAG_NAME"
+    echo "   8/8: Updating appcast files"
+    echo "   9/9: Committing and pushing changes"
+    echo ""
+    echo "📦 Release summary:"
+    echo "   Type: $RELEASE_TYPE"
+    echo "   Version: $RELEASE_VERSION"
+    echo "   Build: $BUILD_NUMBER"
+    echo "   Tag: $TAG_NAME"
+    echo ""
+    echo -e "${GREEN}🎉 Dry run complete!${NC}"
+    echo ""
+    echo "To perform the actual release, run without --dry-run:"
+    echo "   $0 $RELEASE_TYPE${PRERELEASE_NUMBER:+ $PRERELEASE_NUMBER}"
+    exit 0
+fi
+
 "$SCRIPT_DIR/sign-and-notarize.sh" --sign-and-notarize
 
 # Verify Sparkle component signing
