@@ -81,7 +81,7 @@ final class CLIInstaller {
             isInstalled = isCorrectlyInstalled
 
             logger.info("CLIInstaller: vt script installed: \(self.isInstalled)")
-            
+
             // If installed, check if it's outdated
             if isInstalled {
                 checkScriptVersion()
@@ -265,29 +265,29 @@ final class CLIInstaller {
         alert.alertStyle = .critical
         alert.runModal()
     }
-    
+
     // MARK: - Script Version Detection
-    
+
     /// Calculates SHA256 hash of a file
     private func calculateHash(for filePath: String) -> String? {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) else {
             return nil
         }
-        
+
         let hash = SHA256.hash(data: data)
         return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
-    
+
     /// Gets the hash of the bundled vt script
     private func getBundledScriptHash() -> String? {
         guard let scriptPath = Bundle.main.path(forResource: "vt", ofType: nil) else {
             logger.error("CLIInstaller: Bundled vt script not found")
             return nil
         }
-        
+
         return calculateHash(for: scriptPath)
     }
-    
+
     /// Checks if the installed script is outdated compared to bundled version
     func checkScriptVersion() {
         Task { @MainActor in
@@ -295,13 +295,13 @@ final class CLIInstaller {
                 logger.error("CLIInstaller: Failed to get bundled script hash")
                 return
             }
-            
+
             // Check both possible installation paths
             let pathsToCheck = [
                 vtTargetPath,
                 "/opt/homebrew/bin/vt"
             ]
-            
+
             var installedHash: String?
             for path in pathsToCheck where FileManager.default.fileExists(atPath: path) {
                 if let hash = calculateHash(for: path) {
@@ -309,9 +309,9 @@ final class CLIInstaller {
                     break
                 }
             }
-            
+
             // Update outdated status
-            if let installedHash = installedHash {
+            if let installedHash {
                 self.isOutdated = (installedHash != bundledHash)
                 logger.info("CLIInstaller: Script version check - outdated: \(self.isOutdated)")
                 logger.debug("CLIInstaller: Bundled hash: \(bundledHash), Installed hash: \(installedHash)")

@@ -46,7 +46,7 @@ struct AdvancedSettingsView: View {
                                                 .foregroundColor(.orange)
                                             Text("VT update available")
                                                 .foregroundColor(.secondary)
-                                            
+
                                             Button("Update") {
                                                 Task {
                                                     await cliInstaller.install()

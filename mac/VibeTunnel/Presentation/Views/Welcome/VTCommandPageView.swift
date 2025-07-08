@@ -60,7 +60,7 @@ struct VTCommandPageView: View {
                                 Text("CLI tool is outdated")
                                     .foregroundColor(.secondary)
                             }
-                            
+
                             Button("Update VT Command Line Tool") {
                                 Task {
                                     await cliInstaller.install()

@@ -288,7 +288,6 @@ public final class CoordinateTransformer {
 
         return CGPoint(x: clampedX, y: clampedY)
     }
-
 }
 
 // MARK: - Helper Extensions

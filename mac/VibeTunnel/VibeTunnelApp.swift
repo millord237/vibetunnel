@@ -197,15 +197,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // Check CLI installation status
         let cliInstaller = CLIInstaller()
         cliInstaller.checkInstallationStatus()
-        
+
         // Show welcome screen when version changes OR when vt script is outdated
         let storedWelcomeVersion = UserDefaults.standard.integer(forKey: AppConstants.UserDefaultsKeys.welcomeVersion)
-        
+
         // Small delay to allow CLI check to complete
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             // Show welcome if version is different from current OR if vt script is outdated
-            if (storedWelcomeVersion < AppConstants.currentWelcomeVersion || cliInstaller.isOutdated) 
-                && !isRunningInTests && !isRunningInPreview {
+            if (storedWelcomeVersion < AppConstants.currentWelcomeVersion || cliInstaller.isOutdated)
+                && !isRunningInTests && !isRunningInPreview
+            {
                 self?.showWelcomeScreen()
             }
         }
