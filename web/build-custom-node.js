@@ -98,8 +98,8 @@ async function buildCustomNode() {
     // Support CI environment variable
     nodeSourceVersion = process.env.NODE_VERSION;
   } else {
-    // Default to Node.js 24.2.0 (recommended version)
-    nodeSourceVersion = '24.2.0';
+    // Default to Node.js 24.3.0 (recommended version)
+    nodeSourceVersion = '24.3.0';
   }
   
   const platform = process.platform;
@@ -177,6 +177,7 @@ async function buildCustomNode() {
       '--without-inspector', // Remove debugging/profiling features
       '--without-node-code-cache', // Disable code cache
       '--without-node-snapshot',  // Don't create/use startup snapshot
+      '--shared-zlib',     // Use system zlib instead of building custom
     ];
     
     // Check if ninja is available
@@ -188,7 +189,8 @@ async function buildCustomNode() {
       console.log('Ninja not found, using Make...');
     }
     
-    // Enable ccache if available
+    
+    // Enable ccache if available in system paths
     try {
       execSync('which ccache', { stdio: 'ignore' });
       process.env.CC = 'ccache gcc';
@@ -201,8 +203,6 @@ async function buildCustomNode() {
     // Use -Os optimization which is proven to be safe
     process.env.CFLAGS = '-Os';
     process.env.CXXFLAGS = '-Os';
-    // Clear LDFLAGS to avoid any issues
-    delete process.env.LDFLAGS;
     
     execSync(`./configure ${configureArgs.join(' ')}`, { stdio: 'inherit' });
     
@@ -276,6 +276,7 @@ Configure Args: ${configureArgs.join(' ')}
 Path: ${customNodePath}
 `;
     fs.writeFileSync(summaryPath, summary);
+    
     
     // Change back to original directory
     process.chdir(originalCwd);

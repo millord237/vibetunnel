@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.0-beta.8] - 2025-07-08
+
+#### **Homebrew Library Dependencies**
+- **FIXED**: Release builds now correctly bundle all Homebrew library dependencies
+- **FIXED**: App launches reliably on systems without developer tools installed
+- Updated build scripts to handle dynamic library dependencies properly
+
+#### **File Browser Enhancements**
+- **FIXED**: File browser going dark due to event bubbling issues with modal handling
+
 ## [1.0.0-beta.7] - 2025-07-08
 
 ### 🎯 Major Features
