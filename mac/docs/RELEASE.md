@@ -961,6 +961,45 @@ Where possible, run independent operations in parallel:
 - Always verify the Sparkle signature with `sign_update --account VibeTunnel`
 - Keep a template of appcast entries for quick manual updates
 
+### Additional Lessons from v1.0.0-beta.7 Release
+
+#### Repository Name Parsing Issue
+**Issue**: `generate-appcast.sh` was including `.git` suffix when parsing repository name from git remote URL.
+**Fix**: 
+- Updated regex to strip `.git` suffix: `${BASH_REMATCH[2]%.git}`
+- This caused GitHub API calls to fail with 404 errors
+- Always test script changes with actual GitHub API calls
+
+#### False Positive Warnings in Preflight Check
+**Issue**: Preflight check warned about Xcode project not using version.xcconfig values.
+**Explanation**: 
+- The project actually uses `Shared.xcconfig` which includes `version.xcconfig`
+- Build settings correctly show `MARKETING_VERSION = $(MARKETING_VERSION)`
+- The warning logic needs to be improved to detect indirect configuration includes
+
+#### CHANGELOG Location Confusion
+**Issue**: Release script expects CHANGELOG.md in `mac/` directory but it's often in project root.
+**Solution**: 
+- Copy CHANGELOG.md to expected location before release: `cp CHANGELOG.md mac/CHANGELOG.md`
+- Consider updating scripts to check both locations
+- Standardize on one location for consistency
+
+#### Release Script Interruptions
+**Issue**: Release script can be interrupted during long operations like builds and notarization.
+**Solutions**: 
+- Run with longer timeouts: `./scripts/release.sh beta 7` with 20-minute timeout
+- Consider using `nohup` or `screen` for resilience
+- The script needs state preservation for resumability
+
+#### Manual Recovery Process Works Well
+**Success**: When automation fails, manual steps are well-documented and reliable:
+1. Build with `./scripts/build.sh --configuration Release`
+2. Sign and notarize with `./scripts/sign-and-notarize.sh`
+3. Create DMG/ZIP with respective scripts
+4. Create GitHub release with `gh release create`
+5. Sign DMG for Sparkle with `sign_update --account VibeTunnel`
+6. Manually update appcast XML files
+
 ## 🚀 Long-term Improvements
 
 1. **CI/CD Integration**: Move releases to GitHub Actions for reliability
