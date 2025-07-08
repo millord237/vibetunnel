@@ -8,7 +8,7 @@
         <item>
             <title>VibeTunnel 1.0.0-beta.8</title>
             <link>https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.8/VibeTunnel-1.0.0-beta.8.dmg</link>
-            <sparkle:version>171</sparkle:version>
+            <sparkle:version>172</sparkle:version>
             <sparkle:shortVersionString>1.0.0-beta.8</sparkle:shortVersionString>
             <description><![CDATA[
                 <h2>VibeTunnel 1.0.0-beta.8</h2>
@@ -28,11 +28,11 @@
             ]]></description>
             <pubDate>Tue, 08 Jul 2025 10:18:00 +0100</pubDate>
             <enclosure url="https://github.com/amantus-ai/vibetunnel/releases/download/v1.0.0-beta.8/VibeTunnel-1.0.0-beta.8.dmg" 
-                       sparkle:version="171" 
+                       sparkle:version="172" 
                        sparkle:shortVersionString="1.0.0-beta.8" 
-                       length="44746643" 
+                       length="44748347" 
                        type="application/x-apple-diskimage" 
-                       sparkle:edSignature="tNbBdJmNaNbdNiq+0HX+BrscKh6xtxoN91vP/stcbzAHa1NF2qEyqTx7K/tRrOFZ9DwPXP/VavwZt4Ik59pZCQ=="/>
+                       sparkle:edSignature="/538z6L/qhhnHkfWU1hVoqeKvFdHubFRobfq6Vfmwz4UCpDVhJrqG+W28xW1wU4W9+xt41NMgei+DLJr1JV8Cg=="/>
         </item>
         <item>
             <title>VibeTunnel 1.0.0-beta.7</title>
