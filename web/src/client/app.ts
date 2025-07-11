@@ -496,14 +496,8 @@ export class VibeTunnelApp extends LitElement {
       return;
     }
 
-    // Add class to prevent flicker when closing modal
-    document.body.classList.add('modal-closing');
+    // Simply close the modal without animation
     this.showCreateModal = false;
-
-    // Remove the class after a short delay
-    setTimeout(() => {
-      document.body.classList.remove('modal-closing');
-    }, 300);
 
     // Check if this was a terminal spawn (not a web session)
     if (message?.includes('Terminal spawned successfully')) {
@@ -684,40 +678,9 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private handleCreateModalClose() {
-    // Immediately hide the modal
+    // Simply close the modal without animation
     this.showCreateModal = false;
-
-    // Skip animation if we're in session detail view
-    const isInSessionDetailView = this.currentView === 'session';
-
-    // Then apply view transition if supported (non-blocking)
-    if (
-      !isInSessionDetailView &&
-      'startViewTransition' in document &&
-      typeof document.startViewTransition === 'function'
-    ) {
-      // Add a class to prevent flicker during transition
-      document.body.classList.add('modal-closing');
-      // Set data attribute to indicate transition is starting
-      document.documentElement.setAttribute('data-view-transition', 'active');
-
-      try {
-        const transition = document.startViewTransition(() => {
-          // Force a re-render
-          this.requestUpdate();
-        });
-
-        // Clean up the class and attribute after transition
-        transition.finished.finally(() => {
-          document.body.classList.remove('modal-closing');
-          document.documentElement.removeAttribute('data-view-transition');
-        });
-      } catch (_error) {
-        // If view transition fails, clean up
-        document.body.classList.remove('modal-closing');
-        document.documentElement.removeAttribute('data-view-transition');
-      }
-    }
+    this.requestUpdate();
   }
 
   private cleanupSessionViewStream(): void {
@@ -1236,7 +1199,7 @@ export class VibeTunnelApp extends LitElement {
       return 'w-full min-h-screen flex flex-col';
     }
 
-    const baseClasses = 'bg-dark-bg-secondary border-r border-dark-border flex flex-col';
+    const baseClasses = 'bg-secondary border-r border-base flex flex-col';
     const isMobile = this.mediaState.isMobile;
     // Only apply transition class when animations are ready (not during initial load)
     const transitionClass = this.sidebarAnimationReady && !isMobile ? 'sidebar-transition' : '';
@@ -1359,7 +1322,7 @@ export class VibeTunnelApp extends LitElement {
           ? html`
             <div class="fixed top-4 right-4" style="z-index: ${Z_INDEX.MODAL_BACKDROP};">
               <div
-                class="bg-status-error text-dark-bg px-4 py-2 rounded shadow-lg font-mono text-sm"
+                class="bg-status-error text-bg-elevated px-4 py-2 rounded shadow-lg font-mono text-sm"
               >
                 ${this.errorMessage}
                 <button
@@ -1370,7 +1333,7 @@ export class VibeTunnelApp extends LitElement {
                     }
                     this.errorMessage = '';
                   }}
-                  class="ml-2 text-dark-bg hover:text-dark-text"
+                  class="ml-2 text-bg-elevated hover:text-text-muted"
                 >
                   ✕
                 </button>
@@ -1384,7 +1347,7 @@ export class VibeTunnelApp extends LitElement {
           ? html`
             <div class="fixed top-4 right-4" style="z-index: ${Z_INDEX.MODAL_BACKDROP};">
               <div
-                class="bg-status-success text-dark-bg px-4 py-2 rounded shadow-lg font-mono text-sm"
+                class="bg-status-success text-bg-elevated px-4 py-2 rounded shadow-lg font-mono text-sm"
               >
                 ${this.successMessage}
                 <button
@@ -1395,7 +1358,7 @@ export class VibeTunnelApp extends LitElement {
                     }
                     this.successMessage = '';
                   }}
-                  class="ml-2 text-dark-bg hover:text-dark-text"
+                  class="ml-2 text-bg-elevated hover:text-text-muted"
                 >
                   ✕
                 </button>
@@ -1437,7 +1400,7 @@ export class VibeTunnelApp extends LitElement {
               <div
                 class="fixed inset-0 sm:hidden transition-all ${
                   this.isInSidebarDismissMode
-                    ? 'bg-black bg-opacity-50 backdrop-blur-sm'
+                    ? 'bg-bg bg-opacity-50 backdrop-blur-sm'
                     : 'bg-transparent pointer-events-none'
                 }"
                 style="z-index: ${Z_INDEX.MOBILE_OVERLAY}; transition-duration: ${TRANSITIONS.MOBILE_SLIDE}ms;"
@@ -1465,7 +1428,7 @@ export class VibeTunnelApp extends LitElement {
             @navigate-to-list=${this.handleNavigateToList}
             @toggle-sidebar=${this.handleToggleSidebar}
           ></app-header>
-          <div class="${this.showSplitView ? 'flex-1 overflow-y-auto' : 'flex-1'} bg-dark-bg-secondary">
+          <div class="${this.showSplitView ? 'flex-1 overflow-y-auto' : 'flex-1'} bg-secondary">
             <session-list
               .sessions=${this.sessions}
               .loading=${this.loading}
@@ -1490,7 +1453,7 @@ export class VibeTunnelApp extends LitElement {
           this.shouldShowResizeHandle
             ? html`
               <div
-                class="w-1 bg-dark-border hover:bg-accent-green cursor-ew-resize transition-colors ${
+                class="w-1 bg-border hover:bg-accent-green cursor-ew-resize transition-colors ${
                   this.isResizing ? 'bg-accent-green' : ''
                 }"
                 style="transition-duration: ${TRANSITIONS.RESIZE_HANDLE}ms;"
@@ -1562,8 +1525,8 @@ export class VibeTunnelApp extends LitElement {
       ${
         this.showLogLink
           ? html`
-        <div class="fixed ${this.getLogButtonPosition()} right-4 text-dark-text-muted text-xs font-mono bg-dark-bg-secondary px-3 py-1.5 rounded-lg border border-dark-border shadow-sm transition-all duration-200" style="z-index: ${Z_INDEX.LOG_BUTTON};">
-          <a href="/logs" class="hover:text-dark-text transition-colors">Logs</a>
+        <div class="fixed ${this.getLogButtonPosition()} right-4 text-muted text-xs font-mono bg-secondary px-3 py-1.5 rounded-lg border border-base shadow-sm transition-all duration-200" style="z-index: ${Z_INDEX.LOG_BUTTON};">
+          <a href="/logs" class="hover:text-text transition-colors">Logs</a>
           <span class="ml-2 opacity-75">v${VERSION}</span>
         </div>
       `

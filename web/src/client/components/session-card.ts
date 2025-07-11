@@ -371,9 +371,9 @@ export class SessionCard extends LitElement {
       >
         <!-- Compact Header -->
         <div
-          class="flex justify-between items-center px-3 py-2 border-b border-dark-border bg-gradient-to-r from-dark-bg-secondary to-dark-bg-tertiary"
+          class="flex justify-between items-center px-3 py-2 border-b border-base bg-gradient-to-r from-secondary to-tertiary"
         >
-          <div class="text-xs font-mono pr-2 flex-1 min-w-0 text-accent-green">
+          <div class="text-xs font-mono pr-2 flex-1 min-w-0 text-primary">
             <inline-edit
               .value=${this.session.name || this.session.command?.join(' ') || ''}
               .placeholder=${this.session.command?.join(' ') || ''}
@@ -392,7 +392,7 @@ export class SessionCard extends LitElement {
               this.session.status === 'running' && isAIAssistantSession(this.session)
                 ? html`
                   <button
-                    class="bg-transparent border-0 p-0 cursor-pointer opacity-50 hover:opacity-100 transition-opacity duration-200 text-accent-primary"
+                    class="bg-transparent border-0 p-0 cursor-pointer opacity-50 hover:opacity-100 transition-opacity duration-200 text-primary"
                     @click=${(e: Event) => {
                       e.stopPropagation();
                       this.handleMagicButton();
@@ -456,10 +456,10 @@ export class SessionCard extends LitElement {
 
         <!-- Terminal display (main content) -->
         <div
-          class="session-preview bg-black overflow-hidden flex-1 relative ${
+          class="session-preview bg-bg overflow-hidden flex-1 relative ${
             this.session.status === 'exited' ? 'session-exited' : ''
           }"
-          style="background: linear-gradient(to bottom, #0a0a0a, #080808); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);"
+          style="background: linear-gradient(to bottom, rgb(var(--color-bg)), rgb(var(--color-bg-secondary))); box-shadow: inset 0 1px 3px rgb(var(--color-bg) / 0.5);"
         >
           ${
             this.killing
@@ -484,7 +484,7 @@ export class SessionCard extends LitElement {
 
         <!-- Compact Footer -->
         <div
-          class="px-3 py-2 text-dark-text-muted text-xs border-t border-dark-border bg-gradient-to-r from-dark-bg-tertiary to-dark-bg-secondary"
+          class="px-3 py-2 text-muted text-xs border-t border-base bg-gradient-to-r from-tertiary to-secondary"
         >
           <div class="flex justify-between items-center min-w-0">
             <span 
@@ -498,7 +498,7 @@ export class SessionCard extends LitElement {
                 this.session.status === 'running' &&
                 this.isActive &&
                 !this.session.activityStatus?.specificStatus
-                  ? html`<span class="text-accent-green animate-pulse ml-1">●</span>`
+                  ? html`<span class="text-primary animate-pulse ml-1">●</span>`
                   : ''
               }
             </span>
@@ -506,7 +506,7 @@ export class SessionCard extends LitElement {
               this.session.pid
                 ? html`
                   <span
-                    class="cursor-pointer hover:text-accent-green transition-colors text-xs flex-shrink-0 ml-2 inline-flex items-center gap-1"
+                    class="cursor-pointer hover:text-primary transition-colors text-xs flex-shrink-0 ml-2 inline-flex items-center gap-1"
                     @click=${this.handlePidClick}
                     title="Click to copy PID"
                   >
@@ -549,7 +549,7 @@ export class SessionCard extends LitElement {
       return 'text-status-error';
     }
     if (this.session.active === false) {
-      return 'text-dark-text-muted';
+      return 'text-muted';
     }
     return this.session.status === 'running' ? 'text-status-success' : 'text-status-warning';
   }
@@ -559,7 +559,7 @@ export class SessionCard extends LitElement {
       return 'text-status-error';
     }
     if (this.session.active === false) {
-      return 'text-dark-text-muted';
+      return 'text-muted';
     }
     if (this.session.status === 'running' && this.session.activityStatus?.specificStatus) {
       return 'text-status-warning';
@@ -572,7 +572,7 @@ export class SessionCard extends LitElement {
       return 'bg-status-error animate-pulse';
     }
     if (this.session.active === false) {
-      return 'bg-dark-text-muted';
+      return 'bg-muted';
     }
     if (this.session.status === 'running') {
       if (this.session.activityStatus?.specificStatus) {
