@@ -79,6 +79,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Source state management functions
+source "$SCRIPT_DIR/release-state.sh"
+
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -90,11 +93,14 @@ NC='\033[0m'
 DRY_RUN=false
 RELEASE_TYPE=""
 PRERELEASE_NUMBER=""
+RESUME_MODE=false
 
 # Function to show usage
 show_usage() {
     echo "Usage:"
     echo "  $0 [--dry-run] <release-type> [number]"
+    echo "  $0 --resume"
+    echo "  $0 --status"
     echo ""
     echo "Arguments:"
     echo "  release-type    stable, beta, alpha, or rc"
@@ -102,6 +108,8 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --dry-run       Show what would be done without making changes"
+    echo "  --resume        Resume an interrupted release"
+    echo "  --status        Show current release progress"
     echo ""
     echo "Examples:"
     echo "  $0 stable                    # Create stable release"
@@ -110,6 +118,8 @@ show_usage() {
     echo "  $0 rc 3                      # Create rc.3 release"
     echo "  $0 --dry-run stable          # Preview stable release"
     echo "  $0 --dry-run beta 1          # Preview beta.1 release"
+    echo "  $0 --resume                  # Resume interrupted release"
+    echo "  $0 --status                  # Check release progress"
 }
 
 # Parse command line arguments
@@ -118,6 +128,14 @@ while [[ $# -gt 0 ]]; do
         --dry-run)
             DRY_RUN=true
             shift
+            ;;
+        --resume)
+            RESUME_MODE=true
+            shift
+            ;;
+        --status)
+            show_progress
+            exit 0
             ;;
         -h|--help)
             show_usage
@@ -149,12 +167,32 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate required arguments
-if [[ -z "$RELEASE_TYPE" ]]; then
-    echo -e "${RED}❌ Error: Release type is required${NC}"
+# Handle resume mode
+if [[ "$RESUME_MODE" == "true" ]]; then
+    if ! can_resume; then
+        echo -e "${RED}❌ Error: No release in progress to resume${NC}"
+        echo ""
+        echo "Start a new release with: $0 <release-type> [number]"
+        exit 1
+    fi
+    
+    # Load release info from state
+    RELEASE_TYPE=$(get_release_info "release_type")
+    RELEASE_VERSION=$(get_release_info "release_version")
+    BUILD_NUMBER=$(get_release_info "build_number")
+    TAG_NAME=$(get_release_info "tag_name")
+    
+    echo -e "${BLUE}📋 Resuming release${NC}"
+    show_progress
     echo ""
-    show_usage
-    exit 1
+else
+    # Normal mode - validate required arguments
+    if [[ -z "$RELEASE_TYPE" ]]; then
+        echo -e "${RED}❌ Error: Release type is required${NC}"
+        echo ""
+        show_usage
+        exit 1
+    fi
 fi
 
 # Validate release type
@@ -342,6 +380,11 @@ echo "   Version: $RELEASE_VERSION"
 echo "   Build: $BUILD_NUMBER"
 echo "   Tag: $TAG_NAME"
 echo ""
+
+# Initialize state tracking for new releases
+if [[ "$RESUME_MODE" != "true" ]]; then
+    init_state "$RELEASE_TYPE" "$RELEASE_VERSION" "$BUILD_NUMBER" "$TAG_NAME"
+fi
 
 # Additional validation after version determination
 echo -e "${BLUE}🔍 Validating release configuration...${NC}"

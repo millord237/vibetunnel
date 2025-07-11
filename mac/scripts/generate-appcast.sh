@@ -41,10 +41,22 @@ fi
 SPARKLE_ACCOUNT="${SPARKLE_ACCOUNT:-}"
 
 GITHUB_REPO_FULL="${GITHUB_USERNAME}/${GITHUB_REPO}"
-SPARKLE_PRIVATE_KEY_PATH="${SPARKLE_PRIVATE_KEY_PATH:-private/sparkle_private_key}"
-# Try alternate location if primary doesn't exist
-if [[ ! -f "$SPARKLE_PRIVATE_KEY_PATH" ]] && [[ -f "sparkle-private-ed-key.pem" ]]; then
-    SPARKLE_PRIVATE_KEY_PATH="sparkle-private-ed-key.pem"
+# Use the clean key file without comments for sign_update
+SPARKLE_PRIVATE_KEY_PATH="${SPARKLE_PRIVATE_KEY_PATH:-private/sparkle_ed_private_key}"
+# Try fallback locations if primary doesn't exist
+if [[ ! -f "$SPARKLE_PRIVATE_KEY_PATH" ]]; then
+    if [[ -f "private/sparkle_private_key" ]]; then
+        # Extract just the key from the commented file
+        KEY_LINE=$(grep -E '^[A-Za-z0-9+/]+=*$' "private/sparkle_private_key" | head -1)
+        if [ -n "$KEY_LINE" ]; then
+            echo "$KEY_LINE" > "private/sparkle_ed_private_key"
+            SPARKLE_PRIVATE_KEY_PATH="private/sparkle_ed_private_key"
+        else
+            SPARKLE_PRIVATE_KEY_PATH="private/sparkle_private_key"
+        fi
+    elif [[ -f "sparkle-private-ed-key.pem" ]]; then
+        SPARKLE_PRIVATE_KEY_PATH="sparkle-private-ed-key.pem"
+    fi
 fi
 
 # Verify private key exists
