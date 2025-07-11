@@ -11,6 +11,9 @@ VibeTunnel is a macOS application that allows users to access their terminal ses
 
 ## Critical Development Rules
 
+### Release Process
+When the user says "release" or asks to create a release, ALWAYS read and follow `mac/docs/release.md` for the complete release process.
+
 ### ABSOLUTE CARDINAL RULES - VIOLATION MEANS IMMEDIATE FAILURE
 
 1. **NEVER, EVER, UNDER ANY CIRCUMSTANCES CREATE A NEW BRANCH WITHOUT EXPLICIT USER PERMISSION**
