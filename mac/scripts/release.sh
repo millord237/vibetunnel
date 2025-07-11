@@ -489,11 +489,22 @@ else
     echo "🔨 Building ARM64 binary..."
     "$SCRIPT_DIR/build.sh" --configuration Release
     
-    # Verify build
+    # Find the built app - could be in build directory or DerivedData
     APP_PATH="$PROJECT_ROOT/build/Build/Products/Release/VibeTunnel.app"
     if [[ ! -d "$APP_PATH" ]]; then
-        echo -e "${RED}❌ Build failed - app not found${NC}"
-        exit 1
+        # Check DerivedData
+        DEFAULT_DERIVED_DATA="$HOME/Library/Developer/Xcode/DerivedData"
+        APP_PATH=$(find "$DEFAULT_DERIVED_DATA" -name "VibeTunnel.app" -path "*/Build/Products/Release/*" ! -path "*/Index.noindex/*" 2>/dev/null | head -n 1)
+        
+        if [[ ! -d "$APP_PATH" ]]; then
+            echo -e "${RED}❌ Build failed - app not found${NC}"
+            exit 1
+        fi
+        
+        # Copy to expected location for consistency
+        mkdir -p "$PROJECT_ROOT/build/Build/Products/Release"
+        cp -R "$APP_PATH" "$PROJECT_ROOT/build/Build/Products/Release/"
+        APP_PATH="$PROJECT_ROOT/build/Build/Products/Release/VibeTunnel.app"
     fi
     
     # Verify build number
