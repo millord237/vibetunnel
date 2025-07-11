@@ -40,24 +40,48 @@ const terminal_1 = require("./terminal");
 const utils_1 = require("./utils");
 let pty;
 let helperPath;
-try {
-    pty = require('../build/Release/pty.node');
-    helperPath = '../build/Release/spawn-helper';
+// Check if running in SEA (Single Executable Application) context
+if (process.env.VIBETUNNEL_SEA) {
+    // In SEA mode, load native module using process.dlopen
+    const fs = require('fs');
+    const execDir = path.dirname(process.execPath);
+    const ptyPath = path.join(execDir, 'pty.node');
+    if (fs.existsSync(ptyPath)) {
+        const module = { exports: {} };
+        process.dlopen(module, ptyPath);
+        pty = module.exports;
+    }
+    else {
+        throw new Error(`Could not find pty.node next to executable at: ${ptyPath}`);
+    }
+    // Set spawn-helper path for macOS only (Linux doesn't use it)
+    if (process.platform === 'darwin') {
+        helperPath = path.join(execDir, 'spawn-helper');
+        if (!fs.existsSync(helperPath)) {
+            console.warn(`spawn-helper not found at ${helperPath}, PTY operations may fail`);
+        }
+    }
 }
-catch (outerError) {
+else {
+    // Standard Node.js loading
     try {
-        pty = require('../build/Debug/pty.node');
-        helperPath = '../build/Debug/spawn-helper';
+        pty = require('../build/Release/pty.node');
+        helperPath = '../build/Release/spawn-helper';
     }
-    catch (innerError) {
-        console.error('innerError', innerError);
-        // Re-throw the exception from the Release require if the Debug require fails as well
-        throw outerError;
+    catch (outerError) {
+        try {
+            pty = require('../build/Debug/pty.node');
+            helperPath = '../build/Debug/spawn-helper';
+        }
+        catch (innerError) {
+            console.error('innerError', innerError);
+            throw outerError;
+        }
     }
+    helperPath = path.resolve(__dirname, helperPath);
+    helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');
+    helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');
 }
-helperPath = path.resolve(__dirname, helperPath);
-helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');
-helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');
 const DEFAULT_FILE = 'sh';
 const DEFAULT_NAME = 'xterm';
 const DESTROY_SOCKET_TIMEOUT_MS = 200;
