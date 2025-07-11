@@ -258,6 +258,8 @@ screen -S release
 ./scripts/release.sh beta 5 --verbose --log
 ```
 
+**IMPORTANT**: When using Claude Code or any automated tool, NEVER run the release script in the background. Always run it directly in the foreground to ensure proper completion and error handling.
+
 ```bash
 # For stable releases:
 ./scripts/release.sh stable
