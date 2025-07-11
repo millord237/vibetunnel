@@ -116,6 +116,7 @@ tty-fwd/Cargo.lock
 # Bun prebuilt executables (should be built during build process)
 mac/Resources/BunPrebuilts/
 /ios/TestResults.xcresult
+/ios/TestResults-iOS.xcresult
 
 # Playwright test results
 web/playwright-report/
