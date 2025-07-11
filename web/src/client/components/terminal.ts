@@ -15,6 +15,7 @@ import { html, LitElement, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { processKeyboardShortcuts } from '../utils/keyboard-shortcut-highlighter.js';
 import { createLogger } from '../utils/logger.js';
+import { detectMobile } from '../utils/mobile-utils.js';
 import { UrlHighlighter } from '../utils/url-highlighter';
 
 const logger = createLogger('terminal');
@@ -88,8 +89,12 @@ export class Terminal extends LitElement {
     if (!this.renderPending) {
       this.renderPending = true;
       requestAnimationFrame(() => {
-        this.processOperationQueue();
-        this.renderPending = false;
+        this.processOperationQueue().then(() => {
+          // Only clear renderPending when queue is truly empty
+          if (this.operationQueue.length === 0) {
+            this.renderPending = false;
+          }
+        });
       });
     }
   }
@@ -98,17 +103,36 @@ export class Terminal extends LitElement {
     this.queueRenderOperation(() => {});
   }
 
-  private async processOperationQueue() {
-    // Process all queued operations in order
+  private async processOperationQueue(): Promise<void> {
+    const startTime = performance.now();
+    const MAX_FRAME_TIME = 8; // Target ~120fps, yield more frequently for better touch responsiveness
+
+    // Process queued operations, but yield periodically
     while (this.operationQueue.length > 0) {
       const operation = this.operationQueue.shift();
       if (operation) {
         await operation();
       }
+
+      // Check if we've been running too long
+      if (performance.now() - startTime > MAX_FRAME_TIME && this.operationQueue.length > 0) {
+        // Still have more operations, yield control and continue in next frame
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            this.processOperationQueue().then(resolve);
+          });
+        });
+        return; // Exit early to let browser process events
+      }
     }
 
-    // Render once after all operations are complete
+    // All operations complete, render the buffer
     this.renderBuffer();
+
+    // Clear renderPending flag when truly done
+    if (this.operationQueue.length === 0) {
+      this.renderPending = false;
+    }
   }
 
   connectedCallback() {
@@ -189,6 +213,14 @@ export class Terminal extends LitElement {
   // Method to set user override when width is manually selected
   setUserOverrideWidth(override: boolean) {
     this.userOverrideWidth = override;
+
+    // Reset mobile width resize complete flag when user manually changes width
+    // This allows the new width to be applied
+    if (this.isMobile && override) {
+      this.mobileWidthResizeComplete = false;
+      logger.debug('[Terminal] Mobile: Resetting width resize block for user-initiated change');
+    }
+
     // Persist the preference
     if (this.sessionId) {
       try {
@@ -241,18 +273,9 @@ export class Terminal extends LitElement {
     this.initializeTerminal();
   }
 
-  // Consistent mobile detection across the app
-  private detectMobile(): boolean {
-    // Use the same logic as index.html for consistency
-    return (
-      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
-      (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 1)
-    );
-  }
-
   private requestResize(source: string) {
     // Update mobile state using consistent detection
-    this.isMobile = this.detectMobile();
+    this.isMobile = detectMobile();
 
     logger.debug(`[Terminal] Resize requested from ${source} (mobile: ${this.isMobile})`);
 
@@ -270,7 +293,8 @@ export class Terminal extends LitElement {
 
   private shouldResize(cols: number, rows: number): boolean {
     // On mobile, prevent WIDTH changes after initial setup, but allow HEIGHT changes
-    if (this.isMobile && this.mobileWidthResizeComplete) {
+    // Exception: Allow width changes when user has manually selected a width through settings
+    if (this.isMobile && this.mobileWidthResizeComplete && !this.userOverrideWidth) {
       // Check if only height changed (allow keyboard resizes)
       const widthChanged = this.lastCols !== cols;
       const heightChanged = this.lastRows !== rows;
@@ -619,7 +643,7 @@ export class Terminal extends LitElement {
     if (!this.container) return;
 
     // Set the class property using consistent detection
-    this.isMobile = this.detectMobile();
+    this.isMobile = detectMobile();
     logger.debug(
       `[Terminal] Setting up resize - isMobile: ${this.isMobile}, userAgent: ${navigator.userAgent}`
     );
