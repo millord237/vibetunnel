@@ -18,6 +18,7 @@ import { createLogger } from '../utils/logger.js';
 import { detectMobile } from '../utils/mobile-utils.js';
 import { TerminalPreferencesManager } from '../utils/terminal-preferences.js';
 import { TERMINAL_THEMES, type TerminalThemeId } from '../utils/terminal-themes.js';
+import { getCurrentTheme } from '../utils/theme-utils.js';
 import { UrlHighlighter } from '../utils/url-highlighter';
 
 const logger = createLogger('terminal');
@@ -103,7 +104,10 @@ export class Terminal extends LitElement {
   }
 
   private requestRenderBuffer() {
-    this.queueRenderOperation(() => {});
+    logger.debug('Requesting render buffer update');
+    this.queueRenderOperation(() => {
+      logger.debug('Executing render operation');
+    });
   }
 
   private async processOperationQueue(): Promise<void> {
@@ -148,10 +152,15 @@ export class Terminal extends LitElement {
     // Check for debug mode
     this.debugMode = new URLSearchParams(window.location.search).has('debug');
 
-    // Watch for theme changes
+    // Watch for theme changes (only when using auto theme)
     this.themeObserver = new MutationObserver(() => {
-      if (this.terminal) {
+      if (this.terminal && this.theme === 'auto') {
+        logger.debug('Auto theme detected system change, updating terminal');
         this.terminal.options.theme = this.getTerminalTheme();
+        this.updateTerminalColorProperties(this.getTerminalTheme());
+        this.requestRenderBuffer();
+      } else if (this.theme !== 'auto') {
+        logger.debug('Ignoring system theme change - explicit theme selected:', this.theme);
       }
     });
 
@@ -224,8 +233,25 @@ export class Terminal extends LitElement {
     }
 
     if (changedProperties.has('theme')) {
-      if (this.terminal) {
-        this.terminal.options.theme = this.getTerminalTheme();
+      logger.debug('Terminal theme changed to:', this.theme);
+      if (this.terminal?.options) {
+        const resolvedTheme = this.getTerminalTheme();
+        logger.debug('Applying terminal theme:', this.theme);
+        this.terminal.options.theme = resolvedTheme;
+
+        // Update CSS custom properties for terminal colors
+        this.updateTerminalColorProperties(resolvedTheme);
+
+        // Force complete HTML regeneration to pick up new colors
+        if (this.container) {
+          // Clear the container first
+          this.container.innerHTML = '';
+        }
+
+        // Force immediate buffer re-render with new colors
+        this.requestRenderBuffer();
+      } else {
+        logger.warn('No terminal instance found for theme update');
       }
     }
   }
@@ -367,11 +393,60 @@ export class Terminal extends LitElement {
     let themeId = this.theme;
 
     if (themeId === 'auto') {
-      themeId = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+      themeId = getCurrentTheme();
     }
 
     const preset = TERMINAL_THEMES.find((t) => t.id === themeId) || TERMINAL_THEMES[0];
     return { ...preset.colors };
+  }
+
+  /**
+   * Updates CSS custom properties for terminal colors based on theme
+   * This allows the already-rendered HTML to immediately pick up new colors
+   */
+  private updateTerminalColorProperties(themeColors: Record<string, string>) {
+    logger.debug('Updating terminal CSS color properties');
+
+    // Standard 16 colors mapping from XTerm.js theme to CSS custom properties
+    const colorMapping = {
+      black: 0,
+      red: 1,
+      green: 2,
+      yellow: 3,
+      blue: 4,
+      magenta: 5,
+      cyan: 6,
+      white: 7,
+      brightBlack: 8,
+      brightRed: 9,
+      brightGreen: 10,
+      brightYellow: 11,
+      brightBlue: 12,
+      brightMagenta: 13,
+      brightCyan: 14,
+      brightWhite: 15,
+    };
+
+    // Update the CSS custom properties
+    Object.entries(colorMapping).forEach(([colorName, colorIndex]) => {
+      if (themeColors[colorName]) {
+        const cssProperty = `--terminal-color-${colorIndex}`;
+        document.documentElement.style.setProperty(cssProperty, themeColors[colorName]);
+        logger.debug(`Set CSS property ${cssProperty}:`, themeColors[colorName]);
+      }
+    });
+
+    // Update main terminal foreground and background colors
+    if (themeColors.foreground) {
+      document.documentElement.style.setProperty('--terminal-foreground', themeColors.foreground);
+      logger.debug('Set terminal foreground color:', themeColors.foreground);
+    }
+    if (themeColors.background) {
+      document.documentElement.style.setProperty('--terminal-background', themeColors.background);
+      logger.debug('Set terminal background color:', themeColors.background);
+    }
+
+    logger.debug('CSS terminal color properties updated');
   }
 
   private async initializeTerminal() {
@@ -1132,9 +1207,9 @@ export class Terminal extends LitElement {
         const tempFg = style.match(/color: ([^;]+);/)?.[1];
         const tempBg = style.match(/background-color: ([^;]+);/)?.[1];
 
-        // Default terminal colors
-        const defaultFg = '#e4e4e4';
-        const defaultBg = '#0a0a0a';
+        // Use theme colors as defaults
+        const defaultFg = 'var(--terminal-foreground, #e4e4e4)';
+        const defaultBg = 'var(--terminal-background, #0a0a0a)';
 
         // Determine actual foreground and background
         const actualFg = tempFg || defaultFg;
@@ -1551,6 +1626,13 @@ export class Terminal extends LitElement {
   };
 
   render() {
+    const terminalTheme = this.getTerminalTheme();
+    const containerStyle = `
+      view-transition-name: session-${this.sessionId};
+      background-color: ${terminalTheme.background || 'var(--terminal-background, #0a0a0a)'};
+      color: ${terminalTheme.foreground || 'var(--terminal-foreground, #e4e4e4)'};
+    `;
+
     return html`
       <style>
         /* Dynamic terminal sizing */
@@ -1571,7 +1653,7 @@ export class Terminal extends LitElement {
           class="terminal-container w-full h-full overflow-hidden p-0 m-0"
           tabindex="0"
           contenteditable="false"
-          style="view-transition-name: session-${this.sessionId}"
+          style="${containerStyle}"
           @paste=${this.handlePaste}
           @click=${this.handleClick}
           data-testid="terminal-container"
