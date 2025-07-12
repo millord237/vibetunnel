@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import os.log
+import UserNotifications
 
 /// Server session information returned by the API.
 ///
@@ -54,6 +55,21 @@ struct SpecificStatus: Codable {
 @Observable
 final class SessionMonitor {
     static let shared = SessionMonitor()
+
+    /// Previous session states for exit detection
+    private var previousSessions: [String: ServerSessionInfo] = [:]
+    private var firstFetchDone = false
+
+    /// Detect sessions that transitioned from running to not running
+    static func detectEndedSessions(from old: [String: ServerSessionInfo], to new: [String: ServerSessionInfo]) -> [ServerSessionInfo] {
+        old.compactMap { id, oldSession in
+            if oldSession.isRunning,
+               let updated = new[id], !updated.isRunning {
+                return oldSession
+            }
+            return nil
+        }
+    }
 
     private(set) var sessions: [String: ServerSessionInfo] = [:]
     private(set) var lastError: Error?
@@ -109,6 +125,9 @@ final class SessionMonitor {
 
     private func fetchSessions() async {
         do {
+            // Snapshot previous sessions for exit notifications
+            let oldSessions = sessions
+
             // Get current port (might have changed)
             let port = UserDefaults.standard.integer(forKey: "serverPort")
             let actualPort = port > 0 ? port : serverPort
@@ -145,6 +164,27 @@ final class SessionMonitor {
 
             self.sessions = sessionsDict
             self.lastError = nil
+
+            // Notify for sessions that have just ended
+            if firstFetchDone && UserDefaults.standard.bool(forKey: "showNotifications") {
+                let ended = SessionMonitor.detectEndedSessions(from: oldSessions, to: sessionsDict)
+                for session in ended {
+                    let id = session.id
+                    let title = "Session Completed"
+                    let displayName = session.name ?? session.command.joined(separator: " ")
+                    let content = UNMutableNotificationContent()
+                    content.title = title
+                    content.body = displayName
+                    content.sound = .default
+                    let request = UNNotificationRequest(identifier: "session_\(id)", content: content, trigger: nil)
+                    UNUserNotificationCenter.current().add(request) { error in
+                        if let error = error {
+                            self.logger.error("Failed to deliver session notification: \(error.localizedDescription, privacy: .public)")
+                        }
+                    }
+                }
+            }
+            firstFetchDone = true
             self.lastFetch = Date()
 
             // Update WindowTracker

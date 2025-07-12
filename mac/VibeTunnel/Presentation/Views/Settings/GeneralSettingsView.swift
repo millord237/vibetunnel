@@ -31,6 +31,14 @@ struct GeneralSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    // Show Session Notifications
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Show Session Notifications", isOn: $showNotifications)
+                        Text("Display native macOS notifications when terminal sessions complete or error.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     // Prevent Sleep
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Prevent Sleep When Running", isOn: $preventSleepWhenRunning)
