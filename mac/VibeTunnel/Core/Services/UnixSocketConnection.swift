@@ -307,6 +307,11 @@ final class UnixSocketConnection {
         }
     }
 
+    /// Send raw data with error handling
+    func sendRawData(_ data: Data) async throws {
+        try await sendData(data)
+    }
+
     /// Send data with proper error handling and reconnection
     private func sendData(_ data: Data) async throws {
         guard isConnected, socketFD >= 0 else {
@@ -724,7 +729,7 @@ final class UnixSocketConnection {
             return
         }
 
-        let pingMessage = ControlProtocol.createRequest(category: .system, action: "ping")
+        let pingMessage = ControlProtocol.systemPingRequest()
         Task {
             do {
                 try await send(pingMessage)

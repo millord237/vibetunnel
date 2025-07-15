@@ -12,7 +12,7 @@ import type { StreamWatcher } from '../services/stream-watcher.js';
 import type { TerminalManager } from '../services/terminal-manager.js';
 import { createLogger } from '../utils/logger.js';
 import { generateSessionName } from '../utils/session-naming.js';
-import { createControlMessage } from '../websocket/control-protocol.js';
+import { createControlMessage, type TerminalSpawnResponse } from '../websocket/control-protocol.js';
 import { controlUnixHandler } from '../websocket/control-unix-handler.js';
 
 const logger = createLogger('sessions');
@@ -1190,7 +1190,7 @@ function generateSessionId(): string {
 }
 
 // Request terminal spawn from Mac app via control socket
-async function requestTerminalSpawn(params: {
+export async function requestTerminalSpawn(params: {
   sessionId: string;
   sessionName: string;
   command: string[];
@@ -1230,7 +1230,7 @@ async function requestTerminalSpawn(params: {
       };
     }
 
-    const success = (response.payload as { success?: boolean })?.success === true;
+    const success = (response.payload as TerminalSpawnResponse)?.success === true;
     return {
       success,
       error: success ? undefined : 'Terminal spawn failed',

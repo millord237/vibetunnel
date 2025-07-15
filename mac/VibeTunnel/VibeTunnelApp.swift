@@ -124,7 +124,7 @@ struct VibeTunnelApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
     // Needed for some gross menu item highlight hack
-    static weak var shared: AppDelegate?
+    weak static var shared: AppDelegate?
     override init() {
         super.init()
         Self.shared = self
@@ -250,6 +250,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         // Start the terminal control handler (registers its handler)
         TerminalControlHandler.shared.start()
+
+        // Initialize system control handler with ready callback
+        SharedUnixSocketManager.shared.initializeSystemHandler {
+            logger.info("🎉 System ready event received from server")
+            // Could add any system-ready handling here if needed
+        }
 
         // Start the shared unix socket manager after all handlers are registered
         SharedUnixSocketManager.shared.connect()

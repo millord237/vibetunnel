@@ -243,6 +243,11 @@ class ServerManager {
 
             logger.info("Started server on port \(self.port)")
 
+            // Initialize terminal control handler
+            // The handler registers itself with SharedUnixSocketManager during init
+            _ = TerminalControlHandler.shared
+            // Note: SystemControlHandler is initialized in AppDelegate via SharedUnixSocketManager.initializeSystemHandler()
+
             // This allows the screencap API to be available for queries (like listing
             // windows/displays) without triggering the permission dialog. The permission
             // dialog only appears when the user actually starts screen capture.
