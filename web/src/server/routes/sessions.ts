@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { cellsToText } from '../../shared/terminal-text-formatter.js';
-import type { Session, SessionActivity, TitleMode } from '../../shared/types.js';
+import type { ServerStatus, Session, SessionActivity, TitleMode } from '../../shared/types.js';
 import { PtyError, type PtyManager } from '../pty/index.js';
 import type { ActivityMonitor } from '../services/activity-monitor.js';
 import type { RemoteRegistry } from '../services/remote-registry.js';
@@ -47,6 +47,22 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
   const router = Router();
   const { ptyManager, terminalManager, streamWatcher, remoteRegistry, isHQMode, activityMonitor } =
     config;
+
+  // Server status endpoint
+  router.get('/server/status', async (_req, res) => {
+    logger.debug('[GET /server/status] Getting server status');
+    try {
+      const status: ServerStatus = {
+        macAppConnected: controlUnixHandler.isMacAppConnected(),
+        isHQMode,
+        version: process.env.VERSION || 'unknown',
+      };
+      res.json(status);
+    } catch (error) {
+      logger.error('Failed to get server status:', error);
+      res.status(500).json({ error: 'Failed to get server status' });
+    }
+  });
 
   // List all sessions (aggregate local + remote in HQ mode)
   router.get('/sessions', async (_req, res) => {
