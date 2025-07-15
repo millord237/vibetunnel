@@ -91,6 +91,16 @@ vt claude-danger  # Your custom aliases are resolved
 vt --shell
 ```
 
+### Git Repository Scanning on First Session
+
+When opening a new session for the first time, VibeTunnel's working directory scanner will look for Git repositories. By default, this scans your home directory, which may trigger macOS permission prompts for accessing protected folders (like Desktop, Documents, Downloads, iCloud Drive, or external volumes).
+
+To avoid these prompts:
+- **Option 1**: Navigate to your actual projects directory before opening a session
+- **Option 2**: Accept the one-time permission prompts (they won't appear again)
+
+This only happens on the first session when the scanner discovers your Git repositories. For more details about macOS privacy-protected folders, see [this explanation](https://eclecticlight.co/2025/02/24/gaining-access-to-privacy-protected-folders/).
+
 ### 4. Open Your Dashboard
 
 Visit [http://localhost:4020](http://localhost:4020) to see all your terminal sessions.
