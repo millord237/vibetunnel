@@ -654,6 +654,27 @@ sudo tccutil reset ScreenCapture sh.vibetunnel.vibetunnel.debug  # For debug bui
 sudo tccutil reset AppleEvents
 ```
 
+## Contributing
+
+We welcome contributions! VibeTunnel is a community-driven project and we'd love to have you join us.
+
+### Join Our Community
+
+Connect with the VibeTunnel team and other contributors on our [Discord server](https://discord.gg/3Ub3EUwrcR). It's the best place to:
+- Discuss new features and ideas
+- Get help with development setup
+- Coordinate on larger changes
+- Share your VibeTunnel use cases
+
+### How to Contribute
+
+1. **Join Discord**: Start by joining our [Discord server](https://discord.gg/3Ub3EUwrcR) to say hello!
+2. **Check Issues**: Look for issues labeled `good first issue` or `help wanted`
+3. **Development Setup**: Follow our [Contributing Guide](docs/CONTRIBUTING.md) for detailed setup instructions
+4. **Submit PRs**: Fork the repo, create a branch, and submit your changes
+
+For technical details on building and developing VibeTunnel, see our [Contributing Guide](docs/CONTRIBUTING.md).
+
 ## Support VibeTunnel
 
 Love VibeTunnel? Help us keep the terminal vibes flowing! Your support helps us buy pizza and drinks while we keep hacking on your favorite AI agent orchestration platform.
