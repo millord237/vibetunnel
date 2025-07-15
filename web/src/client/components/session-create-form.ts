@@ -271,7 +271,9 @@ export class SessionCreateForm extends LitElement {
   }
 
   private handleBrowse() {
+    logger.debug('handleBrowse called, setting showFileBrowser to true');
     this.showFileBrowser = true;
+    this.requestUpdate();
   }
 
   private handleDirectorySelected(e: CustomEvent) {
