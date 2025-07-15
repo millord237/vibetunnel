@@ -131,7 +131,7 @@ export class FileBrowser extends LitElement {
   async updated(changedProperties: Map<string, unknown>) {
     super.updated(changedProperties);
 
-    // Only load directory when the component becomes visible or when session changes while visible
+    // Only load directory when the component becomes visible or when session's workingDir actually changes
     if (changedProperties.has('visible')) {
       if (this.visible) {
         // Component just became visible
@@ -139,9 +139,17 @@ export class FileBrowser extends LitElement {
         await this.loadDirectory(this.currentPath);
       }
     } else if (changedProperties.has('session') && this.visible) {
-      // Session changed while component is visible
-      this.currentPath = this.session?.workingDir || '.';
-      await this.loadDirectory(this.currentPath);
+      // Check if the workingDir actually changed
+      const oldSession = changedProperties.get('session') as Session | null;
+      const oldWorkingDir = oldSession?.workingDir;
+      const newWorkingDir = this.session?.workingDir;
+
+      if (oldWorkingDir !== newWorkingDir) {
+        // Working directory actually changed, reload
+        this.currentPath = newWorkingDir || '.';
+        await this.loadDirectory(this.currentPath);
+      }
+      // If only the session object reference changed but workingDir is the same, don't reload
     }
 
     // Monaco editor will handle its own updates through properties
@@ -167,7 +175,8 @@ export class FileBrowser extends LitElement {
       if (response.ok) {
         const data: DirectoryListing = await response.json();
         logger.debug(`received ${data.files?.length || 0} files`);
-        this.currentPath = data.path;
+        // Use the absolute path (fullPath) instead of the potentially relative path
+        this.currentPath = data.fullPath || data.path;
         this.currentFullPath = data.fullPath;
         this.files = data.files || [];
         this.gitStatus = data.gitStatus;
@@ -256,6 +265,7 @@ export class FileBrowser extends LitElement {
 
   private handleFileClick(file: FileInfo) {
     if (file.type === 'directory') {
+      // Use the absolute path provided by the server
       this.loadDirectory(file.path);
     } else {
       // Set the selected file
@@ -379,7 +389,7 @@ export class FileBrowser extends LitElement {
     if (this.mode === 'select' && this.currentPath) {
       this.dispatchEvent(
         new CustomEvent('directory-selected', {
-          detail: this.currentPath,
+          detail: this.currentFullPath || this.currentPath,
         })
       );
     }
