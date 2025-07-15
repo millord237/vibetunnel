@@ -177,10 +177,10 @@ final class SessionMonitor {
                     content.body = displayName
                     content.sound = .default
                     let request = UNNotificationRequest(identifier: "session_\(id)", content: content, trigger: nil)
-                    UNUserNotificationCenter.current().add(request) { error in
-                        if let error = error {
-                            self.logger.error("Failed to deliver session notification: \(error.localizedDescription, privacy: .public)")
-                        }
+                    do {
+                        try await UNUserNotificationCenter.current().add(request)
+                    } catch {
+                        self.logger.error("Failed to deliver session notification: \(error.localizedDescription, privacy: .public)")
                     }
                 }
             }
