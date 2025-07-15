@@ -481,6 +481,9 @@ export class PushNotificationService {
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          endpoint: this.pushSubscription?.endpoint,
+        }),
       });
 
       if (!response.ok) {

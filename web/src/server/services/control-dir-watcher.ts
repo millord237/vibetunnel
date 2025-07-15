@@ -5,6 +5,7 @@ import type { PtyManager } from '../pty/index.js';
 import { isShuttingDown } from '../server.js';
 import { createLogger } from '../utils/logger.js';
 import type { HQClient } from './hq-client.js';
+import type { PushNotificationService } from './push-notification-service.js';
 import type { RemoteRegistry } from './remote-registry.js';
 
 const logger = createLogger('control-dir-watcher');
@@ -15,6 +16,7 @@ interface ControlDirWatcherConfig {
   isHQMode: boolean;
   hqClient: HQClient | null;
   ptyManager?: PtyManager;
+  pushNotificationService?: PushNotificationService;
 }
 
 export class ControlDirWatcher {
@@ -95,6 +97,34 @@ export class ControlDirWatcher {
               // PtyManager will pick it up through its own session listing
               // since it reads from the control directory
             }
+          }
+
+          // Send push notification for session start
+          if (this.config.pushNotificationService) {
+            const sessionName = (sessionData.name ||
+              sessionData.command ||
+              'Terminal Session') as string;
+            this.config.pushNotificationService
+              ?.sendNotification({
+                type: 'session-start',
+                title: 'Session Started',
+                body: `${sessionName} has started.`,
+                icon: '/apple-touch-icon.png',
+                badge: '/favicon-32.png',
+                tag: `vibetunnel-session-start-${sessionId}`,
+                requireInteraction: false,
+                data: {
+                  type: 'session-start',
+                  sessionId,
+                  sessionName,
+                  timestamp: new Date().toISOString(),
+                },
+                actions: [
+                  { action: 'view-session', title: 'View Session' },
+                  { action: 'dismiss', title: 'Dismiss' },
+                ],
+              })
+              .catch((err) => logger.error('Push notify session-start failed:', err));
           }
 
           // If we're a remote server registered with HQ, immediately notify HQ

@@ -552,6 +552,50 @@ export async function createApp(): Promise<AppInstance> {
     logger.debug('Connected bell event handler to PTY manager');
   }
 
+  // Connect session exit notifications if push notifications are enabled
+  if (pushNotificationService) {
+    ptyManager.on('sessionExited', (sessionId: string) => {
+      // Load session info to get details
+      const sessionInfo = sessionManager.loadSessionInfo(sessionId);
+      const exitCode = sessionInfo?.exitCode ?? 0;
+      const sessionName = sessionInfo?.name || `Session ${sessionId}`;
+
+      // Determine notification type based on exit code
+      const notificationType = exitCode === 0 ? 'session-exit' : 'session-error';
+      const title = exitCode === 0 ? 'Session Ended' : 'Session Ended with Errors';
+      const body =
+        exitCode === 0
+          ? `${sessionName} has finished.`
+          : `${sessionName} exited with code ${exitCode}.`;
+
+      pushNotificationService
+        .sendNotification({
+          type: notificationType,
+          title,
+          body,
+          icon: '/apple-touch-icon.png',
+          badge: '/favicon-32.png',
+          tag: `vibetunnel-${notificationType}-${sessionId}`,
+          requireInteraction: false,
+          data: {
+            type: notificationType,
+            sessionId,
+            sessionName,
+            exitCode,
+            timestamp: new Date().toISOString(),
+          },
+          actions: [
+            { action: 'view-logs', title: 'View Logs' },
+            { action: 'dismiss', title: 'Dismiss' },
+          ],
+        })
+        .catch((error) => {
+          logger.error('Failed to send session exit notification:', error);
+        });
+    });
+    logger.debug('Connected session exit notifications to PTY manager');
+  }
+
   // Mount authentication routes (no auth required)
   app.use(
     '/api/auth',
@@ -959,6 +1003,7 @@ export async function createApp(): Promise<AppInstance> {
         isHQMode: config.isHQMode,
         hqClient,
         ptyManager,
+        pushNotificationService: pushNotificationService || undefined,
       });
       controlDirWatcher.start();
       logger.debug('Started control directory watcher');
