@@ -6,6 +6,18 @@ import { InputManager } from './input-manager.js';
 // Mock fetch globally
 global.fetch = vi.fn();
 
+// Mock websocket input client
+vi.mock('../../services/websocket-input-client.js', () => ({
+  websocketInputClient: {
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn(),
+    sendInput: vi.fn().mockReturnValue(false), // Return false to fall back to HTTP
+  },
+}));
+
+// We don't need to mock browser-shortcuts because the tests should verify
+// the actual behavior of the module
+
 describe('InputManager', () => {
   let inputManager: InputManager;
   let mockSession: Session;
@@ -25,6 +37,7 @@ describe('InputManager', () => {
 
     mockCallbacks = {
       requestUpdate: vi.fn(),
+      getKeyboardCaptureActive: vi.fn().mockReturnValue(false), // Default to capture OFF for browser shortcut tests
     };
 
     inputManager.setSession(mockSession);
@@ -214,6 +227,79 @@ describe('InputManager', () => {
 
       expect(mockSession.status).toBe('exited');
       expect(mockCallbacks.requestUpdate).toHaveBeenCalled();
+    });
+  });
+
+  describe('Browser shortcut detection', () => {
+    it('should detect Cmd+Shift+A as browser shortcut on macOS', () => {
+      Object.defineProperty(navigator, 'platform', {
+        writable: true,
+        value: 'MacIntel',
+      });
+
+      const event = new KeyboardEvent('keydown', {
+        key: 'A',
+        metaKey: true,
+        shiftKey: true,
+      });
+      // Mock a target element (simulating event fired on document body)
+      Object.defineProperty(event, 'target', {
+        value: document.createElement('div'),
+        configurable: true,
+      });
+
+      expect(inputManager.isKeyboardShortcut(event)).toBe(true);
+    });
+
+    it('should detect Cmd+1-9 as browser shortcuts on macOS', () => {
+      Object.defineProperty(navigator, 'platform', {
+        writable: true,
+        value: 'MacIntel',
+      });
+
+      for (let i = 1; i <= 9; i++) {
+        const event = new KeyboardEvent('keydown', {
+          key: i.toString(),
+          metaKey: true,
+        });
+        // Mock a target element
+        Object.defineProperty(event, 'target', {
+          value: document.createElement('div'),
+          configurable: true,
+        });
+
+        expect(inputManager.isKeyboardShortcut(event)).toBe(true);
+      }
+    });
+
+    it('should detect Cmd+Option+Left/Right as browser shortcuts on macOS', () => {
+      Object.defineProperty(navigator, 'platform', {
+        writable: true,
+        value: 'MacIntel',
+      });
+
+      const leftEvent = new KeyboardEvent('keydown', {
+        key: 'ArrowLeft',
+        metaKey: true,
+        altKey: true,
+      });
+      Object.defineProperty(leftEvent, 'target', {
+        value: document.createElement('div'),
+        configurable: true,
+      });
+
+      const rightEvent = new KeyboardEvent('keydown', {
+        key: 'ArrowRight',
+        metaKey: true,
+        altKey: true,
+      });
+      Object.defineProperty(rightEvent, 'target', {
+        value: document.createElement('div'),
+        configurable: true,
+      });
+
+      expect(inputManager.isKeyboardShortcut(leftEvent)).toBe(true);
+      expect(inputManager.isKeyboardShortcut(rightEvent)).toBe(true);
     });
   });
 });

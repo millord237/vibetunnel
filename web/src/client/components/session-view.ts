@@ -72,6 +72,7 @@ export class SessionView extends LitElement {
   @property({ type: Boolean }) showSidebarToggle = false;
   @property({ type: Boolean }) sidebarCollapsed = false;
   @property({ type: Boolean }) disableFocusManagement = false;
+  @property({ type: Boolean }) keyboardCaptureActive = true;
   @state() private connected = false;
   @state() private showMobileInput = false;
   @state() private mobileInputText = '';
@@ -190,6 +191,7 @@ export class SessionView extends LitElement {
       setConnected: (connected: boolean) => {
         this.connected = connected;
       },
+      getKeyboardCaptureActive: () => this.keyboardCaptureActive,
     };
   }
 
@@ -257,6 +259,7 @@ export class SessionView extends LitElement {
     this.inputManager = new InputManager();
     this.inputManager.setCallbacks({
       requestUpdate: () => this.requestUpdate(),
+      getKeyboardCaptureActive: () => this.keyboardCaptureActive,
     });
 
     // Initialize mobile input manager
@@ -518,6 +521,13 @@ export class SessionView extends LitElement {
     // Ensure terminal is initialized when connected state changes
     if (changedProperties.has('connected') && this.connected && this.session) {
       this.ensureTerminalInitialized();
+    }
+
+    // Update input manager callbacks when keyboard capture state changes
+    if (changedProperties.has('keyboardCaptureActive') && this.inputManager) {
+      // The callback already returns this.keyboardCaptureActive which gets the updated value
+      // We don't need to update callbacks, but we can add logging for debugging
+      logger.log('Keyboard capture state updated:', this.keyboardCaptureActive);
     }
   }
 
@@ -1269,6 +1279,8 @@ export class SessionView extends LitElement {
           .terminalFontSize=${this.terminalFontSize}
           .customWidth=${this.customWidth}
           .showWidthSelector=${this.showWidthSelector}
+          .keyboardCaptureActive=${this.keyboardCaptureActive}
+          .isMobile=${this.isMobile}
           .widthLabel=${this.getCurrentWidthLabel()}
           .widthTooltip=${this.getWidthTooltip()}
           .onBack=${() => this.handleBack()}
@@ -1286,6 +1298,15 @@ export class SessionView extends LitElement {
             this.customWidth = '';
           }}
           @session-rename=${(e: CustomEvent) => this.handleRename(e)}
+          @capture-toggled=${(e: CustomEvent) => {
+            this.dispatchEvent(
+              new CustomEvent('capture-toggled', {
+                detail: e.detail,
+                bubbles: true,
+                composed: true,
+              })
+            );
+          }}
         >
         </session-header>
 

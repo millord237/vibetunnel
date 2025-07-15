@@ -7,6 +7,7 @@
 
 import { authClient } from '../../services/auth-client.js';
 import { websocketInputClient } from '../../services/websocket-input-client.js';
+import { isBrowserShortcut, isCopyPasteShortcut } from '../../utils/browser-shortcuts.js';
 import { consumeEvent } from '../../utils/event-utils.js';
 import { createLogger } from '../../utils/logger.js';
 import type { Session } from '../session-list.js';
@@ -15,12 +16,15 @@ const logger = createLogger('input-manager');
 
 export interface InputManagerCallbacks {
   requestUpdate(): void;
+  getKeyboardCaptureActive?(): boolean;
 }
 
 export class InputManager {
   private session: Session | null = null;
   private callbacks: InputManagerCallbacks | null = null;
   private useWebSocketInput = true; // Feature flag for WebSocket input
+  private lastEscapeTime = 0;
+  private readonly DOUBLE_ESCAPE_THRESHOLD = 500; // ms
 
   setSession(session: Session | null): void {
     this.session = session;
@@ -64,15 +68,7 @@ export class InputManager {
     }
 
     // Allow standard browser copy/paste shortcuts
-    const isMacOS = navigator.platform.toLowerCase().includes('mac');
-    const isStandardPaste =
-      (isMacOS && metaKey && key === 'v' && !ctrlKey && !shiftKey) ||
-      (!isMacOS && ctrlKey && key === 'v' && !shiftKey);
-    const isStandardCopy =
-      (isMacOS && metaKey && key === 'c' && !ctrlKey && !shiftKey) ||
-      (!isMacOS && ctrlKey && key === 'c' && !shiftKey);
-
-    if (isStandardPaste || isStandardCopy) {
+    if (isCopyPasteShortcut(e)) {
       // Allow standard browser copy/paste to work
       return;
     }
@@ -114,9 +110,40 @@ export class InputManager {
           inputText = 'enter';
         }
         break;
-      case 'Escape':
+      case 'Escape': {
+        // Handle double-escape for keyboard capture toggle
+        const now = Date.now();
+        const timeSinceLastEscape = now - this.lastEscapeTime;
+
+        if (timeSinceLastEscape < this.DOUBLE_ESCAPE_THRESHOLD) {
+          // Double escape detected - toggle keyboard capture
+          logger.log('🔄 Double Escape detected in input manager - toggling keyboard capture');
+
+          // Dispatch event to parent to toggle capture
+          if (this.callbacks) {
+            // Create a synthetic capture-toggled event
+            const currentCapture = this.callbacks.getKeyboardCaptureActive?.() ?? true;
+            const newCapture = !currentCapture;
+
+            // Dispatch custom event that will bubble up
+            const event = new CustomEvent('capture-toggled', {
+              detail: { active: newCapture },
+              bubbles: true,
+              composed: true,
+            });
+
+            // Dispatch on document to ensure it reaches the app
+            document.dispatchEvent(event);
+          }
+
+          this.lastEscapeTime = 0; // Reset to prevent triple-tap
+          return; // Don't send this escape to terminal
+        }
+
+        this.lastEscapeTime = now;
         inputText = 'escape';
         break;
+      }
       case 'ArrowUp':
         inputText = 'arrow_up';
         break;
@@ -279,44 +306,56 @@ export class InputManager {
       return false;
     }
 
-    // Allow important browser shortcuts to pass through
-    const isMacOS = navigator.platform.toLowerCase().includes('mac');
+    // Check if this is a critical browser shortcut
+    if (isBrowserShortcut(e)) {
+      return true;
+    }
 
-    // Allow F12 and Ctrl+Shift+I (DevTools)
+    // Always allow DevTools shortcuts
     if (
       e.key === 'F12' ||
-      (!isMacOS && e.ctrlKey && e.shiftKey && e.key === 'I') ||
-      (isMacOS && e.metaKey && e.altKey && e.key === 'I')
+      (!navigator.platform.toLowerCase().includes('mac') &&
+        e.ctrlKey &&
+        e.shiftKey &&
+        e.key === 'I') ||
+      (navigator.platform.toLowerCase().includes('mac') && e.metaKey && e.altKey && e.key === 'I')
     ) {
       return true;
     }
 
-    // Allow Ctrl+A (select all), Ctrl+F (find), Ctrl+R (refresh), Ctrl+C/V (copy/paste), etc.
-    if (
-      !isMacOS &&
-      e.ctrlKey &&
-      !e.shiftKey &&
-      ['a', 'f', 'r', 'l', 't', 'w', 'n', 'c', 'v'].includes(e.key.toLowerCase())
-    ) {
-      return true;
-    }
-
-    // Allow Cmd+A, Cmd+F, Cmd+R, Cmd+C/V (copy/paste), etc. on macOS
-    if (
-      isMacOS &&
-      e.metaKey &&
-      !e.shiftKey &&
-      !e.altKey &&
-      ['a', 'f', 'r', 'l', 't', 'w', 'n', 'c', 'v'].includes(e.key.toLowerCase())
-    ) {
-      return true;
-    }
-
-    // Allow Alt+Tab, Cmd+Tab (window switching)
+    // Always allow window switching
     if ((e.altKey || e.metaKey) && e.key === 'Tab') {
       return true;
     }
 
+    // Get keyboard capture state
+    const captureActive = this.callbacks?.getKeyboardCaptureActive?.() ?? true;
+
+    // If capture is disabled, allow common browser shortcuts
+    if (!captureActive) {
+      const isMacOS = navigator.platform.toLowerCase().includes('mac');
+      const key = e.key.toLowerCase();
+
+      // Common browser shortcuts that are normally captured for terminal
+      if (isMacOS && e.metaKey && !e.shiftKey && !e.altKey) {
+        if (['a', 'f', 'r', 'l', 'p', 's', 'd'].includes(key)) {
+          return true;
+        }
+      }
+
+      if (!isMacOS && e.ctrlKey && !e.shiftKey && !e.altKey) {
+        if (['a', 'f', 'r', 'l', 'p', 's', 'd'].includes(key)) {
+          return true;
+        }
+      }
+
+      // Word navigation on macOS when capture is disabled
+      if (isMacOS && e.metaKey && e.altKey && ['arrowleft', 'arrowright'].includes(key)) {
+        return true;
+      }
+    }
+
+    // When capture is active, everything else goes to terminal
     return false;
   }
 

@@ -11,6 +11,7 @@ import '../clickable-path.js';
 import './width-selector.js';
 import '../inline-edit.js';
 import '../notification-status.js';
+import '../keyboard-capture-indicator.js';
 import { authClient } from '../../services/auth-client.js';
 import { isAIAssistantSession, sendAIPrompt } from '../../utils/ai-sessions.js';
 import { createLogger } from '../../utils/logger.js';
@@ -47,6 +48,8 @@ export class SessionHeader extends LitElement {
   @property({ type: Function }) onScreenshare?: () => void;
   @property({ type: Function }) onOpenSettings?: () => void;
   @property({ type: String }) currentTheme = 'system';
+  @property({ type: Boolean }) keyboardCaptureActive = true;
+  @property({ type: Boolean }) isMobile = false;
   @state() private isHovered = false;
 
   connectedCallback() {
@@ -93,9 +96,9 @@ export class SessionHeader extends LitElement {
     if (!this.session) return null;
 
     return html`
-      <!-- Enhanced Header with gradient background -->
+      <!-- Header with consistent dark theme -->
       <div
-        class="flex items-center justify-between border-b border-base text-sm min-w-0 bg-gradient-to-r from-secondary to-tertiary px-4 py-2 shadow-sm"
+        class="flex items-center justify-between border-b border-border text-sm min-w-0 bg-bg-secondary px-4 py-2"
         style="padding-top: max(0.5rem, env(safe-area-inset-top)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right));"
       >
         <div class="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
@@ -104,7 +107,7 @@ export class SessionHeader extends LitElement {
             this.showSidebarToggle && this.sidebarCollapsed
               ? html`
                 <button
-                  class="bg-elevated border border-base rounded-lg p-2 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-hover hover:border-primary hover:shadow-sm flex-shrink-0"
+                  class="bg-bg-tertiary border border-border rounded-lg p-2 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0"
                   @click=${() => this.onSidebarToggle?.()}
                   title="Show sidebar (⌘B)"
                   aria-label="Show sidebar"
@@ -119,7 +122,7 @@ export class SessionHeader extends LitElement {
                 
                 <!-- Create Session button (desktop only) -->
                 <button
-                  class="hidden sm:flex bg-primary bg-opacity-10 border border-primary text-primary rounded-lg p-2 font-mono transition-all duration-200 hover:bg-primary hover:text-base hover:shadow-glow-primary-sm flex-shrink-0"
+                  class="hidden sm:flex bg-bg-tertiary border border-border text-primary rounded-lg p-2 font-mono transition-all duration-200 hover:bg-surface-hover hover:border-primary hover:shadow-glow-primary-sm flex-shrink-0"
                   @click=${() => this.onCreateSession?.()}
                   title="Create New Session (⌘K)"
                   data-testid="create-session-button"
@@ -145,7 +148,7 @@ export class SessionHeader extends LitElement {
             this.showBackButton
               ? html`
                 <button
-                  class="bg-elevated border border-base rounded-lg px-3 py-1.5 font-mono text-xs text-muted transition-all duration-200 hover:text-primary hover:bg-hover hover:border-primary hover:shadow-sm flex-shrink-0"
+                  class="bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 font-mono text-xs text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0"
                   @click=${() => this.onBack?.()}
                 >
                   Back
@@ -219,6 +222,21 @@ export class SessionHeader extends LitElement {
             ></notification-status>
           </div>
           
+          <!-- Keyboard capture indicator -->
+          <keyboard-capture-indicator
+            .active=${this.keyboardCaptureActive}
+            .isMobile=${this.isMobile}
+            @capture-toggled=${(e: CustomEvent) => {
+              this.dispatchEvent(
+                new CustomEvent('capture-toggled', {
+                  detail: e.detail,
+                  bubbles: true,
+                  composed: true,
+                })
+              );
+            }}
+          ></keyboard-capture-indicator>
+          
           <!-- Desktop buttons - hidden on mobile -->
           <div class="hidden sm:flex items-center gap-2">
             <!-- Theme toggle -->
@@ -230,7 +248,7 @@ export class SessionHeader extends LitElement {
             ></theme-toggle-icon>
             
             <button
-              class="bg-elevated border border-base rounded-lg p-2 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-hover hover:border-primary hover:shadow-sm flex-shrink-0"
+              class="bg-bg-tertiary border border-border rounded-lg p-2 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0"
               @click=${(e: Event) => {
                 e.stopPropagation();
                 this.onOpenFileBrowser?.();
@@ -245,7 +263,7 @@ export class SessionHeader extends LitElement {
               </svg>
             </button>
             <button
-              class="bg-elevated border border-base rounded-lg p-2 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-hover hover:border-primary hover:shadow-sm flex-shrink-0"
+              class="bg-bg-tertiary border border-border rounded-lg p-2 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0"
               @click=${() => this.onScreenshare?.()}
               title="Start Screenshare"
             >
@@ -257,7 +275,7 @@ export class SessionHeader extends LitElement {
               </svg>
             </button>
             <button
-              class="bg-elevated border border-base rounded-lg px-3 py-2 font-mono text-xs text-muted transition-all duration-200 hover:text-primary hover:bg-hover hover:border-primary hover:shadow-sm flex-shrink-0 width-selector-button"
+              class="bg-bg-tertiary border border-border rounded-lg px-3 py-2 font-mono text-xs text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0 width-selector-button"
               @click=${() => this.onMaxWidthToggle?.()}
               title="${this.widthTooltip}"
             >
