@@ -37,6 +37,7 @@ export class UnifiedSettings extends LitElement {
     sessionExit: true,
     sessionStart: false,
     sessionError: true,
+    commandNotifications: true,
     systemAlerts: true,
     soundEnabled: true,
     vibrationEnabled: true,
@@ -384,6 +385,7 @@ export class UnifiedSettings extends LitElement {
                           ${this.renderNotificationToggle('sessionExit', 'Session Exit', 'When a session terminates')}
                           ${this.renderNotificationToggle('sessionStart', 'Session Start', 'When a new session starts')}
                           ${this.renderNotificationToggle('sessionError', 'Session Errors', 'When errors occur in sessions')}
+                          ${this.renderNotificationToggle('commandNotifications', 'Command Completion', 'When long-running commands finish')}
                           ${this.renderNotificationToggle('systemAlerts', 'System Alerts', 'Important system notifications')}
                         </div>
                       </div>

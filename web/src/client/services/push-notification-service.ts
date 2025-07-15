@@ -414,6 +414,7 @@ export class PushNotificationService {
       sessionExit: true,
       sessionStart: false,
       sessionError: true,
+      commandNotifications: true,
       systemAlerts: true,
       soundEnabled: true,
       vibrationEnabled: true,

@@ -34,9 +34,44 @@ struct GeneralSettingsView: View {
                     // Show Session Notifications
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Show Session Notifications", isOn: $showNotifications)
-                        Text("Display native macOS notifications when terminal sessions complete or error.")
+                        Text("Display native macOS notifications for session and command events.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        
+                        if showNotifications {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Toggle("Session Started", isOn: .init(
+                                    get: { UserDefaults.standard.bool(forKey: "notifications.sessionStart") },
+                                    set: { UserDefaults.standard.set($0, forKey: "notifications.sessionStart") }
+                                ))
+                                .padding(.leading, 20)
+                                
+                                Toggle("Session Ended", isOn: .init(
+                                    get: { UserDefaults.standard.bool(forKey: "notifications.sessionExit") },
+                                    set: { UserDefaults.standard.set($0, forKey: "notifications.sessionExit") }
+                                ))
+                                .padding(.leading, 20)
+                                
+                                Toggle("Command Completion", isOn: .init(
+                                    get: { UserDefaults.standard.bool(forKey: "notifications.commandCompletion") },
+                                    set: { UserDefaults.standard.set($0, forKey: "notifications.commandCompletion") }
+                                ))
+                                .padding(.leading, 20)
+                                
+                                Toggle("Command Errors", isOn: .init(
+                                    get: { UserDefaults.standard.bool(forKey: "notifications.commandError") },
+                                    set: { UserDefaults.standard.set($0, forKey: "notifications.commandError") }
+                                ))
+                                .padding(.leading, 20)
+                                
+                                Toggle("Terminal Bell", isOn: .init(
+                                    get: { UserDefaults.standard.bool(forKey: "notifications.bell") },
+                                    set: { UserDefaults.standard.set($0, forKey: "notifications.bell") }
+                                ))
+                                .padding(.leading, 20)
+                            }
+                            .font(.caption)
+                        }
                     }
 
                     // Prevent Sleep

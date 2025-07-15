@@ -134,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     var app: VibeTunnelApp?
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "AppDelegate")
     private(set) var statusBarController: StatusBarController?
+    private let notificationService = NotificationService.shared
 
     /// Distributed notification name used to ask an existing instance to show the Settings window.
     private static let showSettingsNotification = Notification.Name("sh.vibetunnel.vibetunnel.showSettings")
@@ -268,6 +269,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 logger.info("HTTP server started successfully on port \(serverManager.port)")
 
                 // Session monitoring starts automatically
+                
+                // Start native notification service
+                notificationService.start()
             } else {
                 logger.error("HTTP server failed to start")
                 if let error = serverManager.lastError {

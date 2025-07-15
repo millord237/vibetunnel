@@ -6,12 +6,14 @@
  */
 
 import chalk from 'chalk';
+import { exec } from 'child_process';
 import { EventEmitter, once } from 'events';
 import * as fs from 'fs';
 import * as net from 'net';
 import type { IPty } from 'node-pty';
 import * as pty from 'node-pty';
 import * as path from 'path';
+import { promisify } from 'util';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   Session,
@@ -59,6 +61,11 @@ const logger = createLogger('pty-manager');
 const TITLE_UPDATE_INTERVAL_MS = 1000; // How often to check if title needs updating
 const TITLE_INJECTION_QUIET_PERIOD_MS = 50; // Minimum quiet period before injecting title
 const TITLE_INJECTION_CHECK_INTERVAL_MS = 10; // How often to check for quiet period
+
+// Foreground process tracking constants
+const PROCESS_POLL_INTERVAL_MS = 500; // How often to check foreground process
+const MIN_COMMAND_DURATION_MS = 3000; // Minimum command duration to notify (3 seconds)
+const SHELL_COMMANDS = new Set(['cd', 'ls', 'pwd', 'echo', 'export', 'alias', 'unset']); // Built-in commands to ignore
 
 export class PtyManager extends EventEmitter {
   private sessions = new Map<string, PtySession>();
@@ -394,10 +401,16 @@ export class PtyManager extends EventEmitter {
       // Setup PTY event handlers
       this.setupPtyHandlers(session, options.forwardToStdout || false, options.onExit);
 
+      // Start foreground process tracking
+      this.startForegroundProcessTracking(session);
+
       // Note: stdin forwarding is now handled via IPC socket
 
       // Initial title will be set when the first output is received
       // Do not write title sequence to PTY input as it would be sent to the shell
+
+      // Emit session started event
+      this.emit('sessionStarted', sessionId, sessionInfo.name || sessionInfo.command.join(' '));
 
       return {
         sessionId,
@@ -599,8 +612,16 @@ export class PtyManager extends EventEmitter {
         this.lastBellTime.delete(session.id);
         this.sessionExitTimes.delete(session.id);
 
+        // Stop foreground process tracking
+        this.stopForegroundProcessTracking(session);
+
         // Emit session exited event
-        this.emit('sessionExited', session.id);
+        this.emit(
+          'sessionExited',
+          session.id,
+          session.sessionInfo.name || session.sessionInfo.command.join(' '),
+          exitCode
+        );
 
         // Call exit callback if provided (for fwd.ts)
         if (onExit) {
@@ -2175,4 +2196,240 @@ export class PtyManager extends EventEmitter {
 
     return null;
   }
+
+  /**
+   * Start tracking foreground process for command completion notifications
+   */
+  private startForegroundProcessTracking(session: PtySession): void {
+    if (!session.ptyProcess) return;
+
+    logger.debug(`Starting foreground process tracking for session ${session.id}`);
+    const ptyPid = session.ptyProcess.pid;
+
+    // Get the shell's process group ID (pgid)
+    this.getProcessPgid(ptyPid)
+      .then((shellPgid) => {
+        if (shellPgid) {
+          session.shellPgid = shellPgid;
+          session.currentForegroundPgid = shellPgid;
+          logger.debug(`Session ${session.id}: Shell PGID is ${shellPgid}, starting polling`);
+
+          // Start polling for foreground process changes
+          session.processPollingInterval = setInterval(() => {
+            this.checkForegroundProcess(session);
+          }, PROCESS_POLL_INTERVAL_MS);
+        } else {
+          logger.warn(`Session ${session.id}: Could not get shell PGID`);
+        }
+      })
+      .catch((err) => {
+        logger.warn(`Failed to get shell PGID for session ${session.id}:`, err);
+      });
+  }
+
+  /**
+   * Stop tracking foreground process
+   */
+  private stopForegroundProcessTracking(session: PtySession): void {
+    if (session.processPollingInterval) {
+      clearInterval(session.processPollingInterval);
+      session.processPollingInterval = undefined;
+    }
+  }
+
+  /**
+   * Get process group ID for a process
+   */
+  private async getProcessPgid(pid: number): Promise<number | null> {
+    try {
+      const { stdout } = await this.execAsync(`ps -o pgid= -p ${pid}`, { timeout: 1000 });
+      const pgid = Number.parseInt(stdout.trim(), 10);
+      return Number.isNaN(pgid) ? null : pgid;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  /**
+   * Get the foreground process group of a terminal
+   */
+  private async getTerminalForegroundPgid(session: PtySession): Promise<number | null> {
+    if (!session.ptyProcess) return null;
+
+    try {
+      // On Unix-like systems, we can check the terminal's foreground process group
+      // biome-ignore lint/suspicious/noExplicitAny: Accessing internal node-pty property
+      const ttyName = (session.ptyProcess as any)._pty; // Internal PTY name
+      if (!ttyName) return null;
+
+      // Use ps to find processes associated with this terminal
+      const { stdout } = await this.execAsync(
+        `ps -t ${ttyName} -o pgid,pid,ppid,command | grep -v PGID | head -1`,
+        { timeout: 1000 }
+      );
+
+      const lines = stdout.trim().split('\n');
+      if (lines.length > 0) {
+        const parts = lines[0].trim().split(/\s+/);
+        const pgid = Number.parseInt(parts[0], 10);
+        return Number.isNaN(pgid) ? null : pgid;
+      }
+    } catch (_error) {
+      // Fallback: try to get foreground process from process tree
+      return this.getForegroundFromProcessTree(session);
+    }
+
+    return null;
+  }
+
+  /**
+   * Get foreground process from process tree analysis
+   */
+  private async getForegroundFromProcessTree(session: PtySession): Promise<number | null> {
+    if (!session.ptyProcess) return null;
+
+    try {
+      const processTree = await this.processTreeAnalyzer.getProcessTree(session.ptyProcess.pid);
+
+      // Find the most recent non-shell process
+      for (const proc of processTree) {
+        if (proc.pgid !== session.shellPgid && proc.command && !this.isShellProcess(proc.command)) {
+          return proc.pgid;
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to analyze process tree for session ${session.id}:`, error);
+    }
+
+    return session.shellPgid || null;
+  }
+
+  /**
+   * Check if a command is a shell process
+   */
+  private isShellProcess(command: string): boolean {
+    const shellNames = ['bash', 'zsh', 'fish', 'sh', 'dash', 'tcsh', 'csh'];
+    const cmdLower = command.toLowerCase();
+    return shellNames.some((shell) => cmdLower.includes(shell));
+  }
+
+  /**
+   * Check current foreground process and detect changes
+   */
+  private async checkForegroundProcess(session: PtySession): Promise<void> {
+    if (!session.ptyProcess || !session.shellPgid) return;
+
+    try {
+      const currentPgid = await this.getTerminalForegroundPgid(session);
+
+      // Add debug logging
+      if (currentPgid !== session.currentForegroundPgid) {
+        logger.debug(
+          `Session ${session.id}: Foreground PGID changed from ${session.currentForegroundPgid} to ${currentPgid}`
+        );
+      }
+
+      if (currentPgid && currentPgid !== session.currentForegroundPgid) {
+        // Foreground process changed
+        const previousPgid = session.currentForegroundPgid;
+        session.currentForegroundPgid = currentPgid;
+
+        if (currentPgid === session.shellPgid && previousPgid !== session.shellPgid) {
+          // A command just finished (returned to shell)
+          logger.debug(`Session ${session.id}: Command finished, returning to shell`);
+          await this.handleCommandFinished(session, previousPgid);
+        } else if (currentPgid !== session.shellPgid) {
+          // A new command started
+          await this.handleCommandStarted(session, currentPgid);
+        }
+      }
+    } catch (error) {
+      logger.debug(`Error checking foreground process for session ${session.id}:`, error);
+    }
+  }
+
+  /**
+   * Handle when a new command starts
+   */
+  private async handleCommandStarted(session: PtySession, pgid: number): Promise<void> {
+    try {
+      // Get command info from process tree
+      if (!session.ptyProcess) return;
+      const processTree = await this.processTreeAnalyzer.getProcessTree(session.ptyProcess.pid);
+      const commandProc = processTree.find((p) => p.pgid === pgid);
+
+      if (commandProc) {
+        session.currentCommand = commandProc.command;
+        session.commandStartTime = Date.now();
+        logger.debug(`Session ${session.id}: Command started: ${commandProc.command}`);
+      }
+    } catch (error) {
+      logger.debug(`Failed to get command info for session ${session.id}:`, error);
+    }
+  }
+
+  /**
+   * Handle when a command finishes
+   */
+  private async handleCommandFinished(
+    session: PtySession,
+    pgid: number | undefined
+  ): Promise<void> {
+    if (!pgid || !session.commandStartTime || !session.currentCommand) return;
+
+    const duration = Date.now() - session.commandStartTime;
+    const command = session.currentCommand;
+
+    // Reset tracking
+    session.currentCommand = undefined;
+    session.commandStartTime = undefined;
+
+    // Check if we should notify
+    if (duration < MIN_COMMAND_DURATION_MS) {
+      logger.debug(
+        `Session ${session.id}: Command "${command}" too short (${duration}ms), not notifying`
+      );
+      return;
+    }
+
+    // Check if it's a built-in shell command
+    const baseCommand = command.split(/\s+/)[0];
+    if (SHELL_COMMANDS.has(baseCommand)) {
+      logger.debug(`Session ${session.id}: Ignoring built-in command: ${baseCommand}`);
+      return;
+    }
+
+    // Try to get exit code (this is tricky and might not always work)
+    const exitCode = 0;
+    try {
+      // Check if we can find the exit status in shell history or process info
+      // This is platform-specific and might not be reliable
+      const { stdout } = await this.execAsync(
+        `ps -o pid,stat -p ${pgid} 2>/dev/null || echo "NOTFOUND"`,
+        { timeout: 500 }
+      );
+      if (stdout.includes('NOTFOUND') || stdout.includes('Z')) {
+        // Process is zombie or not found, likely exited
+        // We can't reliably get exit code this way
+      }
+    } catch (_error) {
+      // Ignore errors in exit code detection
+    }
+
+    // Emit the event
+    this.emit('commandFinished', {
+      sessionId: session.id,
+      command,
+      exitCode,
+      duration,
+      timestamp: new Date().toISOString(),
+    });
+
+    logger.log(`Session ${session.id}: Command finished: "${command}" (duration: ${duration}ms)`);
+  }
+
+  /**
+   * Import necessary exec function
+   */
+  private execAsync = promisify(exec);
 }

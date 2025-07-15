@@ -22,6 +22,7 @@ interface ControlDirWatcherConfig {
 export class ControlDirWatcher {
   private watcher: fs.FSWatcher | null = null;
   private config: ControlDirWatcherConfig;
+  private recentlyNotifiedSessions = new Map<string, number>(); // Track recently notified sessions
 
   constructor(config: ControlDirWatcherConfig) {
     this.config = config;
@@ -99,8 +100,30 @@ export class ControlDirWatcher {
             }
           }
 
-          // Send push notification for session start
+          // Send push notification for session start (with deduplication)
           if (this.config.pushNotificationService) {
+            // Check if we recently sent a notification for this session
+            const lastNotified = this.recentlyNotifiedSessions.get(sessionId);
+            const now = Date.now();
+
+            // Skip if we notified about this session in the last 5 seconds
+            if (lastNotified && now - lastNotified < 5000) {
+              logger.debug(
+                `Skipping duplicate notification for session ${sessionId} (notified ${now - lastNotified}ms ago)`
+              );
+              return;
+            }
+
+            // Update last notified time
+            this.recentlyNotifiedSessions.set(sessionId, now);
+
+            // Clean up old entries (older than 1 minute)
+            for (const [sid, time] of this.recentlyNotifiedSessions.entries()) {
+              if (now - time > 60000) {
+                this.recentlyNotifiedSessions.delete(sid);
+              }
+            }
+
             const sessionName = (sessionData.name ||
               sessionData.command ||
               'Terminal Session') as string;
