@@ -8,13 +8,18 @@ suppressXtermErrors();
 
 import { startVibeTunnelForward } from './server/fwd.js';
 import { startVibeTunnelServer } from './server/server.js';
-import { closeLogger, createLogger, initLogger } from './server/utils/logger.js';
+import { closeLogger, createLogger, initLogger, VerbosityLevel } from './server/utils/logger.js';
+import { parseVerbosityFromEnv } from './server/utils/verbosity-parser.js';
 import { VERSION } from './server/version.js';
 
 // Initialize logger before anything else
-// Check VIBETUNNEL_DEBUG environment variable for debug mode
+// Parse verbosity from environment variables
+const verbosityLevel = parseVerbosityFromEnv();
+
+// Check for legacy debug mode (for backward compatibility with initLogger)
 const debugMode = process.env.VIBETUNNEL_DEBUG === '1' || process.env.VIBETUNNEL_DEBUG === 'true';
-initLogger(debugMode);
+
+initLogger(debugMode, verbosityLevel);
 const logger = createLogger('cli');
 
 // Source maps are only included if built with --sourcemap flag
@@ -61,7 +66,10 @@ if (!module.parent && (require.main === module || require.main === undefined)) {
       process.exit(1);
     });
   } else {
-    logger.log('Starting VibeTunnel server...');
+    // Show startup message at INFO level or when debug is enabled
+    if (verbosityLevel !== undefined && verbosityLevel >= VerbosityLevel.INFO) {
+      logger.log('Starting VibeTunnel server...');
+    }
     startVibeTunnelServer();
   }
 }
