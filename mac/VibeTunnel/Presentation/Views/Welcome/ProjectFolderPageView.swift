@@ -20,122 +20,85 @@ struct ProjectFolderPageView: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
-            // Title and description
-            VStack(spacing: 12) {
+        VStack(spacing: 30) {
+            VStack(spacing: 16) {
                 Text("Choose Your Project Folder")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundColor(.primary)
+                    .font(.largeTitle)
+                    .fontWeight(.semibold)
 
                 Text(
                     "Select the folder where you keep your projects. VibeTunnel will use this for quick access and repository discovery."
                 )
-                .font(.system(size: 14))
+                .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 400)
-            }
+                .frame(maxWidth: 480)
+                .fixedSize(horizontal: false, vertical: true)
 
-            // Folder picker section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Project Folder")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.secondary)
+                // Folder and repository section
+                VStack(spacing: 16) {
+                    // Folder picker
+                    HStack {
+                        Text(selectedPath.isEmpty ? "~/" : selectedPath)
+                            .font(.system(size: 13))
+                            .foregroundColor(selectedPath.isEmpty ? .secondary : .primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(6)
 
-                HStack {
-                    Text(selectedPath.isEmpty ? "~/" : selectedPath)
-                        .font(.system(size: 13))
-                        .foregroundColor(selectedPath.isEmpty ? .secondary : .primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .cornerRadius(6)
-
-                    Button("Choose...") {
-                        showFolderPicker()
+                        Button("Choose...") {
+                            showFolderPicker()
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
-                }
+                    .frame(width: 350)
 
-                // Repository preview
-                if !selectedPath.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
+                    // Repository count
+                    if !selectedPath.isEmpty {
                         HStack {
-                            Text("Discovered Repositories")
-                                .font(.system(size: 12, weight: .medium))
+                            Image(systemName: "folder.badge.gearshape")
+                                .font(.system(size: 12))
                                 .foregroundColor(.secondary)
-
+                            
                             if isScanning {
-                                ProgressView()
-                                    .scaleEffect(0.5)
-                                    .frame(width: 16, height: 16)
+                                Text("Scanning...")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            } else if discoveredRepos.isEmpty {
+                                Text("No repositories found")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("\(discoveredRepos.count) repositor\(discoveredRepos.count == 1 ? "y" : "ies") found")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.primary)
                             }
-
+                            
                             Spacer()
                         }
-
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 4) {
-                                if discoveredRepos.isEmpty && !isScanning {
-                                    Text("No repositories found in this folder")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-                                        .italic()
-                                        .padding(.vertical, 8)
-                                } else {
-                                    ForEach(discoveredRepos) { repo in
-                                        HStack {
-                                            Image(systemName: "folder.badge.gearshape")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(.secondary)
-
-                                            Text(repo.name)
-                                                .font(.system(size: 11))
-                                                .lineLimit(1)
-
-                                            Spacer()
-                                        }
-                                        .padding(.vertical, 2)
-                                    }
-                                }
-                            }
-                        }
-                        .frame(maxHeight: 100)
-                        .padding(8)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
                         .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
                         .cornerRadius(6)
+                        .frame(width: 350)
                     }
+                    // Tip
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("You can change this later in Settings → Application → Repository")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: 350)
+                    .padding(.top, 8)
                 }
             }
-            .frame(maxWidth: 400)
-
-            // Tips
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "lightbulb")
-                        .font(.system(size: 12))
-                        .foregroundColor(.orange)
-
-                    Text("You can change this later in Settings → Application → Repository Base Path")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 12))
-                        .foregroundColor(.blue)
-
-                    Text("VibeTunnel will scan up to 3 levels deep for Git repositories")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .frame(maxWidth: 400)
-            .padding(.top, 12)
+            Spacer()
         }
-        .padding(.horizontal, 40)
+        .padding()
         .onAppear {
             selectedPath = repositoryBasePath
             if !selectedPath.isEmpty {
@@ -190,7 +153,7 @@ struct ProjectFolderPageView: View {
             let repos = await findGitRepositories(in: expandedPath, maxDepth: 3)
 
             await MainActor.run {
-                discoveredRepos = repos.prefix(10).map { path in
+                discoveredRepos = repos.map { path in
                     RepositoryInfo(name: URL(fileURLWithPath: path).lastPathComponent, path: path)
                 }
                 isScanning = false
