@@ -7,6 +7,9 @@
 
 [![Download](https://img.shields.io/badge/Download-macOS-blue)](https://github.com/amantus-ai/vibetunnel/releases/latest)
 [![npm version](https://img.shields.io/npm/v/vibetunnel.svg)](https://www.npmjs.com/package/vibetunnel)
+[![Homebrew](https://img.shields.io/homebrew/cask/v/vibetunnel)](https://formulae.brew.sh/cask/vibetunnel)
+[![Node.js 20+](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js)](https://nodejs.org)
+[![Discord](https://img.shields.io/discord/1329169513649520762?label=Discord&logo=discord)](https://discord.gg/3Ub3EUwrcR)
 [![Linux Support](https://img.shields.io/badge/Linux-Supported-brightgreen)](https://www.npmjs.com/package/vibetunnel)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![macOS 14.0+](https://img.shields.io/badge/macOS-14.0+-red)](https://www.apple.com/macos/)
