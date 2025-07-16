@@ -375,6 +375,60 @@ function mergePrebuilds() {
   console.log(`✅ Merged prebuilds: ${nodePtyCount} node-pty + ${pamCount} authenticate-pam = ${allPrebuilds.length} total\n`);
 }
 
+// Bundle node-pty with its dependencies
+function bundleNodePty() {
+  console.log('📦 Bundling node-pty with dependencies...\n');
+  
+  const nodePtyDir = path.join(DIST_DIR, 'node-pty');
+  const nodeAddonApiDest = path.join(nodePtyDir, 'node_modules', 'node-addon-api');
+  
+  // Try multiple strategies to find node-addon-api
+  const possiblePaths = [];
+  
+  // Strategy 1: Direct dependency in node_modules
+  const directPath = path.join(ROOT_DIR, 'node_modules', 'node-addon-api');
+  if (fs.existsSync(directPath)) {
+    possiblePaths.push(directPath);
+  }
+  
+  // Strategy 2: pnpm structure (any version)
+  const pnpmDir = path.join(ROOT_DIR, 'node_modules', '.pnpm');
+  if (fs.existsSync(pnpmDir)) {
+    const pnpmEntries = fs.readdirSync(pnpmDir)
+      .filter(dir => dir.startsWith('node-addon-api@'))
+      .map(dir => path.join(pnpmDir, dir, 'node_modules', 'node-addon-api'))
+      .filter(fs.existsSync);
+    possiblePaths.push(...pnpmEntries);
+  }
+  
+  // Strategy 3: Check if it's a dependency of node-pty
+  const nodePtyModules = path.join(ROOT_DIR, 'node-pty', 'node_modules', 'node-addon-api');
+  if (fs.existsSync(nodePtyModules)) {
+    possiblePaths.push(nodePtyModules);
+  }
+  
+  // Strategy 4: Hoisted by npm/yarn (parent directory)
+  const hoistedPath = path.join(ROOT_DIR, '..', 'node_modules', 'node-addon-api');
+  if (fs.existsSync(hoistedPath)) {
+    possiblePaths.push(hoistedPath);
+  }
+  
+  if (possiblePaths.length > 0) {
+    const nodeAddonApiSrc = possiblePaths[0];
+    fs.mkdirSync(path.dirname(nodeAddonApiDest), { recursive: true });
+    fs.cpSync(nodeAddonApiSrc, nodeAddonApiDest, { recursive: true });
+    console.log(`  ✅ Bundled node-addon-api from: ${path.relative(ROOT_DIR, nodeAddonApiSrc)}`);
+  } else {
+    console.error('  ❌ CRITICAL: node-addon-api not found - source compilation will fail!');
+    console.error('     Please ensure node-addon-api is installed as a dependency.');
+    console.error('     Run: pnpm add -D node-addon-api');
+    // Don't exit during build - let the developer decide
+    console.warn('  ⚠️  Continuing build, but npm package may have issues if prebuilds are missing.');
+  }
+  
+  console.log('✅ node-pty bundled with dependencies\n');
+}
+
 // Copy authenticate-pam module for Linux support (OUR LINUX FIX)
 function copyAuthenticatePam() {
   console.log('📦 Copying authenticate-pam module for Linux support...\n');
@@ -577,11 +631,14 @@ async function main() {
     copyRecursive(src, dest);
   });
   
-  // Step 4: Copy authenticate-pam module for Linux support (OUR ENHANCEMENT)
+  // Step 4: Bundle node-pty with dependencies
+  bundleNodePty();
+  
+  // Step 5: Copy authenticate-pam module for Linux support (OUR ENHANCEMENT)
   copyAuthenticatePam();
   
-  // Step 5: Use package.npm.json if available, otherwise create clean package.json
-  console.log('\n4️⃣ Creating package.json for npm...\n');
+  // Step 6: Use package.npm.json if available, otherwise create clean package.json
+  console.log('\n6️⃣ Creating package.json for npm...\n');
   
   const npmPackageJsonPath = path.join(ROOT_DIR, 'package.npm.json');
   let npmPackageJson;
