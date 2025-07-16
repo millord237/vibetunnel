@@ -21,9 +21,17 @@ import { SessionManager } from './pty/session-manager.js';
 import { VibeTunnelSocketClient } from './pty/socket-client.js';
 import { ActivityDetector } from './utils/activity-detector.js';
 import { checkAndPatchClaude } from './utils/claude-patcher.js';
-import { closeLogger, createLogger } from './utils/logger.js';
+import {
+  closeLogger,
+  createLogger,
+  parseVerbosityLevel,
+  setLogFilePath,
+  setVerbosityLevel,
+  VerbosityLevel,
+} from './utils/logger.js';
 import { generateSessionName } from './utils/session-naming.js';
 import { generateTitleSequence } from './utils/terminal-title.js';
+import { parseVerbosityFromEnv } from './utils/verbosity-parser.js';
 import { BUILD_DATE, GIT_COMMIT, VERSION } from './version.js';
 
 const logger = createLogger('fwd');
@@ -33,7 +41,7 @@ function showUsage() {
   console.log('');
   console.log('Usage:');
   console.log(
-    '  pnpm exec tsx src/fwd.ts [--session-id <id>] [--title-mode <mode>] <command> [args...]'
+    '  pnpm exec tsx src/fwd.ts [--session-id <id>] [--title-mode <mode>] [--verbosity <level>] <command> [args...]'
   );
   console.log('');
   console.log('Options:');
@@ -41,6 +49,12 @@ function showUsage() {
   console.log('  --title-mode <mode>   Terminal title mode: none, filter, static, dynamic');
   console.log('                        (defaults to none for most commands, dynamic for claude)');
   console.log('  --update-title <title> Update session title and exit (requires --session-id)');
+  console.log(
+    '  --verbosity <level>   Set logging verbosity: silent, error, warn, info, verbose, debug'
+  );
+  console.log('                        (defaults to error)');
+  console.log('  --log-file <path>     Override default log file location');
+  console.log('                        (defaults to ~/.vibetunnel/log.txt)');
   console.log('');
   console.log('Title Modes:');
   console.log('  none     - No title management (default)');
@@ -48,9 +62,23 @@ function showUsage() {
   console.log('  static   - Show working directory and command');
   console.log('  dynamic  - Show directory, command, and activity (auto-selected for claude)');
   console.log('');
+  console.log('Verbosity Levels:');
+  console.log(`  ${chalk.gray('silent')}   - No output except critical errors`);
+  console.log(`  ${chalk.red('error')}    - Only errors ${chalk.gray('(default)')}`);
+  console.log(`  ${chalk.yellow('warn')}     - Errors and warnings`);
+  console.log(`  ${chalk.green('info')}     - Errors, warnings, and informational messages`);
+  console.log(`  ${chalk.blue('verbose')}  - All messages except debug`);
+  console.log(`  ${chalk.magenta('debug')}    - All messages including debug`);
+  console.log('');
+  console.log(
+    `Quick verbosity: ${chalk.cyan('-q (quiet), -v (verbose), -vv (extra), -vvv (debug)')}`
+  );
+  console.log('');
   console.log('Environment Variables:');
   console.log('  VIBETUNNEL_TITLE_MODE=<mode>         Set default title mode');
   console.log('  VIBETUNNEL_CLAUDE_DYNAMIC_TITLE=1    Force dynamic title for Claude');
+  console.log('  VIBETUNNEL_LOG_LEVEL=<level>         Set default verbosity level');
+  console.log('  VIBETUNNEL_DEBUG=1                   Enable debug mode (legacy)');
   console.log('');
   console.log('Examples:');
   console.log('  pnpm exec tsx src/fwd.ts claude --resume');
@@ -58,16 +86,19 @@ function showUsage() {
   console.log('  pnpm exec tsx src/fwd.ts --title-mode filter vim');
   console.log('  pnpm exec tsx src/fwd.ts --session-id abc123 claude');
   console.log('  pnpm exec tsx src/fwd.ts --update-title "New Title" --session-id abc123');
+  console.log('  pnpm exec tsx src/fwd.ts --verbosity silent npm test');
   console.log('');
   console.log('The command will be spawned in the current working directory');
   console.log('and managed through the VibeTunnel PTY infrastructure.');
 }
 
 export async function startVibeTunnelForward(args: string[]) {
-  // Log startup with version (logger already initialized in cli.ts)
-  if (process.env.VIBETUNNEL_DEBUG === '1' || process.env.VIBETUNNEL_DEBUG === 'true') {
+  // Parse verbosity from environment variables
+  let verbosityLevel = parseVerbosityFromEnv();
+
+  // Set debug mode on logger for backward compatibility
+  if (verbosityLevel === VerbosityLevel.DEBUG) {
     logger.setDebugMode(true);
-    logger.warn('Debug mode enabled');
   }
 
   // Parse command line arguments
@@ -84,6 +115,7 @@ export async function startVibeTunnelForward(args: string[]) {
   let sessionId: string | undefined;
   let titleMode: TitleMode = TitleMode.NONE;
   let updateTitle: string | undefined;
+  let logFilePath: string | undefined;
   let remainingArgs = args;
 
   // Check environment variables for title mode
@@ -123,6 +155,20 @@ export async function startVibeTunnelForward(args: string[]) {
         process.exit(1);
       }
       remainingArgs = remainingArgs.slice(2);
+    } else if (remainingArgs[0] === '--verbosity' && remainingArgs.length > 1) {
+      const parsedLevel = parseVerbosityLevel(remainingArgs[1]);
+      if (parsedLevel !== undefined) {
+        verbosityLevel = parsedLevel;
+      } else {
+        logger.error(`Invalid verbosity level: ${remainingArgs[1]}`);
+        logger.error('Valid levels: silent, error, warn, info, verbose, debug');
+        closeLogger();
+        process.exit(1);
+      }
+      remainingArgs = remainingArgs.slice(2);
+    } else if (remainingArgs[0] === '--log-file' && remainingArgs.length > 1) {
+      logFilePath = remainingArgs[1];
+      remainingArgs = remainingArgs.slice(2);
     } else {
       // Not a flag, must be the start of the command
       break;
@@ -133,6 +179,20 @@ export async function startVibeTunnelForward(args: string[]) {
   // This allows commands like: fwd -- command-with-dashes
   if (remainingArgs[0] === '--' && remainingArgs.length > 1) {
     remainingArgs = remainingArgs.slice(1);
+  }
+
+  // Apply log file path if set
+  if (logFilePath !== undefined) {
+    setLogFilePath(logFilePath);
+    logger.debug(`Log file path set to: ${logFilePath}`);
+  }
+
+  // Apply verbosity level if set
+  if (verbosityLevel !== undefined) {
+    setVerbosityLevel(verbosityLevel);
+    if (verbosityLevel >= VerbosityLevel.INFO) {
+      logger.log(`Verbosity level set to: ${VerbosityLevel[verbosityLevel].toLowerCase()}`);
+    }
   }
 
   // Handle special case: --update-title mode

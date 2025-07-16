@@ -4,9 +4,13 @@ import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import { v4 as uuidv4 } from 'uuid';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getVibetunnelBinaryPath, getVtScriptPath } from '../helpers/vt-paths.js';
 
 const execAsync = promisify(exec);
+
+// These tests require the real node-pty module, not mocked
+vi.unmock('node-pty');
 
 describe('vt title Command Integration', () => {
   let testControlDir: string;
@@ -20,8 +24,8 @@ describe('vt title Command Integration', () => {
     await fs.mkdir(testControlDir, { recursive: true });
 
     // Get path to vt script and vibetunnel binary
-    vtScriptPath = path.join(process.cwd(), '..', 'mac', 'VibeTunnel', 'vt');
-    vibetunnelPath = path.join(process.cwd(), 'native', 'vibetunnel');
+    vtScriptPath = getVtScriptPath();
+    vibetunnelPath = getVibetunnelBinaryPath();
   });
 
   afterEach(async () => {

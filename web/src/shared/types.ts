@@ -22,6 +22,11 @@ export interface SessionInfo {
   pid?: number;
   initialCols?: number;
   initialRows?: number;
+  /**
+   * Byte offset of the last clear event in the session stdout file.
+   * Used to quickly seek to the most recent content when replaying casts.
+   */
+  lastClearOffset?: number;
   version?: string; // VibeTunnel version that created this session
 }
 
@@ -212,4 +217,13 @@ export interface PushDeviceRegistration {
   deviceId: string;
   subscription: PushSubscription;
   userAgent?: string;
+}
+
+/**
+ * Server status information
+ */
+export interface ServerStatus {
+  macAppConnected: boolean;
+  isHQMode: boolean;
+  version: string;
 }

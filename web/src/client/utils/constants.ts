@@ -52,7 +52,7 @@ export const Z_INDEX = {
   SESSION_EXITED_OVERLAY: 120,
 
   // Special high-priority overlays (200+)
-  FILE_BROWSER: 200, // Reduced from 1100
+  FILE_BROWSER: 1100, // Must be higher than modal backdrop (1000)
 } as const;
 
 export const TERMINAL = {

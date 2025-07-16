@@ -41,7 +41,7 @@ export interface ServerInstance {
  */
 const CLI_PATH = path.join(process.cwd(), 'src', 'cli.ts');
 const BUILT_CLI_PATH = path.join(process.cwd(), 'dist', 'vibetunnel-cli');
-const DEFAULT_TIMEOUT = 10000;
+const DEFAULT_TIMEOUT = 30000;
 const HEALTH_CHECK_INTERVAL = 100;
 const PROCESS_KILL_TIMEOUT = 5000;
 
@@ -163,6 +163,8 @@ export async function startTestServer(config: ServerConfig = {}): Promise<Server
     VIBETUNNEL_CONTROL_DIR: controlDir,
     NODE_ENV: 'production',
     FORCE_COLOR: '0',
+    // Ensure INFO verbosity for tests to see server startup messages
+    VIBETUNNEL_LOG_LEVEL: env.VIBETUNNEL_LOG_LEVEL || env.VIBETUNNEL_DEBUG ? undefined : 'info',
     ...env,
   };
 

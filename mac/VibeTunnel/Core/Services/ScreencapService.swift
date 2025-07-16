@@ -582,15 +582,18 @@ public final class ScreencapService: NSObject {
 
     /// Check if screen recording permission is granted
     private func isScreenRecordingAllowed() async -> Bool {
-        do {
-            // Try to get shareable content - this will fail if no permission
-            _ = try await SCShareableContent.current
-            logger.info("✅ Screen recording permission is granted")
-            return true
-        } catch {
-            logger.warning("❌ Screen recording permission check failed: \(error)")
-            return false
+        // Use SystemPermissionManager which has better caching and non-triggering checks
+        let hasPermission = await MainActor.run {
+            SystemPermissionManager.shared.hasPermission(.screenRecording)
         }
+
+        if hasPermission {
+            logger.info("✅ Screen recording permission is granted")
+        } else {
+            logger.warning("❌ Screen recording permission not granted")
+        }
+
+        return hasPermission
     }
 
     /// Get cached application icon or load it if not cached
@@ -1119,7 +1122,8 @@ public final class ScreencapService: NSObject {
         if !hasAccessibility {
             logger.error("❌ Cannot send mouse click - Accessibility permission not granted")
             logger
-                .error("💡 Please grant Accessibility permission in System Settings > Privacy & Security > Accessibility"
+                .error(
+                    "💡 Please grant Accessibility permission in System Settings > Privacy & Security > Accessibility"
                 )
             throw ScreencapError.permissionDenied
         }
@@ -1705,15 +1709,17 @@ public final class ScreencapService: NSObject {
             // Notify WebRTC manager of state changes
             if let webRTCManager = self.webRTCManager {
                 Task {
-                    let message = ControlProtocol.createEvent(
+                    if let messageData = try? ControlProtocol.encodeWithDictionaryPayload(
+                        type: .event,
                         category: .screencap,
                         action: "state-change",
                         payload: [
                             "state": newState.rawValue,
                             "previousState": previousState?.rawValue as Any
                         ]
-                    )
-                    await webRTCManager.sendControlMessage(message)
+                    ) {
+                        await webRTCManager.sendControlMessage(messageData)
+                    }
                 }
             }
         }
@@ -1826,24 +1832,28 @@ public final class ScreencapService: NSObject {
     /// Notify connected clients that display was disconnected
     private func notifyDisplayDisconnected() async {
         if let webRTCManager {
-            let message = ControlProtocol.createEvent(
+            if let messageData = try? ControlProtocol.encodeWithDictionaryPayload(
+                type: .event,
                 category: .screencap,
                 action: "display-disconnected",
                 payload: ["message": "Display disconnected during capture"]
-            )
-            await webRTCManager.sendControlMessage(message)
+            ) {
+                await webRTCManager.sendControlMessage(messageData)
+            }
         }
     }
 
     /// Notify connected clients that window was disconnected
     private func notifyWindowDisconnected() async {
         if let webRTCManager {
-            let message = ControlProtocol.createEvent(
+            if let messageData = try? ControlProtocol.encodeWithDictionaryPayload(
+                type: .event,
                 category: .screencap,
                 action: "window-disconnected",
                 payload: ["message": "Window closed or became unavailable"]
-            )
-            await webRTCManager.sendControlMessage(message)
+            ) {
+                await webRTCManager.sendControlMessage(messageData)
+            }
         }
     }
 

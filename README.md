@@ -16,11 +16,27 @@
 
 Ever wanted to check on your AI agents while you're away? Need to monitor that long-running build from your phone? Want to share a terminal session with a colleague without complex SSH setups? VibeTunnel makes it happen with zero friction.
 
+## Installation Options
+
+### macOS App (Recommended for Mac users)
+The native macOS app provides the best experience with menu bar integration and automatic updates.
+
+### npm Package (Linux & Headless Systems)
+For Linux servers, Docker containers, or headless macOS systems, install via npm:
+
+```bash
+npm install -g vibetunnel
+```
+
+This gives you the full VibeTunnel server with web UI, just without the macOS menu bar app. See the [npm Package section](#npm-package) for detailed usage.
+
 ## Quick Start
 
 ### Requirements
 
-**VibeTunnel requires an Apple Silicon Mac (M1+).** Intel Macs are not supported.
+**macOS App**: Requires an Apple Silicon Mac (M1+). Intel Macs are not supported for the native app.
+
+**npm Package**: Works on any system with Node.js 20+, including Intel Macs and Linux. Windows is not yet supported ([#252](https://github.com/amantus-ai/vibetunnel/issues/252)).
 
 ### 1. Download & Install
 
@@ -38,24 +54,53 @@ VibeTunnel lives in your menu bar. Click the icon to start the server.
 
 ### 3. Use the `vt` Command
 
+The `vt` command is a smart wrapper that forwards your terminal sessions through VibeTunnel:
+
+**How it works**:
+- `vt` is a bash script that internally calls `vibetunnel fwd` to forward terminal output
+- It provides additional features like shell alias resolution and session title management
+- Available from both the Mac app and npm package installations
+
+**Installation sources**:
+- **macOS App**: Creates `/usr/local/bin/vt` symlink during installation
+- **npm Package**: Installs `vt` globally, with intelligent Mac app detection
+
+**Smart detection**:
+When you run `vt` from the npm package, it:
+1. Checks if the Mac app is installed at `/Applications/VibeTunnel.app`
+2. If found, forwards to the Mac app's `vt` for the best experience
+3. If not found, uses the npm-installed `vibetunnel fwd`
+4. This ensures `vt` always uses the best available implementation
+
 ```bash
 # Run any command in the browser
 vt pnpm run dev
+vt npm test
+vt python script.py
 
-# Monitor AI agents (with automatic activity tracking)
+# Monitor AI agents with automatic activity tracking
 vt claude --dangerously-skip-permissions
+vt --title-mode dynamic claude    # See real-time Claude status
 
-# Control terminal titles
-vt --title-mode static npm run dev    # Shows path and command
-vt --title-mode dynamic python app.py  # Shows path, command, and activity
-vt --title-mode filter vim            # Blocks vim from changing title
-
-# Shell aliases work automatically!
-vt claude-danger  # Your custom aliases are resolved
+# Use your shell aliases
+vt gs              # Your 'git status' alias works!
+vt claude-danger   # Custom aliases are resolved
 
 # Open an interactive shell
-vt --shell
+vt --shell         # or vt -i
+
+# For more examples and options, see "The vt Forwarding Command" section below
 ```
+
+### Git Repository Scanning on First Session
+
+When opening a new session for the first time, VibeTunnel's working directory scanner will look for Git repositories. By default, this scans your home directory, which may trigger macOS permission prompts for accessing protected folders (like Desktop, Documents, Downloads, iCloud Drive, or external volumes).
+
+To avoid these prompts:
+- **Option 1**: Navigate to your actual projects directory before opening a session
+- **Option 2**: Accept the one-time permission prompts (they won't appear again)
+
+This only happens on the first session when the scanner discovers your Git repositories. For more details about macOS privacy-protected folders, see [this explanation](https://eclecticlight.co/2025/02/24/gaining-access-to-privacy-protected-folders/).
 
 ### 4. Open Your Dashboard
 
@@ -67,11 +112,12 @@ Visit [http://localhost:4020](http://localhost:4020) to see all your terminal se
 - **🚀 Zero Configuration** - No SSH keys, no port forwarding, no complexity
 - **🤖 AI Agent Friendly** - Perfect for monitoring Claude Code, ChatGPT, or any terminal-based AI tools
 - **📊 Dynamic Terminal Titles** - Real-time activity tracking shows what's happening in each session
-- **🔒 Secure by Design** - Password protection, localhost-only mode, or secure tunneling via Tailscale/ngrok
+- **⌨️ Smart Keyboard Handling** - Intelligent shortcut routing with toggleable capture modes
+- **🔒 Secure by Design** - Multiple authentication modes, localhost-only mode, or secure tunneling via Tailscale/ngrok
 - **📱 Mobile Ready** - Native iOS app and responsive web interface for phones and tablets
 - **🎬 Session Recording** - All sessions recorded in asciinema format for later playback
-- **⚡ High Performance** - Powered by Bun runtime for blazing-fast JavaScript execution
-- **🍎 Apple Silicon Native** - Optimized for M1/M2/M3 Macs with ARM64-only binaries
+- **⚡ High Performance** - Optimized Node.js server with minimal resource usage
+- **🍎 Apple Silicon Native** - Optimized for Apple Silicon (M1+) Macs with ARM64-only binaries
 - **🐚 Shell Alias Support** - Your custom aliases and shell functions work automatically
 
 > **Note**: The iOS app and Tauri-based components are still work in progress and not recommended for production use yet.
@@ -81,10 +127,10 @@ Visit [http://localhost:4020](http://localhost:4020) to see all your terminal se
 VibeTunnel consists of three main components:
 
 1. **macOS Menu Bar App** - Native Swift application that manages the server lifecycle
-2. **Node.js/Bun Server** - High-performance TypeScript server handling terminal sessions
+2. **Node.js Server** - High-performance TypeScript server handling terminal sessions
 3. **Web Frontend** - Modern web interface using Lit components and xterm.js
 
-The server runs as a standalone Bun executable with embedded Node.js modules, providing excellent performance and minimal resource usage.
+The server runs as a standalone Node.js executable with embedded modules, providing excellent performance and minimal resource usage.
 
 ## Remote Access Options
 
@@ -132,7 +178,7 @@ The server runs as a standalone Bun executable with embedded Node.js modules, pr
 **Note**: Free ngrok URLs change each time you restart the tunnel. You can claim one free static domain per user, or upgrade to a paid plan for multiple domains.
 
 ### Option 3: Local Network
-1. Set a dashboard password in settings
+1. Configure authentication (see Authentication section)
 2. Switch to "Network" mode
 3. Access via `http://[your-mac-ip]:4020`
 
@@ -165,13 +211,330 @@ Dynamic mode includes real-time activity detection:
 - Shows `•` when there's terminal output within 5 seconds
 - Claude commands show specific status (Crafting, Transitioning, etc.)
 - Extensible system for future app-specific detectors
+
+## Authentication
+
+VibeTunnel provides multiple authentication modes to secure your terminal sessions:
+
+### Authentication Modes
+
+#### 1. System Authentication (Default)
+Uses your operating system's native authentication:
+- **macOS**: Authenticates against local user accounts
+- **Linux**: Uses PAM (Pluggable Authentication Modules)
+- Login with your system username and password
+
+#### 2. Environment Variable Authentication
+Simple authentication for deployments:
+```bash
+export VIBETUNNEL_USERNAME=admin
+export VIBETUNNEL_PASSWORD=your-secure-password
+npm run start
+```
+
+#### 3. SSH Key Authentication
+Use Ed25519 SSH keys from `~/.ssh/authorized_keys`:
+```bash
+# Enable SSH key authentication
+npm run start -- --enable-ssh-keys
+
+# Make SSH keys mandatory (disable password auth)
+npm run start -- --enable-ssh-keys --disallow-user-password
+```
+
+#### 4. No Authentication
+For trusted environments only:
+```bash
+npm run start -- --no-auth
+```
+
+#### 5. Local Bypass (Development Only)
+Allow localhost connections to bypass authentication:
+```bash
+# Basic local bypass (DEVELOPMENT ONLY - NOT FOR PRODUCTION)
+npm run start -- --allow-local-bypass
+
+# With token for additional security (minimum for production)
+npm run start -- --allow-local-bypass --local-auth-token mytoken
+```
+
+**Security Note**: Local bypass uses `req.socket.remoteAddress` which cannot be spoofed remotely due to TCP's three-way handshake. The implementation also rejects requests with proxy headers (`X-Forwarded-For`, etc.) to prevent header injection attacks. However:
+- **Development only**: Basic bypass without token should never be used in production
+- **Local processes**: Any process on the same machine can access the API
+- **Always use tokens**: In production, always require `--local-auth-token`
+- **Consider alternatives**: For production, use proper authentication instead of local bypass
+
+### macOS App Authentication
+
+The macOS menu bar app supports these authentication modes:
+- **No Authentication**: For trusted environments only
+- **System Authentication**: Uses your macOS user account credentials
+- **SSH Key Authentication**: Uses Ed25519 SSH keys from `~/.ssh/authorized_keys`
+- Configure via Settings → Security when in "Network" mode
+
+### Security Best Practices
+
+1. **Always use authentication** when binding to network interfaces (`--bind 0.0.0.0`)
+2. **Use HTTPS** in production with a reverse proxy (nginx, Caddy)
+3. **Rotate credentials** regularly
+4. **Consider SSH keys** for stronger security
+5. **Never use local bypass without tokens** in production environments
+6. **Monitor access logs** for suspicious authentication patterns
+7. **Default to secure** - explicitly enable less secure options only when needed
+
+
+## npm Package
+
+The VibeTunnel npm package provides the full server functionality for Linux, Docker, CI/CD environments, and headless macOS systems.
+
+### Installation
+
+```bash
+# Install globally via npm
+npm install -g vibetunnel
+
+# Or with yarn
+yarn global add vibetunnel
+
+# Or with pnpm
+pnpm add -g vibetunnel
+```
+
+**Requirements**: Node.js 20.0.0 or higher
+
+### Running the VibeTunnel Server
+
+#### Basic Usage
+
+```bash
+# Start with default settings (localhost:4020)
+vibetunnel
+
+# Bind to all network interfaces
+vibetunnel --bind 0.0.0.0
+
+# Use a custom port
+vibetunnel --port 8080
+
+# With authentication
+VIBETUNNEL_USERNAME=admin VIBETUNNEL_PASSWORD=secure vibetunnel --bind 0.0.0.0
+
+# Enable debug logging
+VIBETUNNEL_DEBUG=1 vibetunnel
+
+# Run without authentication (trusted networks only!)
+vibetunnel --no-auth
+```
+
+#### Using the `vt` Command
+
+The `vt` command wrapper makes it easy to forward terminal sessions:
+
+```bash
+# Monitor AI agents with automatic activity tracking
+vt claude
+vt claude --dangerously-skip-permissions
+vt --title-mode dynamic claude    # See real-time Claude status
+
+# Run any command and see it in the browser
+vt npm test
+vt python script.py
+vt cargo build --release
+
+# Open an interactive shell
+vt --shell
+vt -i  # short form
+
+# Control terminal titles
+vt --title-mode static npm run dev    # Shows path and command
+vt --title-mode dynamic python app.py  # Shows path, command, and activity
+vt --title-mode filter vim            # Blocks vim from changing title
+
+# Control output verbosity
+vt -q npm test         # Quiet mode - no console output
+vt -v npm run dev      # Verbose mode - show more information
+vt -vv cargo build     # Extra verbose - all except debug
+vt -vvv python app.py  # Debug mode - show everything
+
+# Shell aliases work automatically!
+vt claude-danger  # Your custom alias for claude --dangerously-skip-permissions
+
+# Update session title (inside a VibeTunnel session)
+vt title "My Project - Testing"
+```
+
+### The `vt` Forwarding Command
+
+The `vt` command is VibeTunnel's terminal forwarding wrapper that allows you to run any command while making its output visible in the browser. Under the hood, `vt` is a convenient shortcut for `vibetunnel fwd` - it's a bash script that calls the full command with proper path resolution and additional features like shell alias support. The `vt` wrapper acts as a transparent proxy between your terminal and the command, forwarding all input and output through VibeTunnel's infrastructure.
+
+#### Command Syntax
+
+```bash
+vt [options] <command> [args...]
+```
+
+#### Options
+
+**Terminal Title Control:**
+- `--title-mode <mode>` - Control how terminal titles are managed:
+  - `none` - No title management, apps control their own titles (default)
+  - `filter` - Block all title changes from applications
+  - `static` - Show working directory and command in title
+  - `dynamic` - Show directory, command, and live activity status (auto-enabled for Claude)
+
+**Verbosity Control:**
+- `-q, --quiet` - Quiet mode, no console output (logs to file only)
+- `-v, --verbose` - Verbose mode, show errors, warnings, and info messages
+- `-vv` - Extra verbose, show all messages except debug
+- `-vvv` - Debug mode, show all messages including debug
+
+**Other Options:**
+- `--shell, -i` - Launch your current shell interactively
+- `--no-shell-wrap, -S` - Execute command directly without shell interpretation
+- `--log-file <path>` - Override default log file location (defaults to `~/.vibetunnel/log.txt`)
+- `--help, -h` - Show help message with all options
+
+#### Verbosity Levels
+
+VibeTunnel uses a hierarchical logging system where each level includes all messages from more severe levels:
+
+| Level | Flag | Environment Variable | Shows |
+|-------|------|---------------------|-------|
+| SILENT | `-q` | `VIBETUNNEL_LOG_LEVEL=silent` | No console output (file logging only) |
+| ERROR | (default) | `VIBETUNNEL_LOG_LEVEL=error` | Errors only |
+| WARN | - | `VIBETUNNEL_LOG_LEVEL=warn` | Errors and warnings |
+| INFO | `-v` | `VIBETUNNEL_LOG_LEVEL=info` | Errors, warnings, and informational messages |
+| VERBOSE | `-vv` | `VIBETUNNEL_LOG_LEVEL=verbose` | All messages except debug |
+| DEBUG | `-vvv` | `VIBETUNNEL_LOG_LEVEL=debug` | Everything including debug traces |
+
+**Note:** All logs are always written to `~/.vibetunnel/log.txt` regardless of verbosity settings. The verbosity only controls terminal output.
+
+#### Examples
+
+```bash
+# Basic command forwarding
+vt ls -la                    # List files with VibeTunnel monitoring
+vt npm run dev              # Run development server
+vt python script.py         # Execute Python script
+
+# With verbosity control
+vt -q npm test              # Run tests silently
+vt -v npm install           # See detailed installation progress
+vt -vvv python debug.py     # Full debug output
+vt --log-file debug.log npm run dev  # Write logs to custom file
+
+# Terminal title management
+vt --title-mode static npm run dev    # Fixed title showing command
+vt --title-mode dynamic claude         # Live activity updates
+vt --title-mode filter vim            # Prevent vim from changing title
+
+# Shell handling
+vt --shell                  # Open interactive shell
+vt -S /usr/bin/python      # Run python directly without shell
+```
+
+#### How It Works
+
+1. **Command Resolution**: The `vt` wrapper first checks if your command is an alias, shell function, or binary
+2. **Session Creation**: It creates a new VibeTunnel session with a unique ID
+3. **PTY Allocation**: A pseudo-terminal is allocated to preserve terminal features (colors, cursor control, etc.)
+4. **I/O Forwarding**: All input/output is forwarded between your terminal and the browser in real-time
+5. **Process Management**: The wrapper monitors the process and handles signals, exit codes, and cleanup
+
+#### Environment Variables
+
+- `VIBETUNNEL_LOG_LEVEL` - Set default verbosity level (silent, error, warn, info, verbose, debug)
+- `VIBETUNNEL_TITLE_MODE` - Set default title mode (none, filter, static, dynamic)
+- `VIBETUNNEL_DEBUG` - Legacy debug flag, equivalent to `VIBETUNNEL_LOG_LEVEL=debug`
+- `VIBETUNNEL_CLAUDE_DYNAMIC_TITLE` - Force dynamic title mode for Claude commands
+
+#### Special Features
+
+**Automatic Claude Detection**: When running Claude AI, `vt` automatically enables dynamic title mode to show real-time activity status (thinking, writing, idle).
+
+**Shell Alias Support**: Your shell aliases and functions work transparently through `vt`:
+```bash
+alias gs='git status'
+vt gs  # Works as expected
+```
+
+**Session Title Updates**: Inside a VibeTunnel session, use `vt title` to update the session name:
+```bash
+vt title "Building Production Release"
+```
+
+### Mac App Interoperability
+
+The npm package is designed to work seamlessly alongside the Mac app:
+
+#### Smart Command Routing
+- The `vt` command automatically detects if the Mac app is installed
+- If found at `/Applications/VibeTunnel.app`, it defers to the Mac app
+- If not found, it uses the npm-installed server
+- This ensures you always get the best available implementation
+
+#### Installation Behavior
+- If `/usr/local/bin/vt` already exists (from another tool), npm won't overwrite it
+- You'll see a helpful warning with alternatives: `vibetunnel` or `npx vt`
+- The installation always succeeds, even if the `vt` symlink can't be created
+
+#### When to Use Each Version
+- **Mac app only**: Best for macOS users who want menu bar integration
+- **npm only**: Perfect for Linux, Docker, CI/CD, or headless servers
+- **Both installed**: Mac app takes precedence, npm serves as fallback
+- **Development**: npm package useful for testing without affecting Mac app
+
+### Package Contents
+
+The npm package includes:
+- Full VibeTunnel server with web UI
+- CLI tools (`vibetunnel` and `vt` commands)
+- Native PTY support via node-pty
+- Pre-built binaries for common platforms
+- Complete feature parity with macOS app (minus menu bar)
+
+### Building the npm Package
+
+For maintainers who need to build the npm package:
+
+#### Unified Build (Multi-Platform by Default)
+```bash
+# Build with prebuilt binaries for all platforms
+# Requires Docker for Linux cross-compilation
+npm run build:npm
+```
+
+This creates prebuilt binaries for:
+- macOS (x64, arm64) - Node.js 20, 22, 23, 24
+- Linux (x64, arm64) - Node.js 20, 22, 23, 24
+
+#### Build Options
+```bash
+# Current platform only (faster for development)
+node scripts/build-npm.js --current-only
+
+# Specific platform/architecture
+node scripts/build-npm.js --platform darwin --arch arm64
+
+# Skip Docker builds
+node scripts/build-npm.js --no-docker
+```
+
+#### Publishing
+```bash
+# Test the package locally
+npm pack
+
+# Publish to npm
+npm publish
+```
+
 ## Building from Source
 
 ### Prerequisites
-- macOS 14.0+ (Sonoma) on Apple Silicon (M1/M2/M3)
+- macOS 14.0+ (Sonoma) on Apple Silicon (M1+)
 - Xcode 16.0+
-- Node.js 20+
-- Bun runtime
+- Node.js 20+ (minimum supported version)
 
 ### Build Steps
 
@@ -261,11 +624,33 @@ cd web && ./scripts/coverage-report.sh
 - macOS/iOS: 75% minimum (enforced in CI)
 - Web: 80% minimum for lines, functions, branches, and statements
 
-### Testing on External Devices (iPad, iPhone, etc.)
+### Development Server & Hot Reload
+
+VibeTunnel includes a development server with automatic rebuilding for faster iteration:
+
+#### Development Mode
+
+```bash
+cd web
+pnpm run dev
+```
+
+**What this provides:**
+- **Automatic Rebuilds**: esbuild watches for file changes and rebuilds bundles instantly
+- **Fast Feedback**: Changes are compiled within seconds of saving
+- **Manual Refresh Required**: Browser needs manual refresh to see changes (no hot module replacement)
+
+**How it works:**
+- esbuild watch mode detects file changes in `src/`
+- Automatically rebuilds JavaScript bundles and CSS
+- Express server serves updated files immediately
+- Visit `http://localhost:4020` and refresh to see changes
+
+#### Testing on External Devices (iPad, iPhone, etc.)
 
 When developing the web interface, you often need to test changes on external devices to debug browser-specific issues. Here's how to do it:
 
-#### Quick Setup
+##### Quick Setup
 
 1. **Run the dev server with network access**:
    ```bash
@@ -283,22 +668,52 @@ When developing the web interface, you often need to test changes on external de
    http://[your-mac-ip]:4021
    ```
 
-#### Important Notes
+##### Important Notes
 
 - **Port conflict**: The Mac app runs on port 4020, so use a different port (e.g., 4021) for development
 - **Same network**: Ensure both devices are on the same Wi-Fi network
 - **Firewall**: macOS may prompt to allow incoming connections - click "Allow"
-- **Hot reload**: Changes to the web code will automatically update on your external device
+- **Auto-rebuild**: Changes to the web code are automatically rebuilt, but you need to manually refresh the browser
 
-#### Alternative: Using the Mac App
+#### Future: Hot Module Replacement
 
-If you need to test with the full Mac app integration:
+For true hot module replacement without manual refresh, see our [Vite migration plan](docs/vite-plan.md) which would provide:
+- Instant updates without page refresh
+- Preserved application state during development
+- Sub-second feedback loops
+- Modern development tooling
+
+#### Mac App Development Server Mode
+
+The VibeTunnel Mac app includes a special development server mode that integrates with the web development workflow:
+
+**Setup:**
+1. Open VibeTunnel Settings → Debug tab (enable Debug Mode first in General settings)
+2. Enable "Use Development Server"
+3. Set the path to your `web/` directory
+4. Restart the VibeTunnel server
+
+**How it works:**
+- Instead of using the bundled production server, the Mac app runs `pnpm run dev` in your web directory
+- Provides hot reload and automatic rebuilding during development
+- Maintains all Mac app functionality (session management, logging, etc.)
+- Shows "Dev Server" in the menu bar and status indicators
+
+**Benefits:**
+- No need to manually rebuild after code changes
+- Automatic esbuild watch mode for instant compilation
+- Full integration with Mac app features
+- Same terminal session management as production
+
+**Alternative: Standalone Development**
+
+If you prefer working outside the Mac app:
 
 1. Build the web project: `cd web && pnpm run build`
 2. In VibeTunnel settings, set Dashboard Access to "Network"
 3. Access from external device: `http://[your-mac-ip]:4020`
 
-Note: This requires rebuilding after each change, so the dev server method above is preferred for rapid iteration.
+Note: This requires rebuilding after each change, so the dev server mode above is preferred for rapid iteration.
 
 ### Debug Logging
 
@@ -314,8 +729,35 @@ VIBETUNNEL_DEBUG=1 vt your-command
 
 Debug logs are written to `~/.vibetunnel/log.txt`.
 
+### Verbosity Control
+
+Control the amount of output from VibeTunnel commands:
+
+```bash
+# Command-line flags
+vt -q npm test                # Quiet mode - no console output
+vt npm test                   # Default - errors only
+vt -v npm run dev            # Verbose - errors, warnings, and info
+vt -vv cargo build           # Extra verbose - all except debug
+vt -vvv python script.py     # Debug mode - everything
+
+# Environment variable
+export VIBETUNNEL_LOG_LEVEL=error    # Default
+export VIBETUNNEL_LOG_LEVEL=warn     # Show errors and warnings
+export VIBETUNNEL_LOG_LEVEL=info     # Show errors, warnings, and info
+export VIBETUNNEL_LOG_LEVEL=verbose  # All except debug
+export VIBETUNNEL_LOG_LEVEL=debug    # Everything
+
+# Or use inline
+VIBETUNNEL_LOG_LEVEL=silent vt npm test
+```
+
+**Note**: All logs are always written to `~/.vibetunnel/log.txt` regardless of verbosity level. The verbosity settings only control what's displayed in the terminal.
+
 ## Documentation
 
+- [Keyboard Shortcuts](docs/keyboard-shortcuts.md) - Complete keyboard shortcut reference
+- [Quick Reference Card](docs/keyboard-shortcuts-quick-reference.md) - Printable shortcuts cheat sheet
 - [Technical Specification](docs/spec.md) - Detailed architecture and implementation
 - [Contributing Guide](docs/CONTRIBUTING.md) - Development setup and guidelines
 - [Architecture](docs/architecture.md) - System design overview
@@ -343,6 +785,27 @@ sudo tccutil reset ScreenCapture sh.vibetunnel.vibetunnel.debug  # For debug bui
 # This removes all Automation permissions system-wide (cannot target specific apps):
 sudo tccutil reset AppleEvents
 ```
+
+## Contributing
+
+We welcome contributions! VibeTunnel is a community-driven project and we'd love to have you join us.
+
+### Join Our Community
+
+Connect with the VibeTunnel team and other contributors on our [Discord server](https://discord.gg/3Ub3EUwrcR). It's the best place to:
+- Discuss new features and ideas
+- Get help with development setup
+- Coordinate on larger changes
+- Share your VibeTunnel use cases
+
+### How to Contribute
+
+1. **Join Discord**: Start by joining our [Discord server](https://discord.gg/3Ub3EUwrcR) to say hello!
+2. **Check Issues**: Look for issues labeled `good first issue` or `help wanted`
+3. **Development Setup**: Follow our [Contributing Guide](docs/CONTRIBUTING.md) for detailed setup instructions
+4. **Submit PRs**: Fork the repo, create a branch, and submit your changes
+
+For technical details on building and developing VibeTunnel, see our [Contributing Guide](docs/CONTRIBUTING.md).
 
 ## Support VibeTunnel
 

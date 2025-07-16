@@ -14,8 +14,10 @@ final class TerminalControlHandler {
 
     private init() {
         // Register handler with the shared socket manager
-        SharedUnixSocketManager.shared.registerControlHandler(for: .terminal) { [weak self] message in
-            await self?.handleMessage(message)
+        // NOTE: System handlers (like SystemControlHandler) need to be registered separately
+        // since they may have different lifecycle requirements
+        SharedUnixSocketManager.shared.registerControlHandler(for: .terminal) { [weak self] data in
+            await self?.handleMessage(data)
         }
 
         logger.info("🚀 Terminal control handler initialized")
@@ -23,39 +25,58 @@ final class TerminalControlHandler {
 
     // MARK: - Message Handling
 
-    private func handleMessage(_ message: ControlProtocol.ControlMessage) async -> ControlProtocol.ControlMessage? {
-        logger.info("📥 Terminal message: \(message.action)")
+    private func handleMessage(_ data: Data) async -> Data? {
+        do {
+            // First check what action this is
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let action = json["action"] as? String
+            {
+                switch action {
+                case "spawn":
+                    // Try to decode as terminal spawn request
+                    if let spawnRequest = try? ControlProtocol.decodeTerminalSpawnRequest(data) {
+                        logger
+                            .info(
+                                "📥 Terminal spawn request for session: \(spawnRequest.payload?.sessionId ?? "unknown")"
+                            )
+                        let response = await handleSpawnRequest(spawnRequest)
+                        return try ControlProtocol.encode(response)
+                    } else {
+                        logger.error("Failed to decode terminal spawn request")
+                        return createErrorResponse(for: data, error: "Invalid spawn request format")
+                    }
 
-        switch message.action {
-        case "spawn":
-            return await handleSpawnRequest(message)
-
-        default:
-            logger.warning("Unknown terminal action: \(message.action)")
-            return ControlProtocol.createResponse(
-                to: message,
-                error: "Unknown action: \(message.action)"
-            )
+                default:
+                    logger.error("Unknown terminal action: \(action)")
+                    return createErrorResponse(for: data, error: "Unknown terminal action: \(action)")
+                }
+            } else {
+                logger.error("Invalid terminal message format")
+                return createErrorResponse(for: data, error: "Invalid message format")
+            }
+        } catch {
+            logger.error("Failed to process terminal message: \(error)")
+            return createErrorResponse(for: data, error: "Failed to process message: \(error.localizedDescription)")
         }
     }
 
-    private func handleSpawnRequest(_ message: ControlProtocol.ControlMessage) async -> ControlProtocol.ControlMessage {
+    private func handleSpawnRequest(_ message: ControlProtocol.TerminalSpawnRequestMessage) async -> ControlProtocol
+        .TerminalSpawnResponseMessage
+    {
         guard let payload = message.payload else {
-            return ControlProtocol.createResponse(to: message, error: "Missing payload")
+            return ControlProtocol.terminalSpawnResponse(
+                to: message,
+                success: false,
+                error: "Missing payload"
+            )
         }
 
-        // Extract spawn parameters
-        let sessionId = payload["sessionId"] as? String ?? message.sessionId ?? ""
-        let workingDirectory = payload["workingDirectory"] as? String ?? ""
-        let command = payload["command"] as? String ?? ""
-        let terminalPreference = payload["terminalPreference"] as? String
-
-        logger.info("Spawning terminal session \(sessionId)")
+        logger.info("Spawning terminal session \(payload.sessionId)")
 
         do {
             // If a specific terminal is requested, temporarily set it
             var originalTerminal: String?
-            if let requestedTerminal = terminalPreference {
+            if let requestedTerminal = payload.terminalPreference {
                 originalTerminal = UserDefaults.standard.string(forKey: "preferredTerminal")
                 UserDefaults.standard.set(requestedTerminal, forKey: "preferredTerminal")
             }
@@ -69,22 +90,22 @@ final class TerminalControlHandler {
 
             // Launch the terminal
             try TerminalLauncher.shared.launchOptimizedTerminalSession(
-                workingDirectory: workingDirectory,
-                command: command,
-                sessionId: sessionId,
+                workingDirectory: payload.workingDirectory ?? "",
+                command: payload.command ?? "",
+                sessionId: payload.sessionId,
                 vibetunnelPath: nil // Use bundled path
             )
 
-            // Success response
-            return ControlProtocol.createResponse(
+            // Success response with compile-time guarantees
+            return ControlProtocol.terminalSpawnResponse(
                 to: message,
-                payload: ["success": true]
+                success: true
             )
         } catch {
             logger.error("Failed to spawn terminal: \(error)")
-            return ControlProtocol.createResponse(
+            return ControlProtocol.terminalSpawnResponse(
                 to: message,
-                payload: ["success": false],
+                success: false,
                 error: error.localizedDescription
             )
         }
@@ -102,5 +123,32 @@ final class TerminalControlHandler {
     func stop() {
         SharedUnixSocketManager.shared.unregisterControlHandler(for: .terminal)
         logger.info("🛑 Terminal control handler stopped")
+    }
+
+    // MARK: - Error Handling
+
+    private func createErrorResponse(for data: Data, error: String) -> Data? {
+        do {
+            // Try to get request ID for proper error response
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let id = json["id"] as? String,
+               let action = json["action"] as? String
+            {
+                // Create error response matching request
+                let errorResponse: [String: Any] = [
+                    "id": id,
+                    "type": "response",
+                    "category": "terminal",
+                    "action": action,
+                    "error": error
+                ]
+
+                return try JSONSerialization.data(withJSONObject: errorResponse)
+            }
+        } catch {
+            logger.error("Failed to create error response: \(error)")
+        }
+
+        return nil
     }
 }

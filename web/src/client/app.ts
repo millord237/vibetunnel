@@ -12,6 +12,7 @@ import { keyed } from 'lit/directives/keyed.js';
 
 // Import shared types
 import type { Session } from '../shared/types.js';
+import { isBrowserShortcut } from './utils/browser-shortcuts.js';
 // Import utilities
 import { BREAKPOINTS, SIDEBAR, TIMING, TRANSITIONS, Z_INDEX } from './utils/constants.js';
 // Import logger
@@ -19,7 +20,7 @@ import { createLogger } from './utils/logger.js';
 import { isIOS } from './utils/mobile-utils.js';
 import { type MediaQueryState, responsiveObserver } from './utils/responsive-utils.js';
 import { triggerTerminalResize } from './utils/terminal-utils.js';
-import { initTitleUpdater } from './utils/title-updater.js';
+import { titleManager } from './utils/title-manager.js';
 // Import version
 import { VERSION } from './version.js';
 
@@ -74,6 +75,7 @@ export class VibeTunnelApp extends LitElement {
   @state() private mediaState: MediaQueryState = responsiveObserver.getCurrentState();
   @state() private showLogLink = false;
   @state() private hasActiveOverlay = false;
+  @state() private keyboardCaptureActive = true;
   private initialLoadComplete = false;
   private responsiveObserverInitialized = false;
   private initialRenderComplete = false;
@@ -95,7 +97,9 @@ export class VibeTunnelApp extends LitElement {
     this.setupResponsiveObserver();
     this.setupPreferences();
     // Initialize title updater
-    initTitleUpdater();
+    titleManager.initAutoUpdates();
+    // Listen for keyboard capture toggle events from input manager
+    document.addEventListener('capture-toggled', this.handleCaptureToggled as EventListener);
     // Initialize authentication and routing together
     this.initializeApp();
   }
@@ -145,6 +149,8 @@ export class VibeTunnelApp extends LitElement {
     window.removeEventListener('popstate', this.handlePopState);
     // Clean up keyboard shortcuts
     window.removeEventListener('keydown', this.handleKeyDown);
+    // Clean up capture toggle listener
+    document.removeEventListener('capture-toggled', this.handleCaptureToggled as EventListener);
     // Clean up auto refresh interval
     if (this.autoRefreshIntervalId !== null) {
       clearInterval(this.autoRefreshIntervalId);
@@ -159,16 +165,171 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
-    // Handle Cmd+O / Ctrl+O to open file browser
+    const isMacOS = navigator.platform.toLowerCase().includes('mac');
+
+    // Check if we're capturing and what the shortcut would do
+    const checkCapturedShortcut = (): {
+      captured: boolean;
+      browserAction?: string;
+      terminalAction?: string;
+    } => {
+      const key = e.key.toLowerCase();
+
+      // Define what shortcuts we capture and their actions
+      const capturedShortcuts: Record<
+        string,
+        { browser: string; terminal: string; check: () => boolean }
+      > = {
+        'mod+a': {
+          browser: 'Select all',
+          terminal: 'Line start',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'a',
+        },
+        'mod+e': {
+          browser: 'Search/Extension',
+          terminal: 'Line end',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'e',
+        },
+        'mod+w': {
+          browser: 'Close tab',
+          terminal: 'Delete word',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'w',
+        },
+        'mod+r': {
+          browser: 'Reload',
+          terminal: 'History search',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'r',
+        },
+        'mod+l': {
+          browser: 'Address bar',
+          terminal: 'Clear screen',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'l',
+        },
+        'mod+d': {
+          browser: 'Bookmark',
+          terminal: 'EOF/Exit',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'd',
+        },
+        'mod+f': {
+          browser: 'Find',
+          terminal: 'Forward char',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'f',
+        },
+        'mod+p': {
+          browser: 'Print',
+          terminal: 'Previous cmd',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'p',
+        },
+        'mod+u': {
+          browser: 'View source',
+          terminal: 'Delete to start',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'u',
+        },
+        'mod+k': {
+          browser: 'Search bar',
+          terminal: 'Delete to end',
+          check: () => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'k',
+        },
+        'alt+d': {
+          browser: 'Address bar',
+          terminal: 'Delete word fwd',
+          check: () => e.altKey && !e.ctrlKey && !e.metaKey && key === 'd',
+        },
+      };
+
+      for (const config of Object.values(capturedShortcuts)) {
+        if (config.check()) {
+          return {
+            captured: true,
+            browserAction: config.browser,
+            terminalAction: config.terminal,
+          };
+        }
+      }
+
+      return { captured: false };
+    };
+
+    // Always allow critical browser shortcuts
+    if (isBrowserShortcut(e)) {
+      return;
+    }
+
+    // In session view with capture active, check if we're capturing this shortcut
+    if (this.currentView === 'session' && this.keyboardCaptureActive) {
+      const { captured, browserAction, terminalAction } = checkCapturedShortcut();
+      if (captured) {
+        // Dispatch event for indicator animation
+        window.dispatchEvent(
+          new CustomEvent('shortcut-captured', {
+            detail: {
+              shortcut: this.formatShortcut(e),
+              browserAction,
+              terminalAction,
+            },
+          })
+        );
+        // Don't prevent default - let terminal handle it
+        // The terminal's input manager will capture these
+      }
+    }
+
+    // Legacy browser shortcut checking for non-session views
+    const shouldAllowBrowserShortcut = (): boolean => {
+      // If we're not in session view or capture is disabled, use the legacy allow list
+      if (this.currentView !== 'session' || !this.keyboardCaptureActive) {
+        const key = e.key.toLowerCase();
+        const hasModifier = e.ctrlKey || e.metaKey;
+        const hasShift = e.shiftKey;
+        const hasAlt = e.altKey;
+
+        // Tab management shortcuts
+        if (hasModifier && !hasShift && !hasAlt) {
+          if (['t', 'w', 'r'].includes(key)) return true;
+          if (/^[0-9]$/.test(key)) return true; // Include 0 for tab switching
+          if (['l', 'p', 's', 'f', 'd', 'h', 'j'].includes(key)) return true;
+        }
+
+        // Ctrl/Cmd + Shift shortcuts
+        if (hasModifier && hasShift && !hasAlt) {
+          if (['t', 'r', 'n'].includes(key)) return true;
+          if (key === 'delete') return true;
+          if (key === 'tab') return true;
+          if (!isMacOS && key === 'q') return true;
+          if (isMacOS && key === 'a') return true;
+        }
+
+        // Ctrl/Cmd + Tab
+        if (hasModifier && !hasShift && !hasAlt && key === 'tab') {
+          return true;
+        }
+
+        // Function keys
+        if (['f5', 'f6', 'f11'].includes(key)) return true;
+      }
+
+      return false;
+    };
+
+    // Check if this is a browser shortcut we should not intercept
+    if (shouldAllowBrowserShortcut()) {
+      return;
+    }
+
+    // VibeTunnel-specific shortcuts below this line
+
+    // Handle Cmd+O / Ctrl+O to open file browser (only in list view)
     if ((e.metaKey || e.ctrlKey) && e.key === 'o' && this.currentView === 'list') {
       e.preventDefault();
       this.handleNavigateToFileBrowser();
+      return;
     }
 
     // Handle Cmd+B / Ctrl+B to toggle sidebar
     if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
       e.preventDefault();
       this.handleToggleSidebar();
+      return;
     }
 
     // Handle Escape to close the session and return to list view
@@ -179,6 +340,7 @@ export class VibeTunnelApp extends LitElement {
     ) {
       e.preventDefault();
       this.handleNavigateToList();
+      return;
     }
   };
 
@@ -373,7 +535,7 @@ export class VibeTunnelApp extends LitElement {
           // Update page title if we're in list view
           if (this.currentView === 'list') {
             const sessionCount = this.sessions.length;
-            document.title = `VibeTunnel - ${sessionCount} Session${sessionCount !== 1 ? 's' : ''}`;
+            titleManager.setListTitle(sessionCount);
           }
 
           // Handle session loading state tracking
@@ -496,14 +658,8 @@ export class VibeTunnelApp extends LitElement {
       return;
     }
 
-    // Add class to prevent flicker when closing modal
-    document.body.classList.add('modal-closing');
+    // Simply close the modal without animation
     this.showCreateModal = false;
-
-    // Remove the class after a short delay
-    setTimeout(() => {
-      document.body.classList.remove('modal-closing');
-    }, 300);
 
     // Check if this was a terminal spawn (not a web session)
     if (message?.includes('Terminal spawned successfully')) {
@@ -684,40 +840,9 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private handleCreateModalClose() {
-    // Immediately hide the modal
+    // Simply close the modal without animation
     this.showCreateModal = false;
-
-    // Skip animation if we're in session detail view
-    const isInSessionDetailView = this.currentView === 'session';
-
-    // Then apply view transition if supported (non-blocking)
-    if (
-      !isInSessionDetailView &&
-      'startViewTransition' in document &&
-      typeof document.startViewTransition === 'function'
-    ) {
-      // Add a class to prevent flicker during transition
-      document.body.classList.add('modal-closing');
-      // Set data attribute to indicate transition is starting
-      document.documentElement.setAttribute('data-view-transition', 'active');
-
-      try {
-        const transition = document.startViewTransition(() => {
-          // Force a re-render
-          this.requestUpdate();
-        });
-
-        // Clean up the class and attribute after transition
-        transition.finished.finally(() => {
-          document.body.classList.remove('modal-closing');
-          document.documentElement.removeAttribute('data-view-transition');
-        });
-      } catch (_error) {
-        // If view transition fails, clean up
-        document.body.classList.remove('modal-closing');
-        document.documentElement.removeAttribute('data-view-transition');
-      }
-    }
+    this.requestUpdate();
   }
 
   private cleanupSessionViewStream(): void {
@@ -760,7 +885,7 @@ export class VibeTunnelApp extends LitElement {
     if (session) {
       const sessionName = session.name || session.command.join(' ');
       console.log('[App] Setting title:', sessionName);
-      document.title = `${sessionName} - VibeTunnel`;
+      titleManager.setSessionTitle(sessionName);
     } else {
       console.log('[App] No session found:', sessionId);
     }
@@ -782,7 +907,7 @@ export class VibeTunnelApp extends LitElement {
     this.selectedSessionId = sessionId || null;
 
     // Update document title
-    document.title = 'VibeTunnel - File Browser';
+    titleManager.setFileBrowserTitle();
 
     // Navigate to file browser view
     this.currentView = 'file-browser';
@@ -795,7 +920,7 @@ export class VibeTunnelApp extends LitElement {
 
     // Update document title with session count
     const sessionCount = this.sessions.length;
-    document.title = `VibeTunnel - ${sessionCount} Session${sessionCount !== 1 ? 's' : ''}`;
+    titleManager.setListTitle(sessionCount);
 
     // Disable View Transitions when navigating from session detail view
     // to prevent animations when sidebar is involved
@@ -873,6 +998,16 @@ export class VibeTunnelApp extends LitElement {
   private handleToggleSidebar() {
     this.sidebarCollapsed = !this.sidebarCollapsed;
     this.saveSidebarState(this.sidebarCollapsed);
+  }
+
+  private formatShortcut(e: KeyboardEvent): string {
+    const parts: string[] = [];
+    if (e.ctrlKey) parts.push('Ctrl');
+    if (e.metaKey) parts.push('Cmd');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.altKey) parts.push(navigator.platform.toLowerCase().includes('mac') ? 'Option' : 'Alt');
+    parts.push(e.key);
+    return parts.join('+');
   }
 
   private handleSessionStatusChanged(e: CustomEvent) {
@@ -1222,6 +1357,13 @@ export class VibeTunnelApp extends LitElement {
     }
   };
 
+  private handleCaptureToggled = (e: CustomEvent) => {
+    this.keyboardCaptureActive = e.detail.active;
+    logger.log(
+      `Keyboard capture ${this.keyboardCaptureActive ? 'enabled' : 'disabled'} via indicator`
+    );
+  };
+
   private get showSplitView(): boolean {
     return this.currentView === 'session' && this.selectedSessionId !== null;
   }
@@ -1236,7 +1378,7 @@ export class VibeTunnelApp extends LitElement {
       return 'w-full min-h-screen flex flex-col';
     }
 
-    const baseClasses = 'bg-dark-bg-secondary border-r border-dark-border flex flex-col';
+    const baseClasses = 'bg-secondary flex flex-col';
     const isMobile = this.mediaState.isMobile;
     // Only apply transition class when animations are ready (not during initial load)
     const transitionClass = this.sidebarAnimationReady && !isMobile ? 'sidebar-transition' : '';
@@ -1359,7 +1501,7 @@ export class VibeTunnelApp extends LitElement {
           ? html`
             <div class="fixed top-4 right-4" style="z-index: ${Z_INDEX.MODAL_BACKDROP};">
               <div
-                class="bg-status-error text-dark-bg px-4 py-2 rounded shadow-lg font-mono text-sm"
+                class="bg-status-error text-bg-elevated px-4 py-2 rounded shadow-lg font-mono text-sm"
               >
                 ${this.errorMessage}
                 <button
@@ -1370,7 +1512,7 @@ export class VibeTunnelApp extends LitElement {
                     }
                     this.errorMessage = '';
                   }}
-                  class="ml-2 text-dark-bg hover:text-dark-text"
+                  class="ml-2 text-bg-elevated hover:text-text-muted"
                 >
                   ✕
                 </button>
@@ -1384,7 +1526,7 @@ export class VibeTunnelApp extends LitElement {
           ? html`
             <div class="fixed top-4 right-4" style="z-index: ${Z_INDEX.MODAL_BACKDROP};">
               <div
-                class="bg-status-success text-dark-bg px-4 py-2 rounded shadow-lg font-mono text-sm"
+                class="bg-status-success text-bg-elevated px-4 py-2 rounded shadow-lg font-mono text-sm"
               >
                 ${this.successMessage}
                 <button
@@ -1395,7 +1537,7 @@ export class VibeTunnelApp extends LitElement {
                     }
                     this.successMessage = '';
                   }}
-                  class="ml-2 text-dark-bg hover:text-dark-text"
+                  class="ml-2 text-bg-elevated hover:text-text-muted"
                 >
                   ✕
                 </button>
@@ -1437,7 +1579,7 @@ export class VibeTunnelApp extends LitElement {
               <div
                 class="fixed inset-0 sm:hidden transition-all ${
                   this.isInSidebarDismissMode
-                    ? 'bg-black bg-opacity-50 backdrop-blur-sm'
+                    ? 'bg-bg bg-opacity-50 backdrop-blur-sm'
                     : 'bg-transparent pointer-events-none'
                 }"
                 style="z-index: ${Z_INDEX.MOBILE_OVERLAY}; transition-duration: ${TRANSITIONS.MOBILE_SLIDE}ms;"
@@ -1465,7 +1607,7 @@ export class VibeTunnelApp extends LitElement {
             @navigate-to-list=${this.handleNavigateToList}
             @toggle-sidebar=${this.handleToggleSidebar}
           ></app-header>
-          <div class="${this.showSplitView ? 'flex-1 overflow-y-auto' : 'flex-1'} bg-dark-bg-secondary">
+          <div class="${this.showSplitView ? 'flex-1 overflow-y-auto' : 'flex-1'} bg-secondary">
             <session-list
               .sessions=${this.sessions}
               .loading=${this.loading}
@@ -1490,7 +1632,7 @@ export class VibeTunnelApp extends LitElement {
           this.shouldShowResizeHandle
             ? html`
               <div
-                class="w-1 bg-dark-border hover:bg-accent-green cursor-ew-resize transition-colors ${
+                class="w-1 bg-border hover:bg-accent-green cursor-ew-resize transition-colors ${
                   this.isResizing ? 'bg-accent-green' : ''
                 }"
                 style="transition-duration: ${TRANSITIONS.RESIZE_HANDLE}ms;"
@@ -1515,11 +1657,13 @@ export class VibeTunnelApp extends LitElement {
                       .showSidebarToggle=${true}
                       .sidebarCollapsed=${this.sidebarCollapsed}
                       .disableFocusManagement=${this.hasActiveOverlay}
+                      .keyboardCaptureActive=${this.keyboardCaptureActive}
                       @navigate-to-list=${this.handleNavigateToList}
                       @toggle-sidebar=${this.handleToggleSidebar}
                       @create-session=${this.handleCreateSession}
                       @session-status-changed=${this.handleSessionStatusChanged}
                       @open-settings=${this.handleOpenSettings}
+                      @capture-toggled=${this.handleCaptureToggled}
                     ></session-view>
                   `
                 )}
@@ -1562,8 +1706,8 @@ export class VibeTunnelApp extends LitElement {
       ${
         this.showLogLink
           ? html`
-        <div class="fixed ${this.getLogButtonPosition()} right-4 text-dark-text-muted text-xs font-mono bg-dark-bg-secondary px-3 py-1.5 rounded-lg border border-dark-border shadow-sm transition-all duration-200" style="z-index: ${Z_INDEX.LOG_BUTTON};">
-          <a href="/logs" class="hover:text-dark-text transition-colors">Logs</a>
+        <div class="fixed ${this.getLogButtonPosition()} right-4 text-muted text-xs font-mono bg-secondary px-3 py-1.5 rounded-lg border border-base shadow-sm transition-all duration-200" style="z-index: ${Z_INDEX.LOG_BUTTON};">
+          <a href="/logs" class="hover:text-text transition-colors">Logs</a>
           <span class="ml-2 opacity-75">v${VERSION}</span>
         </div>
       `

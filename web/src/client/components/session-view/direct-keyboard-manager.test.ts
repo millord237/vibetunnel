@@ -1,6 +1,9 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DirectKeyboardManager } from '../components/session-view/direct-keyboard-manager';
-import type { InputManager } from '../components/session-view/input-manager';
+import { DirectKeyboardManager } from './direct-keyboard-manager';
+import type { InputManager } from './input-manager';
 
 describe('DirectKeyboardManager', () => {
   let manager: DirectKeyboardManager;
@@ -25,6 +28,13 @@ describe('DirectKeyboardManager', () => {
       value: {
         readText: vi.fn().mockResolvedValue('clipboard content'),
       },
+      writable: true,
+      configurable: true,
+    });
+
+    // Mock secure context for clipboard API to work
+    Object.defineProperty(window, 'isSecureContext', {
+      value: true,
       writable: true,
       configurable: true,
     });

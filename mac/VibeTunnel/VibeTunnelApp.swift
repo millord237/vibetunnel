@@ -22,6 +22,7 @@ struct VibeTunnelApp: App {
     @State var gitRepositoryMonitor = GitRepositoryMonitor()
     @State var repositoryDiscoveryService = RepositoryDiscoveryService()
     @State var screencapService: ScreencapService?
+    @State var sessionService: SessionService?
 
     init() {
         // Connect the app delegate to this app instance
@@ -29,19 +30,38 @@ struct VibeTunnelApp: App {
     }
 
     var body: some Scene {
-        #if os(macOS)
-            // Hidden WindowGroup to make Settings work in MenuBarExtra-only apps
-            // This is a workaround for FB10184971
-            WindowGroup("HiddenWindow") {
-                HiddenWindowView()
-            }
-            .windowResizability(.contentSize)
-            .defaultSize(width: 1, height: 1)
-            .windowStyle(.hiddenTitleBar)
+        // Hidden WindowGroup to make Settings work in MenuBarExtra-only apps
+        // This is a workaround for FB10184971
+        WindowGroup("HiddenWindow") {
+            HiddenWindowView()
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 1, height: 1)
+        .windowStyle(.hiddenTitleBar)
 
-            // Welcome Window
-            WindowGroup("Welcome", id: "welcome") {
-                WelcomeView()
+        // Welcome Window
+        WindowGroup("Welcome", id: "welcome") {
+            WelcomeView()
+                .environment(sessionMonitor)
+                .environment(serverManager)
+                .environment(ngrokService)
+                .environment(tailscaleService)
+                .environment(cloudflareService)
+                .environment(permissionManager)
+                .environment(terminalLauncher)
+                .environment(gitRepositoryMonitor)
+                .environment(repositoryDiscoveryService)
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 580, height: 480)
+        .windowStyle(.hiddenTitleBar)
+
+        // Session Detail Window
+        WindowGroup("Session Details", id: "session-detail", for: String.self) { $sessionId in
+            if let sessionId,
+               let session = sessionMonitor.sessions[sessionId]
+            {
+                SessionDetailView(session: session)
                     .environment(sessionMonitor)
                     .environment(serverManager)
                     .environment(ngrokService)
@@ -51,65 +71,43 @@ struct VibeTunnelApp: App {
                     .environment(terminalLauncher)
                     .environment(gitRepositoryMonitor)
                     .environment(repositoryDiscoveryService)
+            } else {
+                Text("Session not found")
+                    .frame(width: 400, height: 300)
             }
-            .windowResizability(.contentSize)
-            .defaultSize(width: 580, height: 480)
-            .windowStyle(.hiddenTitleBar)
+        }
+        .windowResizability(.contentSize)
 
-            // Session Detail Window
-            WindowGroup("Session Details", id: "session-detail", for: String.self) { $sessionId in
-                if let sessionId,
-                   let session = sessionMonitor.sessions[sessionId]
-                {
-                    SessionDetailView(session: session)
-                        .environment(sessionMonitor)
-                        .environment(serverManager)
-                        .environment(ngrokService)
-                        .environment(tailscaleService)
-                        .environment(cloudflareService)
-                        .environment(permissionManager)
-                        .environment(terminalLauncher)
-                        .environment(gitRepositoryMonitor)
-                        .environment(repositoryDiscoveryService)
-                } else {
-                    Text("Session not found")
-                        .frame(width: 400, height: 300)
-                }
-            }
-            .windowResizability(.contentSize)
+        // New Session is now integrated into the popover
 
-            // New Session is now integrated into the popover
-
-            Settings {
-                SettingsView()
-                    .environment(sessionMonitor)
-                    .environment(serverManager)
-                    .environment(ngrokService)
-                    .environment(tailscaleService)
-                    .environment(cloudflareService)
-                    .environment(permissionManager)
-                    .environment(terminalLauncher)
-                    .environment(gitRepositoryMonitor)
-                    .environment(repositoryDiscoveryService)
-            }
-            .commands {
-                CommandGroup(after: .appInfo) {
-                    Button("About VibeTunnel") {
-                        SettingsOpener.openSettings()
-                        // Navigate to About tab after settings opens
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(100))
-                            NotificationCenter.default.post(
-                                name: .openSettingsTab,
-                                object: SettingsTab.about
-                            )
-                        }
+        Settings {
+            SettingsView()
+                .environment(sessionMonitor)
+                .environment(serverManager)
+                .environment(ngrokService)
+                .environment(tailscaleService)
+                .environment(cloudflareService)
+                .environment(permissionManager)
+                .environment(terminalLauncher)
+                .environment(gitRepositoryMonitor)
+                .environment(repositoryDiscoveryService)
+                .environment(sessionService ?? SessionService(serverManager: serverManager, sessionMonitor: sessionMonitor))
+        }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("About VibeTunnel") {
+                    SettingsOpener.openSettings()
+                    // Navigate to About tab after settings opens
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(100))
+                        NotificationCenter.default.post(
+                            name: .openSettingsTab,
+                            object: SettingsTab.about
+                        )
                     }
                 }
             }
-
-            // MenuBarExtra is replaced by custom StatusBarController in AppDelegate
-        #endif
+        }
     }
 }
 
@@ -135,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "AppDelegate")
     private(set) var statusBarController: StatusBarController?
     private let notificationService = NotificationService.shared
+    private var repositoryPathSync: RepositoryPathSyncService?
 
     /// Distributed notification name used to ask an existing instance to show the Settings window.
     private static let showSettingsNotification = Notification.Name("sh.vibetunnel.vibetunnel.showSettings")
@@ -249,11 +248,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             logger.warning("🎥 Screencap service is disabled in settings")
         }
 
+        // Initialize SessionService
+        if let serverManager = app?.serverManager, let sessionMonitor = app?.sessionMonitor {
+            app?.sessionService = SessionService(serverManager: serverManager, sessionMonitor: sessionMonitor)
+        }
+
         // Start the terminal control handler (registers its handler)
         TerminalControlHandler.shared.start()
 
+        // Initialize system control handler with ready callback
+        SharedUnixSocketManager.shared.initializeSystemHandler {
+            self.logger.info("🎉 System ready event received from server")
+            // Could add any system-ready handling here if needed
+        }
+
         // Start the shared unix socket manager after all handlers are registered
         SharedUnixSocketManager.shared.connect()
+
+        // Initialize repository path sync service after Unix socket is connected
+        repositoryPathSync = RepositoryPathSyncService()
+        // Sync current path after initial connection
+        Task { [weak self] in
+            // Give socket time to connect
+            try? await Task.sleep(for: .seconds(1))
+            await self?.repositoryPathSync?.syncCurrentPath()
+        }
 
         // Start Git monitoring early
         app?.gitRepositoryMonitor.startMonitoring()
@@ -301,7 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                     repositoryDiscovery: repositoryDiscoveryService
                 )
             }
-            
+
             // Set up multi-layer cleanup for cloudflared processes
             setupMultiLayerCleanup()
         }
@@ -427,26 +446,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     func applicationWillTerminate(_ notification: Notification) {
         logger.info("🚨 applicationWillTerminate called - starting cleanup process")
-        
+
         let processInfo = ProcessInfo.processInfo
         let isRunningInTests = processInfo.environment["XCTestConfigurationFilePath"] != nil ||
             processInfo.environment["XCTestBundlePath"] != nil ||
             processInfo.environment["XCTestSessionIdentifier"] != nil ||
             processInfo.arguments.contains("-XCTest") ||
             NSClassFromString("XCTestCase") != nil
-        
+
         // Skip cleanup during tests
         if isRunningInTests {
             logger.info("Running in test mode - skipping termination cleanup")
             return
         }
-        
+
         // Ultra-fast cleanup for cloudflared - just send signals and exit
         if let cloudflareService = app?.cloudflareService, cloudflareService.isRunning {
             logger.info("🔥 Sending quick termination signal to Cloudflare")
             cloudflareService.sendTerminationSignal()
         }
-        
+
         // Stop HTTP server with very short timeout
         if let serverManager = app?.serverManager {
             let semaphore = DispatchSemaphore(value: 0)
@@ -457,24 +476,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // Only wait 0.5 seconds max
             _ = semaphore.wait(timeout: .now() + .milliseconds(500))
         }
-        
+
         // Remove observers (quick operations)
         #if !DEBUG
-        if !isRunningInTests {
-            DistributedNotificationCenter.default().removeObserver(
-                self,
-                name: Self.showSettingsNotification,
-                object: nil
-            )
-        }
+            if !isRunningInTests {
+                DistributedNotificationCenter.default().removeObserver(
+                    self,
+                    name: Self.showSettingsNotification,
+                    object: nil
+                )
+            }
         #endif
-        
+
         NotificationCenter.default.removeObserver(
             self,
             name: Notification.Name("checkForUpdates"),
             object: nil
         )
-        
+
         logger.info("🚨 applicationWillTerminate completed quickly")
     }
 
@@ -511,13 +530,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// Set up lightweight cleanup system for cloudflared processes
     private func setupMultiLayerCleanup() {
         logger.info("🛡️ Setting up cloudflared cleanup system")
-        
+
         // Only set up minimal cleanup - no atexit, no complex watchdog
         // The OS will clean up child processes automatically when parent dies
-        
+
         logger.info("🛡️ Cleanup system initialized (minimal mode)")
     }
-    
-
-
 }

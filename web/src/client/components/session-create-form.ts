@@ -18,6 +18,10 @@ import { TitleMode } from '../../shared/types.js';
 import type { AuthClient } from '../services/auth-client.js';
 import { createLogger } from '../utils/logger.js';
 import type { Session } from './session-list.js';
+import {
+  STORAGE_KEY as APP_PREFERENCES_STORAGE_KEY,
+  type AppPreferences,
+} from './unified-settings.js';
 
 const logger = createLogger('session-create-form');
 
@@ -50,6 +54,16 @@ export class SessionCreateForm extends LitElement {
   @state() private isCreating = false;
   @state() private showFileBrowser = false;
   @state() private selectedQuickStart = 'zsh';
+  @state() private showRepositoryDropdown = false;
+  @state() private repositories: Array<{
+    id: string;
+    path: string;
+    folderName: string;
+    lastModified: string;
+    relativePath: string;
+  }> = [];
+  @state() private isDiscovering = false;
+  @state() private macAppConnected = false;
 
   quickStartCommands = [
     { label: 'claude', command: 'claude' },
@@ -69,6 +83,8 @@ export class SessionCreateForm extends LitElement {
     super.connectedCallback();
     // Load from localStorage when component is first created
     this.loadFromLocalStorage();
+    // Check server status
+    this.checkServerStatus();
   }
 
   disconnectedCallback() {
@@ -110,8 +126,21 @@ export class SessionCreateForm extends LitElement {
       const savedSpawnWindow = localStorage.getItem(this.STORAGE_KEY_SPAWN_WINDOW);
       const savedTitleMode = localStorage.getItem(this.STORAGE_KEY_TITLE_MODE);
 
+      // Get app preferences for repository base path to use as default working dir
+      let appRepoBasePath = '~/';
+      const savedPreferences = localStorage.getItem(APP_PREFERENCES_STORAGE_KEY);
+      if (savedPreferences) {
+        try {
+          const preferences: AppPreferences = JSON.parse(savedPreferences);
+          appRepoBasePath = preferences.repositoryBasePath || '~/';
+        } catch (error) {
+          logger.error('Failed to parse app preferences:', error);
+        }
+      }
+
       // Always set values, using saved values or defaults
-      this.workingDir = savedWorkingDir || '~/';
+      // Priority: savedWorkingDir > appRepoBasePath > default
+      this.workingDir = savedWorkingDir || appRepoBasePath || '~/';
       this.command = savedCommand || 'zsh';
 
       // For spawn window, only use saved value if it exists and is valid
@@ -159,15 +188,36 @@ export class SessionCreateForm extends LitElement {
     }
   }
 
+  private async checkServerStatus() {
+    // Defensive check - authClient should always be provided
+    if (!this.authClient) {
+      logger.warn('checkServerStatus called without authClient');
+      this.macAppConnected = false;
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/server/status', {
+        headers: this.authClient.getAuthHeader(),
+      });
+      if (response.ok) {
+        const status = await response.json();
+        this.macAppConnected = status.macAppConnected || false;
+        logger.debug('server status:', status);
+      }
+    } catch (error) {
+      logger.warn('failed to check server status:', error);
+      // Default to not connected if we can't check
+      this.macAppConnected = false;
+    }
+  }
+
   updated(changedProperties: PropertyValues) {
     super.updated(changedProperties);
 
     // Handle visibility changes
     if (changedProperties.has('visible')) {
       if (this.visible) {
-        // Remove any lingering modal-closing class that might make the modal invisible
-        document.body.classList.remove('modal-closing');
-
         // Reset to defaults first to ensure clean state
         this.workingDir = '~/';
         this.command = 'zsh';
@@ -178,12 +228,18 @@ export class SessionCreateForm extends LitElement {
         // Then load from localStorage which may override the defaults
         this.loadFromLocalStorage();
 
+        // Re-check server status when form becomes visible
+        this.checkServerStatus();
+
         // Add global keyboard listener
         document.addEventListener('keydown', this.handleGlobalKeyDown);
 
         // Set data attributes for testing - both synchronously to avoid race conditions
         this.setAttribute('data-modal-state', 'open');
         this.setAttribute('data-modal-rendered', 'true');
+
+        // Discover repositories
+        this.discoverRepositories();
       } else {
         // Remove global keyboard listener when hidden
         document.removeEventListener('keydown', this.handleGlobalKeyDown);
@@ -245,7 +301,9 @@ export class SessionCreateForm extends LitElement {
   }
 
   private handleBrowse() {
+    logger.debug('handleBrowse called, setting showFileBrowser to true');
     this.showFileBrowser = true;
+    this.requestUpdate();
   }
 
   private handleDirectorySelected(e: CustomEvent) {
@@ -269,15 +327,18 @@ export class SessionCreateForm extends LitElement {
 
     this.isCreating = true;
 
+    // Determine if we're actually spawning a terminal window
+    const effectiveSpawnTerminal = this.spawnWindow && this.macAppConnected;
+
     const sessionData: SessionCreateData = {
       command: this.parseCommand(this.command?.trim() || ''),
       workingDir: this.workingDir?.trim() || '',
-      spawn_terminal: this.spawnWindow,
+      spawn_terminal: effectiveSpawnTerminal,
       titleMode: this.titleMode,
     };
 
     // Only add dimensions for web sessions (not external terminal spawns)
-    if (!this.spawnWindow) {
+    if (!effectiveSpawnTerminal) {
       // Use conservative defaults that work well across devices
       // The terminal will auto-resize to fit the actual container after creation
       sessionData.cols = 120;
@@ -404,33 +465,69 @@ export class SessionCreateForm extends LitElement {
     }
   }
 
+  private async discoverRepositories() {
+    // Get app preferences to read repositoryBasePath
+    const savedPreferences = localStorage.getItem(APP_PREFERENCES_STORAGE_KEY);
+    let basePath = '~/';
+
+    if (savedPreferences) {
+      try {
+        const preferences: AppPreferences = JSON.parse(savedPreferences);
+        basePath = preferences.repositoryBasePath || '~/';
+      } catch (error) {
+        logger.error('Failed to parse app preferences:', error);
+      }
+    }
+
+    this.isDiscovering = true;
+
+    try {
+      const response = await fetch(
+        `/api/repositories/discover?path=${encodeURIComponent(basePath)}`,
+        {
+          headers: this.authClient.getAuthHeader(),
+        }
+      );
+
+      if (response.ok) {
+        this.repositories = await response.json();
+        logger.debug(`Discovered ${this.repositories.length} repositories`);
+      } else {
+        logger.error('Failed to discover repositories');
+      }
+    } catch (error) {
+      logger.error('Error discovering repositories:', error);
+    } finally {
+      this.isDiscovering = false;
+    }
+  }
+
+  private handleToggleRepositoryDropdown() {
+    this.showRepositoryDropdown = !this.showRepositoryDropdown;
+  }
+
+  private handleSelectRepository(repoPath: string) {
+    this.workingDir = repoPath;
+    this.showRepositoryDropdown = false;
+  }
+
   render() {
     if (!this.visible) {
       return html``;
-    }
-
-    // Ensure modal-closing class is removed when rendering visible modal
-    if (this.visible) {
-      // Remove immediately
-      document.body.classList.remove('modal-closing');
-      // Also check if element has data-testid
-      requestAnimationFrame(() => {
-        document.body.classList.remove('modal-closing');
-      });
     }
 
     return html`
       <div class="modal-backdrop flex items-center justify-center" @click=${this.handleBackdropClick} role="dialog" aria-modal="true">
         <div
           class="modal-content font-mono text-sm w-full max-w-[calc(100vw-1rem)] sm:max-w-md lg:max-w-[576px] mx-2 sm:mx-4"
-          style="view-transition-name: create-session-modal; pointer-events: auto;"
+          style="pointer-events: auto;"
           @click=${(e: Event) => e.stopPropagation()}
           data-testid="session-create-modal"
         >
-          <div class="p-3 sm:p-4 lg:p-6 mb-1 sm:mb-2 lg:mb-3 border-b border-dark-border relative bg-gradient-to-r from-dark-bg-secondary to-dark-bg-tertiary flex-shrink-0">
+          <div class="p-3 sm:p-4 lg:p-6 mb-1 sm:mb-2 lg:mb-3 border-b border-base relative bg-gradient-to-r from-secondary to-tertiary flex-shrink-0">
             <h2 id="modal-title" class="text-primary text-base sm:text-lg lg:text-xl font-bold">New Session</h2>
             <button
-              class="absolute top-2 right-2 sm:top-3 sm:right-3 lg:top-5 lg:right-5 text-dark-text-muted hover:text-dark-text transition-all duration-200 p-1.5 sm:p-2 hover:bg-dark-bg-tertiary rounded-lg"
+              class="absolute top-2 right-2 sm:top-3 sm:right-3 lg:top-5 lg:right-5 text-muted hover:text-primary transition-all duration-200 p-1.5 sm:p-2 hover:bg-tertiary rounded-lg"
               @click=${this.handleCancel}
               title="Close (Esc)"
               aria-label="Close modal"
@@ -455,7 +552,7 @@ export class SessionCreateForm extends LitElement {
           <div class="p-3 sm:p-4 lg:p-6 overflow-y-auto flex-grow max-h-[65vh] sm:max-h-[75vh] lg:max-h-[80vh]">
             <!-- Session Name -->
             <div class="mb-2 sm:mb-3 lg:mb-5">
-              <label class="form-label text-dark-text-muted text-[10px] sm:text-xs lg:text-sm">Session Name (Optional):</label>
+              <label class="form-label text-muted text-[10px] sm:text-xs lg:text-sm">Session Name (Optional):</label>
               <input
                 type="text"
                 class="input-field py-1.5 sm:py-2 lg:py-3 text-xs sm:text-sm"
@@ -469,7 +566,7 @@ export class SessionCreateForm extends LitElement {
 
             <!-- Command -->
             <div class="mb-2 sm:mb-3 lg:mb-5">
-              <label class="form-label text-dark-text-muted text-[10px] sm:text-xs lg:text-sm">Command:</label>
+              <label class="form-label text-muted text-[10px] sm:text-xs lg:text-sm">Command:</label>
               <input
                 type="text"
                 class="input-field py-1.5 sm:py-2 lg:py-3 text-xs sm:text-sm"
@@ -483,7 +580,7 @@ export class SessionCreateForm extends LitElement {
 
             <!-- Working Directory -->
             <div class="mb-2 sm:mb-3 lg:mb-5">
-              <label class="form-label text-dark-text-muted text-[10px] sm:text-xs lg:text-sm">Working Directory:</label>
+              <label class="form-label text-muted text-[10px] sm:text-xs lg:text-sm">Working Directory:</label>
               <div class="flex gap-1.5 sm:gap-2">
                 <input
                   type="text"
@@ -495,7 +592,7 @@ export class SessionCreateForm extends LitElement {
                   data-testid="working-dir-input"
                 />
                 <button
-                  class="bg-dark-bg-elevated border border-dark-border rounded-lg p-1.5 sm:p-2 lg:p-3 font-mono text-dark-text-muted transition-all duration-200 hover:text-primary hover:bg-dark-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0"
+                  class="bg-bg-tertiary border border-border rounded-lg p-1.5 sm:p-2 lg:p-3 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0"
                   @click=${this.handleBrowse}
                   ?disabled=${this.disabled || this.isCreating}
                   title="Browse directories"
@@ -507,38 +604,89 @@ export class SessionCreateForm extends LitElement {
                     />
                   </svg>
                 </button>
+                <button
+                  class="bg-bg-tertiary border border-border rounded-lg p-1.5 sm:p-2 lg:p-3 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0 ${
+                    this.showRepositoryDropdown ? 'text-primary border-primary' : ''
+                  }"
+                  @click=${this.handleToggleRepositoryDropdown}
+                  ?disabled=${this.disabled || this.isCreating || this.repositories.length === 0 || this.isDiscovering}
+                  title="Choose from repositories"
+                  type="button"
+                >
+                  <svg width="12" height="12" class="sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4" viewBox="0 0 16 16" fill="currentColor">
+                    <path
+                      d="M5.22 1.22a.75.75 0 011.06 0l6.25 6.25a.75.75 0 010 1.06l-6.25 6.25a.75.75 0 01-1.06-1.06L10.94 8 5.22 2.28a.75.75 0 010-1.06z"
+                      transform=${this.showRepositoryDropdown ? 'rotate(90 8 8)' : ''}
+                    />
+                  </svg>
+                </button>
               </div>
+              ${
+                this.showRepositoryDropdown && this.repositories.length > 0
+                  ? html`
+                    <div class="mt-2 bg-bg-elevated border border-border rounded-lg overflow-hidden">
+                      <div class="max-h-48 overflow-y-auto">
+                        ${this.repositories.map(
+                          (repo) => html`
+                            <button
+                              @click=${() => this.handleSelectRepository(repo.path)}
+                              class="w-full text-left px-3 py-2 hover:bg-surface-hover transition-colors duration-200 border-b border-border last:border-b-0"
+                              type="button"
+                            >
+                              <div class="flex items-center justify-between">
+                                <div>
+                                  <div class="text-dark-text text-xs sm:text-sm font-medium">${repo.folderName}</div>
+                                  <div class="text-dark-text-muted text-[9px] sm:text-[10px] mt-0.5">${repo.relativePath}</div>
+                                </div>
+                                <div class="text-dark-text-muted text-[9px] sm:text-[10px]">
+                                  ${new Date(repo.lastModified).toLocaleDateString()}
+                                </div>
+                              </div>
+                            </button>
+                          `
+                        )}
+                      </div>
+                    </div>
+                  `
+                  : ''
+              }
             </div>
 
-            <!-- Spawn Window Toggle -->
-            <div class="mb-2 sm:mb-3 lg:mb-5 flex items-center justify-between bg-dark-bg-elevated border border-dark-border rounded-lg p-2 sm:p-3 lg:p-4">
-              <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
-                <span class="text-dark-text text-[10px] sm:text-xs lg:text-sm font-medium">Spawn window</span>
-                <p class="text-[9px] sm:text-[10px] lg:text-xs text-dark-text-muted mt-0.5 hidden sm:block">Opens native terminal window</p>
-              </div>
-              <button
-                role="switch"
-                aria-checked="${this.spawnWindow}"
-                @click=${this.handleSpawnWindowChange}
-                class="relative inline-flex h-4 w-8 sm:h-5 sm:w-10 lg:h-6 lg:w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-dark-bg ${
-                  this.spawnWindow ? 'bg-primary' : 'bg-dark-border'
-                }"
-                ?disabled=${this.disabled || this.isCreating}
-                data-testid="spawn-window-toggle"
-              >
-                <span
-                  class="inline-block h-3 w-3 sm:h-4 sm:w-4 lg:h-5 lg:w-5 transform rounded-full bg-white transition-transform ${
-                    this.spawnWindow ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0.5'
-                  }"
-                ></span>
-              </button>
-            </div>
+            <!-- Spawn Window Toggle - Only show when Mac app is connected -->
+            ${
+              this.macAppConnected
+                ? html`
+                  <div class="mb-2 sm:mb-3 lg:mb-5 flex items-center justify-between bg-elevated border border-base rounded-lg p-2 sm:p-3 lg:p-4">
+                    <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
+                      <span class="text-primary text-[10px] sm:text-xs lg:text-sm font-medium">Spawn window</span>
+                      <p class="text-[9px] sm:text-[10px] lg:text-xs text-muted mt-0.5 hidden sm:block">Opens native terminal window</p>
+                    </div>
+                    <button
+                      role="switch"
+                      aria-checked="${this.spawnWindow}"
+                      @click=${this.handleSpawnWindowChange}
+                      class="relative inline-flex h-4 w-8 sm:h-5 sm:w-10 lg:h-6 lg:w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-base ${
+                        this.spawnWindow ? 'bg-primary' : 'bg-border'
+                      }"
+                      ?disabled=${this.disabled || this.isCreating}
+                      data-testid="spawn-window-toggle"
+                    >
+                      <span
+                        class="inline-block h-3 w-3 sm:h-4 sm:w-4 lg:h-5 lg:w-5 transform rounded-full bg-bg-elevated transition-transform ${
+                          this.spawnWindow ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0.5'
+                        }"
+                      ></span>
+                    </button>
+                  </div>
+                `
+                : ''
+            }
 
             <!-- Terminal Title Mode -->
-            <div class="mb-2 sm:mb-4 lg:mb-6 flex items-center justify-between bg-dark-bg-elevated border border-dark-border rounded-lg p-2 sm:p-3 lg:p-4">
+            <div class="mb-2 sm:mb-4 lg:mb-6 flex items-center justify-between bg-elevated border border-base rounded-lg p-2 sm:p-3 lg:p-4">
               <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
-                <span class="text-dark-text text-[10px] sm:text-xs lg:text-sm font-medium">Terminal Title Mode</span>
-                <p class="text-[9px] sm:text-[10px] lg:text-xs text-dark-text-muted mt-0.5 hidden sm:block">
+                <span class="text-primary text-[10px] sm:text-xs lg:text-sm font-medium">Terminal Title Mode</span>
+                <p class="text-[9px] sm:text-[10px] lg:text-xs text-muted mt-0.5 hidden sm:block">
                   ${this.getTitleModeDescription()}
                 </p>
               </div>
@@ -546,16 +694,16 @@ export class SessionCreateForm extends LitElement {
                 <select
                   .value=${this.titleMode}
                   @change=${this.handleTitleModeChange}
-                  class="bg-dark-bg-secondary border border-dark-border rounded-lg px-1.5 py-1 pr-6 sm:px-2 sm:py-1.5 sm:pr-7 lg:px-3 lg:py-2 lg:pr-8 text-dark-text text-[10px] sm:text-xs lg:text-sm transition-all duration-200 hover:border-primary-hover focus:border-primary focus:outline-none appearance-none cursor-pointer"
+                  class="bg-secondary border border-base rounded-lg px-1.5 py-1 pr-6 sm:px-2 sm:py-1.5 sm:pr-7 lg:px-3 lg:py-2 lg:pr-8 text-primary text-[10px] sm:text-xs lg:text-sm transition-all duration-200 hover:border-primary-hover focus:border-primary focus:outline-none appearance-none cursor-pointer"
                   style="min-width: 80px"
                   ?disabled=${this.disabled || this.isCreating}
                 >
-                  <option value="${TitleMode.NONE}" class="bg-dark-bg-secondary text-dark-text" ?selected=${this.titleMode === TitleMode.NONE}>None</option>
-                  <option value="${TitleMode.FILTER}" class="bg-dark-bg-secondary text-dark-text" ?selected=${this.titleMode === TitleMode.FILTER}>Filter</option>
-                  <option value="${TitleMode.STATIC}" class="bg-dark-bg-secondary text-dark-text" ?selected=${this.titleMode === TitleMode.STATIC}>Static</option>
-                  <option value="${TitleMode.DYNAMIC}" class="bg-dark-bg-secondary text-dark-text" ?selected=${this.titleMode === TitleMode.DYNAMIC}>Dynamic</option>
+                  <option value="${TitleMode.NONE}" class="bg-secondary text-primary" ?selected=${this.titleMode === TitleMode.NONE}>None</option>
+                  <option value="${TitleMode.FILTER}" class="bg-secondary text-primary" ?selected=${this.titleMode === TitleMode.FILTER}>Filter</option>
+                  <option value="${TitleMode.STATIC}" class="bg-secondary text-primary" ?selected=${this.titleMode === TitleMode.STATIC}>Static</option>
+                  <option value="${TitleMode.DYNAMIC}" class="bg-secondary text-primary" ?selected=${this.titleMode === TitleMode.DYNAMIC}>Dynamic</option>
                 </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 sm:px-1.5 lg:px-2 text-dark-text-muted">
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 sm:px-1.5 lg:px-2 text-muted">
                   <svg class="h-2.5 w-2.5 sm:h-3 sm:w-3 lg:h-4 lg:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
@@ -565,7 +713,7 @@ export class SessionCreateForm extends LitElement {
 
             <!-- Quick Start Section -->
             <div class="mb-2 sm:mb-4 lg:mb-6">
-              <label class="form-label text-dark-text-muted uppercase text-[9px] sm:text-[10px] lg:text-xs tracking-wider mb-1 sm:mb-2 lg:mb-3"
+              <label class="form-label text-muted uppercase text-[9px] sm:text-[10px] lg:text-xs tracking-wider mb-1 sm:mb-2 lg:mb-3"
                 >Quick Start</label
               >
               <div class="grid grid-cols-2 gap-2 sm:gap-2.5 lg:gap-3 mt-1.5 sm:mt-2">
@@ -576,7 +724,7 @@ export class SessionCreateForm extends LitElement {
                       class="${
                         this.command === command
                           ? 'px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3 rounded-lg border text-left transition-all bg-primary bg-opacity-10 border-primary text-primary hover:bg-opacity-20 font-medium text-[10px] sm:text-xs lg:text-sm'
-                          : 'px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3 rounded-lg border text-left transition-all bg-dark-bg-elevated border-dark-border text-dark-text hover:bg-dark-surface-hover hover:border-primary hover:text-primary text-[10px] sm:text-xs lg:text-sm'
+                          : 'px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3 rounded-lg border text-left transition-all bg-elevated border-base text-primary hover:bg-hover hover:border-primary hover:text-primary text-[10px] sm:text-xs lg:text-sm'
                       }"
                       ?disabled=${this.disabled || this.isCreating}
                     >
@@ -591,14 +739,14 @@ export class SessionCreateForm extends LitElement {
 
             <div class="flex gap-1.5 sm:gap-2 lg:gap-3 mt-2 sm:mt-3 lg:mt-4 xl:mt-6">
               <button
-                class="flex-1 bg-dark-bg-elevated border border-dark-border text-dark-text px-2 py-1 sm:px-3 sm:py-1.5 lg:px-4 lg:py-2 xl:px-6 xl:py-3 rounded-lg font-mono text-[10px] sm:text-xs lg:text-sm transition-all duration-200 hover:bg-dark-surface-hover hover:border-dark-border-light"
+                class="flex-1 bg-elevated border border-base text-primary px-2 py-1 sm:px-3 sm:py-1.5 lg:px-4 lg:py-2 xl:px-6 xl:py-3 rounded-lg font-mono text-[10px] sm:text-xs lg:text-sm transition-all duration-200 hover:bg-hover hover:border-light"
                 @click=${this.handleCancel}
                 ?disabled=${this.isCreating}
               >
                 Cancel
               </button>
               <button
-                class="flex-1 bg-primary text-black px-2 py-1 sm:px-3 sm:py-1.5 lg:px-4 lg:py-2 xl:px-6 xl:py-3 rounded-lg font-mono text-[10px] sm:text-xs lg:text-sm font-medium transition-all duration-200 hover:bg-primary-hover hover:shadow-glow disabled:opacity-50 disabled:cursor-not-allowed"
+                class="flex-1 bg-primary text-text-bright px-2 py-1 sm:px-3 sm:py-1.5 lg:px-4 lg:py-2 xl:px-6 xl:py-3 rounded-lg font-mono text-[10px] sm:text-xs lg:text-sm font-medium transition-all duration-200 hover:bg-primary-hover hover:shadow-glow disabled:opacity-50 disabled:cursor-not-allowed"
                 @click=${this.handleCreate}
                 ?disabled=${
                   this.disabled ||

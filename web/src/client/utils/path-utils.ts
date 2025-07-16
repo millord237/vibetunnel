@@ -25,6 +25,13 @@ const HOME_PATTERN = /^(?:\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:[/\\]Users[/\\][
 export function formatPathForDisplay(path: string): string {
   if (!path) return '';
 
+  // If the path is already using ~ notation, return as-is
+  if (path.startsWith('~')) {
+    return path;
+  }
+
+  // Apply home directory replacement for absolute paths
+  // This includes Unix paths (starting with /) and Windows paths (starting with drive letter)
   // Use pre-compiled regex for better performance
   // The regex safely matches home directories without being affected by special characters in usernames
   return path.replace(HOME_PATTERN, '~');

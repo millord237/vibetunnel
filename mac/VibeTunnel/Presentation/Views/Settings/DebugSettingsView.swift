@@ -2,34 +2,52 @@ import AppKit
 import os.log
 import SwiftUI
 
+// MARK: - Dev Server Validation
+
+enum DevServerValidation: Equatable {
+    case notValidated
+    case validating
+    case valid
+    case invalid(String)
+
+    var isValid: Bool {
+        if case .valid = self { return true }
+        return false
+    }
+
+    var errorMessage: String? {
+        if case .invalid(let message) = self { return message }
+        return nil
+    }
+}
+
 /// Debug settings tab for development and troubleshooting
 struct DebugSettingsView: View {
-    @AppStorage("debugMode")
+    @AppStorage(AppConstants.UserDefaultsKeys.debugMode)
     private var debugMode = false
-    @AppStorage("logLevel")
+    @AppStorage(AppConstants.UserDefaultsKeys.logLevel)
     private var logLevel = "info"
+    @AppStorage(AppConstants.UserDefaultsKeys.useDevServer)
+    private var useDevServer = false
+    @AppStorage(AppConstants.UserDefaultsKeys.devServerPath)
+    private var devServerPath = ""
     @Environment(ServerManager.self)
     private var serverManager
     @State private var showPurgeConfirmation = false
+    @State private var devServerValidation: DevServerValidation = .notValidated
+    @State private var devServerManager = DevServerManager.shared
 
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "DebugSettings")
-
-    private var isServerRunning: Bool {
-        serverManager.isRunning
-    }
-
-    private var serverPort: Int {
-        Int(serverManager.port) ?? 4_020
-    }
 
     var body: some View {
         NavigationStack {
             Form {
-                ServerSection(
-                    isServerRunning: isServerRunning,
-                    serverPort: serverPort,
-                    serverManager: serverManager,
-                    getCurrentServerMode: getCurrentServerMode
+                DevelopmentServerSection(
+                    useDevServer: $useDevServer,
+                    devServerPath: $devServerPath,
+                    devServerValidation: $devServerValidation,
+                    validateDevServer: validateDevServer,
+                    serverManager: serverManager
                 )
 
                 DebugOptionsSection(
@@ -78,11 +96,6 @@ struct DebugSettingsView: View {
         }
     }
 
-    private func getCurrentServerMode() -> String {
-        // Server mode is fixed to Go
-        "Go"
-    }
-
     private func openConsole() {
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Console.app"))
     }
@@ -93,162 +106,9 @@ struct DebugSettingsView: View {
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: appDirectory.path)
         }
     }
-}
 
-// MARK: - Server Section
-
-private struct ServerSection: View {
-    let isServerRunning: Bool
-    let serverPort: Int
-    let serverManager: ServerManager
-    let getCurrentServerMode: () -> String
-
-    @State private var portConflict: PortConflict?
-    @State private var isCheckingPort = false
-
-    var body: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 12) {
-                // Server Information
-                VStack(alignment: .leading, spacing: 8) {
-                    LabeledContent("Status") {
-                        if isServerRunning {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                Text("Running")
-                            }
-                        } else {
-                            Text("Stopped")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    LabeledContent("Port") {
-                        Text("\(serverPort)")
-                    }
-
-                    LabeledContent("Bind Address") {
-                        Text(serverManager.bindAddress)
-                            .font(.system(.body, design: .monospaced))
-                    }
-
-                    LabeledContent("Base URL") {
-                        let baseAddress = serverManager.bindAddress == "0.0.0.0" ? "127.0.0.1" : serverManager
-                            .bindAddress
-                        if let serverURL = URL(string: "http://\(baseAddress):\(serverPort)") {
-                            Link("http://\(baseAddress):\(serverPort)", destination: serverURL)
-                                .font(.system(.body, design: .monospaced))
-                        } else {
-                            Text("http://\(baseAddress):\(serverPort)")
-                                .font(.system(.body, design: .monospaced))
-                        }
-                    }
-                }
-
-                Divider()
-
-                // Server Status
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("HTTP Server")
-                            Circle()
-                                .fill(isServerRunning ? .green : .red)
-                                .frame(width: 8, height: 8)
-                        }
-                        Text(isServerRunning ? "Server is running on port \(serverPort)" : "Server is stopped")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    // Show restart button for all server modes
-                    Button("Restart") {
-                        Task {
-                            await serverManager.manualRestart()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                // Port conflict warning
-                if let conflict = portConflict {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.orange)
-                                .font(.caption)
-
-                            Text("Port \(conflict.port) is used by \(conflict.process.name)")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                        }
-
-                        if !conflict.alternativePorts.isEmpty {
-                            HStack(spacing: 4) {
-                                Text("Try port:")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                ForEach(conflict.alternativePorts.prefix(3), id: \.self) { port in
-                                    Button(String(port)) {
-                                        serverManager.port = String(port)
-                                        Task {
-                                            await serverManager.restart()
-                                        }
-                                    }
-                                    .buttonStyle(.link)
-                                    .font(.caption)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.orange.opacity(0.1))
-                    .cornerRadius(6)
-                }
-            }
-            .padding(.vertical, 4)
-            .task {
-                await checkPortAvailability()
-            }
-            .task(id: serverPort) {
-                await checkPortAvailability()
-            }
-        } header: {
-            Text("HTTP Server")
-                .font(.headline)
-        }
-    }
-
-    private func checkPortAvailability() async {
-        isCheckingPort = true
-        defer { isCheckingPort = false }
-
-        let port = Int(serverPort)
-
-        // Only check if it's not the port we're already successfully using
-        if serverManager.isRunning && Int(serverManager.port) == port {
-            portConflict = nil
-            return
-        }
-
-        if let conflict = await PortConflictResolver.shared.detectConflict(on: port) {
-            // Only show warning for non-VibeTunnel processes
-            // VibeTunnel instances will be auto-killed by ServerManager
-            if case .reportExternalApp = conflict.suggestedAction {
-                portConflict = conflict
-            } else {
-                // It's our own process, will be handled automatically
-                portConflict = nil
-            }
-        } else {
-            portConflict = nil
-        }
+    private func validateDevServer(path: String) {
+        devServerValidation = devServerManager.validate(path: path)
     }
 }
 
@@ -257,6 +117,8 @@ private struct ServerSection: View {
 private struct DebugOptionsSection: View {
     @Binding var debugMode: Bool
     @Binding var logLevel: String
+    @AppStorage("verboseStatusCheckLogging")
+    private var verboseStatusCheckLogging = false
 
     var body: some View {
         Section {
@@ -274,6 +136,13 @@ private struct DebugOptionsSection: View {
                     .labelsHidden()
                 }
                 Text("Set the verbosity of application logs.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Verbose Status Check Logging", isOn: $verboseStatusCheckLogging)
+                Text("Log detailed information about remote service status checks.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -340,6 +209,133 @@ private struct DeveloperToolsSection: View {
         } header: {
             Text("Developer Tools")
                 .font(.headline)
+        }
+    }
+}
+
+// MARK: - Development Server Section
+
+private struct DevelopmentServerSection: View {
+    @Binding var useDevServer: Bool
+    @Binding var devServerPath: String
+    @Binding var devServerValidation: DevServerValidation
+    let validateDevServer: (String) -> Void
+    let serverManager: ServerManager
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 12) {
+                // Toggle for using dev server
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Use development server", isOn: $useDevServer)
+                        .onChange(of: useDevServer) { _, newValue in
+                            if newValue && !devServerPath.isEmpty {
+                                validateDevServer(devServerPath)
+                            }
+                            // Restart server if it's running and the setting changed
+                            if serverManager.isRunning {
+                                Task {
+                                    await serverManager.restart()
+                                }
+                            }
+                        }
+                    Text("Run the web server in development mode with hot reload instead of using the built-in server.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                // Path input (only shown when enabled)
+                if useDevServer {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            TextField("Web project path", text: $devServerPath)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: devServerPath) { _, newPath in
+                                    validateDevServer(newPath)
+                                }
+
+                            Button(action: selectDirectory) {
+                                Image(systemName: "folder")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Choose directory")
+                        }
+
+                        // Validation status
+                        if devServerValidation == .validating {
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                Text("Validating...")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else if devServerValidation.isValid {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                                Text("Valid project with 'pnpm run dev' script")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                            }
+                        } else if let error = devServerValidation.errorMessage {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+
+                        Text("Path to the VibeTunnel web project directory containing package.json.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("Development Server")
+                .font(.headline)
+        } footer: {
+            if useDevServer {
+                Text(
+                    "Requires pnpm to be installed. The server will run 'pnpm run dev' with the same arguments as the built-in server."
+                )
+                .font(.caption)
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private func selectDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+
+        // Set initial directory
+        if !devServerPath.isEmpty {
+            let expandedPath = NSString(string: devServerPath).expandingTildeInPath
+            panel.directoryURL = URL(fileURLWithPath: expandedPath)
+        }
+
+        if panel.runModal() == .OK, let url = panel.url {
+            let path = url.path
+            let homeDir = NSHomeDirectory()
+            if path.hasPrefix(homeDir) {
+                devServerPath = "~" + path.dropFirst(homeDir.count)
+            } else {
+                devServerPath = path
+            }
+
+            // Validate immediately after selection
+            validateDevServer(devServerPath)
         }
     }
 }
