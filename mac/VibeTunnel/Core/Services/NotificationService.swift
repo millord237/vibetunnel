@@ -60,6 +60,11 @@ final class NotificationService: NSObject {
     private override init() {
         super.init()
         setupNotifications()
+        
+        // Load preferences from API on startup
+        Task {
+            await syncPreferencesFromAPI()
+        }
     }
     
     /// Start monitoring server events
@@ -81,6 +86,11 @@ final class NotificationService: NSObject {
     func updatePreferences(_ prefs: NotificationPreferences) {
         self.preferences = prefs
         prefs.save()
+        
+        // Sync to API
+        Task {
+            await syncPreferencesToAPI(prefs)
+        }
     }
     
     // MARK: - Private Methods
@@ -428,4 +438,76 @@ private final class EventSource: NSObject, URLSessionDataDelegate, @unchecked Se
 
 extension Notification.Name {
     static let serverStateChanged = Notification.Name("serverStateChanged")
+}
+
+// MARK: - API Sync
+
+extension NotificationService {
+    /// Sync preferences from the API
+    private func syncPreferencesFromAPI() async {
+        guard serverManager.isRunning else { return }
+        
+        let port = serverManager.port
+        guard let url = URL(string: "http://localhost:\(port)/api/preferences/notifications") else {
+            return
+        }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Bool] {
+                // Map API preferences to our format
+                var prefs = NotificationPreferences()
+                prefs.sessionStart = json["sessionStart"] ?? true
+                prefs.sessionExit = json["sessionExit"] ?? true
+                prefs.commandCompletion = json["commandNotifications"] ?? true
+                prefs.commandError = json["sessionError"] ?? true
+                prefs.bell = json["systemAlerts"] ?? true
+                
+                // Update local preferences
+                self.preferences = prefs
+                prefs.save()
+                
+                logger.info("Synced notification preferences from API")
+            }
+        } catch {
+            logger.debug("Failed to sync preferences from API: \(error)")
+            // Not critical - we have local defaults
+        }
+    }
+    
+    /// Sync preferences to the API
+    private func syncPreferencesToAPI(_ prefs: NotificationPreferences) async {
+        guard serverManager.isRunning else { return }
+        
+        let port = serverManager.port
+        guard let url = URL(string: "http://localhost:\(port)/api/preferences/notifications") else {
+            return
+        }
+        
+        // Map our preferences to API format
+        let apiPrefs: [String: Any] = [
+            "enabled": true, // Always true for native notifications
+            "sessionStart": prefs.sessionStart,
+            "sessionExit": prefs.sessionExit,
+            "commandNotifications": prefs.commandCompletion,
+            "sessionError": prefs.commandError,
+            "systemAlerts": prefs.bell,
+            "soundEnabled": true,
+            "vibrationEnabled": false
+        ]
+        
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: apiPrefs)
+            var request = URLRequest(url: url)
+            request.httpMethod = "PUT"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = jsonData
+            
+            let (_, _) = try await URLSession.shared.data(for: request)
+            logger.info("Synced notification preferences to API")
+        } catch {
+            logger.error("Failed to sync preferences to API: \(error)")
+            // Not critical - changes are saved locally
+        }
+    }
 }

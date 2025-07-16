@@ -64,7 +64,7 @@ const TITLE_INJECTION_CHECK_INTERVAL_MS = 10; // How often to check for quiet pe
 
 // Foreground process tracking constants
 const PROCESS_POLL_INTERVAL_MS = 500; // How often to check foreground process
-const MIN_COMMAND_DURATION_MS = 3000; // Minimum command duration to notify (3 seconds)
+const MIN_COMMAND_DURATION_MS = 500; // Lowered from 3000ms for testing Claude commands
 const SHELL_COMMANDS = new Set(['cd', 'ls', 'pwd', 'echo', 'export', 'alias', 'unset']); // Built-in commands to ignore
 
 export class PtyManager extends EventEmitter {
@@ -2260,21 +2260,31 @@ export class PtyManager extends EventEmitter {
       // On Unix-like systems, we can check the terminal's foreground process group
       // biome-ignore lint/suspicious/noExplicitAny: Accessing internal node-pty property
       const ttyName = (session.ptyProcess as any)._pty; // Internal PTY name
-      if (!ttyName) return null;
+      if (!ttyName) {
+        logger.debug(`Session ${session.id}: No TTY name found, falling back to process tree`);
+        return this.getForegroundFromProcessTree(session);
+      }
 
       // Use ps to find processes associated with this terminal
-      const { stdout } = await this.execAsync(
-        `ps -t ${ttyName} -o pgid,pid,ppid,command | grep -v PGID | head -1`,
-        { timeout: 1000 }
-      );
+      const psCommand = `ps -t ${ttyName} -o pgid,pid,ppid,command | grep -v PGID | head -1`;
+      const { stdout } = await this.execAsync(psCommand, { timeout: 1000 });
 
       const lines = stdout.trim().split('\n');
-      if (lines.length > 0) {
+      if (lines.length > 0 && lines[0].trim()) {
         const parts = lines[0].trim().split(/\s+/);
         const pgid = Number.parseInt(parts[0], 10);
-        return Number.isNaN(pgid) ? null : pgid;
+
+        // Log the raw ps output for debugging
+        logger.debug(`Session ${session.id}: ps output for TTY ${ttyName}: "${lines[0].trim()}"`);
+
+        if (!Number.isNaN(pgid)) {
+          return pgid;
+        }
       }
-    } catch (_error) {
+
+      logger.debug(`Session ${session.id}: Could not parse PGID from ps output, falling back`);
+    } catch (error) {
+      logger.debug(`Session ${session.id}: Error getting terminal PGID: ${error}, falling back`);
       // Fallback: try to get foreground process from process tree
       return this.getForegroundFromProcessTree(session);
     }
@@ -2322,10 +2332,20 @@ export class PtyManager extends EventEmitter {
     try {
       const currentPgid = await this.getTerminalForegroundPgid(session);
 
+      // Enhanced debug logging
+      const timestamp = new Date().toISOString();
+      logger.debug(
+        chalk.gray(
+          `[${timestamp}] Session ${session.id} PGID check: current=${currentPgid}, previous=${session.currentForegroundPgid}, shell=${session.shellPgid}`
+        )
+      );
+
       // Add debug logging
       if (currentPgid !== session.currentForegroundPgid) {
         logger.debug(
-          `Session ${session.id}: Foreground PGID changed from ${session.currentForegroundPgid} to ${currentPgid}`
+          chalk.yellow(
+            `Session ${session.id}: Foreground PGID changed from ${session.currentForegroundPgid} to ${currentPgid}`
+          )
         );
       }
 
@@ -2336,10 +2356,17 @@ export class PtyManager extends EventEmitter {
 
         if (currentPgid === session.shellPgid && previousPgid !== session.shellPgid) {
           // A command just finished (returned to shell)
-          logger.debug(`Session ${session.id}: Command finished, returning to shell`);
+          logger.debug(
+            chalk.green(
+              `Session ${session.id}: Command finished, returning to shell (PGID ${previousPgid} → ${currentPgid})`
+            )
+          );
           await this.handleCommandFinished(session, previousPgid);
         } else if (currentPgid !== session.shellPgid) {
           // A new command started
+          logger.debug(
+            chalk.blue(`Session ${session.id}: New command started (PGID ${currentPgid})`)
+          );
           await this.handleCommandStarted(session, currentPgid);
         }
       }
@@ -2361,7 +2388,30 @@ export class PtyManager extends EventEmitter {
       if (commandProc) {
         session.currentCommand = commandProc.command;
         session.commandStartTime = Date.now();
-        logger.debug(`Session ${session.id}: Command started: ${commandProc.command}`);
+
+        // Special logging for Claude commands
+        const isClaudeCommand = commandProc.command.toLowerCase().includes('claude');
+        if (isClaudeCommand) {
+          logger.log(
+            chalk.cyan(
+              `🤖 Session ${session.id}: Claude command started: "${commandProc.command}" (PGID: ${pgid})`
+            )
+          );
+        } else {
+          logger.debug(
+            `Session ${session.id}: Command started: "${commandProc.command}" (PGID: ${pgid})`
+          );
+        }
+
+        // Log process tree for debugging
+        logger.debug(
+          `Process tree for session ${session.id}:`,
+          processTree.map((p) => `  PID: ${p.pid}, PGID: ${p.pgid}, CMD: ${p.command}`).join('\n')
+        );
+      } else {
+        logger.warn(
+          chalk.yellow(`Session ${session.id}: Could not find process info for PGID ${pgid}`)
+        );
       }
     } catch (error) {
       logger.debug(`Failed to get command info for session ${session.id}:`, error);
@@ -2375,21 +2425,47 @@ export class PtyManager extends EventEmitter {
     session: PtySession,
     pgid: number | undefined
   ): Promise<void> {
-    if (!pgid || !session.commandStartTime || !session.currentCommand) return;
+    if (!pgid || !session.commandStartTime || !session.currentCommand) {
+      logger.debug(
+        chalk.red(
+          `Session ${session.id}: Cannot handle command finished - missing data: pgid=${pgid}, startTime=${session.commandStartTime}, command="${session.currentCommand}"`
+        )
+      );
+      return;
+    }
 
     const duration = Date.now() - session.commandStartTime;
     const command = session.currentCommand;
+    const isClaudeCommand = command.toLowerCase().includes('claude');
 
     // Reset tracking
     session.currentCommand = undefined;
     session.commandStartTime = undefined;
 
-    // Check if we should notify
-    if (duration < MIN_COMMAND_DURATION_MS) {
+    // Log command completion for Claude
+    if (isClaudeCommand) {
+      logger.log(
+        chalk.cyan(
+          `🤖 Session ${session.id}: Claude command completed: "${command}" (duration: ${duration}ms)`
+        )
+      );
+    }
+
+    // Check if we should notify - bypass duration check for Claude commands
+    if (!isClaudeCommand && duration < MIN_COMMAND_DURATION_MS) {
       logger.debug(
-        `Session ${session.id}: Command "${command}" too short (${duration}ms), not notifying`
+        `Session ${session.id}: Command "${command}" too short (${duration}ms < ${MIN_COMMAND_DURATION_MS}ms), not notifying`
       );
       return;
+    }
+
+    // Log duration for Claude commands even if bypassing the check
+    if (isClaudeCommand && duration < MIN_COMMAND_DURATION_MS) {
+      logger.log(
+        chalk.yellow(
+          `⚡ Session ${session.id}: Claude command completed quickly (${duration}ms) - still notifying`
+        )
+      );
     }
 
     // Check if it's a built-in shell command
@@ -2411,21 +2487,38 @@ export class PtyManager extends EventEmitter {
       if (stdout.includes('NOTFOUND') || stdout.includes('Z')) {
         // Process is zombie or not found, likely exited
         // We can't reliably get exit code this way
+        logger.debug(
+          `Session ${session.id}: Process ${pgid} not found or zombie, assuming exit code 0`
+        );
       }
     } catch (_error) {
       // Ignore errors in exit code detection
+      logger.debug(`Session ${session.id}: Could not detect exit code for process ${pgid}`);
     }
 
     // Emit the event
-    this.emit('commandFinished', {
+    const eventData = {
       sessionId: session.id,
       command,
       exitCode,
       duration,
       timestamp: new Date().toISOString(),
-    });
+    };
 
-    logger.log(`Session ${session.id}: Command finished: "${command}" (duration: ${duration}ms)`);
+    this.emit('commandFinished', eventData);
+
+    // Enhanced logging for events
+    if (isClaudeCommand) {
+      logger.log(
+        chalk.green(
+          `✅ Session ${session.id}: Claude command notification event emitted: "${command}" (duration: ${duration}ms, exit: ${exitCode})`
+        )
+      );
+    } else {
+      logger.log(`Session ${session.id}: Command finished: "${command}" (duration: ${duration}ms)`);
+    }
+
+    logger.debug(`Session ${session.id}: commandFinished event data:`, eventData);
   }
 
   /**

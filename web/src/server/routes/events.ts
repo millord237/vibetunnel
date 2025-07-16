@@ -39,6 +39,16 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
         timestamp: new Date().toISOString(),
         ...data,
       };
+
+      // Enhanced logging for Claude-related events
+      if (
+        (type === 'command-finished' || type === 'command-error') &&
+        data.command &&
+        (data.command as string).toLowerCase().includes('claude')
+      ) {
+        logger.log(`🚀 SSE: Sending Claude ${type} event for session ${data.sessionId}`);
+      }
+
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     };
 
@@ -80,6 +90,12 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
     }
 
     const onCommandFinished = (data: CommandFinishedEvent) => {
+      const isClaudeCommand = data.command.toLowerCase().includes('claude');
+
+      if (isClaudeCommand) {
+        logger.debug(`📨 SSE Route: Received Claude commandFinished event - preparing to send SSE`);
+      }
+
       if (data.exitCode === 0) {
         sendEvent('command-finished', {
           sessionId: data.sessionId,

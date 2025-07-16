@@ -112,7 +112,14 @@ final class SystemPermissionManager {
         case .appleScript:
             requestAppleScriptPermission()
         case .screenRecording:
-            openSystemSettings(for: permission)
+            Task {
+                // Try to request directly first
+                let granted = await requestScreenRecordingPermission()
+                if !granted {
+                    // If denied, open settings
+                    openSystemSettings(for: permission)
+                }
+            }
         case .accessibility:
             requestAccessibilityPermission()
         }
@@ -266,12 +273,27 @@ final class SystemPermissionManager {
     // MARK: - Screen Recording Permission
 
     private func checkScreenRecordingPermission() async -> Bool {
+        // Use CGPreflightScreenCaptureAccess which checks without prompting
+        // This returns true if permission was already granted, false otherwise
+        let hasPermission = CGPreflightScreenCaptureAccess()
+        
+        if !hasPermission {
+            logger.debug("Screen recording permission not granted")
+        }
+        
+        return hasPermission
+    }
+    
+    /// Request screen recording permission (will show prompt if needed)
+    func requestScreenRecordingPermission() async -> Bool {
         do {
             // This will trigger the permission prompt if needed
             _ = try await SCShareableContent.current
+            permissions[.screenRecording] = true
             return true
         } catch {
-            logger.debug("Screen recording permission not granted: \(error)")
+            logger.debug("Screen recording permission denied: \(error)")
+            permissions[.screenRecording] = false
             return false
         }
     }

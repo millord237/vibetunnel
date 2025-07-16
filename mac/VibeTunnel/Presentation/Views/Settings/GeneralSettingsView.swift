@@ -18,6 +18,12 @@ struct GeneralSettingsView: View {
     var updateChannel: UpdateChannel {
         UpdateChannel(rawValue: updateChannelRaw) ?? .stable
     }
+    
+    private func updateNotificationPreferences() {
+        // Load current preferences and notify the service
+        let prefs = NotificationService.NotificationPreferences()
+        NotificationService.shared.updatePreferences(prefs)
+    }
 
     var body: some View {
         NavigationStack {
@@ -39,38 +45,46 @@ struct GeneralSettingsView: View {
                             .foregroundStyle(.secondary)
                         
                         if showNotifications {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Toggle("Session Started", isOn: .init(
-                                    get: { UserDefaults.standard.bool(forKey: "notifications.sessionStart") },
-                                    set: { UserDefaults.standard.set($0, forKey: "notifications.sessionStart") }
-                                ))
-                                .padding(.leading, 20)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Notify me for:")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.leading, 20)
+                                    .padding(.top, 4)
                                 
-                                Toggle("Session Ended", isOn: .init(
-                                    get: { UserDefaults.standard.bool(forKey: "notifications.sessionExit") },
-                                    set: { UserDefaults.standard.set($0, forKey: "notifications.sessionExit") }
-                                ))
-                                .padding(.leading, 20)
-                                
-                                Toggle("Command Completion", isOn: .init(
-                                    get: { UserDefaults.standard.bool(forKey: "notifications.commandCompletion") },
-                                    set: { UserDefaults.standard.set($0, forKey: "notifications.commandCompletion") }
-                                ))
-                                .padding(.leading, 20)
-                                
-                                Toggle("Command Errors", isOn: .init(
-                                    get: { UserDefaults.standard.bool(forKey: "notifications.commandError") },
-                                    set: { UserDefaults.standard.set($0, forKey: "notifications.commandError") }
-                                ))
-                                .padding(.leading, 20)
-                                
-                                Toggle("Terminal Bell", isOn: .init(
-                                    get: { UserDefaults.standard.bool(forKey: "notifications.bell") },
-                                    set: { UserDefaults.standard.set($0, forKey: "notifications.bell") }
-                                ))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    NotificationCheckbox(
+                                        title: "Session starts",
+                                        key: "notifications.sessionStart",
+                                        updateAction: updateNotificationPreferences
+                                    )
+                                    
+                                    NotificationCheckbox(
+                                        title: "Session ends",
+                                        key: "notifications.sessionExit",
+                                        updateAction: updateNotificationPreferences
+                                    )
+                                    
+                                    NotificationCheckbox(
+                                        title: "Commands complete (> 3 seconds)",
+                                        key: "notifications.commandCompletion",
+                                        updateAction: updateNotificationPreferences
+                                    )
+                                    
+                                    NotificationCheckbox(
+                                        title: "Commands fail",
+                                        key: "notifications.commandError",
+                                        updateAction: updateNotificationPreferences
+                                    )
+                                    
+                                    NotificationCheckbox(
+                                        title: "Terminal bell (\u{0007})",
+                                        key: "notifications.bell",
+                                        updateAction: updateNotificationPreferences
+                                    )
+                                }
                                 .padding(.leading, 20)
                             }
-                            .font(.caption)
                         }
                     }
 
@@ -189,6 +203,52 @@ struct GeneralSettingsView: View {
             try? await Task.sleep(for: .seconds(2))
             isCheckingForUpdates = false
         }
+    }
+}
+
+// MARK: - Notification Checkbox Component
+
+private struct NotificationCheckbox: View {
+    let title: String
+    let key: String
+    let updateAction: () -> Void
+    
+    @State private var isChecked: Bool
+    
+    init(title: String, key: String, updateAction: @escaping () -> Void) {
+        self.title = title
+        self.key = key
+        self.updateAction = updateAction
+        self._isChecked = State(initialValue: UserDefaults.standard.bool(forKey: key))
+    }
+    
+    var body: some View {
+        Button(action: toggleCheck) {
+            HStack(spacing: 6) {
+                Image(systemName: isChecked ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(isChecked ? Color.accentColor : Color.secondary)
+                    .font(.system(size: 14))
+                    .animation(.easeInOut(duration: 0.15), value: isChecked)
+                
+                Text(title)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onAppear {
+            // Sync with UserDefaults on appear
+            isChecked = UserDefaults.standard.bool(forKey: key)
+        }
+    }
+    
+    private func toggleCheck() {
+        isChecked.toggle()
+        UserDefaults.standard.set(isChecked, forKey: key)
+        updateAction()
     }
 }
 

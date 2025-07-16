@@ -100,7 +100,7 @@ export class UnifiedSettings extends LitElement {
 
     this.permission = pushNotificationService.getPermission();
     this.subscription = pushNotificationService.getSubscription();
-    this.notificationPreferences = pushNotificationService.loadPreferences();
+    this.notificationPreferences = await pushNotificationService.loadPreferences();
 
     // Listen for changes
     this.permissionChangeUnsubscribe = pushNotificationService.onPermissionChange((permission) => {
@@ -165,7 +165,7 @@ export class UnifiedSettings extends LitElement {
         // Disable notifications
         await pushNotificationService.unsubscribe();
         this.notificationPreferences = { ...this.notificationPreferences, enabled: false };
-        pushNotificationService.savePreferences(this.notificationPreferences);
+        await pushNotificationService.savePreferences(this.notificationPreferences);
         this.dispatchEvent(new CustomEvent('notifications-disabled'));
       } else {
         // Enable notifications
@@ -174,7 +174,7 @@ export class UnifiedSettings extends LitElement {
           const subscription = await pushNotificationService.subscribe();
           if (subscription) {
             this.notificationPreferences = { ...this.notificationPreferences, enabled: true };
-            pushNotificationService.savePreferences(this.notificationPreferences);
+            await pushNotificationService.savePreferences(this.notificationPreferences);
             this.dispatchEvent(new CustomEvent('notifications-enabled'));
           } else {
             this.dispatchEvent(
@@ -221,7 +221,7 @@ export class UnifiedSettings extends LitElement {
   ) {
     this.notificationPreferences = { ...this.notificationPreferences, [key]: value };
     this.hasNotificationChanges = true;
-    pushNotificationService.savePreferences(this.notificationPreferences);
+    await pushNotificationService.savePreferences(this.notificationPreferences);
   }
 
   private handleAppPreferenceChange(key: keyof AppPreferences, value: boolean) {
@@ -234,9 +234,9 @@ export class UnifiedSettings extends LitElement {
   }
 
   private get isNotificationsEnabled(): boolean {
-    return (
-      this.notificationPreferences.enabled && this.permission === 'granted' && !!this.subscription
-    );
+    // Show as enabled if the preference is set, regardless of subscription state
+    // This allows the toggle to properly reflect user intent
+    return this.notificationPreferences.enabled;
   }
 
   private renderSubscriptionStatus() {
@@ -359,16 +359,16 @@ export class UnifiedSettings extends LitElement {
                 </div>
                 <button
                   role="switch"
-                  aria-checked="${this.isNotificationsEnabled}"
+                  aria-checked="${this.notificationPreferences.enabled}"
                   @click=${this.handleToggleNotifications}
                   ?disabled=${this.isLoading}
                   class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-green focus:ring-offset-2 focus:ring-offset-dark-bg ${
-                    this.isNotificationsEnabled ? 'bg-accent-green' : 'bg-dark-border'
+                    this.notificationPreferences.enabled ? 'bg-accent-green' : 'bg-dark-border'
                   }"
                 >
                   <span
                     class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                      this.isNotificationsEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                      this.notificationPreferences.enabled ? 'translate-x-5' : 'translate-x-0.5'
                     }"
                   ></span>
                 </button>
