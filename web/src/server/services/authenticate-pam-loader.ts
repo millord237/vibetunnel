@@ -27,7 +27,10 @@ if (fs.existsSync(seaPamPath) || fs.existsSync(seaNativePamPath)) {
   const possiblePaths = [
     seaPamPath,
     seaNativePamPath,
-    path.join(__dirname, '..', '..', '..', 'native', 'authenticate_pam.node'),
+    // Try different parent levels for native directory
+    ...[1, 2, 3].map((levels) =>
+      path.join(__dirname, ...Array(levels).fill('..'), 'native', 'authenticate_pam.node')
+    ),
   ];
 
   let loaded = false;
@@ -77,27 +80,38 @@ if (fs.existsSync(seaPamPath) || fs.existsSync(seaNativePamPath)) {
 
   // If normal require failed, try the optional-modules location
   if (!loaded) {
-    const optionalModulePath = path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
+    // Try different parent directory levels for various contexts:
+    // 1 level up: bundled context (dist-npm/lib/)
+    // 3 levels up: development context (src/server/services/)
+    // 2 levels up: alternative bundled location
+    const parentLevels = [1, 3, 2];
+    const modulePath = [
       'optional-modules',
       'authenticate-pam',
       'build',
       'Release',
-      'authenticate_pam.node'
-    );
-    if (fs.existsSync(optionalModulePath)) {
-      try {
-        const nativeModule = loadNativeModule(optionalModulePath);
-        if (nativeModule.authenticate) {
-          authenticate = nativeModule.authenticate;
-          loaded = true;
-          console.log('Loaded authenticate-pam from optional-modules location');
+      'authenticate_pam.node',
+    ];
+
+    for (const levels of parentLevels) {
+      const pathSegments = [__dirname, ...Array(levels).fill('..'), ...modulePath];
+      const optionalModulePath = path.join(...pathSegments);
+
+      if (fs.existsSync(optionalModulePath)) {
+        try {
+          const nativeModule = loadNativeModule(optionalModulePath);
+          if (nativeModule.authenticate) {
+            authenticate = nativeModule.authenticate;
+            loaded = true;
+            console.log(
+              'Loaded authenticate-pam from optional-modules location:',
+              optionalModulePath
+            );
+            break;
+          }
+        } catch (_loadError) {
+          // Continue to next path
         }
-      } catch (_loadError) {
-        // Continue to stub
       }
     }
   }
