@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 /// Project folder configuration page in the welcome flow.
 ///
@@ -18,6 +19,12 @@ struct ProjectFolderPageView: View {
         let name: String
         let path: String
     }
+
+    @State private var scanTask: Task<Void, Never>?
+    @Binding var currentPage: Int
+    
+    // Page index for ProjectFolderPageView in the welcome flow
+    private let pageIndex = 4
 
     var body: some View {
         VStack(spacing: 30) {
@@ -103,14 +110,36 @@ struct ProjectFolderPageView: View {
         .padding()
         .onAppear {
             selectedPath = repositoryBasePath
-            if !selectedPath.isEmpty {
-                scanForRepositories()
+        }
+        .onChange(of: currentPage) { _, newPage in
+            if newPage == pageIndex {
+                // Page just became visible
+                if !selectedPath.isEmpty {
+                    scanForRepositories()
+                }
+            } else {
+                // Page is no longer visible, cancel any ongoing scan
+                scanTask?.cancel()
+                // Ensure UI is reset if scan was in progress
+                isScanning = false
             }
         }
         .onChange(of: selectedPath) { _, newValue in
             repositoryBasePath = newValue
-            if !newValue.isEmpty {
-                scanForRepositories()
+            
+            // Cancel any existing scan
+            scanTask?.cancel()
+            
+            // Debounce path changes to prevent rapid successive scans
+            scanTask = Task {
+                // Add small delay to debounce rapid changes
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                
+                // Only scan if we're the current page
+                if currentPage == pageIndex && !newValue.isEmpty {
+                    await performScan()
+                }
             }
         }
     }
@@ -147,61 +176,90 @@ struct ProjectFolderPageView: View {
     }
 
     private func scanForRepositories() {
+        // Cancel any existing scan
+        scanTask?.cancel()
+        
+        scanTask = Task {
+            await performScan()
+        }
+    }
+    
+    private func performScan() async {
         isScanning = true
         discoveredRepos = []
+        
+        let expandedPath = (selectedPath as NSString).expandingTildeInPath
+        let repos = await findGitRepositories(in: expandedPath, maxDepth: 3)
 
-        Task {
-            let expandedPath = (selectedPath as NSString).expandingTildeInPath
-            let repos = await findGitRepositories(in: expandedPath, maxDepth: 3)
-
-            await MainActor.run {
+        await MainActor.run {
+            // Always update isScanning to false when done, regardless of cancellation
+            if !Task.isCancelled {
                 discoveredRepos = repos.map { path in
                     RepositoryInfo(name: URL(fileURLWithPath: path).lastPathComponent, path: path)
                 }
-                isScanning = false
             }
+            isScanning = false
         }
     }
 
     private func findGitRepositories(in path: String, maxDepth: Int) async -> [String] {
         var repositories: [String] = []
-
-        func scanDirectory(_ dirPath: String, depth: Int) {
+        
+        // Use a recursive async function that properly checks for cancellation
+        func scanDirectory(_ dirPath: String, depth: Int) async {
+            // Check for cancellation at each level
+            guard !Task.isCancelled else { return }
             guard depth <= maxDepth else { return }
-
+            
             do {
                 let contents = try FileManager.default.contentsOfDirectory(atPath: dirPath)
-
+                
                 for item in contents {
+                    // Check for cancellation in the loop
+                    try Task.checkCancellation()
+                    
                     let fullPath = (dirPath as NSString).appendingPathComponent(item)
                     var isDirectory: ObjCBool = false
-
+                    
                     guard FileManager.default.fileExists(atPath: fullPath, isDirectory: &isDirectory),
                           isDirectory.boolValue else { continue }
-
+                    
                     // Skip hidden directories except .git
                     if item.hasPrefix(".") && item != ".git" { continue }
-
+                    
                     // Check if this directory contains .git
                     let gitPath = (fullPath as NSString).appendingPathComponent(".git")
                     if FileManager.default.fileExists(atPath: gitPath) {
                         repositories.append(fullPath)
                     } else {
                         // Recursively scan subdirectories
-                        scanDirectory(fullPath, depth: depth + 1)
+                        await scanDirectory(fullPath, depth: depth + 1)
                     }
                 }
+            } catch is CancellationError {
+                // Task was cancelled, stop scanning
+                return
+            } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoPermissionError {
+                // Silently ignore permission errors - common for system directories
+            } catch let error as NSError where error.domain == NSPOSIXErrorDomain && error.code == 1 {
+                // Operation not permitted - another common permission error
             } catch {
-                // Ignore directories we can't read
+                // Log unexpected errors for debugging
+                Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "ProjectFolderPageView")
+                    .debug("Unexpected error scanning \(dirPath): \(error)")
             }
         }
-
-        scanDirectory(path, depth: 0)
+        
+        // Run the scanning on a lower priority
+        await Task(priority: .background) {
+            await scanDirectory(path, depth: 0)
+        }.value
+        
         return repositories
     }
 }
 
 #Preview {
-    ProjectFolderPageView()
+    ProjectFolderPageView(currentPage: .constant(4))
         .frame(width: 640, height: 300)
 }
