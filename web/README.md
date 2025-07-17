@@ -4,9 +4,32 @@ Full-featured terminal sharing server with web interface for macOS and Linux. Wi
 
 ## Installation
 
+### From npm (Recommended)
 ```bash
 npm install -g vibetunnel
 ```
+
+### From Source
+```bash
+git clone https://github.com/amantus-ai/vibetunnel.git
+cd vibetunnel/web
+pnpm install
+pnpm run build
+```
+
+## Installation Differences
+
+**npm package**:
+- Pre-built binaries for common platforms (macOS x64/arm64, Linux x64/arm64)
+- Automatic fallback to source compilation if pre-built binaries unavailable
+- Global installation makes `vibetunnel` and `vt` commands available system-wide
+- Includes production dependencies only
+
+**Source installation**:
+- Full development environment with hot reload (`pnpm run dev`)
+- Access to all development scripts and tools
+- Ability to modify and rebuild the application
+- Includes test suites and development dependencies
 
 ## Requirements
 
@@ -89,6 +112,54 @@ This npm package includes:
 - macOS (Intel and Apple Silicon)
 - Linux (x64 and ARM64)
 - Windows: Not yet supported ([#252](https://github.com/amantus-ai/vibetunnel/issues/252))
+
+## Troubleshooting
+
+### Installation Issues
+
+If you encounter issues during installation:
+
+1. **Missing Build Tools**: Install build essentials
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install build-essential python3-dev
+   
+   # macOS
+   xcode-select --install
+   ```
+
+2. **Permission Issues**: Use sudo for global installation
+   ```bash
+   sudo npm install -g vibetunnel
+   ```
+
+3. **Node Version**: Ensure Node.js 20+ is installed
+   ```bash
+   node --version
+   ```
+
+### Runtime Issues
+
+- **Server Won't Start**: Check if port is already in use
+- **Authentication Failed**: Verify system authentication setup
+- **Terminal Not Responsive**: Check browser console for WebSocket errors
+
+### Development Setup
+
+For source installations:
+```bash
+# Install dependencies
+pnpm install
+
+# Run development server with hot reload
+pnpm run dev
+
+# Run code quality checks
+pnpm run check
+
+# Build for production
+pnpm run build
+```
 
 ## Documentation
 

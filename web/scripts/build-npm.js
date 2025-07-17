@@ -767,112 +767,14 @@ child.on('exit', (code, signal) => {
   
   // vt script doesn't need fixing - it dynamically finds the binary
   
-  // Step 7: Create README
-  console.log('\n7️⃣ Creating npm README...\n');
+  // Step 7: Copy README from web directory
+  console.log('\n7️⃣ Copying README from web directory...\n');
   
-  const readmeContent = `# VibeTunnel CLI
-
-Full-featured terminal sharing server with web interface for macOS and Linux. Windows not yet supported.
-
-## Installation
-
-\`\`\`bash
-npm install -g vibetunnel
-\`\`\`
-
-## Quick Start
-
-\`\`\`bash
-# Start VibeTunnel server
-vibetunnel
-
-# Or use short alias
-vt
-
-# Custom port and settings
-vibetunnel --port 4020 --auth
-
-# Forward mode (connect to remote VibeTunnel)
-vibetunnel fwd username@hostname
-\`\`\`
-
-## Features
-
-- **Terminal Sharing**: Share your terminal through a web browser
-- **Web Interface**: Access terminals from any device with a browser
-- **Session Management**: Create, manage, and switch between multiple terminal sessions
-- **Authentication**: Built-in authentication system
-- **Cross-Platform**: Works on macOS and Linux
-
-## Requirements
-
-- **Node.js**: Version 20 or higher
-- **Operating System**: macOS or Linux (Windows not yet supported)
-- **Build Tools**: For source compilation fallback (make, gcc, python3)
-
-## Platform Support
-
-### macOS
-- Intel (x64) and Apple Silicon (arm64)
-- Requires Xcode Command Line Tools for source compilation
-
-### Linux
-- x64 and ARM64 architectures
-- PAM authentication support
-- Automatic fallback to source compilation when prebuilds unavailable
-
-## Configuration
-
-VibeTunnel can be configured via command line arguments:
-
-\`\`\`bash
-vibetunnel --help
-\`\`\`
-
-## Troubleshooting
-
-### Installation Issues
-
-If you encounter issues during installation:
-
-1. **Missing Build Tools**: Install build essentials
-   \`\`\`bash
-   # Ubuntu/Debian
-   sudo apt-get install build-essential python3-dev
-   
-   # macOS
-   xcode-select --install
-   \`\`\`
-
-2. **Permission Issues**: Use sudo for global installation
-   \`\`\`bash
-   sudo npm install -g vibetunnel
-   \`\`\`
-
-3. **Node Version**: Ensure Node.js 20+ is installed
-   \`\`\`bash
-   node --version
-   \`\`\`
-
-### Runtime Issues
-
-- **Server Won't Start**: Check if port is already in use
-- **Authentication Failed**: Verify system authentication setup
-- **Terminal Not Responsive**: Check browser console for WebSocket errors
-
-## Documentation
-
-See the main repository for complete documentation: https://github.com/amantus-ai/vibetunnel
-
-## License
-
-MIT
-`;
+  const sourceReadmePath = path.join(ROOT_DIR, 'README.md');
+  const destReadmePath = path.join(DIST_DIR, 'README.md');
   
-  fs.writeFileSync(
-    path.join(DIST_DIR, 'README.md'),
-    readmeContent
-  );
+  fs.copyFileSync(sourceReadmePath, destReadmePath);
+  console.log('  ✓ Copied README.md from web directory');
   
   // Step 8: Clean up test files in dist-npm
   console.log('\n8️⃣ Cleaning up test files...\n');
