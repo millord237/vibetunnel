@@ -184,6 +184,7 @@ final class SessionMonitor {
                     }
                 }
             }
+            
             firstFetchDone = true
             self.lastFetch = Date()
 

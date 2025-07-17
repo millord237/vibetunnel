@@ -70,10 +70,11 @@ final class NotificationService: NSObject {
     /// Start monitoring server events
     func start() {
         guard serverManager.isRunning else {
-            logger.debug("Server not running, skipping notification service start")
+            logger.warning("🔴 Server not running, cannot start notification service")
             return
         }
         
+        logger.info("🔔 Starting notification service...")
         connect()
     }
     
@@ -107,41 +108,66 @@ final class NotificationService: NSObject {
     
     @objc private func serverStateChanged(_ notification: Notification) {
         if serverManager.isRunning {
+            logger.info("🔔 Server started, initializing notification service...")
             // Delay connection to ensure server is ready
             Task {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds (increased delay)
                 await MainActor.run {
                     if serverManager.isRunning {
+                        logger.info("🔔 Server ready, connecting notification service...")
                         connect()
+                    } else {
+                        logger.warning("🔴 Server stopped before notification service could connect")
                     }
                 }
             }
         } else {
+            logger.info("🔔 Server stopped, disconnecting notification service...")
             disconnect()
         }
     }
     
     private func connect() {
-        guard !isConnected else { return }
+        guard !isConnected else { 
+            logger.debug("🔔 Already connected to event stream")
+            return 
+        }
         
         let port = serverManager.port
         guard let url = URL(string: "http://localhost:\(port)/api/events") else {
-            logger.error("Invalid event stream URL")
+            logger.error("🔴 Invalid event stream URL for port \(port)")
             return
         }
         
-        logger.info("Connecting to server event stream at \(url.absoluteString)")
+        logger.info("🔔 Connecting to server event stream at \(url.absoluteString)")
         
         eventSource = EventSource(url: url)
         
+        // Add authentication if available
+        if let localToken = serverManager.bunServer?.localToken {
+            eventSource?.addHeader("X-VibeTunnel-Local", value: localToken)
+            logger.debug("🔐 Added local auth token to event stream")
+        } else {
+            logger.warning("⚠️ No local auth token available for event stream")
+        }
+        
         eventSource?.onOpen = { [weak self] in
-            self?.logger.info("Event stream connected")
+            self?.logger.info("✅ Event stream connected successfully")
             self?.isConnected = true
         }
         
         eventSource?.onError = { [weak self] error in
-            self?.logger.error("Event stream error: \(error?.localizedDescription ?? "Unknown")")
+            self?.logger.error("🔴 Event stream error: \(error?.localizedDescription ?? "Unknown")")
             self?.isConnected = false
+            
+            // Schedule reconnection after delay
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                if let self, !self.isConnected && self.serverManager.isRunning {
+                    self.logger.info("🔄 Attempting to reconnect event stream...")
+                    self.connect()
+                }
+            }
         }
         
         eventSource?.onMessage = { [weak self] event in
@@ -159,44 +185,62 @@ final class NotificationService: NSObject {
     }
     
     private func handleServerEvent(_ event: EventSource.Event) {
-        guard let data = event.data else { return }
+        guard let data = event.data else { 
+            logger.debug("🔔 Received event with no data")
+            return 
+        }
         
         do {
             guard let jsonData = data.data(using: .utf8),
                   let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
                   let type = json["type"] as? String else {
-                logger.error("Invalid event data format")
+                logger.error("🔴 Invalid event data format: \(data)")
                 return
             }
             
-            logger.debug("Received event: \(type)")
+            logger.info("📨 Received event: \(type)")
             
             switch type {
             case "session-start":
+                logger.info("🚀 Processing session-start event")
                 if preferences.sessionStart {
                     handleSessionStart(json)
+                } else {
+                    logger.debug("Session start notifications disabled")
                 }
             case "session-exit":
+                logger.info("🏁 Processing session-exit event") 
                 if preferences.sessionExit {
                     handleSessionExit(json)
+                } else {
+                    logger.debug("Session exit notifications disabled")
                 }
             case "command-finished":
+                logger.info("✅ Processing command-finished event")
                 if preferences.commandCompletion {
                     handleCommandFinished(json)
+                } else {
+                    logger.debug("Command completion notifications disabled")
                 }
             case "command-error":
+                logger.info("❌ Processing command-error event")
                 if preferences.commandError {
                     handleCommandError(json)
+                } else {
+                    logger.debug("Command error notifications disabled")
                 }
             case "bell":
+                logger.info("🔔 Processing bell event")
                 if preferences.bell {
                     handleBell(json)
+                } else {
+                    logger.debug("Bell notifications disabled")
                 }
             default:
-                logger.debug("Unhandled event type: \(type)")
+                logger.debug("⚠️ Unhandled event type: \(type)")
             }
         } catch {
-            logger.error("Failed to parse event: \(error)")
+            logger.error("🔴 Failed to parse event: \(error)")
         }
     }
     
@@ -323,9 +367,9 @@ final class NotificationService: NSObject {
         Task {
             do {
                 try await UNUserNotificationCenter.current().add(request)
-                logger.debug("Delivered notification: \(content.title)")
+                logger.info("🔔 Delivered notification: '\(content.title)' - '\(content.body)'")
             } catch {
-                logger.error("Failed to deliver notification: \(error)")
+                logger.error("🔴 Failed to deliver notification '\(content.title)': \(error)")
             }
         }
     }
@@ -338,6 +382,7 @@ private final class EventSource: NSObject, URLSessionDataDelegate, @unchecked Se
     private let url: URL
     private var session: URLSession?
     private var task: URLSessionDataTask?
+    private var headers: [String: String] = [:]
     
     var onOpen: (() -> Void)?
     var onMessage: ((Event) -> Void)?
@@ -354,6 +399,10 @@ private final class EventSource: NSObject, URLSessionDataDelegate, @unchecked Se
         super.init()
     }
     
+    func addHeader(_ name: String, value: String) {
+        headers[name] = value
+    }
+    
     func connect() {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = TimeInterval.infinity
@@ -364,6 +413,11 @@ private final class EventSource: NSObject, URLSessionDataDelegate, @unchecked Se
         var request = URLRequest(url: url)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        
+        // Add custom headers
+        for (name, value) in headers {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
         
         task = session?.dataTask(with: request)
         task?.resume()
