@@ -2,33 +2,35 @@
 
 ## [1.0.0-beta.12] - 2025-01-17
 
-### 🚀 Major Improvements
+#### **Welcome Screen Performance**
+- Background folder scanning eliminates UI freeze when opening the welcome screen (#394)
+- Improved startup performance with optimized web directory structure
+- Much smoother experience when working with large project directories
 
-#### **NPM Package Fixes**
-- Fixed critical npm installation issues on Linux systems
-- `authenticate-pam` is now correctly an optional dependency
-- Linux users can install without PAM development headers
-- Proper package.npm.json configuration is now used for npm releases
+#### **SSH Agent Reliability**
+- Fixed SSH key generation errors on non-localhost HTTP connections (#392)
+- SSH agent now works correctly when accessing VibeTunnel via ngrok or from another device
+- Improved security and reliability for remote access scenarios
+
+#### **npm Package Stability**
+- Fixed critical installation issues on Linux systems (#393)
+- `authenticate-pam` now properly handled as optional dependency
+- Enhanced cross-platform compatibility for Ubuntu and other distributions
+- Comprehensive vt command tests ensure reliability across environments
+
+#### **Developer Experience**
+- Fixed missing public directory in Mac app bundle (#392)
+- Resolved TypeScript type annotations throughout codebase
+- Improved lint compliance and code quality
+- Streamlined CI/CD workflow for more reliable builds
 
 ### 🐛 Bug Fixes
 
-- Fixed PAM module and npm_config_prefix issues on Ubuntu (#380)
-- Fixed SSH key generation errors on non-localhost HTTP connections (#384)
-- Fixed npm package documentation and unified READMEs (#381)
-- Removed verbose output from vt script (#383)
-
-### 📚 Documentation
-
-- Added comprehensive npm publishing guide (npm.md) with installation instructions
-- Added Discord member count badge with correct server ID
-- Added Node.js version, Discord, and Homebrew installation badges
-- Improved npm package installation documentation
-- Added Docker test script for npm package validation
-
-### 🧹 Maintenance
-
-- Cleaned up old npm package versions (11.2, 11.3) due to installation issues
-- Added test-npm-docker.sh script for automated npm package testing
+- Fixed vt command syntax errors on Linux systems (#393)
+- Fixed welcome screen lag during folder scanning (#394)
+- Resolved missing icons and resources in Mac app
+- Fixed lint and type errors across the codebase
+- Cleaned up duplicate and stray files from web directory
 
 ## [1.0.0-beta.11] - 2025-01-16
 
