@@ -232,27 +232,19 @@ for (const module of modules) {
   }
 }
 
+// Import vt installation functions
+const { detectGlobalInstall, installVtCommand } = require('./install-vt-command');
+
 // Install vt symlink/wrapper
 if (!hasErrors && !isDevelopment) {
   console.log('\nSetting up vt command...');
   
   const vtSource = path.join(__dirname, '..', 'bin', 'vt');
   
-  // Check if vt script exists
-  if (!fs.existsSync(vtSource)) {
-    console.warn('⚠️  vt command script not found in package');
-    console.log('   Use "vibetunnel" command instead');
-  } else {
-    try {
-      // Make vt script executable
-      fs.chmodSync(vtSource, '755');
-      console.log('✓ vt command configured');
-      console.log('  Note: The vt command is available through npm/npx');
-    } catch (error) {
-      console.warn('⚠️  Could not configure vt command:', error.message);
-      console.log('   Use "vibetunnel" command instead');
-    }
-  }
+  // Use the improved global install detection
+  const isGlobalInstall = detectGlobalInstall();
+  console.log(`  Detected ${isGlobalInstall ? 'global' : 'local'} installation`);
+  installVtCommand(vtSource, isGlobalInstall);
 }
 
 if (hasErrors) {
