@@ -1,6 +1,12 @@
 # VibeTunnel CLI
 
+**Turn any browser into your terminal.** VibeTunnel proxies your terminals right into the browser, so you can vibe-code anywhere.
+
 Full-featured terminal sharing server with web interface for macOS and Linux. Windows not yet supported.
+
+## Why VibeTunnel?
+
+Ever wanted to check on your AI agents while you're away? Need to monitor that long-running build from your phone? Want to share a terminal session with a colleague without complex SSH setups? VibeTunnel makes it happen with zero friction.
 
 ## Installation
 
@@ -50,9 +56,63 @@ vibetunnel --port 8080
 
 # Start without authentication
 vibetunnel --no-auth
+
+# Bind to specific interface
+vibetunnel --bind 127.0.0.1 --port 4020
+
+# Enable SSH key authentication
+vibetunnel --enable-ssh-keys
+
+# SSH keys only (no password auth)
+vibetunnel --disallow-user-password
 ```
 
 Then open http://localhost:4020 in your browser to access the web interface.
+
+### Command-line Options
+
+```
+vibetunnel [options]
+
+Basic Options:
+  --help, -h            Show help message
+  --version, -v         Show version information
+  --port <number>       Server port (default: 4020 or PORT env var)
+  --bind <address>      Bind address (default: 0.0.0.0, all interfaces)
+
+Authentication Options:
+  --no-auth             Disable authentication (auto-login as current user)
+  --enable-ssh-keys     Enable SSH key authentication UI and functionality
+  --disallow-user-password  Disable password auth, SSH keys only (auto-enables --enable-ssh-keys)
+  --allow-local-bypass  Allow localhost connections to bypass authentication
+  --local-auth-token <token>  Token for localhost authentication bypass
+
+Push Notification Options:
+  --push-enabled        Enable push notifications (default: enabled)
+  --push-disabled       Disable push notifications
+  --vapid-email <email> Contact email for VAPID configuration
+  --generate-vapid-keys Generate new VAPID keys if none exist
+
+Network Discovery Options:
+  --no-mdns             Disable mDNS/Bonjour advertisement (enabled by default)
+
+HQ Mode Options:
+  --hq                  Run as HQ (headquarters) server
+  --no-hq-auth          Disable HQ authentication
+
+Remote Server Options:
+  --hq-url <url>        HQ server URL to register with
+  --hq-username <user>  Username for HQ authentication
+  --hq-password <pass>  Password for HQ authentication
+  --name <name>         Unique name for remote server
+  --allow-insecure-hq   Allow HTTP URLs for HQ (not recommended)
+
+Repository Options:
+  --repository-base-path <path>  Base path for repository discovery
+
+Debugging:
+  --debug               Enable debug logging
+```
 
 ### Use the vt command wrapper
 
@@ -74,6 +134,22 @@ vt -i
 
 # Update session title (inside a session)
 vt title "My Project"
+
+# Execute command directly without shell wrapper
+vt --no-shell-wrap ls -la
+vt -S ls -la
+
+# Control terminal title behavior
+vt --title-mode none     # No title management
+vt --title-mode filter   # Block all title changes
+vt --title-mode static   # Show directory and command
+vt --title-mode dynamic  # Show directory, command, and activity
+
+# Verbosity control
+vt -q npm test          # Quiet mode (errors only)
+vt -v npm run dev       # Verbose mode
+vt -vv npm test         # Extra verbose
+vt -vvv npm build       # Debug mode
 ```
 
 ### Forward commands to a session
@@ -86,6 +162,20 @@ vibetunnel fwd <session-id> <command> [args...]
 vibetunnel fwd --session-id abc123 ls -la
 vibetunnel fwd --session-id abc123 npm test
 vibetunnel fwd --session-id abc123 python script.py
+```
+
+### Environment Variables
+
+VibeTunnel respects the following environment variables:
+
+```bash
+PORT=8080                           # Default port if --port not specified
+VIBETUNNEL_USERNAME=myuser          # Username (for env-based auth, not CLI)
+VIBETUNNEL_PASSWORD=mypass          # Password (for env-based auth, not CLI)
+VIBETUNNEL_CONTROL_DIR=/path        # Control directory for session data
+VIBETUNNEL_SESSION_ID=abc123        # Current session ID (set automatically inside sessions)
+VIBETUNNEL_LOG_LEVEL=debug          # Log level: error, warn, info, verbose, debug
+PUSH_CONTACT_EMAIL=admin@example.com # Contact email for VAPID configuration
 ```
 
 ## Features
