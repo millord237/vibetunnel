@@ -107,8 +107,8 @@ describe('Control Unix Handler', () => {
       };
 
       // Process the message through the system handler
-      const systemHandler = (controlUnixHandler as any).handlers.get('system');
-      const response = await systemHandler.handleMessage(message);
+      const systemHandler = (controlUnixHandler as unknown as { handlers: Map<string, { handleMessage: (msg: typeof message) => Promise<unknown> }> }).handlers.get('system');
+      const response = await systemHandler?.handleMessage(message);
 
       // Verify the update was processed
       expect(mockCallback).toHaveBeenCalledWith({
@@ -142,8 +142,8 @@ describe('Control Unix Handler', () => {
       };
 
       // Process the message
-      const systemHandler = (controlUnixHandler as any).handlers.get('system');
-      const response = await systemHandler.handleMessage(message);
+      const systemHandler = (controlUnixHandler as unknown as { handlers: Map<string, { handleMessage: (msg: typeof message) => Promise<unknown> }> }).handlers.get('system');
+      const response = await systemHandler?.handleMessage(message);
 
       // Verify callback was not called
       expect(mockCallback).not.toHaveBeenCalled();
@@ -172,7 +172,7 @@ describe('Control Unix Handler', () => {
       };
 
       // Simulate handleMacMessage behavior - response messages without pending requests are ignored
-      const pendingRequests = (controlUnixHandler as any).pendingRequests;
+      const pendingRequests = (controlUnixHandler as unknown as { pendingRequests: Map<string, unknown> }).pendingRequests;
       const hasPendingRequest = pendingRequests.has(message.id);
 
       // Since this is a response without a pending request, it should be ignored
@@ -199,8 +199,8 @@ describe('Control Unix Handler', () => {
       };
 
       // Set up the handler
-      (controlUnixHandler as any).screenCaptureHandler = mockScreenCaptureHandler;
-      (controlUnixHandler as any).handlers.set('screencap', mockScreenCaptureHandler);
+      (controlUnixHandler as unknown as { screenCaptureHandler: typeof mockScreenCaptureHandler }).screenCaptureHandler = mockScreenCaptureHandler;
+      (controlUnixHandler as unknown as { handlers: Map<string, typeof mockScreenCaptureHandler> }).handlers.set('screencap', mockScreenCaptureHandler);
       mockScreenCaptureHandler.browserSocket = mockBrowserSocket;
 
       // Create a screencap API response message (simulating response from Mac app)

@@ -298,6 +298,14 @@ If you accidentally published with wrong configuration:
 - `authenticate-pam` correctly optional
 - Linux installations work properly
 
+### Version 11.5 (Good - Latest)
+- Published December 2024
+- Built with explicit `pnpm run build:npm`
+- Published pre-built tarball: `vibetunnel-1.0.0-beta.11.5.tgz`
+- Verified `authenticate-pam` as optional dependency before publishing
+- Tagged as both `beta` and `latest`
+- **Process followed correctly**: All three version files updated, tarball verified, published with explicit filename
+
 ## Summary
 
 The critical lesson: **package.npm.json must be used for npm distribution**, not package.json. The build script supports this, but you must publish the pre-built tarball, not rely on npm's prepublish hooks.
