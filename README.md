@@ -287,6 +287,10 @@ The macOS menu bar app supports these authentication modes:
 6. **Monitor access logs** for suspicious authentication patterns
 7. **Default to secure** - explicitly enable less secure options only when needed
 
+### SSH Key Authentication Troubleshooting
+
+If SSH key generation fails with crypto errors, see the [detailed troubleshooting guide](web/README.md#ssh-key-authentication-issues) for solutions.
+
 
 ## npm Package
 
