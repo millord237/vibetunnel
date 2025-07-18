@@ -77,20 +77,7 @@ final class NotificationService: NSObject {
         logger.info("🔔 Starting notification service...")
         
         // Check authorization status first
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        
-        if settings.authorizationStatus == .notDetermined {
-            logger.info("🔔 Notification permissions not determined, requesting authorization...")
-            do {
-                let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-                logger.info("🔔 Notification permission granted: \(granted)")
-            } catch {
-                logger.error("🔔 Failed to request notification permissions: \(error)")
-            }
-        } else {
-            logger.info("🔔 Notification authorization status: \(settings.authorizationStatus.rawValue)")
-        }
+        await checkAndRequestNotificationPermissions()
         
         connect()
     }
@@ -112,6 +99,33 @@ final class NotificationService: NSObject {
     }
     
     // MARK: - Private Methods
+    
+    private nonisolated func checkAndRequestNotificationPermissions() async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        let authStatus = settings.authorizationStatus
+        
+        await MainActor.run {
+            if authStatus == .notDetermined {
+                logger.info("🔔 Notification permissions not determined, requesting authorization...")
+            } else {
+                logger.info("🔔 Notification authorization status: \(authStatus.rawValue)")
+            }
+        }
+        
+        if authStatus == .notDetermined {
+            do {
+                let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                await MainActor.run {
+                    logger.info("🔔 Notification permission granted: \(granted)")
+                }
+            } catch {
+                await MainActor.run {
+                    logger.error("🔔 Failed to request notification permissions: \(error)")
+                }
+            }
+        }
+    }
     
     private func setupNotifications() {
         // Listen for server state changes
