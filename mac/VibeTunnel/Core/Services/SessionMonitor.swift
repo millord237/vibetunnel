@@ -185,6 +185,7 @@ final class SessionMonitor {
                 }
             }
             
+            // Set firstFetchDone AFTER detecting ended sessions
             firstFetchDone = true
             self.lastFetch = Date()
 

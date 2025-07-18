@@ -68,13 +68,30 @@ final class NotificationService: NSObject {
     }
     
     /// Start monitoring server events
-    func start() {
+    func start() async {
         guard serverManager.isRunning else {
             logger.warning("🔴 Server not running, cannot start notification service")
             return
         }
         
         logger.info("🔔 Starting notification service...")
+        
+        // Check authorization status first
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        
+        if settings.authorizationStatus == .notDetermined {
+            logger.info("🔔 Notification permissions not determined, requesting authorization...")
+            do {
+                let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                logger.info("🔔 Notification permission granted: \(granted)")
+            } catch {
+                logger.error("🔔 Failed to request notification permissions: \(error)")
+            }
+        } else {
+            logger.info("🔔 Notification authorization status: \(settings.authorizationStatus.rawValue)")
+        }
+        
         connect()
     }
     
@@ -154,6 +171,29 @@ final class NotificationService: NSObject {
         eventSource?.onOpen = { [weak self] in
             self?.logger.info("✅ Event stream connected successfully")
             self?.isConnected = true
+            
+            // Send synthetic events for existing sessions
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                
+                // Get current sessions from SessionMonitor
+                let sessions = await SessionMonitor.shared.getSessions()
+                
+                for (sessionId, session) in sessions where session.isRunning {
+                    let sessionName = session.name ?? session.command.joined(separator: " ")
+                    self.logger.info("📨 Sending synthetic session-start event for existing session: \(sessionId)")
+                    
+                    // Create synthetic event data
+                    let eventData: [String: Any] = [
+                        "type": "session-start",
+                        "sessionId": sessionId,
+                        "sessionName": sessionName
+                    ]
+                    
+                    // Handle as if it was a real event
+                    self.handleSessionStart(eventData)
+                }
+            }
         }
         
         eventSource?.onError = { [weak self] error in

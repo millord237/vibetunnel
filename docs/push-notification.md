@@ -18,12 +18,33 @@ VibeTunnel supports several types of notifications:
 
 ## Local (macOS) Notifications
 
-The macOS menu bar app can deliver native local notifications when terminal sessions complete or encounter errors. To enable this feature:
+The macOS menu bar app delivers native notifications for terminal events without requiring web push setup. These notifications appear as system banners and in the Notification Center.
 
-1. Open the General Settings tab in the macOS app.
-2. Toggle **Show Session Notifications** on.
+### Enabling Native Notifications
 
-The app uses the UserNotifications framework to dispatch system notifications even when the interface is not in focus.
+1. Open VibeTunnel Settings → General tab
+2. Toggle **Show Session Notifications** on
+3. Grant notification permissions when prompted (first time only)
+
+### Supported Events
+
+Native notifications are triggered for:
+
+- **Session Start**: When a new terminal session begins
+- **Session Exit**: When a terminal session ends (with exit code if non-zero)  
+- **Command Completion**: When long-running commands (>3 seconds) finish
+- **Command Errors**: When commands fail with non-zero exit codes
+- **Terminal Bell**: When applications trigger the terminal bell (^G)
+- **Claude Status**: When Claude transitions between active/idle states
+
+### Technical Details
+
+The native notification system:
+- Uses macOS `UserNotifications` framework for system-level notifications
+- Connects to the VibeTunnel server via Server-Sent Events (SSE) for real-time updates
+- Automatically handles existing sessions on startup to avoid missing events
+- Respects macOS Do Not Disturb and Focus modes
+- Works even when VibeTunnel is running in the background
 
 Access notification settings by clicking the notification status indicator:
 

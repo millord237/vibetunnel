@@ -76,6 +76,16 @@ struct GeneralSettingsView: View {
                     // Show Session Notifications
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Show Session Notifications", isOn: $showNotifications)
+                            .onChange(of: showNotifications) { _, newValue in
+                                // Ensure NotificationService starts/stops based on the toggle
+                                if newValue {
+                                    Task {
+                                        await NotificationService.shared.start()
+                                    }
+                                } else {
+                                    NotificationService.shared.stop()
+                                }
+                            }
                         Text("Display native macOS notifications for session and command events.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
