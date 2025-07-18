@@ -1,6 +1,35 @@
 # Changelog
 
-## [1.0.0-beta.12] - 2024-12-17
+## [1.0.0-beta.13] - 2025-07-19
+
+### **Terminal Performance Mode (Experimental) **
+- New binary WebSocket mode for terminal sessions dramatically improves performance for high-throughput operations (#412)
+- Toggle between standard SSE mode and high-performance binary mode in terminal settings
+- Binary mode significantly reduces latency and CPU usage when running commands with heavy output
+- Seamless switching between modes without losing your session
+
+### **Enhanced Terminal Control** 
+- Uninstall option for the `vt` command line tool now available in settings (#407)
+- Simple trash icon button to cleanly remove the CLI tool when needed
+- Proper cleanup of both standard and Homebrew installation paths
+
+### **Screen Sharing Removed**
+- Removed screen sharing feature to focus on core terminal functionality (#415)
+- Eliminated ~17,000 lines of WebRTC and screen capture code
+- No longer requests screen recording permissions
+- Screen Sharing is out of scope for the 1.0 release
+
+### 🐛 Bug Fixes
+- Fixed server crashes when using special characters (like `*`) in terminal status messages (#398)
+- Resolved "Kill All Sessions" button failing silently in compact/sidebar view (#418)
+- Fixed network bind address reverting to localhost after server restarts (#404)
+- Ghostty terminal now properly spawns and executes commands if there are no windows (#408)
+
+### 📚 Documentation
+- Added complete HQ mode documentation covering distributed deployments
+- Organized all documentation into logical categories with Mintlify
+
+## [1.0.0-beta.12] - 2025-07-17
 
 #### **Welcome Screen Performance**
 - Background folder scanning eliminates UI freeze when opening the welcome screen (#394)
@@ -32,7 +61,7 @@
 - Fixed lint and type errors across the codebase
 - Cleaned up duplicate and stray files from web directory
 
-## [1.0.0-beta.11] - 2024-12-16
+## [1.0.0-beta.11] - 2025-07-17
 
 #### **Better Settings Organization**
 - Reorganized settings into logical tabs for easier navigation (#359)
@@ -63,7 +92,7 @@
 - Replaced bell icon with settings icon for better clarity (#366)
 - Resolved Tailwind CSS performance warning
 
-## [1.0.0-beta.10] - 2024-12-15
+## [1.0.0-beta.10] - 2025-07-15
 
 #### **Repository Discovery**
 - Automatic Git repository detection when creating new sessions (#301)
@@ -97,7 +126,7 @@
 - Updated all dependencies to latest stable versions
 - Enhanced TypeScript configuration with better type safety
 
-## [1.0.0-beta.9] - 2024-12-11
+## [1.0.0-beta.9] - 2025-07-11
 
 #### **Terminal Crash Fix**
 - Replaced Microsoft's node-pty with custom fork to resolve random terminal crashes (#304)
@@ -132,7 +161,7 @@
 - Enhanced event handling for better cross-platform compatibility
 - Improved file browser functionality with better click handling
 
-## [1.0.0-beta.8] - 2024-07-08
+## [1.0.0-beta.8] - 2025-07-08
 
 ### 🐛 Bug Fixes
 
@@ -141,7 +170,7 @@
 - Fixed file browser going dark due to event bubbling issues with modal handling
 - Updated build scripts to handle dynamic library dependencies properly
 
-## [1.0.0-beta.7] - 2024-07-08
+## [1.0.0-beta.7] - 2025-07-08
 
 #### **AI Session Context Injection**
 - Inject project context into Claude.ai sessions with a single click (#210, #218)
@@ -192,7 +221,7 @@
 - Unified control protocol for terminal sessions (#239)
 - Improved Unix socket handling with better error recovery
 
-## [1.0.0-beta.6] - 2024-07-03
+## [1.0.0-beta.6] - 2025-07-03
 
 #### **Git Repository Monitoring**
 - Real-time Git status in session rows with branch name and change counts (#200)
@@ -231,7 +260,7 @@
 - Removed manual token management requirements
 - Streamlined connection UI
 
-## [1.0.0-beta.5] - 2024-06-29
+## [1.0.0-beta.5] - 2025-06-29
 
 #### **UI Improvements**
 - Web interface now shows full version including beta suffix
@@ -253,7 +282,7 @@
 - Better test fixtures, helpers, and debugging capabilities (#73)
 - Cleaner logs when running in development mode
 
-## [1.0.0-beta.4] - 2024-06-25
+## [1.0.0-beta.4] - 2025-06-25
 
 - We replaced HTTP Basic auth with System Login or SSH Keys for better security (#43).
 - Sessions now show exited terminals by default - no more hunting for terminated sessions
@@ -264,7 +293,7 @@
 - Leverages View Transitions API for smoother animations with CSS fallbacks
 - More intuitive default settings for better out-of-box experience
 
-## [1.0.0-beta.3] - 2024-06-23
+## [1.0.0-beta.3] - 2025-06-23
 
 There's too much to list! This is the version you've been waiting for. 
 
@@ -284,7 +313,7 @@ There's too much to list! This is the version you've been waiting for.
 - More resilient vt command-line tool with better error handling
 - Ensured vibetunnel server properly terminates when Mac app is killed
 
-## [1.0.0-beta.2] - 2024-06-19
+## [1.0.0-beta.2] - 2025-06-19
 
 ### 🎨 Improvements
 - Redesigned slick new web frontend
@@ -300,7 +329,7 @@ There's too much to list! This is the version you've been waiting for.
 - Fixed PTY service enhancements with proper async operations
 - Fixed race condition in session creation that caused frontend to open previous session
 
-## [1.0.0-beta.1] - 2024-06-17
+## [1.0.0-beta.1] - 2025-06-17
 
 ### 🎉 First Public Beta Release
 
@@ -343,7 +372,7 @@ This is the first public beta release of VibeTunnel, ready for testing by early 
 - Auto-update functionality is fully enabled
 - All core features are stable and ready for daily use
 
-## [1.0.0] - 2024-06-16
+## [1.0.0] - 2025-06-16
 
 ### 🎉 Initial Release
 
