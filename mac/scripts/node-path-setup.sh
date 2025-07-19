@@ -23,7 +23,7 @@ else
 fi
 
 # Verify Node.js is available (skip in CI when using pre-built artifacts)
-if [ "${SKIP_NODE_CHECK}" = "true" ] && [ "${CI}" = "true" ]; then
+if [ "${SKIP_NODE_CHECK:-false}" = "true" ] && [ "${CI:-false}" = "true" ]; then
     # In CI with pre-built artifacts, Node.js is not required
     return 0 2>/dev/null || exit 0
 fi

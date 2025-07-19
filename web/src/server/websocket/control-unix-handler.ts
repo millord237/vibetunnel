@@ -148,7 +148,6 @@ export class ControlUnixHandler {
       // Ignore if already exists
     }
 
-    // Changed from screencap.sock to control.sock
     this.socketPath = path.join(socketDir, 'control.sock');
 
     // Initialize handlers
@@ -381,7 +380,6 @@ export class ControlUnixHandler {
     logger.log(
       `🔌 Mac socket status on browser connect: ${this.macSocket ? 'CONNECTED' : 'NOT CONNECTED'}`
     );
-    // The browser connection is established but screencap functionality has been removed
 
     ws.on('message', async (data) => {
       try {

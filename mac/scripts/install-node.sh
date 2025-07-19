@@ -17,7 +17,7 @@ fi
 echo "Checking for Node.js..."
 
 # Skip Node.js check in CI when web artifacts are pre-built
-if [ "${CI}" = "true" ] && [ "${SKIP_NODE_CHECK}" = "true" ]; then
+if [ "${CI:-false}" = "true" ] && [ "${SKIP_NODE_CHECK:-false}" = "true" ]; then
     echo "✓ Skipping Node.js check in CI (web artifacts are pre-built)"
     exit 0
 fi
