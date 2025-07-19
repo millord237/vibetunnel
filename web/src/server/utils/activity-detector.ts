@@ -283,6 +283,12 @@ export class ActivityDetector {
         this.lastStatusTime = Date.now();
         // Always update activity time for app-specific status
         this.lastActivityTime = Date.now();
+        
+        // Update Claude status tracking
+        if (this.detector.name === 'claude') {
+          this.hadClaudeStatus = true;
+        }
+        
         return {
           filteredData: status.filteredData,
           activity: {
@@ -318,26 +324,20 @@ export class ActivityDetector {
     const now = Date.now();
     const isActive = now - this.lastActivityTime < this.ACTIVITY_TIMEOUT;
 
-    // Check if Claude status has cleared (transition from active to inactive)
-    const hadClaudeStatusBefore = this.hadClaudeStatus;
-    const hasClaudeStatusNow = this.currentStatus !== null && this.detector?.name === 'claude';
-
     // Clear status if we haven't seen it for a while
     if (this.currentStatus && now - this.lastStatusTime > this.STATUS_TIMEOUT) {
       logger.debug('Clearing stale status - not seen for', this.STATUS_TIMEOUT, 'ms');
       this.currentStatus = null;
-    }
-
-    // Detect Claude turn transition
-    if (hadClaudeStatusBefore && !hasClaudeStatusNow) {
-      logger.log("Claude turn detected - status cleared, it's the user's turn");
-      if (this.onClaudeTurnCallback && this.sessionId) {
-        this.onClaudeTurnCallback(this.sessionId);
+      
+      // Check if this was a Claude status clearing
+      if (this.hadClaudeStatus && this.detector?.name === 'claude') {
+        logger.log("Claude turn detected - status cleared, it's the user's turn");
+        if (this.onClaudeTurnCallback && this.sessionId) {
+          this.onClaudeTurnCallback(this.sessionId);
+        }
+        this.hadClaudeStatus = false;
       }
     }
-
-    // Update tracked status
-    this.hadClaudeStatus = hasClaudeStatusNow;
 
     // If we have a specific status (like Claude running), always show it
     // The activity indicator in the title will show if it's active or not
