@@ -468,7 +468,17 @@ export class PtyManager extends EventEmitter {
 
     // Setup activity detector for dynamic mode
     if (session.titleMode === TitleMode.DYNAMIC) {
-      session.activityDetector = new ActivityDetector(session.sessionInfo.command);
+      session.activityDetector = new ActivityDetector(session.sessionInfo.command, session.id);
+
+      // Set up Claude turn notification callback
+      session.activityDetector.setOnClaudeTurn((sessionId) => {
+        logger.log(`Claude turn detected for session ${sessionId}`);
+        this.emit(
+          'claudeTurn',
+          sessionId,
+          session.sessionInfo.name || session.sessionInfo.command.join(' ')
+        );
+      });
     }
 
     // Setup periodic title updates for both static and dynamic modes

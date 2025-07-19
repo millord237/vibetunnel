@@ -1,6 +1,6 @@
+import { EventEmitter } from 'events';
 import type { Response } from 'express';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EventEmitter } from 'events';
 import type { PtyManager } from '../pty/index.js';
 import { createEventsRouter } from './events.js';
 
@@ -23,7 +23,7 @@ describe('Events Router', () => {
   beforeEach(() => {
     // Create a mock PtyManager that extends EventEmitter
     mockPtyManager = new EventEmitter() as PtyManager & EventEmitter;
-    
+
     // Create mock request
     mockRequest = {
       headers: {},
@@ -157,9 +157,7 @@ describe('Events Router', () => {
       mockPtyManager.emit('bell', eventData);
 
       // Verify SSE was sent
-      expect(mockResponse.write).toHaveBeenCalledWith(
-        expect.stringContaining('event: bell\n')
-      );
+      expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('event: bell\n'));
       expect(mockResponse.write).toHaveBeenCalledWith(
         expect.stringContaining(`data: ${JSON.stringify(eventData)}\n\n`)
       );
@@ -184,9 +182,7 @@ describe('Events Router', () => {
 
       // Should have written 3 events
       const writeCalls = (mockResponse.write as ReturnType<typeof vi.fn>).mock.calls;
-      const eventCalls = writeCalls.filter(call => 
-        call[0].includes('event:')
-      );
+      const eventCalls = writeCalls.filter((call) => call[0].includes('event:'));
       expect(eventCalls).toHaveLength(3);
     });
 
@@ -223,9 +219,7 @@ describe('Events Router', () => {
       await handler(mockRequest, mockResponse);
 
       // Get the close handler
-      const closeHandler = mockRequest.on.mock.calls.find(
-        (call: any) => call[0] === 'close'
-      )?.[1];
+      const closeHandler = mockRequest.on.mock.calls.find((call: any) => call[0] === 'close')?.[1];
       expect(closeHandler).toBeTruthy();
 
       // Verify listeners are attached
@@ -279,8 +273,8 @@ describe('Events Router', () => {
 
       // Verify SSE format includes id
       const writeCalls = (mockResponse.write as ReturnType<typeof vi.fn>).mock.calls;
-      const sseData = writeCalls.map(call => call[0]).join('');
-      
+      const sseData = writeCalls.map((call) => call[0]).join('');
+
       expect(sseData).toMatch(/id: \d+\n/);
       expect(sseData).toMatch(/event: bell\n/);
       expect(sseData).toMatch(/data: {.*}\n\n/);
@@ -346,12 +340,8 @@ describe('Events Router', () => {
       mockPtyManager.emit('bell', { sessionId: 'test-123' });
 
       // Both clients should receive the event
-      expect(client1Response.write).toHaveBeenCalledWith(
-        expect.stringContaining('event: bell')
-      );
-      expect(client2Response.write).toHaveBeenCalledWith(
-        expect.stringContaining('event: bell')
-      );
+      expect(client1Response.write).toHaveBeenCalledWith(expect.stringContaining('event: bell'));
+      expect(client2Response.write).toHaveBeenCalledWith(expect.stringContaining('event: bell'));
     });
   });
 });

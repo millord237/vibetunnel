@@ -31,7 +31,7 @@ describe('PushNotificationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    
+
     // Reset service state
     (pushNotificationService as any).initialized = false;
     (pushNotificationService as any).registration = null;
@@ -363,7 +363,7 @@ describe('PushNotificationService', () => {
   describe('permission change handling', () => {
     it('should notify subscribers when permission changes', async () => {
       const callback = vi.fn();
-      
+
       await pushNotificationService.initialize();
       const unsubscribe = pushNotificationService.onPermissionChange(callback);
 
@@ -385,7 +385,7 @@ describe('PushNotificationService', () => {
   describe('subscription change handling', () => {
     it('should notify subscribers when subscription changes', async () => {
       const callback = vi.fn();
-      
+
       await pushNotificationService.initialize();
       const unsubscribe = pushNotificationService.onSubscriptionChange(callback);
 
@@ -402,9 +402,11 @@ describe('PushNotificationService', () => {
 
       await pushNotificationService.subscribe('test-key');
 
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
-        endpoint: 'https://fcm.googleapis.com/test',
-      }));
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endpoint: 'https://fcm.googleapis.com/test',
+        })
+      );
 
       unsubscribe();
     });

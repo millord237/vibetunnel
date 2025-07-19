@@ -113,11 +113,21 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
       }
     };
 
+    const onClaudeTurn = (sessionId: string, sessionName: string) => {
+      logger.debug(`🔔 SSE Route: Claude turn detected for session ${sessionId}`);
+      sendEvent('claude-turn', {
+        sessionId,
+        sessionName,
+        message: 'Claude has finished responding',
+      });
+    };
+
     // Subscribe to events
     ptyManager.on('sessionStarted', onSessionStarted);
     ptyManager.on('sessionExited', onSessionExited);
     ptyManager.on('bell', onBell);
     ptyManager.on('commandFinished', onCommandFinished);
+    ptyManager.on('claudeTurn', onClaudeTurn);
 
     // Handle client disconnect
     req.on('close', () => {
@@ -129,6 +139,7 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
       ptyManager.off('sessionExited', onSessionExited);
       ptyManager.off('bell', onBell);
       ptyManager.off('commandFinished', onCommandFinished);
+      ptyManager.off('claudeTurn', onClaudeTurn);
     });
   });
 

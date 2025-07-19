@@ -61,10 +61,16 @@ final class SessionMonitor {
     private var firstFetchDone = false
 
     /// Detect sessions that transitioned from running to not running
-    static func detectEndedSessions(from old: [String: ServerSessionInfo], to new: [String: ServerSessionInfo]) -> [ServerSessionInfo] {
+    static func detectEndedSessions(
+        from old: [String: ServerSessionInfo],
+        to new: [String: ServerSessionInfo]
+    )
+        -> [ServerSessionInfo]
+    {
         old.compactMap { id, oldSession in
             if oldSession.isRunning,
-               let updated = new[id], !updated.isRunning {
+               let updated = new[id], !updated.isRunning
+            {
                 return oldSession
             }
             return nil
@@ -167,7 +173,7 @@ final class SessionMonitor {
 
             // Notify for sessions that have just ended
             if firstFetchDone && UserDefaults.standard.bool(forKey: "showNotifications") {
-                let ended = SessionMonitor.detectEndedSessions(from: oldSessions, to: sessionsDict)
+                let ended = Self.detectEndedSessions(from: oldSessions, to: sessionsDict)
                 for session in ended {
                     let id = session.id
                     let title = "Session Completed"
@@ -180,11 +186,14 @@ final class SessionMonitor {
                     do {
                         try await UNUserNotificationCenter.current().add(request)
                     } catch {
-                        self.logger.error("Failed to deliver session notification: \(error.localizedDescription, privacy: .public)")
+                        self.logger
+                            .error(
+                                "Failed to deliver session notification: \(error.localizedDescription, privacy: .public)"
+                            )
                     }
                 }
             }
-            
+
             // Set firstFetchDone AFTER detecting ended sessions
             firstFetchDone = true
             self.lastFetch = Date()

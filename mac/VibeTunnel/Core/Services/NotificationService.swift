@@ -1,6 +1,6 @@
 import Foundation
-import UserNotifications
 import os.log
+import UserNotifications
 
 /// Manages native macOS notifications for VibeTunnel events.
 ///
@@ -9,14 +9,14 @@ import os.log
 @MainActor
 final class NotificationService: NSObject {
     static let shared = NotificationService()
-    
+
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "NotificationService")
     private var eventSource: EventSource?
     private let serverManager = ServerManager.shared
     private var isConnected = false
     private var recentlyNotifiedSessions = Set<String>()
     private var notificationCleanupTimer: Timer?
-    
+
     /// Notification types that can be enabled/disabled
     struct NotificationPreferences {
         var sessionStart: Bool = true
@@ -24,7 +24,8 @@ final class NotificationService: NSObject {
         var commandCompletion: Bool = true
         var commandError: Bool = true
         var bell: Bool = true
-        
+        var claudeTurn: Bool = true
+
         init() {
             // Load from UserDefaults
             let defaults = UserDefaults.standard
@@ -33,7 +34,8 @@ final class NotificationService: NSObject {
             self.commandCompletion = defaults.bool(forKey: "notifications.commandCompletion")
             self.commandError = defaults.bool(forKey: "notifications.commandError")
             self.bell = defaults.bool(forKey: "notifications.bell")
-            
+            self.claudeTurn = defaults.bool(forKey: "notifications.claudeTurn")
+
             // Set defaults if not set
             if !defaults.bool(forKey: "notifications.initialized") {
                 defaults.set(true, forKey: "notifications.sessionStart")
@@ -41,10 +43,11 @@ final class NotificationService: NSObject {
                 defaults.set(true, forKey: "notifications.commandCompletion")
                 defaults.set(true, forKey: "notifications.commandError")
                 defaults.set(true, forKey: "notifications.bell")
+                defaults.set(true, forKey: "notifications.claudeTurn")
                 defaults.set(true, forKey: "notifications.initialized")
             }
         }
-        
+
         func save() {
             let defaults = UserDefaults.standard
             defaults.set(sessionStart, forKey: "notifications.sessionStart")
@@ -52,59 +55,60 @@ final class NotificationService: NSObject {
             defaults.set(commandCompletion, forKey: "notifications.commandCompletion")
             defaults.set(commandError, forKey: "notifications.commandError")
             defaults.set(bell, forKey: "notifications.bell")
+            defaults.set(claudeTurn, forKey: "notifications.claudeTurn")
         }
     }
-    
+
     private var preferences = NotificationPreferences()
-    
-    private override init() {
+
+    override private init() {
         super.init()
         setupNotifications()
-        
+
         // Load preferences from API on startup
         Task {
             await syncPreferencesFromAPI()
         }
     }
-    
+
     /// Start monitoring server events
     func start() async {
         guard serverManager.isRunning else {
             logger.warning("🔴 Server not running, cannot start notification service")
             return
         }
-        
+
         logger.info("🔔 Starting notification service...")
-        
+
         // Check authorization status first
         await checkAndRequestNotificationPermissions()
-        
+
         connect()
     }
-    
+
     /// Stop monitoring server events
     func stop() {
         disconnect()
     }
-    
+
     /// Update notification preferences
     func updatePreferences(_ prefs: NotificationPreferences) {
         self.preferences = prefs
         prefs.save()
-        
+
         // Sync to API
         Task {
             await syncPreferencesToAPI(prefs)
         }
     }
-    
+
     // MARK: - Private Methods
-    
+
     private nonisolated func checkAndRequestNotificationPermissions() async {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         let authStatus = settings.authorizationStatus
-        
+
         await MainActor.run {
             if authStatus == .notDetermined {
                 logger.info("🔔 Notification permissions not determined, requesting authorization...")
@@ -112,7 +116,7 @@ final class NotificationService: NSObject {
                 logger.info("🔔 Notification authorization status: \(authStatus.rawValue)")
             }
         }
-        
+
         if authStatus == .notDetermined {
             do {
                 let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
@@ -126,7 +130,7 @@ final class NotificationService: NSObject {
             }
         }
     }
-    
+
     private func setupNotifications() {
         // Listen for server state changes
         NotificationCenter.default.addObserver(
@@ -136,7 +140,7 @@ final class NotificationService: NSObject {
             object: nil
         )
     }
-    
+
     @objc private func serverStateChanged(_ notification: Notification) {
         if serverManager.isRunning {
             logger.info("🔔 Server started, initializing notification service...")
@@ -157,23 +161,23 @@ final class NotificationService: NSObject {
             disconnect()
         }
     }
-    
+
     private func connect() {
-        guard !isConnected else { 
+        guard !isConnected else {
             logger.debug("🔔 Already connected to event stream")
-            return 
+            return
         }
-        
+
         let port = serverManager.port
         guard let url = URL(string: "http://localhost:\(port)/api/events") else {
             logger.error("🔴 Invalid event stream URL for port \(port)")
             return
         }
-        
+
         logger.info("🔔 Connecting to server event stream at \(url.absoluteString)")
-        
+
         eventSource = EventSource(url: url)
-        
+
         // Add authentication if available
         if let localToken = serverManager.bunServer?.localToken {
             eventSource?.addHeader("X-VibeTunnel-Local", value: localToken)
@@ -181,39 +185,39 @@ final class NotificationService: NSObject {
         } else {
             logger.warning("⚠️ No local auth token available for event stream")
         }
-        
+
         eventSource?.onOpen = { [weak self] in
             self?.logger.info("✅ Event stream connected successfully")
             self?.isConnected = true
-            
+
             // Send synthetic events for existing sessions
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                
+
                 // Get current sessions from SessionMonitor
                 let sessions = await SessionMonitor.shared.getSessions()
-                
+
                 for (sessionId, session) in sessions where session.isRunning {
                     let sessionName = session.name ?? session.command.joined(separator: " ")
                     self.logger.info("📨 Sending synthetic session-start event for existing session: \(sessionId)")
-                    
+
                     // Create synthetic event data
                     let eventData: [String: Any] = [
                         "type": "session-start",
                         "sessionId": sessionId,
                         "sessionName": sessionName
                     ]
-                    
+
                     // Handle as if it was a real event
                     self.handleSessionStart(eventData)
                 }
             }
         }
-        
+
         eventSource?.onError = { [weak self] error in
             self?.logger.error("🔴 Event stream error: \(error?.localizedDescription ?? "Unknown")")
             self?.isConnected = false
-            
+
             // Schedule reconnection after delay
             Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
@@ -223,37 +227,38 @@ final class NotificationService: NSObject {
                 }
             }
         }
-        
+
         eventSource?.onMessage = { [weak self] event in
             self?.handleServerEvent(event)
         }
-        
+
         eventSource?.connect()
     }
-    
+
     private func disconnect() {
         eventSource?.disconnect()
         eventSource = nil
         isConnected = false
         logger.info("Disconnected from event stream")
     }
-    
+
     private func handleServerEvent(_ event: EventSource.Event) {
-        guard let data = event.data else { 
+        guard let data = event.data else {
             logger.debug("🔔 Received event with no data")
-            return 
+            return
         }
-        
+
         do {
             guard let jsonData = data.data(using: .utf8),
                   let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-                  let type = json["type"] as? String else {
+                  let type = json["type"] as? String
+            else {
                 logger.error("🔴 Invalid event data format: \(data)")
                 return
             }
-            
+
             logger.info("📨 Received event: \(type)")
-            
+
             switch type {
             case "session-start":
                 logger.info("🚀 Processing session-start event")
@@ -263,7 +268,7 @@ final class NotificationService: NSObject {
                     logger.debug("Session start notifications disabled")
                 }
             case "session-exit":
-                logger.info("🏁 Processing session-exit event") 
+                logger.info("🏁 Processing session-exit event")
                 if preferences.sessionExit {
                     handleSessionExit(json)
                 } else {
@@ -290,6 +295,13 @@ final class NotificationService: NSObject {
                 } else {
                     logger.debug("Bell notifications disabled")
                 }
+            case "claude-turn":
+                logger.info("💬 Processing claude-turn event")
+                if preferences.claudeTurn {
+                    handleClaudeTurn(json)
+                } else {
+                    logger.debug("Claude turn notifications disabled")
+                }
             default:
                 logger.debug("⚠️ Unhandled event type: \(type)")
             }
@@ -297,10 +309,10 @@ final class NotificationService: NSObject {
             logger.error("🔴 Failed to parse event: \(error)")
         }
     }
-    
+
     private func handleSessionStart(_ data: [String: Any]) {
         guard let sessionName = data["sessionName"] as? String else { return }
-        
+
         // Check for duplicate notifications
         if let sessionId = data["sessionId"] as? String {
             if recentlyNotifiedSessions.contains(sessionId) {
@@ -308,122 +320,172 @@ final class NotificationService: NSObject {
                 return
             }
             recentlyNotifiedSessions.insert(sessionId)
-            
+
             // Schedule cleanup after 10 seconds
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
                 self.recentlyNotifiedSessions.remove(sessionId)
             }
         }
-        
+
         let content = UNMutableNotificationContent()
         content.title = "Session Started"
         content.body = sessionName
         content.sound = .default
         content.categoryIdentifier = "SESSION"
-        
+        content.interruptionLevel = .passive // Less intrusive for auto-dismiss
+
+        let identifier: String
         if let sessionId = data["sessionId"] as? String {
             content.userInfo = ["sessionId": sessionId, "type": "session-start"]
-            deliverNotification(content, identifier: "session-start-\(sessionId)")
+            identifier = "session-start-\(sessionId)"
         } else {
-            deliverNotification(content, identifier: "session-start-\(UUID().uuidString)")
+            identifier = "session-start-\(UUID().uuidString)"
         }
+
+        // Deliver notification with auto-dismiss
+        deliverNotificationWithAutoDismiss(content, identifier: identifier, dismissAfter: 5.0)
     }
-    
+
     private func handleSessionExit(_ data: [String: Any]) {
         guard let sessionName = data["sessionName"] as? String else { return }
-        
+
         let content = UNMutableNotificationContent()
         content.title = "Session Ended"
         content.body = sessionName
         content.sound = .default
         content.categoryIdentifier = "SESSION"
-        
+
         if let sessionId = data["sessionId"] as? String {
             content.userInfo = ["sessionId": sessionId, "type": "session-exit"]
         }
-        
+
         if let exitCode = data["exitCode"] as? Int, exitCode != 0 {
             content.subtitle = "Exit code: \(exitCode)"
         }
-        
+
         deliverNotification(content, identifier: "session-exit-\(UUID().uuidString)")
     }
-    
+
     private func handleCommandFinished(_ data: [String: Any]) {
         guard let command = data["command"] as? String else { return }
-        
+
         let content = UNMutableNotificationContent()
         content.title = "Command Completed"
         content.body = command
         content.sound = .default
         content.categoryIdentifier = "COMMAND"
-        
+
         if let sessionId = data["sessionId"] as? String {
             content.userInfo = ["sessionId": sessionId, "type": "command-finished"]
         }
-        
+
         if let duration = data["duration"] as? Int {
-            let seconds = duration / 1000
+            let seconds = duration / 1_000
             if seconds > 60 {
                 content.subtitle = "Duration: \(seconds / 60)m \(seconds % 60)s"
             } else {
                 content.subtitle = "Duration: \(seconds)s"
             }
         }
-        
+
         deliverNotification(content, identifier: "command-\(UUID().uuidString)")
     }
-    
+
     private func handleCommandError(_ data: [String: Any]) {
         guard let command = data["command"] as? String else { return }
-        
+
         let content = UNMutableNotificationContent()
         content.title = "Command Failed"
         content.body = command
         content.sound = .defaultCritical
         content.categoryIdentifier = "COMMAND"
-        
+
         if let sessionId = data["sessionId"] as? String {
             content.userInfo = ["sessionId": sessionId, "type": "command-error"]
         }
-        
+
         if let exitCode = data["exitCode"] as? Int {
             content.subtitle = "Exit code: \(exitCode)"
         }
-        
+
         deliverNotification(content, identifier: "command-error-\(UUID().uuidString)")
     }
-    
+
     private func handleBell(_ data: [String: Any]) {
         guard let sessionName = data["sessionName"] as? String else { return }
-        
+
         let content = UNMutableNotificationContent()
         content.title = "Terminal Bell"
         content.body = sessionName
         content.sound = .default
         content.categoryIdentifier = "BELL"
-        
+
         if let sessionId = data["sessionId"] as? String {
             content.userInfo = ["sessionId": sessionId, "type": "bell"]
         }
-        
+
         if let processInfo = data["processInfo"] as? String {
             content.subtitle = processInfo
         }
-        
+
         deliverNotification(content, identifier: "bell-\(UUID().uuidString)")
     }
-    
+
+    private func handleClaudeTurn(_ data: [String: Any]) {
+        guard let sessionName = data["sessionName"] as? String else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Your Turn"
+        content.body = "Claude has finished responding"
+        content.subtitle = sessionName
+        content.sound = .default
+        content.categoryIdentifier = "CLAUDE_TURN"
+        content.interruptionLevel = .active
+
+        if let sessionId = data["sessionId"] as? String {
+            content.userInfo = ["sessionId": sessionId, "type": "claude-turn"]
+        }
+
+        deliverNotification(content, identifier: "claude-turn-\(UUID().uuidString)")
+    }
+
     private func deliverNotification(_ content: UNMutableNotificationContent, identifier: String) {
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-        
+
         Task {
             do {
                 try await UNUserNotificationCenter.current().add(request)
                 logger.info("🔔 Delivered notification: '\(content.title)' - '\(content.body)'")
             } catch {
                 logger.error("🔴 Failed to deliver notification '\(content.title)': \(error)")
+            }
+        }
+    }
+
+    private func deliverNotificationWithAutoDismiss(
+        _ content: UNMutableNotificationContent,
+        identifier: String,
+        dismissAfter seconds: Double
+    ) {
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+
+        Task {
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+                logger
+                    .info(
+                        "🔔 Delivered auto-dismiss notification: '\(content.title)' - '\(content.body)' (dismiss in \(seconds)s)"
+                    )
+
+                // Schedule automatic dismissal
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+
+                // Remove the notification
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
+                logger.debug("🔔 Auto-dismissed notification: \(identifier)")
+            } catch {
+                logger.error("🔴 Failed to deliver auto-dismiss notification '\(content.title)': \(error)")
             }
         }
     }
@@ -437,56 +499,61 @@ private final class EventSource: NSObject, URLSessionDataDelegate, @unchecked Se
     private var session: URLSession?
     private var task: URLSessionDataTask?
     private var headers: [String: String] = [:]
-    
+
     var onOpen: (() -> Void)?
     var onMessage: ((Event) -> Void)?
     var onError: ((Error?) -> Void)?
-    
+
     struct Event {
         let id: String?
         let event: String?
         let data: String?
     }
-    
+
     init(url: URL) {
         self.url = url
         super.init()
     }
-    
+
     func addHeader(_ name: String, value: String) {
         headers[name] = value
     }
-    
+
     func connect() {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = TimeInterval.infinity
         configuration.timeoutIntervalForResource = TimeInterval.infinity
-        
+
         session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-        
+
         var request = URLRequest(url: url)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-        
+
         // Add custom headers
         for (name, value) in headers {
             request.setValue(value, forHTTPHeaderField: name)
         }
-        
+
         task = session?.dataTask(with: request)
         task?.resume()
     }
-    
+
     func disconnect() {
         task?.cancel()
         session?.invalidateAndCancel()
         task = nil
         session = nil
     }
-    
+
     // URLSessionDataDelegate
-    
-    nonisolated func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+
+    nonisolated func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
             DispatchQueue.main.async {
                 self.onOpen?()
@@ -499,20 +566,20 @@ private final class EventSource: NSObject, URLSessionDataDelegate, @unchecked Se
             }
         }
     }
-    
+
     private var buffer = ""
-    
+
     nonisolated func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let text = String(data: data, encoding: .utf8) else { return }
         buffer += text
-        
+
         // Process complete events
         let lines = buffer.components(separatedBy: "\n")
         buffer = lines.last ?? ""
-        
+
         var currentEvent = Event(id: nil, event: nil, data: nil)
         var dataLines: [String] = []
-        
+
         for line in lines.dropLast() {
             if line.isEmpty {
                 // End of event
@@ -526,15 +593,23 @@ private final class EventSource: NSObject, URLSessionDataDelegate, @unchecked Se
                 currentEvent = Event(id: nil, event: nil, data: nil)
                 dataLines = []
             } else if line.hasPrefix("id:") {
-                currentEvent = Event(id: line.dropFirst(3).trimmingCharacters(in: .whitespaces), event: currentEvent.event, data: currentEvent.data)
+                currentEvent = Event(
+                    id: line.dropFirst(3).trimmingCharacters(in: .whitespaces),
+                    event: currentEvent.event,
+                    data: currentEvent.data
+                )
             } else if line.hasPrefix("event:") {
-                currentEvent = Event(id: currentEvent.id, event: line.dropFirst(6).trimmingCharacters(in: .whitespaces), data: currentEvent.data)
+                currentEvent = Event(
+                    id: currentEvent.id,
+                    event: line.dropFirst(6).trimmingCharacters(in: .whitespaces),
+                    data: currentEvent.data
+                )
             } else if line.hasPrefix("data:") {
                 dataLines.append(String(line.dropFirst(5).trimmingCharacters(in: .whitespaces)))
             }
         }
     }
-    
+
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         DispatchQueue.main.async {
             self.onError?(error)
@@ -554,12 +629,12 @@ extension NotificationService {
     /// Sync preferences from the API
     private func syncPreferencesFromAPI() async {
         guard serverManager.isRunning else { return }
-        
+
         let port = serverManager.port
         guard let url = URL(string: "http://localhost:\(port)/api/preferences/notifications") else {
             return
         }
-        
+
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Bool] {
@@ -570,11 +645,12 @@ extension NotificationService {
                 prefs.commandCompletion = json["commandNotifications"] ?? true
                 prefs.commandError = json["sessionError"] ?? true
                 prefs.bell = json["systemAlerts"] ?? true
-                
+                prefs.claudeTurn = json["claudeTurn"] ?? true
+
                 // Update local preferences
                 self.preferences = prefs
                 prefs.save()
-                
+
                 logger.info("Synced notification preferences from API")
             }
         } catch {
@@ -582,16 +658,16 @@ extension NotificationService {
             // Not critical - we have local defaults
         }
     }
-    
+
     /// Sync preferences to the API
     private func syncPreferencesToAPI(_ prefs: NotificationPreferences) async {
         guard serverManager.isRunning else { return }
-        
+
         let port = serverManager.port
         guard let url = URL(string: "http://localhost:\(port)/api/preferences/notifications") else {
             return
         }
-        
+
         // Map our preferences to API format
         let apiPrefs: [String: Any] = [
             "enabled": true, // Always true for native notifications
@@ -600,17 +676,18 @@ extension NotificationService {
             "commandNotifications": prefs.commandCompletion,
             "sessionError": prefs.commandError,
             "systemAlerts": prefs.bell,
+            "claudeTurn": prefs.claudeTurn,
             "soundEnabled": true,
             "vibrationEnabled": false
         ]
-        
+
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: apiPrefs)
             var request = URLRequest(url: url)
             request.httpMethod = "PUT"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = jsonData
-            
+
             let (_, _) = try await URLSession.shared.data(for: request)
             logger.info("Synced notification preferences to API")
         } catch {

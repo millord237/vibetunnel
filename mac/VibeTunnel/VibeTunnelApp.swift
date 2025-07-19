@@ -91,7 +91,10 @@ struct VibeTunnelApp: App {
                 .environment(terminalLauncher)
                 .environment(gitRepositoryMonitor)
                 .environment(repositoryDiscoveryService)
-                .environment(sessionService ?? SessionService(serverManager: serverManager, sessionMonitor: sessionMonitor))
+                .environment(sessionService ?? SessionService(
+                    serverManager: serverManager,
+                    sessionMonitor: sessionMonitor
+                ))
         }
         .commands {
             CommandGroup(after: .appInfo) {
@@ -288,7 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 logger.info("HTTP server started successfully on port \(serverManager.port)")
 
                 // Session monitoring starts automatically
-                
+
                 // Start native notification service
                 await notificationService.start()
             } else {

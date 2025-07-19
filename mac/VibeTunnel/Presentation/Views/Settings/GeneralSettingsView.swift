@@ -37,7 +37,7 @@ struct GeneralSettingsView: View {
     var updateChannel: UpdateChannel {
         UpdateChannel(rawValue: updateChannelRaw) ?? .stable
     }
-    
+
     private func updateNotificationPreferences() {
         // Load current preferences and notify the service
         let prefs = NotificationService.NotificationPreferences()
@@ -89,7 +89,7 @@ struct GeneralSettingsView: View {
                         Text("Display native macOS notifications for session and command events.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        
+
                         if showNotifications {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Notify me for:")
@@ -97,32 +97,32 @@ struct GeneralSettingsView: View {
                                     .foregroundStyle(.secondary)
                                     .padding(.leading, 20)
                                     .padding(.top, 4)
-                                
+
                                 VStack(alignment: .leading, spacing: 4) {
                                     NotificationCheckbox(
                                         title: "Session starts",
                                         key: "notifications.sessionStart",
                                         updateAction: updateNotificationPreferences
                                     )
-                                    
+
                                     NotificationCheckbox(
                                         title: "Session ends",
                                         key: "notifications.sessionExit",
                                         updateAction: updateNotificationPreferences
                                     )
-                                    
+
                                     NotificationCheckbox(
                                         title: "Commands complete (> 3 seconds)",
                                         key: "notifications.commandCompletion",
                                         updateAction: updateNotificationPreferences
                                     )
-                                    
+
                                     NotificationCheckbox(
                                         title: "Commands fail",
                                         key: "notifications.commandError",
                                         updateAction: updateNotificationPreferences
                                     )
-                                    
+
                                     NotificationCheckbox(
                                         title: "Terminal bell (\u{0007})",
                                         key: "notifications.bell",
@@ -250,16 +250,16 @@ private struct NotificationCheckbox: View {
     let title: String
     let key: String
     let updateAction: () -> Void
-    
+
     @State private var isChecked: Bool
-    
+
     init(title: String, key: String, updateAction: @escaping () -> Void) {
         self.title = title
         self.key = key
         self.updateAction = updateAction
         self._isChecked = State(initialValue: UserDefaults.standard.bool(forKey: key))
     }
-    
+
     var body: some View {
         Button(action: toggleCheck) {
             HStack(spacing: 6) {
@@ -267,11 +267,11 @@ private struct NotificationCheckbox: View {
                     .foregroundStyle(isChecked ? Color.accentColor : Color.secondary)
                     .font(.system(size: 14))
                     .animation(.easeInOut(duration: 0.15), value: isChecked)
-                
+
                 Text(title)
                     .font(.system(size: 12))
                     .foregroundStyle(.primary)
-                
+
                 Spacer()
             }
             .contentShape(Rectangle())
@@ -282,7 +282,7 @@ private struct NotificationCheckbox: View {
             isChecked = UserDefaults.standard.bool(forKey: key)
         }
     }
-    
+
     private func toggleCheck() {
         isChecked.toggle()
         UserDefaults.standard.set(isChecked, forKey: key)

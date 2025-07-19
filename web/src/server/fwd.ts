@@ -600,7 +600,7 @@ export async function startVibeTunnelForward(args: string[]) {
     let cleanupStdout: (() => void) | undefined;
 
     if (titleMode === TitleMode.DYNAMIC) {
-      activityDetector = new ActivityDetector(command);
+      activityDetector = new ActivityDetector(command, sessionId);
 
       // Hook into stdout to detect Claude status
       const originalStdoutWrite = process.stdout.write.bind(process.stdout);

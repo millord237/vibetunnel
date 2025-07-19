@@ -614,8 +614,8 @@ describe('UnifiedSettings - Notification Settings', () => {
     await el.updateComplete;
 
     // Find the notification section
-    const notificationSection = Array.from(el.querySelectorAll('h3')).find(
-      (h3) => h3.textContent?.includes('Notifications')
+    const notificationSection = Array.from(el.querySelectorAll('h3')).find((h3) =>
+      h3.textContent?.includes('Notifications')
     );
     expect(notificationSection).toBeTruthy();
 
@@ -646,7 +646,9 @@ describe('UnifiedSettings - Notification Settings', () => {
     const { pushNotificationService } = await import('@/client/services/push-notification-service');
     (pushNotificationService.isSupported as ReturnType<typeof vi.fn>).mockReturnValue(true);
     (pushNotificationService.getPermission as ReturnType<typeof vi.fn>).mockReturnValue('granted');
-    (pushNotificationService.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue('granted');
+    (pushNotificationService.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue(
+      'granted'
+    );
     (pushNotificationService.subscribe as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
     const el = await fixture<UnifiedSettings>(html`<unified-settings></unified-settings>`);
@@ -658,10 +660,10 @@ describe('UnifiedSettings - Notification Settings', () => {
     // Find and click the enable toggle
     const enableToggle = el.querySelector('button[role="switch"]') as HTMLButtonElement;
     expect(enableToggle).toBeTruthy();
-    
+
     // Click to enable
     enableToggle.click();
-    
+
     await new Promise((resolve) => setTimeout(resolve, 100));
     await el.updateComplete;
 
@@ -862,7 +864,7 @@ describe('UnifiedSettings - Notification Settings', () => {
   it('should show iOS-specific message for Safari', async () => {
     // Mock iOS Safari detection
     const el = await fixture<UnifiedSettings>(html`<unified-settings></unified-settings>`);
-    
+
     // Override the isIOSSafari method
     (el as any).isIOSSafari = () => true;
     (el as any).isStandalone = () => false;

@@ -231,7 +231,8 @@ public final class CoordinateTransformer {
         // Find the screen that contains our click point
         guard let targetScreen = findScreenContaining(point: pixelCoordinates) else {
             logger
-                .warning("No screen contains point at (\(pixelCoordinates.x), \(pixelCoordinates.y)), using main screen"
+                .warning(
+                    "No screen contains point at (\(pixelCoordinates.x), \(pixelCoordinates.y)), using main screen"
                 )
             guard let mainScreen = NSScreen.main ?? NSScreen.screens.first else {
                 return pixelCoordinates

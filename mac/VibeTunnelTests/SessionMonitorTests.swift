@@ -528,11 +528,11 @@ final class SessionMonitorTests {
     func cachePerformance() async throws {
         // Skip this test on macOS < 13
         #if os(macOS)
-        if #unavailable(macOS 13.0) {
-            try XCTSkipIf(true, "Skipping cache performance test on macOS < 13")
-        }
+            if #unavailable(macOS 13.0) {
+                try XCTSkipIf(true, "Skipping cache performance test on macOS < 13")
+            }
         #endif
-        
+
         // Warm up cache
         _ = await monitor.getSessions()
 
