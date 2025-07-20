@@ -8,6 +8,8 @@ import UserNotifications
 /// Manages the app's lifecycle and window hierarchy including the menu bar interface,
 /// settings window, welcome screen, and session detail views. Coordinates shared services
 /// across all windows and handles deep linking for terminal session URLs.
+///
+/// This application runs on macOS 14.0+ and requires Swift 6.
 @main
 struct VibeTunnelApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self)
@@ -21,7 +23,6 @@ struct VibeTunnelApp: App {
     @State var terminalLauncher = TerminalLauncher.shared
     @State var gitRepositoryMonitor = GitRepositoryMonitor()
     @State var repositoryDiscoveryService = RepositoryDiscoveryService()
-    @State var screencapService: ScreencapService?
     @State var sessionService: SessionService?
 
     init() {
@@ -124,7 +125,7 @@ struct VibeTunnelApp: App {
 /// coordinator for application-wide events and services.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
-    // Needed for some gross menu item highlight hack
+    // Needed for menu item highlight hack
     static weak var shared: AppDelegate?
     override init() {
         super.init()
@@ -179,7 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         // Register default values
         UserDefaults.standard.register(defaults: [
-            "showInDock": true // Default to showing in dock
+            "showInDock": true, // Default to showing in dock
+            "dashboardAccessMode": AppConstants.Defaults.dashboardAccessMode
         ])
 
         // Initialize Sparkle updater manager
@@ -238,18 +240,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             name: Notification.Name("checkForUpdates"),
             object: nil
         )
-
-        // Initialize ScreencapService if enabled (must happen before socket connection)
-        let screencapEnabled = AppConstants.boolValue(for: AppConstants.UserDefaultsKeys.enableScreencapService)
-        logger.info("🎥 Screencap service enabled: \(screencapEnabled)")
-        if screencapEnabled {
-            logger.info("🎥 Initializing ScreencapService...")
-            let service = ScreencapService.shared
-            app?.screencapService = service
-            logger.info("🎥 ScreencapService initialized and retained")
-        } else {
-            logger.warning("🎥 Screencap service is disabled in settings")
-        }
 
         // Initialize SessionService
         if let serverManager = app?.serverManager, let sessionMonitor = app?.sessionMonitor {

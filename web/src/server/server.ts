@@ -23,9 +23,7 @@ import { createPreferencesRouter } from './routes/preferences.js';
 import { createPushRoutes } from './routes/push.js';
 import { createRemoteRoutes } from './routes/remotes.js';
 import { createRepositoryRoutes } from './routes/repositories.js';
-import { createScreencapRoutes, initializeScreencap } from './routes/screencap.js';
 import { createSessionRoutes } from './routes/sessions.js';
-import { createWebRTCConfigRouter } from './routes/webrtc-config.js';
 import { WebSocketInputHandler } from './routes/websocket-input.js';
 import { ActivityMonitor } from './services/activity-monitor.js';
 import { AuthService } from './services/auth-service.js';
@@ -564,7 +562,81 @@ export async function createApp(): Promise<AppInstance> {
   });
 
   // Serve static files with .html extension handling and caching headers
-  const publicPath = path.join(process.cwd(), 'public');
+  // In production/bundled mode, use the package directory; in development, use cwd
+  const getPublicPath = () => {
+    // First check if BUILD_PUBLIC_PATH is set (used by Mac app bundle)
+    if (process.env.BUILD_PUBLIC_PATH) {
+      logger.info(`Using BUILD_PUBLIC_PATH: ${process.env.BUILD_PUBLIC_PATH}`);
+      return process.env.BUILD_PUBLIC_PATH;
+    }
+    // More precise npm package detection:
+    // 1. Check if we're explicitly in an npm package structure
+    // 2. The file should be in node_modules/vibetunnel/lib/
+    // 3. Or check for our specific package markers
+    const isNpmPackage = (() => {
+      // Most reliable: check if we're in node_modules/vibetunnel structure
+      if (__filename.includes(path.join('node_modules', 'vibetunnel', 'lib'))) {
+        return true;
+      }
+
+      // Check for Windows path variant
+      if (__filename.includes('node_modules\\vibetunnel\\lib')) {
+        return true;
+      }
+
+      // Secondary check: if we're in a lib directory, verify it's actually an npm package
+      // by checking for the existence of package.json in the parent directory
+      if (path.basename(__dirname) === 'lib') {
+        const parentDir = path.dirname(__dirname);
+        const packageJsonPath = path.join(parentDir, 'package.json');
+        try {
+          const packageJson = require(packageJsonPath);
+          // Verify this is actually our package
+          return packageJson.name === 'vibetunnel';
+        } catch {
+          // Not a valid npm package structure
+          return false;
+        }
+      }
+
+      return false;
+    })();
+
+    if (process.env.VIBETUNNEL_BUNDLED === 'true' || process.env.BUILD_DATE || isNpmPackage) {
+      // In bundled/production/npm mode, find package root
+      // When bundled, __dirname is /path/to/package/dist, so go up one level
+      // When globally installed, we need to find the package root
+      let packageRoot = __dirname;
+
+      // If we're in the dist directory, go up one level
+      if (path.basename(packageRoot) === 'dist') {
+        packageRoot = path.dirname(packageRoot);
+      }
+
+      // For npm package context, if we're in lib directory, go up one level
+      if (path.basename(packageRoot) === 'lib') {
+        packageRoot = path.dirname(packageRoot);
+      }
+
+      // Look for package.json to confirm we're in the right place
+      const publicPath = path.join(packageRoot, 'public');
+      const indexPath = path.join(publicPath, 'index.html');
+
+      // If index.html exists, we found the right path
+      if (require('fs').existsSync(indexPath)) {
+        return publicPath;
+      }
+
+      // Fallback: try going up from the bundled CLI location
+      // The bundled CLI might be in node_modules/vibetunnel/dist/
+      return path.join(__dirname, '..', 'public');
+    } else {
+      // In development mode, use current working directory
+      return path.join(process.cwd(), 'public');
+    }
+  };
+
+  const publicPath = getPublicPath();
   const isDevelopment = !process.env.BUILD_DATE || process.env.NODE_ENV === 'development';
 
   app.use(
@@ -809,22 +881,12 @@ export async function createApp(): Promise<AppInstance> {
     logger.debug('Mounted push notification routes');
   }
 
-  // Mount screencap routes
-  app.use('/', createScreencapRoutes());
-  logger.debug('Mounted screencap routes');
-
-  // WebRTC configuration route
-  app.use('/api', createWebRTCConfigRouter());
-  logger.debug('Mounted WebRTC config routes');
-
   // Mount events router for SSE streaming
   app.use('/api', createEventsRouter(ptyManager));
   logger.debug('Mounted events routes');
 
-  // Initialize screencap service and control socket
+  // Initialize control socket
   try {
-    await initializeScreencap();
-
     // Set up configuration update callback
     controlUnixHandler.setConfigUpdateCallback((updatedConfig) => {
       // Update server configuration
@@ -851,8 +913,8 @@ export async function createApp(): Promise<AppInstance> {
     await controlUnixHandler.start();
     logger.log(chalk.green('Control UNIX socket: READY'));
   } catch (error) {
-    logger.error('Failed to initialize screencap or control socket:', error);
-    logger.warn('Screen capture and Mac control features will not be available.');
+    logger.error('Failed to initialize control socket:', error);
+    logger.warn('Mac control features will not be available.');
     // Depending on the desired behavior, you might want to exit here
     // For now, we'll let the server continue without these features.
   }
@@ -866,7 +928,6 @@ export async function createApp(): Promise<AppInstance> {
     if (
       parsedUrl.pathname !== '/buffers' &&
       parsedUrl.pathname !== '/ws/input' &&
-      parsedUrl.pathname !== '/ws/screencap-signal' &&
       parsedUrl.pathname !== '/ws/config'
     ) {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
@@ -1024,20 +1085,6 @@ export async function createApp(): Promise<AppInstance> {
       const userId = wsReq.userId || 'unknown';
 
       websocketInputHandler.handleConnection(ws, sessionId, userId);
-    } else if (pathname === '/ws/screencap-signal') {
-      logger.log('🖥️ Handling screencap WebSocket connection');
-      // Handle screencap WebRTC signaling from browser
-      const userId = wsReq.userId || 'unknown';
-      logger.log(`🖥️ Screencap WebSocket user: ${userId}`);
-
-      if (!controlUnixHandler) {
-        logger.error('❌ controlUnixHandler not initialized!');
-        ws.close();
-        return;
-      }
-
-      logger.log('✅ Passing connection to controlUnixHandler');
-      controlUnixHandler.handleBrowserConnection(ws);
     } else if (pathname === '/ws/config') {
       logger.log('⚙️ Handling config WebSocket connection');
       // Add client to the set

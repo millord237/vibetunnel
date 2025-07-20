@@ -20,14 +20,33 @@ execSync('pnpm exec tailwindcss -i ./src/client/styles.css -o ./public/bundle/st
 console.log('Bundling client JavaScript...');
 execSync('esbuild src/client/app-entry.ts --bundle --outfile=public/bundle/client-bundle.js --format=esm --minify --define:process.env.NODE_ENV=\'"test"\'', { stdio: 'inherit' });
 execSync('esbuild src/client/test-entry.ts --bundle --outfile=public/bundle/test.js --format=esm --minify --define:process.env.NODE_ENV=\'"test"\'', { stdio: 'inherit' });
-execSync('esbuild src/client/screencap-entry.ts --bundle --outfile=public/bundle/screencap.js --format=esm --minify --define:process.env.NODE_ENV=\'"test"\'', { stdio: 'inherit' });
 execSync('esbuild src/client/sw.ts --bundle --outfile=public/sw.js --format=iife --minify --define:process.env.NODE_ENV=\'"test"\'', { stdio: 'inherit' });
 
 // Build server TypeScript
 console.log('Building server...');
-execSync('tsc', { stdio: 'inherit' });
+// Force a clean build in CI to avoid incremental build issues
+execSync('npx tsc --build --force', { stdio: 'inherit' });
 
-// Skip native executable build in CI
-console.log('Skipping native executable build in CI environment...');
+// Verify dist directory exists
+if (fs.existsSync(path.join(__dirname, '../dist'))) {
+  const files = fs.readdirSync(path.join(__dirname, '../dist'));
+  console.log(`Server build created ${files.length} files in dist/`);
+  console.log('Files in dist:', files.join(', '));
+  
+  // Check for the essential server.js file
+  if (!fs.existsSync(path.join(__dirname, '../dist/server/server.js'))) {
+    console.error('ERROR: dist/server/server.js not found after tsc build!');
+    console.log('Contents of dist directory:');
+    execSync('find dist -type f | head -20', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+    process.exit(1);
+  }
+} else {
+  console.error('ERROR: dist directory does not exist after tsc build!');
+  process.exit(1);
+}
+
+// Build native executable in CI
+console.log('Building native executable for CI...');
+execSync('node build-native.js', { stdio: 'inherit' });
 
 console.log('CI build completed successfully!');

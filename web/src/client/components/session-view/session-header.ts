@@ -17,6 +17,7 @@ import { isAIAssistantSession, sendAIPrompt } from '../../utils/ai-sessions.js';
 import { createLogger } from '../../utils/logger.js';
 import './mobile-menu.js';
 import '../theme-toggle-icon.js';
+import './image-upload-menu.js';
 
 const logger = createLogger('session-header');
 
@@ -45,7 +46,6 @@ export class SessionHeader extends LitElement {
   @property({ type: Function }) onMaxWidthToggle?: () => void;
   @property({ type: Function }) onWidthSelect?: (width: number) => void;
   @property({ type: Function }) onFontSizeChange?: (size: number) => void;
-  @property({ type: Function }) onScreenshare?: () => void;
   @property({ type: Function }) onOpenSettings?: () => void;
   @property({ type: String }) currentTheme = 'system';
   @property({ type: Boolean }) keyboardCaptureActive = true;
@@ -248,39 +248,15 @@ export class SessionHeader extends LitElement {
               }}
             ></theme-toggle-icon>
             
-            <button
-              class="bg-bg-tertiary border border-border rounded-lg p-2 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0"
-              @click=${(e: Event) => {
-                e.stopPropagation();
-                this.onOpenFileBrowser?.();
-              }}
-              title="Browse Files (⌘O)"
-              data-testid="file-browser-button"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path
-                  d="M1.75 1h5.5c.966 0 1.75.784 1.75 1.75v1h4c.966 0 1.75.784 1.75 1.75v7.75A1.75 1.75 0 0113 15H3a1.75 1.75 0 01-1.75-1.75V2.75C1.25 1.784 1.784 1 1.75 1zM2.75 2.5v10.75c0 .138.112.25.25.25h10a.25.25 0 00.25-.25V5.5a.25.25 0 00-.25-.25H8.75v-2.5a.25.25 0 00-.25-.25h-5.5a.25.25 0 00-.25.25z"
-                />
-              </svg>
-            </button>
-            ${
-              this.macAppConnected
-                ? html`
-                  <button
-                    class="bg-bg-tertiary border border-border rounded-lg p-2 font-mono text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0"
-                    @click=${() => this.onScreenshare?.()}
-                    title="Start Screenshare"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="2" y="3" width="20" height="14" rx="2"/>
-                      <line x1="8" y1="21" x2="16" y2="21"/>
-                      <line x1="12" y1="17" x2="12" y2="21"/>
-                      <circle cx="12" cy="10" r="3" fill="currentColor" stroke="none"/>
-                    </svg>
-                  </button>
-                `
-                : ''
-            }
+            <!-- Image Upload Menu -->
+            <image-upload-menu
+              .onPasteImage=${() => this.handlePasteImage()}
+              .onSelectImage=${() => this.handleSelectImage()}
+              .onOpenCamera=${() => this.handleOpenCamera()}
+              .onBrowseFiles=${() => this.onOpenFileBrowser?.()}
+              .isMobile=${this.isMobile}
+            ></image-upload-menu>
+            
             <button
               class="bg-bg-tertiary border border-border rounded-lg px-3 py-2 font-mono text-xs text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0 width-selector-button"
               @click=${() => this.onMaxWidthToggle?.()}
@@ -297,7 +273,7 @@ export class SessionHeader extends LitElement {
               .widthLabel=${this.widthLabel}
               .widthTooltip=${this.widthTooltip}
               .onOpenFileBrowser=${this.onOpenFileBrowser}
-              .onScreenshare=${this.onScreenshare}
+              .onUploadImage=${() => this.handleMobileUploadImage()}
               .onMaxWidthToggle=${this.onMaxWidthToggle}
               .onOpenSettings=${this.onOpenSettings}
               .onCreateSession=${this.onCreateSession}
@@ -360,4 +336,44 @@ export class SessionHeader extends LitElement {
   private handleMouseLeave = () => {
     this.isHovered = false;
   };
+
+  private handlePasteImage() {
+    // Dispatch event to session-view to handle paste
+    this.dispatchEvent(
+      new CustomEvent('paste-image', {
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  private handleSelectImage() {
+    // Always dispatch select-image event to trigger the OS picker directly
+    this.dispatchEvent(
+      new CustomEvent('select-image', {
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  private handleOpenCamera() {
+    // Dispatch event to session-view to open camera
+    this.dispatchEvent(
+      new CustomEvent('open-camera', {
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  private handleMobileUploadImage() {
+    // Directly trigger the OS image picker
+    this.dispatchEvent(
+      new CustomEvent('select-image', {
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
 }

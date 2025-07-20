@@ -61,16 +61,24 @@ class ServerManager {
 
     var bindAddress: String {
         get {
-            let mode = DashboardAccessMode(
-                rawValue: UserDefaults.standard.string(forKey: "dashboardAccessMode") ?? ""
-            ) ??
-                .localhost
+            // Get the raw value from UserDefaults, defaulting to the app default
+            let rawValue = UserDefaults.standard.string(forKey: "dashboardAccessMode") ?? AppConstants.Defaults
+                .dashboardAccessMode
+            let mode = DashboardAccessMode(rawValue: rawValue) ?? .network
+
+            // Log for debugging
+            logger
+                .debug(
+                    "bindAddress getter: rawValue='\(rawValue)', mode=\(mode.rawValue), bindAddress=\(mode.bindAddress)"
+                )
+
             return mode.bindAddress
         }
         set {
             // Find the mode that matches this bind address
             if let mode = DashboardAccessMode.allCases.first(where: { $0.bindAddress == newValue }) {
                 UserDefaults.standard.set(mode.rawValue, forKey: "dashboardAccessMode")
+                logger.debug("bindAddress setter: set mode=\(mode.rawValue) for bindAddress=\(newValue)")
             }
         }
     }
@@ -209,7 +217,9 @@ class ServerManager {
         do {
             let server = BunServer()
             server.port = port
-            server.bindAddress = bindAddress
+            let currentBindAddress = bindAddress
+            server.bindAddress = currentBindAddress
+            logger.info("Starting server with port=\(self.port), bindAddress=\(currentBindAddress)")
 
             // Set up crash handler
             server.onCrash = { [weak self] exitCode in
@@ -251,18 +261,6 @@ class ServerManager {
             _ = TerminalControlHandler.shared
             // Note: SystemControlHandler is initialized in AppDelegate via
             // SharedUnixSocketManager.initializeSystemHandler()
-
-            // This allows the screencap API to be available for queries (like listing
-            // windows/displays) without triggering the permission dialog. The permission
-            // dialog only appears when the user actually starts screen capture.
-            if AppConstants.boolValue(for: AppConstants.UserDefaultsKeys.enableScreencapService) {
-                self.logger.info("Screencap service enabled, initializing...")
-                // Ensure the singleton is created and ready to receive messages.
-                // This will in turn initialize the WebRTCManager and register its handlers.
-                _ = ScreencapService.shared
-            } else {
-                self.logger.info("Screencap service disabled by user preference")
-            }
 
             // Pass the local auth token to SessionMonitor
             SessionMonitor.shared.setLocalAuthToken(server.localToken)

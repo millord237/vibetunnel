@@ -1,6 +1,6 @@
 import type { Server } from 'http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import WebSocket from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 
 // Mock the control Unix handler
 const mockControlUnixHandler = {
@@ -18,7 +18,7 @@ vi.mock('../../server/server', () => ({
 }));
 
 describe('Repository Path Bidirectional Sync Integration', () => {
-  let wsServer: WebSocket.Server;
+  let wsServer: WebSocketServer;
   let httpServer: Server;
   let client: WebSocket;
   const port = 4321;
@@ -26,7 +26,7 @@ describe('Repository Path Bidirectional Sync Integration', () => {
   beforeEach(async () => {
     // Create a simple WebSocket server to simulate the config endpoint
     httpServer = require('http').createServer();
-    wsServer = new WebSocket.Server({ server: httpServer, path: '/ws/config' });
+    wsServer = new WebSocketServer({ server: httpServer, path: '/ws/config' });
 
     // Handle WebSocket connections
     wsServer.on('connection', (ws) => {
@@ -112,7 +112,7 @@ describe('Repository Path Bidirectional Sync Integration', () => {
     });
 
     // Track received messages
-    const receivedMessages: any[] = [];
+    const receivedMessages: Array<{ type: string; data?: unknown }> = [];
     client.on('message', (data) => {
       receivedMessages.push(JSON.parse(data.toString()));
     });
@@ -168,7 +168,7 @@ describe('Repository Path Bidirectional Sync Integration', () => {
       client.on('open', resolve);
     });
 
-    const receivedMessages: any[] = [];
+    const receivedMessages: Array<{ type: string; data?: unknown }> = [];
     client.on('message', (data) => {
       receivedMessages.push(JSON.parse(data.toString()));
     });
@@ -211,7 +211,7 @@ describe('Repository Path Bidirectional Sync Integration', () => {
       client1.on('open', resolve);
     });
 
-    const client1Messages: any[] = [];
+    const client1Messages: Array<{ type: string; data?: unknown }> = [];
     client1.on('message', (data) => {
       client1Messages.push(JSON.parse(data.toString()));
     });
@@ -222,7 +222,7 @@ describe('Repository Path Bidirectional Sync Integration', () => {
       client2.on('open', resolve);
     });
 
-    const client2Messages: any[] = [];
+    const client2Messages: Array<{ type: string; data?: unknown }> = [];
     client2.on('message', (data) => {
       client2Messages.push(JSON.parse(data.toString()));
     });
