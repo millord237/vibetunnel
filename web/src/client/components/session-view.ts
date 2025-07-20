@@ -1005,6 +1005,67 @@ export class SessionView extends LitElement {
     this.showImagePicker = false;
   }
 
+  private async handlePasteImage() {
+    // Try to paste image from clipboard
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+
+      for (const clipboardItem of clipboardItems) {
+        const imageTypes = clipboardItem.types.filter((type) => type.startsWith('image/'));
+
+        for (const imageType of imageTypes) {
+          const blob = await clipboardItem.getType(imageType);
+          const file = new File([blob], `pasted-image.${imageType.split('/')[1]}`, {
+            type: imageType,
+          });
+
+          await this.uploadFile(file);
+          logger.log(`Successfully pasted image from clipboard`);
+          return;
+        }
+      }
+
+      // No image found in clipboard
+      logger.log('No image found in clipboard');
+      this.dispatchEvent(
+        new CustomEvent('error', {
+          detail: 'No image found in clipboard',
+          bubbles: true,
+          composed: true,
+        })
+      );
+    } catch (error) {
+      logger.error('Failed to paste image from clipboard:', error);
+      this.dispatchEvent(
+        new CustomEvent('error', {
+          detail: 'Failed to access clipboard. Please check permissions.',
+          bubbles: true,
+          composed: true,
+        })
+      );
+    }
+  }
+
+  private handleSelectImage() {
+    // Use the file picker component to open image picker
+    const filePicker = this.querySelector('file-picker') as FilePicker | null;
+    if (filePicker && typeof filePicker.openImagePicker === 'function') {
+      filePicker.openImagePicker();
+    } else {
+      logger.error('File picker component not found or openImagePicker method not available');
+    }
+  }
+
+  private handleOpenCamera() {
+    // Use the file picker component to open camera
+    const filePicker = this.querySelector('file-picker') as FilePicker | null;
+    if (filePicker && typeof filePicker.openCamera === 'function') {
+      filePicker.openCamera();
+    } else {
+      logger.error('File picker component not found or openCamera method not available');
+    }
+  }
+
   private async handleFileSelected(event: CustomEvent) {
     const { path } = event.detail;
     if (!path || !this.session) return;
@@ -1377,6 +1438,10 @@ export class SessionView extends LitElement {
             this.customWidth = '';
           }}
           @session-rename=${(e: CustomEvent) => this.handleRename(e)}
+          @paste-image=${() => this.handlePasteImage()}
+          @select-image=${() => this.handleSelectImage()}
+          @open-camera=${() => this.handleOpenCamera()}
+          @show-image-upload-options=${() => this.handleSelectImage()}
           @capture-toggled=${(e: CustomEvent) => {
             this.dispatchEvent(
               new CustomEvent('capture-toggled', {
@@ -1638,6 +1703,7 @@ export class SessionView extends LitElement {
           @file-error=${this.handleFileError}
           @file-cancel=${this.handleCloseFilePicker}
         ></file-picker>
+
         
         <!-- Width Selector Modal (moved here for proper positioning) -->
         <terminal-settings-modal
