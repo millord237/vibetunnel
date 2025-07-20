@@ -91,6 +91,35 @@ final class NotificationService: NSObject {
         disconnect()
     }
 
+    /// Request notification permissions and show test notification
+    func requestPermissionAndShowTestNotification() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        
+        do {
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            
+            if granted {
+                logger.info("✅ Notification permissions granted")
+                
+                // Show test notification
+                let content = UNMutableNotificationContent()
+                content.title = "VibeTunnel Notifications"
+                content.body = "Notifications are now enabled! You'll receive alerts for terminal events."
+                content.sound = .default
+                
+                deliverNotification(content, identifier: "permission-granted-\(UUID().uuidString)")
+                
+                return true
+            } else {
+                logger.warning("❌ Notification permissions denied")
+                return false
+            }
+        } catch {
+            logger.error("Failed to request notification permissions: \(error)")
+            return false
+        }
+    }
+
     /// Update notification preferences
     func updatePreferences(_ prefs: NotificationPreferences) {
         self.preferences = prefs

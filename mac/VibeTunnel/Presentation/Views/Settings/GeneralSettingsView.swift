@@ -80,7 +80,15 @@ struct GeneralSettingsView: View {
                                 // Ensure NotificationService starts/stops based on the toggle
                                 if newValue {
                                     Task {
-                                        await NotificationService.shared.start()
+                                        // Request permissions and show test notification
+                                        let granted = await NotificationService.shared.requestPermissionAndShowTestNotification()
+                                        
+                                        if granted {
+                                            await NotificationService.shared.start()
+                                        } else {
+                                            // If permission denied, turn toggle back off
+                                            showNotifications = false
+                                        }
                                     }
                                 } else {
                                     NotificationService.shared.stop()
@@ -284,8 +292,31 @@ private struct NotificationCheckbox: View {
     }
 
     private func toggleCheck() {
-        isChecked.toggle()
-        UserDefaults.standard.set(isChecked, forKey: key)
-        updateAction()
+        // If enabling any notification checkbox and main notifications are off, request permissions first
+        if !isChecked && !UserDefaults.standard.bool(forKey: "showNotifications") {
+            Task { @MainActor in
+                // Request permissions and enable main toggle
+                let granted = await NotificationService.shared.requestPermissionAndShowTestNotification()
+                
+                if granted {
+                    // Enable main notifications toggle
+                    UserDefaults.standard.set(true, forKey: "showNotifications")
+                    
+                    // Enable this specific checkbox
+                    isChecked = true
+                    UserDefaults.standard.set(isChecked, forKey: key)
+                    updateAction()
+                    
+                    // Start notification service
+                    await NotificationService.shared.start()
+                }
+                // If permission denied, leave everything as is
+            }
+        } else {
+            // Normal toggle behavior
+            isChecked.toggle()
+            UserDefaults.standard.set(isChecked, forKey: key)
+            updateAction()
+        }
     }
 }
