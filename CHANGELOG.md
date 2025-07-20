@@ -29,6 +29,10 @@
 - Added complete HQ mode documentation covering distributed deployments
 - Organized all documentation into logical categories with Mintlify
 
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@hewigovens](https://github.com/hewigovens) - Added systemd service management for Linux deployments, refactored installer for user-level services with improved security (#419)
+
 ## [1.0.0-beta.12] - 2025-07-17
 
 #### **Welcome Screen Performance**
@@ -61,6 +65,10 @@
 - Fixed lint and type errors across the codebase
 - Cleaned up duplicate and stray files from web directory
 
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@amazanov](https://github.com/amazanov) - Fixed PAM module and npm_config_prefix issues on Ubuntu, improving Linux compatibility (#380)
+
 ## [1.0.0-beta.11] - 2025-07-17
 
 #### **Better Settings Organization**
@@ -82,7 +90,7 @@
 
 #### **Improved `vt` Command**
 - Added verbosity control with `-q` (quiet), `-v` (verbose), `-vv` (extra verbose) flags (#356)
-- New `vt title` command to update session names from within a VibeTunnel session
+- New `vt title` command to update session names from within a VibeTunnel session (via @tarasenko)
 
 ### 🐛 Bug Fixes
 
@@ -92,15 +100,20 @@
 - Replaced bell icon with settings icon for better clarity (#366)
 - Resolved Tailwind CSS performance warning
 
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@janremes](https://github.com/janremes) - Implemented Git repository discovery with folder selection and automatic repo detection (#274)
+- [@lukeswitz](https://github.com/lukeswitz) - Fixed duplicate session creation with intelligent detection logic (#345)
+
 ## [1.0.0-beta.10] - 2025-07-15
 
 #### **Repository Discovery**
-- Automatic Git repository detection when creating new sessions (#301)
+- Automatic Git repository detection when creating new sessions (#301) (via @mrshu)
 - Recently modified repositories displayed in new session dialog
 - Quick project access with one-click repository selection
 
 #### **Keyboard Shortcut Handling**
-- Redesigned keyboard capture system with intelligent priority handling (#298)
+- Redesigned keyboard capture system with intelligent priority handling (#298) (via @tarasenko)
 - Browser shortcuts work naturally: Cmd+Shift+A (tab search), Cmd+1-9 (tab switching), Alt+Arrow keys
 - Visual keyboard capture indicator with detailed tooltips
 - Double-Escape toggle for switching between browser and terminal keyboard modes
@@ -110,7 +123,6 @@
 - Professional light mode with improved contrast (#314)
 - Easy theme switching between light and dark modes
 - Enhanced terminal color schemes (#332)
-
 #### **Development Server Mode**
 - New "Development Server" mode in Debug Settings enables hot reload (#316)
 - Significantly faster iteration when developing the web interface
@@ -119,12 +131,19 @@
 ### 🐛 Bug Fixes
 
 - Fixed Safari clipboard paste on iOS and macOS (#336)
-- Fixed duplicate session creation with intelligent detection (#345)
+- Fixed duplicate session creation with intelligent detection (#345) (via @lukeswitz)
 - Added keyboard navigation in session grid (arrow keys, Enter, etc.) (#322)
 - Fixed race conditions in network access mode (#347)
-- Improved SSH key manager modal layout (#325)
+- Improved SSH key manager modal layout (#325) (via @taoxugit)
 - Updated all dependencies to latest stable versions
 - Enhanced TypeScript configuration with better type safety
+
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@davidgomesdev](https://github.com/davidgomesdev) - Transformed SessionListView to clean MVVM architecture for better maintainability (#217)
+- [@jeffhurray](https://github.com/jeffhurray) - Consolidated z-index management to prevent UI layer conflicts (#291)
+- [@taoxugit](https://github.com/taoxugit) - Fixed SSH key manager modal layout and improved test compatibility (#325)
+- [@tarasenko](https://github.com/tarasenko) - Added browser keyboard shortcut support with intelligent priority handling (#298)
 
 ## [1.0.0-beta.9] - 2025-07-11
 
@@ -144,22 +163,26 @@
 - Added support for smaller grid sizes on compact devices
 - Added Alt+Delete/Left/Right keyboard shortcuts for mobile users (#290)
 - Fixed mobile header overflow when using dropdown menus (#295)
-
 #### **Cloudflare Integration**
 - Improved tunnel setup with stream-based monitoring (#306)
 - Enhanced error handling and more reliable setup process
 
 #### **Git Repository Discovery**
-- Enhanced folder selection when creating new sessions (#274)
+- Enhanced folder selection when creating new sessions (#274) (via @janremes)
 - Added intelligent Git repository discovery in selected folders
 - Fixed multiple bugs in repository discovery (#282)
 
 ### 🐛 Bug Fixes
 
 - Fixed terminal titles jumping due to activity indicators (#309)
-- Consolidated z-index management to prevent UI layer conflicts (#291)
+- Consolidated z-index management to prevent UI layer conflicts (#291) (via @jeffhurray)
 - Enhanced event handling for better cross-platform compatibility
 - Improved file browser functionality with better click handling
+
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@claywarren](https://github.com/claywarren) - Fixed infinite scroll loop that could freeze the browser (#206)
+- [@luisnell](https://github.com/luisnell) - Added Apple Silicon Homebrew path check for VT tool installation
 
 ## [1.0.0-beta.8] - 2025-07-08
 
@@ -221,6 +244,14 @@
 - Unified control protocol for terminal sessions (#239)
 - Improved Unix socket handling with better error recovery
 
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@deveshseth](https://github.com/deveshseth) - Fixed responsive layout issues preventing proper desktop mode transition (#201)
+- [@raghavsethi](https://github.com/raghavsethi) - Added fish shell expansion support with proper syntax handling (#228, #242)
+- [@raghavsethi](https://github.com/raghavsethi) - Fixed Xcode Node.js detection issues with fnm/homebrew conflicts (#246, #253)
+- [@sandeepjak2007](https://github.com/sandeepjak2007) - Added paste button to quick keyboard for improved iOS usability (#227)
+- [@Dimillian](https://github.com/Dimillian) - Fixed WebSocket and terminal resize loop on iOS devices (#224)
+
 ## [1.0.0-beta.6] - 2025-07-03
 
 #### **Git Repository Monitoring**
@@ -260,6 +291,11 @@
 - Removed manual token management requirements
 - Streamlined connection UI
 
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@noppe](https://github.com/noppe) - Enabled scrolling in ConnectionView for narrow windows, improving UI accessibility
+- [@tarasenko](https://github.com/tarasenko) - Added title mode support and enhanced CLI installation verification (#153)
+
 ## [1.0.0-beta.5] - 2025-06-29
 
 #### **UI Improvements**
@@ -282,6 +318,11 @@
 - Better test fixtures, helpers, and debugging capabilities (#73)
 - Cleaner logs when running in development mode
 
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@manuelmaly](https://github.com/manuelmaly) - Added gemini quick start button and slash commands for enhanced workflow (#128, #138)
+- [@billyb2](https://github.com/billyb2) - Fixed repeated screen recording permission dialogs for better user experience
+
 ## [1.0.0-beta.4] - 2025-06-25
 
 - We replaced HTTP Basic auth with System Login or SSH Keys for better security (#43).
@@ -292,6 +333,12 @@
 - Improved touch targets and spacing for mobile users
 - Leverages View Transitions API for smoother animations with CSS fallbacks
 - More intuitive default settings for better out-of-box experience
+
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@hjanuschka](https://github.com/hjanuschka) - Implemented authentication system with SSH key management for better security (#43)
+- [@hjanuschka](https://github.com/hjanuschka) - Added screen sharing functionality with WebRTC (later removed in beta.13) (#209)
+- [@chrisreyn](https://github.com/chrisreyn) - Fixed double shell-wrapping issues for aliases in vt script (#132)
 
 ## [1.0.0-beta.3] - 2025-06-23
 
@@ -313,6 +360,12 @@ There's too much to list! This is the version you've been waiting for.
 - More resilient vt command-line tool with better error handling
 - Ensured vibetunnel server properly terminates when Mac app is killed
 
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@tarasenko](https://github.com/tarasenko) - Added Bonjour/mDNS service discovery for iOS app connectivity (#226)
+- [@PiotrBosak](https://github.com/PiotrBosak) - Updated README documentation for clarity
+- [@zhouzhuojie](https://github.com/zhouzhuojie) - Added Cloudflare Quick Tunnel as a new access option
+
 ## [1.0.0-beta.2] - 2025-06-19
 
 ### 🎨 Improvements
@@ -328,6 +381,10 @@ There's too much to list! This is the version you've been waiting for.
 - Fixed window front order when dock icon is hidden
 - Fixed PTY service enhancements with proper async operations
 - Fixed race condition in session creation that caused frontend to open previous session
+
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@moffmann](https://github.com/moffmann) - Updated CONTRIBUTING.md documentation
 
 ## [1.0.0-beta.1] - 2025-06-17
 
@@ -469,6 +526,10 @@ Created by:
 - [@badlogic](https://mariozechner.at/) - Mario Zechner
 - [@mitsuhiko](https://lucumr.pocoo.org/) - Armin Ronacher  
 - [@steipete](https://steipete.com/) - Peter Steinberger
+
+First-time contributors to VibeTunnel:
+- [@hjanuschka](https://github.com/hjanuschka) - Implemented comprehensive authentication system with SSH key management and PAM support (#43)
+- [@hjanuschka](https://github.com/hjanuschka) - Added keyboard shortcut highlighter, fixed Japanese input duplication on iOS, and sleep prevention option (#114, #102, #146)
 
 ### 📄 License
 
