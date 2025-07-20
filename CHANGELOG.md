@@ -5,12 +5,27 @@
 ### **Linux Systemd Support**
 - Added systemd service management for Linux deployments (#426)
 - Simple installation with `vibetunnel systemd` command
-- User-level service with automatic startup via loginctl lingering
+- User-level service with automatic startup on boot
 - Smart wrapper script handles nvm/fnm Node.js installations
 - Comprehensive documentation at `web/docs/systemd.md`
 
+### **Enhanced Terminal Experience**
+- ngrok URLs are now clickable in terminal output (#422)
+
+### **Infrastructure Improvements**
+- Major codebase cleanup and simplification (#419)
+- Improved release scripts and Node.js detection
+- Enhanced CI/CD pipeline reliability
+
+### 📚 Documentation
+- Added systemd documentation for Linux users
+- Created release guide with troubleshooting steps
+- Updated README with clearer Linux instructions
+
 ### 🐛 Bug Fixes
-- Fixed incorrect systemd documentation that described system-wide service
+- Fixed incorrect systemd documentation
+- Resolved release script Node.js detection issues
+- Fixed Mintlify deployment configuration
 
 ### 👥 Contributors
 First-time contributors to VibeTunnel:
