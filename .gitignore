@@ -142,3 +142,6 @@ buildServer.json
 /temp
 /temp/webrtc-check
 /web/release-check/
+
+# OpenCode local development state
+.opencode/
