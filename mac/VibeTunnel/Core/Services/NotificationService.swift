@@ -163,8 +163,8 @@ final class NotificationService: NSObject {
     }
 
     private func connect() {
-        guard !isConnected else {
-            logger.debug("🔔 Already connected to event stream")
+        guard serverManager.isRunning, !isConnected else {
+            logger.debug("🔔 Server not running or already connected to event stream")
             return
         }
 

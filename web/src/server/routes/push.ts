@@ -197,6 +197,7 @@ export function createPushRoutes(options: CreatePushRoutesOptions): Router {
         hasVapidKeys: !!vapidManager.getPublicKey(),
         totalSubscriptions: subscriptions.length,
         activeSubscriptions: subscriptions.filter((sub) => sub.isActive).length,
+        status: new PushNotificationStatusService(vapidManager, pushNotificationService).getStatus(),
       });
     } catch (error) {
       logger.error('Failed to get push status:', error);

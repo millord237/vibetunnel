@@ -33,6 +33,7 @@
   },
   "scripts": {
     "clean": "node scripts/clean.js",
+    "validate": "node scripts/validate-environment.js",
     "dev": "node scripts/dev.js",
     "dev:server": "tsx watch src/cli.ts --no-auth",
     "dev:client": "node scripts/dev.js --client-only",

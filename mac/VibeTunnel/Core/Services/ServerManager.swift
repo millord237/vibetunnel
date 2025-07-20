@@ -233,6 +233,9 @@ class ServerManager {
                 lastError = nil
                 // Reset crash counter on successful start
                 consecutiveCrashes = 0
+
+                // Start notification service
+                await NotificationService.shared.start()
             } else {
                 logger.error("Server started but not in running state")
                 isRunning = false
@@ -293,6 +296,9 @@ class ServerManager {
         bunServer = nil
 
         isRunning = false
+
+        // Post notification that server state has changed
+        NotificationCenter.default.post(name: .serverStateChanged, object: nil)
 
         // Clear the auth token from SessionMonitor
         SessionMonitor.shared.setLocalAuthToken(nil)

@@ -320,9 +320,17 @@ export async function startVibeTunnelForward(args: string[]) {
 
   const cwd = process.cwd();
 
-  // Initialize PTY manager
+  // Initialize PTY manager with fallback support
   const controlPath = path.join(os.homedir(), '.vibetunnel', 'control');
   logger.debug(`Control path: ${controlPath}`);
+  
+  // Initialize PtyManager before creating instance
+  await PtyManager.initialize().catch((error) => {
+    logger.error('Failed to initialize PTY manager:', error);
+    closeLogger();
+    process.exit(1);
+  });
+  
   const ptyManager = new PtyManager(controlPath);
 
   // Store original terminal dimensions

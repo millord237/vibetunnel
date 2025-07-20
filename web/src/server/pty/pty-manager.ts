@@ -11,8 +11,11 @@ import { EventEmitter, once } from 'events';
 import * as fs from 'fs';
 import * as net from 'net';
 import type { IPty } from 'node-pty';
-import * as pty from 'node-pty';
 import * as path from 'path';
+// Import node-pty with fallback support
+let pty: typeof import('node-pty');
+
+// Dynamic import will be done in initialization
 import { promisify } from 'util';
 import { v4 as uuidv4 } from 'uuid';
 import type {
@@ -27,6 +30,7 @@ import { ProcessTreeAnalyzer } from '../services/process-tree-analyzer.js';
 import { ActivityDetector, type ActivityState } from '../utils/activity-detector.js';
 import { TitleSequenceFilter } from '../utils/ansi-title-filter.js';
 import { createLogger } from '../utils/logger.js';
+import { NativeModuleLoader } from '../utils/native-module-loader.js';
 import {
   extractCdDirectory,
   generateDynamicTitle,
@@ -78,6 +82,7 @@ export class PtyManager extends EventEmitter {
     string,
     { cols: number; rows: number; source: 'browser' | 'terminal'; timestamp: number }
   >();
+  private static initialized = false;
   private sessionEventListeners = new Map<string, Set<(...args: unknown[]) => void>>();
   private lastBellTime = new Map<string, number>(); // Track last bell time per session
   private sessionExitTimes = new Map<string, number>(); // Track session exit times to avoid false bells
@@ -89,6 +94,30 @@ export class PtyManager extends EventEmitter {
     super();
     this.sessionManager = new SessionManager(controlPath);
     this.setupTerminalResizeDetection();
+    
+    // Initialize node-pty if not already done
+    if (!PtyManager.initialized) {
+      throw new Error('PtyManager not initialized. Call PtyManager.initialize() first.');
+    }
+  }
+  
+  /**
+   * Initialize PtyManager with fallback support for node-pty
+   */
+  public static async initialize(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+    
+    try {
+      logger.log('Initializing PtyManager with native module loader...');
+      pty = await NativeModuleLoader.loadNodePty();
+      this.initialized = true;
+      logger.log('✅ PtyManager initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize PtyManager:', error);
+      throw new Error(`Cannot load node-pty: ${error.message}`);
+    }
   }
 
   /**

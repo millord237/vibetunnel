@@ -280,6 +280,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // Start Git monitoring early
         app?.gitRepositoryMonitor.startMonitoring()
 
+        // Start native notification service
+        Task { [weak self] in
+            await self?.notificationService.start()
+        }
+
+        // Start native notification service
+        Task { [weak self] in
+            await self?.notificationService.start()
+        }
+
         // Initialize and start HTTP server using ServerManager
         Task {
             guard let serverManager = app?.serverManager else { return }
@@ -291,9 +301,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 logger.info("HTTP server started successfully on port \(serverManager.port)")
 
                 // Session monitoring starts automatically
-
-                // Start native notification service
-                await notificationService.start()
             } else {
                 logger.error("HTTP server failed to start")
                 if let error = serverManager.lastError {
