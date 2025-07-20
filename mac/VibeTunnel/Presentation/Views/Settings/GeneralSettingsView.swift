@@ -87,7 +87,21 @@ struct GeneralSettingsView: View {
                                             await NotificationService.shared.start()
                                         } else {
                                             // If permission denied, turn toggle back off
-                                            showNotifications = false
+                                            await MainActor.run {
+                                                showNotifications = false
+                                                
+                                                // Show alert explaining the situation
+                                                let alert = NSAlert()
+                                                alert.messageText = "Notification Permission Required"
+                                                alert.informativeText = "VibeTunnel needs permission to show notifications. Please enable notifications for VibeTunnel in System Settings."
+                                                alert.alertStyle = .informational
+                                                alert.addButton(withTitle: "Open System Settings")
+                                                alert.addButton(withTitle: "Cancel")
+                                                
+                                                if alert.runModal() == .alertFirstButtonReturn {
+                                                    // Settings will already be open from the service
+                                                }
+                                            }
                                         }
                                     }
                                 } else {
@@ -309,8 +323,15 @@ private struct NotificationCheckbox: View {
                     
                     // Start notification service
                     await NotificationService.shared.start()
+                } else {
+                    // Show alert if permission was denied
+                    let alert = NSAlert()
+                    alert.messageText = "Notification Permission Required"
+                    alert.informativeText = "VibeTunnel needs permission to show notifications. Please enable notifications for VibeTunnel in System Settings."
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
                 }
-                // If permission denied, leave everything as is
             }
         } else {
             // Normal toggle behavior
