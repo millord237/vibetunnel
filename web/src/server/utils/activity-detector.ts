@@ -294,12 +294,12 @@ export class ActivityDetector {
           this.lastStatusTime = Date.now();
           // Always update activity time for app-specific status
           this.lastActivityTime = Date.now();
-          
+
           // Update Claude status tracking
           if (this.detector.name === 'claude') {
             this.hadClaudeStatus = true;
           }
-          
+
           return {
             filteredData: status.filteredData,
             activity: {
@@ -343,7 +343,7 @@ export class ActivityDetector {
     if (this.currentStatus && now - this.lastStatusTime > this.STATUS_TIMEOUT) {
       logger.debug('Clearing stale status - not seen for', this.STATUS_TIMEOUT, 'ms');
       this.currentStatus = null;
-      
+
       // Check if this was a Claude status clearing
       if (this.hadClaudeStatus && this.detector?.name === 'claude') {
         logger.log("Claude turn detected - status cleared, it's the user's turn");

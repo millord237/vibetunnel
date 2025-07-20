@@ -1,6 +1,6 @@
 /**
  * Native Module Loader with Fallback Support
- * 
+ *
  * Provides robust loading of native modules with multiple fallback strategies
  * to handle different environments (development, production, SEA mode, etc.)
  */
@@ -20,19 +20,19 @@ interface LoaderOptions {
 
 export class NativeModuleLoader {
   private static cache = new Map<string, any>();
-  
+
   /**
    * Load a native module with fallback support
    */
   public static async load(options: LoaderOptions): Promise<any> {
     const { moduleName, searchPaths = [], fallbackLoader } = options;
-    
+
     // Check cache first
     if (this.cache.has(moduleName)) {
       logger.debug(`Returning cached module: ${moduleName}`);
       return this.cache.get(moduleName);
     }
-    
+
     // Strategy 1: Try normal import first (without VIBETUNNEL_SEA)
     if (!process.env.VIBETUNNEL_SEA) {
       try {
@@ -42,10 +42,13 @@ export class NativeModuleLoader {
         logger.log(`✅ Loaded ${moduleName} via standard import`);
         return module;
       } catch (error) {
-        logger.debug(`Standard import failed for ${moduleName}:`, error.message);
+        logger.debug(
+          `Standard import failed for ${moduleName}:`,
+          error instanceof Error ? error.message : String(error)
+        );
       }
     }
-    
+
     // Strategy 2: Try with temporarily removed VIBETUNNEL_SEA
     if (process.env.VIBETUNNEL_SEA) {
       const originalSEA = process.env.VIBETUNNEL_SEA;
@@ -59,10 +62,13 @@ export class NativeModuleLoader {
         return module;
       } catch (error) {
         process.env.VIBETUNNEL_SEA = originalSEA;
-        logger.debug(`Import with removed SEA failed:`, error.message);
+        logger.debug(
+          `Import with removed SEA failed:`,
+          error instanceof Error ? error.message : String(error)
+        );
       }
     }
-    
+
     // Strategy 3: Search for native binaries in custom paths
     if (searchPaths.length > 0) {
       for (const searchPath of searchPaths) {
@@ -76,11 +82,14 @@ export class NativeModuleLoader {
             return module;
           }
         } catch (error) {
-          logger.debug(`Custom path import failed:`, error.message);
+          logger.debug(
+            `Custom path import failed:`,
+            error instanceof Error ? error.message : String(error)
+          );
         }
       }
     }
-    
+
     // Strategy 4: Use fallback loader if provided
     if (fallbackLoader) {
       try {
@@ -93,11 +102,11 @@ export class NativeModuleLoader {
         logger.error(`Fallback loader failed:`, error);
       }
     }
-    
+
     // All strategies failed
     throw new Error(`Failed to load native module ${moduleName} after trying all strategies`);
   }
-  
+
   /**
    * Load node-pty with automatic fallback handling
    */
@@ -108,7 +117,7 @@ export class NativeModuleLoader {
         'node_modules/.pnpm/node-pty@file+node-pty/node_modules',
         'node_modules',
         '../node_modules',
-        '../../node_modules'
+        '../../node_modules',
       ],
       fallbackLoader: async () => {
         // Last resort: try to rebuild
@@ -120,10 +129,10 @@ export class NativeModuleLoader {
         } catch (error) {
           throw new Error('Failed to rebuild node-pty');
         }
-      }
+      },
     });
   }
-  
+
   /**
    * Clear module cache
    */
@@ -134,7 +143,7 @@ export class NativeModuleLoader {
       this.cache.clear();
     }
   }
-  
+
   /**
    * Get diagnostic information about native modules
    */
@@ -145,23 +154,23 @@ export class NativeModuleLoader {
         NODE_ENV: process.env.NODE_ENV || 'not set',
         platform: process.platform,
         arch: process.arch,
-        nodeVersion: process.version
+        nodeVersion: process.version,
       },
-      nativeModulePaths: {}
+      nativeModulePaths: {},
     };
-    
+
     // Check for node-pty
     const ptyPaths = [
       'node_modules/.pnpm/node-pty@file+node-pty/node_modules/node-pty/build/Release/pty.node',
       'node_modules/node-pty/build/Release/pty.node',
-      'node-pty/build/Release/pty.node'
+      'node-pty/build/Release/pty.node',
     ];
-    
+
     for (const path of ptyPaths) {
       const fullPath = join(process.cwd(), path);
       diagnostics.nativeModulePaths[path] = existsSync(fullPath);
     }
-    
+
     return diagnostics;
   }
 }
@@ -171,21 +180,21 @@ export class NativeModuleLoader {
  */
 export function safeRequire(moduleName: string): any {
   const originalSEA = process.env.VIBETUNNEL_SEA;
-  
+
   try {
     // Remove SEA flag temporarily
     delete process.env.VIBETUNNEL_SEA;
-    
+
     // Use createRequire for ESM compatibility
     const { createRequire } = require('module');
-    const customRequire = createRequire(import.meta.url || __filename);
+    const customRequire = createRequire(__filename);
     const module = customRequire(moduleName);
-    
+
     // Restore SEA flag
     if (originalSEA) {
       process.env.VIBETUNNEL_SEA = originalSEA;
     }
-    
+
     return module;
   } catch (error) {
     // Restore SEA flag on error

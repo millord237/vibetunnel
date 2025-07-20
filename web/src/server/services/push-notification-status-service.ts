@@ -4,7 +4,7 @@ import type { VapidManager } from '../utils/vapid-manager.js';
 export class PushNotificationStatusService {
   constructor(
     private vapidManager: VapidManager,
-    private pushNotificationService: PushNotificationService | null,
+    private pushNotificationService: PushNotificationService | null
   ) {}
 
   getStatus() {

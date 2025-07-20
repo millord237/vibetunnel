@@ -1,6 +1,6 @@
 /**
  * Environment Sanitizer
- * 
+ *
  * Ensures the development environment is properly configured and prevents
  * conflicts with production SEA (Single Executable Application) mode.
  */
@@ -20,29 +20,29 @@ interface EnvironmentIssue {
 
 export class EnvironmentSanitizer {
   private issues: EnvironmentIssue[] = [];
-  
+
   /**
    * Check and fix all environment issues
    */
   public sanitize(): void {
     logger.log('🔍 Checking environment configuration...');
-    
+
     // Check VIBETUNNEL_SEA variable
     this.checkVibeTunnelSEA();
-    
+
     // Check NODE_ENV
     this.checkNodeEnv();
-    
+
     // Check native module paths
     this.checkNativeModulePaths();
-    
+
     // Check for conflicting environment variables
     this.checkConflictingVars();
-    
+
     // Report results
     this.reportResults();
   }
-  
+
   /**
    * Check and fix VIBETUNNEL_SEA variable
    */
@@ -52,18 +52,18 @@ export class EnvironmentSanitizer {
         variable: 'VIBETUNNEL_SEA',
         issue: `VIBETUNNEL_SEA is set to '${process.env.VIBETUNNEL_SEA}' which causes native modules to load from wrong location`,
         solution: 'Removing VIBETUNNEL_SEA for development mode',
-        fixed: false
+        fixed: false,
       };
-      
+
       // Fix it
       delete process.env.VIBETUNNEL_SEA;
       issue.fixed = true;
-      
+
       this.issues.push(issue);
       logger.warn(`⚠️  Fixed: ${issue.solution}`);
     }
   }
-  
+
   /**
    * Check NODE_ENV is appropriate for development
    */
@@ -73,18 +73,18 @@ export class EnvironmentSanitizer {
         variable: 'NODE_ENV',
         issue: 'NODE_ENV is set to production in development environment',
         solution: 'Setting NODE_ENV to development',
-        fixed: false
+        fixed: false,
       };
-      
+
       // Fix it
       process.env.NODE_ENV = 'development';
       issue.fixed = true;
-      
+
       this.issues.push(issue);
       logger.warn(`⚠️  Fixed: ${issue.solution}`);
     }
   }
-  
+
   /**
    * Check native module paths exist
    */
@@ -95,15 +95,15 @@ export class EnvironmentSanitizer {
         paths: [
           'node_modules/.pnpm/node-pty@file+node-pty/node_modules/node-pty/build/Release/pty.node',
           'node_modules/node-pty/build/Release/pty.node',
-          'node-pty/build/Release/pty.node'
-        ]
-      }
+          'node-pty/build/Release/pty.node',
+        ],
+      },
     ];
-    
+
     for (const module of modulesToCheck) {
       let found = false;
       let foundPath = '';
-      
+
       for (const path of module.paths) {
         const fullPath = join(process.cwd(), path);
         if (existsSync(fullPath)) {
@@ -112,13 +112,13 @@ export class EnvironmentSanitizer {
           break;
         }
       }
-      
+
       if (!found) {
         const issue: EnvironmentIssue = {
           variable: 'PATH',
           issue: `Native module ${module.name} not found in expected locations`,
           solution: 'Run "pnpm install" to rebuild native modules',
-          fixed: false
+          fixed: false,
         };
         this.issues.push(issue);
       } else {
@@ -126,24 +126,20 @@ export class EnvironmentSanitizer {
       }
     }
   }
-  
+
   /**
    * Check for other conflicting environment variables
    */
   private checkConflictingVars(): void {
-    const conflictingVars = [
-      'ELECTRON_RUN_AS_NODE',
-      'NODE_OPTIONS',
-      'NODE_PATH'
-    ];
-    
+    const conflictingVars = ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_PATH'];
+
     for (const varName of conflictingVars) {
       if (process.env[varName]) {
         logger.debug(`ℹ️  ${varName} is set to: ${process.env[varName]}`);
       }
     }
   }
-  
+
   /**
    * Report sanitization results
    */
@@ -152,9 +148,9 @@ export class EnvironmentSanitizer {
       logger.log('✅ Environment is properly configured');
       return;
     }
-    
-    logger.log(`🔧 Fixed ${this.issues.filter(i => i.fixed).length} environment issues:`);
-    
+
+    logger.log(`🔧 Fixed ${this.issues.filter((i) => i.fixed).length} environment issues:`);
+
     for (const issue of this.issues) {
       if (issue.fixed) {
         logger.log(`  ✓ ${issue.variable}: ${issue.solution}`);
@@ -164,24 +160,24 @@ export class EnvironmentSanitizer {
       }
     }
   }
-  
+
   /**
    * Get a clean environment for spawning child processes
    */
   public static getCleanEnvironment(): NodeJS.ProcessEnv {
     const cleanEnv = { ...process.env };
-    
+
     // Remove problematic variables
     delete cleanEnv.VIBETUNNEL_SEA;
-    
+
     // Ensure development mode
     if (!cleanEnv.NODE_ENV || cleanEnv.NODE_ENV === 'production') {
       cleanEnv.NODE_ENV = 'development';
     }
-    
+
     return cleanEnv;
   }
-  
+
   /**
    * Create a diagnostic report
    */
@@ -201,20 +197,20 @@ export class EnvironmentSanitizer {
       '',
       '=== Native Module Check ===',
     ];
-    
+
     // Check for node-pty
     const ptyPaths = [
       'node_modules/.pnpm/node-pty@file+node-pty/node_modules/node-pty/build/Release/pty.node',
-      'node_modules/node-pty/build/Release/pty.node'
+      'node_modules/node-pty/build/Release/pty.node',
     ];
-    
+
     for (const path of ptyPaths) {
       const exists = existsSync(join(process.cwd(), path));
       report.push(`${exists ? '✓' : '✗'} ${path}`);
     }
-    
+
     report.push('', '=== End of Report ===');
-    
+
     return report.join('\n');
   }
 }

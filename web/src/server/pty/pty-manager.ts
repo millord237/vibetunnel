@@ -68,8 +68,12 @@ const TITLE_INJECTION_CHECK_INTERVAL_MS = 10; // How often to check for quiet pe
 
 // Foreground process tracking constants
 const PROCESS_POLL_INTERVAL_MS = 500; // How often to check foreground process
-const MIN_COMMAND_DURATION_MS = 500; // Lowered from 3000ms for testing Claude commands
+const MIN_COMMAND_DURATION_MS = 3000; // Minimum duration for command completion notifications (3 seconds)
 const SHELL_COMMANDS = new Set(['cd', 'ls', 'pwd', 'echo', 'export', 'alias', 'unset']); // Built-in commands to ignore
+
+// Bell detection constants
+const BELL_CHAR = '\x07'; // ASCII bell character
+const BELL_DEBOUNCE_MS = 100; // Debounce multiple bells within this window
 
 export class PtyManager extends EventEmitter {
   private sessions = new Map<string, PtySession>();
@@ -90,17 +94,27 @@ export class PtyManager extends EventEmitter {
   private activityFileWarningsLogged = new Set<string>(); // Track which sessions we've logged warnings for
   private lastWrittenActivityState = new Map<string, string>(); // Track last written activity state to avoid unnecessary writes
 
+  // Command tracking for notifications
+  private commandTracking = new Map<
+    string,
+    {
+      command: string;
+      startTime: number;
+      pid?: number;
+    }
+  >();
+
   constructor(controlPath?: string) {
     super();
     this.sessionManager = new SessionManager(controlPath);
     this.setupTerminalResizeDetection();
-    
+
     // Initialize node-pty if not already done
     if (!PtyManager.initialized) {
       throw new Error('PtyManager not initialized. Call PtyManager.initialize() first.');
     }
   }
-  
+
   /**
    * Initialize PtyManager with fallback support for node-pty
    */
@@ -108,7 +122,7 @@ export class PtyManager extends EventEmitter {
     if (this.initialized) {
       return;
     }
-    
+
     try {
       logger.log('Initializing PtyManager with native module loader...');
       pty = await NativeModuleLoader.loadNodePty();
@@ -116,7 +130,9 @@ export class PtyManager extends EventEmitter {
       logger.log('✅ PtyManager initialized successfully');
     } catch (error) {
       logger.error('Failed to initialize PtyManager:', error);
-      throw new Error(`Cannot load node-pty: ${error.message}`);
+      throw new Error(
+        `Cannot load node-pty: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -326,7 +342,7 @@ export class PtyManager extends EventEmitter {
         });
 
         // Build spawn options - only include dimensions if provided
-        const spawnOptions: pty.IPtyForkOptions = {
+        const spawnOptions: any = {
           name: term,
           cwd: workingDir,
           env: ptyEnv,
@@ -563,6 +579,11 @@ export class PtyManager extends EventEmitter {
     ptyProcess.onData((data: string) => {
       let processedData = data;
 
+      // Check for bell character
+      if (data.includes(BELL_CHAR)) {
+        this.handleBell(session);
+      }
+
       // If title mode is not NONE, filter out any title sequences the process might
       // have written to the stream.
       if (session.titleMode !== undefined && session.titleMode !== TitleMode.NONE) {
@@ -654,6 +675,9 @@ export class PtyManager extends EventEmitter {
 
         // Stop foreground process tracking
         this.stopForegroundProcessTracking(session);
+
+        // Clean up command tracking
+        this.commandTracking.delete(session.id);
 
         // Emit session exited event
         this.emit(
@@ -2565,4 +2589,44 @@ export class PtyManager extends EventEmitter {
    * Import necessary exec function
    */
   private execAsync = promisify(exec);
+
+  /**
+   * Handle bell character in PTY output
+   */
+  private handleBell(session: PtySession): void {
+    const now = Date.now();
+    const sessionId = session.id;
+
+    // Check if session has recently exited to avoid false bells
+    const sessionExitTime = this.sessionExitTimes.get(sessionId);
+    if (sessionExitTime && now - sessionExitTime < 1000) {
+      logger.debug(`Ignoring bell for recently exited session ${sessionId}`);
+      return;
+    }
+
+    // Debounce bells
+    const lastBell = this.lastBellTime.get(sessionId);
+    if (lastBell && now - lastBell < BELL_DEBOUNCE_MS) {
+      logger.debug(`Debouncing bell for session ${sessionId}`);
+      return;
+    }
+
+    this.lastBellTime.set(sessionId, now);
+
+    // Get session info for the event
+    const sessionName = session.sessionInfo.name || session.sessionInfo.command.join(' ');
+
+    logger.debug(`Bell detected in session ${sessionId}: ${sessionName}`);
+
+    // Emit bell event
+    this.emit('bell', {
+      sessionInfo: {
+        id: sessionId,
+        name: sessionName,
+        command: session.sessionInfo.command,
+      },
+      bellCount: 1,
+      timestamp: new Date().toISOString(),
+    });
+  }
 }

@@ -92,9 +92,7 @@ describe('Claude Turn Events', () => {
 
       // Should have written 3 events
       const writeCalls = (mockResponse.write as ReturnType<typeof vi.fn>).mock.calls;
-      const claudeTurnEvents = writeCalls.filter((call) => 
-        call[0].includes('claude-turn')
-      );
+      const claudeTurnEvents = writeCalls.filter((call) => call[0].includes('claude-turn'));
       expect(claudeTurnEvents).toHaveLength(3);
     });
 
@@ -120,9 +118,7 @@ describe('Claude Turn Events', () => {
       await eventHandler(mockRequest, mockResponse);
 
       // Get the close handler
-      const closeHandler = mockRequest.on.mock.calls.find(
-        (call: any) => call[0] === 'close'
-      )?.[1];
+      const closeHandler = mockRequest.on.mock.calls.find((call: any) => call[0] === 'close')?.[1];
       expect(closeHandler).toBeTruthy();
 
       // Verify claude-turn listener is attached
@@ -160,7 +156,6 @@ describe('Claude Turn Events', () => {
       expect(eventTypes).toEqual(['session-start', 'claude-turn', 'bell', 'session-exit']);
     });
 
-
     it('should properly format SSE message for claude-turn', async () => {
       await eventHandler(mockRequest, mockResponse);
       vi.clearAllMocks();
@@ -168,14 +163,14 @@ describe('Claude Turn Events', () => {
       mockPtyManager.emit('claudeTurn', 'session-123', 'My Claude Session');
 
       const writeCall = (mockResponse.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      
+
       // Verify proper SSE format
       expect(writeCall).toMatch(/^data: .+\n\n$/);
-      
+
       // Extract and verify JSON
       const jsonStr = writeCall.replace('data: ', '').trim();
       const eventData = JSON.parse(jsonStr);
-      
+
       expect(eventData).toMatchObject({
         type: 'claude-turn',
         sessionId: 'session-123',
