@@ -119,7 +119,15 @@ export class SessionCreateForm extends LitElement {
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      this.handleCancel();
+
+      // If autocomplete is visible, close it first
+      if (this.showCompletions) {
+        this.showCompletions = false;
+        this.selectedCompletionIndex = -1;
+      } else {
+        // Otherwise close the dialog
+        this.handleCancel();
+      }
     } else if (e.key === 'Enter') {
       // Don't interfere with Enter in textarea elements
       if (e.target instanceof HTMLTextAreaElement) return;
@@ -475,7 +483,8 @@ export class SessionCreateForm extends LitElement {
       // Use the autocomplete manager to fetch completions
       this.completions = await this.autocompleteManager.fetchCompletions(path);
       this.showCompletions = this.completions.length > 0;
-      this.selectedCompletionIndex = -1;
+      // Auto-select the first item when completions are shown
+      this.selectedCompletionIndex = this.completions.length > 0 ? 0 : -1;
     } catch (error) {
       logger.error('Error fetching completions:', error);
       this.completions = [];
@@ -504,13 +513,13 @@ export class SessionCreateForm extends LitElement {
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       this.selectedCompletionIndex = Math.max(this.selectedCompletionIndex - 1, -1);
-    } else if ((e.key === 'Tab' || e.key === 'Enter') && this.selectedCompletionIndex >= 0) {
-      e.preventDefault();
-      e.stopPropagation();
-      this.handleSelectCompletion(this.completions[this.selectedCompletionIndex].suggestion);
-    } else if (e.key === 'Escape') {
-      this.showCompletions = false;
-      this.selectedCompletionIndex = -1;
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+      // Allow Enter/Tab to select the auto-selected first item or any selected item
+      if (this.selectedCompletionIndex >= 0 && this.completions[this.selectedCompletionIndex]) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleSelectCompletion(this.completions[this.selectedCompletionIndex].suggestion);
+      }
     }
   }
 
