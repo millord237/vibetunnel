@@ -1,21 +1,61 @@
 <!-- Generated: 2025-06-21 18:45:00 UTC -->
-![VibeTunnel Banner](assets/banner.png)
+<p align="center">
+  <img src="assets/banner.png" alt="VibeTunnel Banner" />
+</p>
 
-# VibeTunnel
+<h1 align="center">VibeTunnel</h1>
 
-**Turn any browser into your Mac terminal.** VibeTunnel proxies your terminals right into the browser, so you can vibe-code anywhere.
+<p align="center">
+  <strong>Turn any browser into your Mac terminal.</strong><br>
+  VibeTunnel proxies your terminals right into the browser, so you can vibe-code anywhere.
+</p>
 
-[![Download](https://img.shields.io/badge/Download-macOS-blue)](https://github.com/amantus-ai/vibetunnel/releases/latest)
-[![npm version](https://img.shields.io/npm/v/vibetunnel.svg)](https://www.npmjs.com/package/vibetunnel)
-[![Homebrew](https://img.shields.io/homebrew/cask/v/vibetunnel)](https://formulae.brew.sh/cask/vibetunnel)
-[![Node.js 20+](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js)](https://nodejs.org)
-[![Discord](https://img.shields.io/discord/1394471066990280875?label=Discord&logo=discord)](https://discord.gg/3Ub3EUwrcR)
-[![Linux Support](https://img.shields.io/badge/Linux-Supported-brightgreen)](https://www.npmjs.com/package/vibetunnel)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![macOS 14.0+](https://img.shields.io/badge/macOS-14.0+-red)](https://www.apple.com/macos/)
-[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Required-orange)](https://support.apple.com/en-us/HT211814)
-[![Support us on Polar](https://img.shields.io/badge/Support%20us-on%20Polar-purple)](https://vibetunnel.sh/#support)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/amantus-ai/vibetunnel)
+<p align="center">
+  <a href="https://github.com/amantus-ai/vibetunnel/releases/latest"><img src="https://img.shields.io/badge/Download-macOS-blue" alt="Download"></a>
+  <a href="https://www.npmjs.com/package/vibetunnel"><img src="https://img.shields.io/npm/v/vibetunnel.svg" alt="npm version"></a>
+  <a href="https://formulae.brew.sh/cask/vibetunnel"><img src="https://img.shields.io/homebrew/cask/v/vibetunnel" alt="Homebrew"></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-20+-339933?logo=node.js" alt="Node.js 20+"></a>
+  <a href="https://discord.gg/3Ub3EUwrcR"><img src="https://img.shields.io/discord/1394471066990280875?label=Discord&logo=discord" alt="Discord"></a>
+  <a href="https://twitter.com/vibetunnel"><img src="https://img.shields.io/twitter/follow/vibetunnel?style=social" alt="Twitter"></a>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/vibetunnel"><img src="https://img.shields.io/badge/Linux-Supported-brightgreen" alt="Linux Support"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License"></a>
+  <a href="https://www.apple.com/macos/"><img src="https://img.shields.io/badge/macOS-14.0+-red" alt="macOS 14.0+"></a>
+  <a href="https://support.apple.com/en-us/HT211814"><img src="https://img.shields.io/badge/Apple%20Silicon-Required-orange" alt="Apple Silicon"></a>
+  <a href="https://vibetunnel.sh/#support"><img src="https://img.shields.io/badge/Support%20us-on%20Polar-purple" alt="Support us on Polar"></a>
+  <a href="https://deepwiki.com/amantus-ai/vibetunnel"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+</p>
+
+<p align="center">
+  <a href="https://docs.vibetunnel.sh">Documentation</a> •
+  <a href="https://github.com/amantus-ai/vibetunnel/releases">Releases</a> •
+  <a href="https://discord.gg/3Ub3EUwrcR">Discord</a> •
+  <a href="https://twitter.com/vibetunnel">Twitter</a>
+</p>
+
+---
+
+## Table of Contents
+
+- [Why VibeTunnel?](#why-vibetunnel)
+- [Installation Options](#installation-options)
+- [Quick Start](#quick-start)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Remote Access Options](#remote-access-options)
+- [Terminal Title Management](#terminal-title-management)
+- [Authentication](#authentication)
+- [npm Package](#npm-package)
+- [Building from Source](#building-from-source)
+- [Development](#development)
+- [Documentation](#documentation)
+- [macOS Permissions](#macos-permissions)
+- [Contributing](#contributing)
+- [Support VibeTunnel](#support-vibetunnel)
+- [Credits](#credits)
+- [License](#license)
 
 ## Why VibeTunnel?
 
