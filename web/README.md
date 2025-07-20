@@ -165,6 +165,8 @@ vibetunnel fwd --session-id abc123 npm test
 vibetunnel fwd --session-id abc123 python script.py
 ```
 
+Linux users can install VibeTunnel as a systemd service with `vibetunnel systemd` for automatic startup and process management - see [detailed systemd documentation](docs/systemd.md).
+
 ### Environment Variables
 
 VibeTunnel respects the following environment variables:
@@ -197,6 +199,7 @@ This npm package includes:
 - Native PTY support for terminal emulation
 - Web interface with xterm.js
 - Session management and forwarding
+- Built-in systemd service management for Linux
 
 ## Platform Support
 
