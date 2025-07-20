@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.0-beta.14] - 2025-07-20
+
+### **Linux Systemd Support**
+- Added systemd service management for Linux deployments (#426)
+- Simple installation with `vibetunnel systemd` command
+- User-level service with automatic startup via loginctl lingering
+- Smart wrapper script handles nvm/fnm Node.js installations
+- Comprehensive documentation at `web/docs/systemd.md`
+
+### 🐛 Bug Fixes
+- Fixed incorrect systemd documentation that described system-wide service
+
+### 👥 Contributors
+First-time contributors to VibeTunnel:
+- [@hewigovens](https://github.com/hewigovens) - Added systemd service management for Linux deployments (#426)
+
 ## [1.0.0-beta.13] - 2025-07-19
 
 ### **Terminal Performance Mode (Experimental) **
