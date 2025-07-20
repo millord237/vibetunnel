@@ -16,7 +16,24 @@ import { customElement, property, state } from 'lit/decorators.js';
 import './file-browser.js';
 import { TitleMode } from '../../shared/types.js';
 import type { AuthClient } from '../services/auth-client.js';
+import { RepositoryService } from '../services/repository-service.js';
+import { type SessionCreateData, SessionService } from '../services/session-service.js';
+import { parseCommand } from '../utils/command-utils.js';
 import { createLogger } from '../utils/logger.js';
+import { formatPathForDisplay } from '../utils/path-utils.js';
+import {
+  getSessionFormValue,
+  loadSessionFormData,
+  removeSessionFormValue,
+  saveSessionFormData,
+  setSessionFormValue,
+} from '../utils/storage-utils.js';
+import { getTitleModeDescription } from '../utils/title-mode-utils.js';
+import {
+  type AutocompleteItem,
+  AutocompleteManager,
+  type Repository,
+} from './autocomplete-manager.js';
 import type { Session } from './session-list.js';
 import {
   STORAGE_KEY as APP_PREFERENCES_STORAGE_KEY,
@@ -24,16 +41,6 @@ import {
 } from './unified-settings.js';
 
 const logger = createLogger('session-create-form');
-
-export interface SessionCreateData {
-  command: string[];
-  workingDir: string;
-  name?: string;
-  spawn_terminal?: boolean;
-  cols?: number;
-  rows?: number;
-  titleMode?: TitleMode;
-}
 
 @customElement('session-create-form')
 export class SessionCreateForm extends LitElement {
@@ -55,15 +62,13 @@ export class SessionCreateForm extends LitElement {
   @state() private showFileBrowser = false;
   @state() private selectedQuickStart = 'zsh';
   @state() private showRepositoryDropdown = false;
-  @state() private repositories: Array<{
-    id: string;
-    path: string;
-    folderName: string;
-    lastModified: string;
-    relativePath: string;
-  }> = [];
+  @state() private repositories: Repository[] = [];
   @state() private isDiscovering = false;
   @state() private macAppConnected = false;
+  @state() private showCompletions = false;
+  @state() private completions: AutocompleteItem[] = [];
+  @state() private selectedCompletionIndex = -1;
+  @state() private isLoadingCompletions = false;
 
   quickStartCommands = [
     { label: 'claude', command: 'claude' },
@@ -74,13 +79,21 @@ export class SessionCreateForm extends LitElement {
     { label: 'pnpm run dev', command: 'pnpm run dev' },
   ];
 
-  private readonly STORAGE_KEY_WORKING_DIR = 'vibetunnel_last_working_dir';
-  private readonly STORAGE_KEY_COMMAND = 'vibetunnel_last_command';
-  private readonly STORAGE_KEY_SPAWN_WINDOW = 'vibetunnel_spawn_window';
-  private readonly STORAGE_KEY_TITLE_MODE = 'vibetunnel_title_mode';
+  private completionsDebounceTimer?: NodeJS.Timeout;
+  private autocompleteManager!: AutocompleteManager;
+  private repositoryService?: RepositoryService;
+  private sessionService?: SessionService;
 
   connectedCallback() {
     super.connectedCallback();
+    // Initialize services - AutocompleteManager handles optional authClient
+    this.autocompleteManager = new AutocompleteManager(this.authClient);
+
+    // Initialize other services only if authClient is available
+    if (this.authClient) {
+      this.repositoryService = new RepositoryService(this.authClient);
+      this.sessionService = new SessionService(this.authClient);
+    }
     // Load from localStorage when component is first created
     this.loadFromLocalStorage();
     // Check server status
@@ -92,6 +105,10 @@ export class SessionCreateForm extends LitElement {
     // Clean up document event listener if modal is still visible
     if (this.visible) {
       document.removeEventListener('keydown', this.handleGlobalKeyDown);
+    }
+    // Clean up debounce timer
+    if (this.completionsDebounceTimer) {
+      clearTimeout(this.completionsDebounceTimer);
     }
   }
 
@@ -107,6 +124,9 @@ export class SessionCreateForm extends LitElement {
       // Don't interfere with Enter in textarea elements
       if (e.target instanceof HTMLTextAreaElement) return;
 
+      // Don't submit if autocomplete is active and an item is selected
+      if (this.showCompletions && this.selectedCompletionIndex >= 0) return;
+
       // Check if form is valid (same conditions as Create button)
       const canCreate =
         !this.disabled && !this.isCreating && this.workingDir?.trim() && this.command?.trim();
@@ -120,72 +140,45 @@ export class SessionCreateForm extends LitElement {
   };
 
   private loadFromLocalStorage() {
-    try {
-      const savedWorkingDir = localStorage.getItem(this.STORAGE_KEY_WORKING_DIR);
-      const savedCommand = localStorage.getItem(this.STORAGE_KEY_COMMAND);
-      const savedSpawnWindow = localStorage.getItem(this.STORAGE_KEY_SPAWN_WINDOW);
-      const savedTitleMode = localStorage.getItem(this.STORAGE_KEY_TITLE_MODE);
+    const formData = loadSessionFormData();
 
-      // Get app preferences for repository base path to use as default working dir
-      let appRepoBasePath = '~/';
-      const savedPreferences = localStorage.getItem(APP_PREFERENCES_STORAGE_KEY);
-      if (savedPreferences) {
-        try {
-          const preferences: AppPreferences = JSON.parse(savedPreferences);
-          appRepoBasePath = preferences.repositoryBasePath || '~/';
-        } catch (error) {
-          logger.error('Failed to parse app preferences:', error);
-        }
+    // Get app preferences for repository base path to use as default working dir
+    let appRepoBasePath = '~/';
+    const savedPreferences = localStorage.getItem(APP_PREFERENCES_STORAGE_KEY);
+    if (savedPreferences) {
+      try {
+        const preferences: AppPreferences = JSON.parse(savedPreferences);
+        appRepoBasePath = preferences.repositoryBasePath || '~/';
+      } catch (error) {
+        logger.error('Failed to parse app preferences:', error);
       }
-
-      // Always set values, using saved values or defaults
-      // Priority: savedWorkingDir > appRepoBasePath > default
-      this.workingDir = savedWorkingDir || appRepoBasePath || '~/';
-      this.command = savedCommand || 'zsh';
-
-      // For spawn window, only use saved value if it exists and is valid
-      // This ensures we respect the default (false) when nothing is saved
-      if (savedSpawnWindow !== null && savedSpawnWindow !== '') {
-        this.spawnWindow = savedSpawnWindow === 'true';
-      }
-
-      if (savedTitleMode !== null) {
-        // Validate the saved mode is a valid enum value
-        if (Object.values(TitleMode).includes(savedTitleMode as TitleMode)) {
-          this.titleMode = savedTitleMode as TitleMode;
-        } else {
-          // If invalid value in localStorage, default to DYNAMIC
-          this.titleMode = TitleMode.DYNAMIC;
-        }
-      } else {
-        // If no value in localStorage, ensure DYNAMIC is set
-        this.titleMode = TitleMode.DYNAMIC;
-      }
-
-      // Force re-render to update the input values
-      this.requestUpdate();
-    } catch (_error) {
-      logger.warn('failed to load from localStorage');
     }
+
+    // Always set values, using saved values or defaults
+    // Priority: savedWorkingDir > appRepoBasePath > default
+    this.workingDir = formData.workingDir || appRepoBasePath || '~/';
+    this.command = formData.command || 'zsh';
+
+    // For spawn window, use saved value or default to false
+    this.spawnWindow = formData.spawnWindow ?? false;
+
+    // For title mode, use saved value or default to DYNAMIC
+    this.titleMode = formData.titleMode || TitleMode.DYNAMIC;
+
+    // Force re-render to update the input values
+    this.requestUpdate();
   }
 
   private saveToLocalStorage() {
-    try {
-      const workingDir = this.workingDir?.trim() || '';
-      const command = this.command?.trim() || '';
+    const workingDir = this.workingDir?.trim() || '';
+    const command = this.command?.trim() || '';
 
-      // Only save non-empty values
-      if (workingDir) {
-        localStorage.setItem(this.STORAGE_KEY_WORKING_DIR, workingDir);
-      }
-      if (command) {
-        localStorage.setItem(this.STORAGE_KEY_COMMAND, command);
-      }
-      localStorage.setItem(this.STORAGE_KEY_SPAWN_WINDOW, String(this.spawnWindow));
-      localStorage.setItem(this.STORAGE_KEY_TITLE_MODE, this.titleMode);
-    } catch (_error) {
-      logger.warn('failed to save to localStorage');
-    }
+    saveSessionFormData({
+      workingDir,
+      command,
+      spawnWindow: this.spawnWindow,
+      titleMode: this.titleMode,
+    });
   }
 
   private async checkServerStatus() {
@@ -214,6 +207,19 @@ export class SessionCreateForm extends LitElement {
 
   updated(changedProperties: PropertyValues) {
     super.updated(changedProperties);
+
+    // Handle authClient becoming available
+    if (changedProperties.has('authClient') && this.authClient) {
+      // Initialize services if they haven't been created yet
+      if (!this.repositoryService) {
+        this.repositoryService = new RepositoryService(this.authClient);
+      }
+      if (!this.sessionService) {
+        this.sessionService = new SessionService(this.authClient);
+      }
+      // Update autocomplete manager's authClient
+      this.autocompleteManager.setAuthClient(this.authClient);
+    }
 
     // Handle visibility changes
     if (changedProperties.has('visible')) {
@@ -259,6 +265,18 @@ export class SessionCreateForm extends LitElement {
         detail: this.workingDir,
       })
     );
+
+    // Hide repository dropdown when typing
+    this.showRepositoryDropdown = false;
+
+    // Trigger autocomplete with debounce
+    if (this.completionsDebounceTimer) {
+      clearTimeout(this.completionsDebounceTimer);
+    }
+
+    this.completionsDebounceTimer = setTimeout(() => {
+      this.fetchCompletions();
+    }, 300);
   }
 
   private handleCommandChange(e: Event) {
@@ -285,21 +303,6 @@ export class SessionCreateForm extends LitElement {
     this.titleMode = select.value as TitleMode;
   }
 
-  private getTitleModeDescription(): string {
-    switch (this.titleMode) {
-      case TitleMode.NONE:
-        return 'Apps control their own titles';
-      case TitleMode.FILTER:
-        return 'Blocks all title changes';
-      case TitleMode.STATIC:
-        return 'Shows path and command';
-      case TitleMode.DYNAMIC:
-        return '○ idle ● active ▶ running';
-      default:
-        return '';
-    }
-  }
-
   private handleBrowse() {
     logger.debug('handleBrowse called, setting showFileBrowser to true');
     this.showFileBrowser = true;
@@ -307,7 +310,7 @@ export class SessionCreateForm extends LitElement {
   }
 
   private handleDirectorySelected(e: CustomEvent) {
-    this.workingDir = e.detail;
+    this.workingDir = formatPathForDisplay(e.detail);
     this.showFileBrowser = false;
   }
 
@@ -331,7 +334,7 @@ export class SessionCreateForm extends LitElement {
     const effectiveSpawnTerminal = this.spawnWindow && this.macAppConnected;
 
     const sessionData: SessionCreateData = {
-      command: this.parseCommand(this.command?.trim() || ''),
+      command: parseCommand(this.command?.trim() || ''),
       workingDir: this.workingDir?.trim() || '',
       spawn_terminal: effectiveSpawnTerminal,
       titleMode: this.titleMode,
@@ -351,98 +354,50 @@ export class SessionCreateForm extends LitElement {
     }
 
     try {
-      const response = await fetch('/api/sessions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...this.authClient.getAuthHeader(),
-        },
-        body: JSON.stringify(sessionData),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-
-        // Save to localStorage before clearing the fields
-        // In test environments, don't save spawn window to avoid cross-test contamination
-        const isTestEnvironment =
-          window.location.search.includes('test=true') ||
-          navigator.userAgent.includes('HeadlessChrome');
-
-        if (isTestEnvironment) {
-          // Save everything except spawn window in tests
-          const currentSpawnWindow = localStorage.getItem(this.STORAGE_KEY_SPAWN_WINDOW);
-          this.saveToLocalStorage();
-          // Restore the original spawn window value
-          if (currentSpawnWindow !== null) {
-            localStorage.setItem(this.STORAGE_KEY_SPAWN_WINDOW, currentSpawnWindow);
-          } else {
-            localStorage.removeItem(this.STORAGE_KEY_SPAWN_WINDOW);
-          }
-        } else {
-          this.saveToLocalStorage();
-        }
-
-        this.command = ''; // Clear command on success
-        this.sessionName = ''; // Clear session name on success
-        this.dispatchEvent(
-          new CustomEvent('session-created', {
-            detail: result,
-          })
-        );
-      } else {
-        const error = await response.json();
-        // Use the detailed error message if available, otherwise fall back to the error field
-        const errorMessage = error.details || error.error || 'Unknown error';
-        this.dispatchEvent(
-          new CustomEvent('error', {
-            detail: errorMessage,
-          })
-        );
+      // Check if sessionService is initialized
+      if (!this.sessionService) {
+        throw new Error('Session service not initialized');
       }
+      const result = await this.sessionService.createSession(sessionData);
+
+      // Save to localStorage before clearing the fields
+      // In test environments, don't save spawn window to avoid cross-test contamination
+      const isTestEnvironment =
+        window.location.search.includes('test=true') ||
+        navigator.userAgent.includes('HeadlessChrome');
+
+      if (isTestEnvironment) {
+        // Save everything except spawn window in tests
+        const currentSpawnWindow = getSessionFormValue('SPAWN_WINDOW');
+        this.saveToLocalStorage();
+        // Restore the original spawn window value
+        if (currentSpawnWindow !== null) {
+          setSessionFormValue('SPAWN_WINDOW', currentSpawnWindow);
+        } else {
+          removeSessionFormValue('SPAWN_WINDOW');
+        }
+      } else {
+        this.saveToLocalStorage();
+      }
+
+      this.command = ''; // Clear command on success
+      this.sessionName = ''; // Clear session name on success
+      this.dispatchEvent(
+        new CustomEvent('session-created', {
+          detail: result,
+        })
+      );
     } catch (error) {
-      logger.error('error creating session:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create session';
+      logger.error('Error creating session:', error);
       this.dispatchEvent(
         new CustomEvent('error', {
-          detail: 'Failed to create session',
+          detail: errorMessage,
         })
       );
     } finally {
       this.isCreating = false;
     }
-  }
-
-  private parseCommand(commandStr: string): string[] {
-    // Simple command parsing - split by spaces but respect quotes
-    const args: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    let quoteChar = '';
-
-    for (let i = 0; i < commandStr.length; i++) {
-      const char = commandStr[i];
-
-      if ((char === '"' || char === "'") && !inQuotes) {
-        inQuotes = true;
-        quoteChar = char;
-      } else if (char === quoteChar && inQuotes) {
-        inQuotes = false;
-        quoteChar = '';
-      } else if (char === ' ' && !inQuotes) {
-        if (current) {
-          args.push(current);
-          current = '';
-        }
-      } else {
-        current += char;
-      }
-    }
-
-    if (current) {
-      args.push(current);
-    }
-
-    return args;
   }
 
   private handleCancel() {
@@ -466,37 +421,17 @@ export class SessionCreateForm extends LitElement {
   }
 
   private async discoverRepositories() {
-    // Get app preferences to read repositoryBasePath
-    const savedPreferences = localStorage.getItem(APP_PREFERENCES_STORAGE_KEY);
-    let basePath = '~/';
-
-    if (savedPreferences) {
-      try {
-        const preferences: AppPreferences = JSON.parse(savedPreferences);
-        basePath = preferences.repositoryBasePath || '~/';
-      } catch (error) {
-        logger.error('Failed to parse app preferences:', error);
-      }
-    }
-
     this.isDiscovering = true;
-
     try {
-      const response = await fetch(
-        `/api/repositories/discover?path=${encodeURIComponent(basePath)}`,
-        {
-          headers: this.authClient.getAuthHeader(),
-        }
-      );
-
-      if (response.ok) {
-        this.repositories = await response.json();
-        logger.debug(`Discovered ${this.repositories.length} repositories`);
+      // Only proceed if repositoryService is initialized
+      if (this.repositoryService) {
+        this.repositories = await this.repositoryService.discoverRepositories();
+        // Update autocomplete manager with discovered repositories
+        this.autocompleteManager.setRepositories(this.repositories);
       } else {
-        logger.error('Failed to discover repositories');
+        logger.warn('Repository service not initialized yet');
+        this.repositories = [];
       }
-    } catch (error) {
-      logger.error('Error discovering repositories:', error);
     } finally {
       this.isDiscovering = false;
     }
@@ -506,9 +441,85 @@ export class SessionCreateForm extends LitElement {
     this.showRepositoryDropdown = !this.showRepositoryDropdown;
   }
 
+  private handleToggleAutocomplete() {
+    // If we have text input, toggle the autocomplete
+    if (this.workingDir?.trim()) {
+      if (this.showCompletions) {
+        this.showCompletions = false;
+        this.completions = [];
+      } else {
+        this.fetchCompletions();
+      }
+    } else {
+      // If no text, show repository dropdown instead
+      this.showRepositoryDropdown = !this.showRepositoryDropdown;
+    }
+  }
+
   private handleSelectRepository(repoPath: string) {
-    this.workingDir = repoPath;
+    this.workingDir = formatPathForDisplay(repoPath);
     this.showRepositoryDropdown = false;
+  }
+
+  private async fetchCompletions() {
+    const path = this.workingDir?.trim();
+    if (!path || path === '') {
+      this.completions = [];
+      this.showCompletions = false;
+      return;
+    }
+
+    this.isLoadingCompletions = true;
+
+    try {
+      // Use the autocomplete manager to fetch completions
+      this.completions = await this.autocompleteManager.fetchCompletions(path);
+      this.showCompletions = this.completions.length > 0;
+      this.selectedCompletionIndex = -1;
+    } catch (error) {
+      logger.error('Error fetching completions:', error);
+      this.completions = [];
+      this.showCompletions = false;
+    } finally {
+      this.isLoadingCompletions = false;
+    }
+  }
+
+  private handleSelectCompletion(suggestion: string) {
+    this.workingDir = formatPathForDisplay(suggestion);
+    this.showCompletions = false;
+    this.completions = [];
+    this.selectedCompletionIndex = -1;
+  }
+
+  private handleWorkingDirKeydown(e: KeyboardEvent) {
+    if (!this.showCompletions || this.completions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.selectedCompletionIndex = Math.min(
+        this.selectedCompletionIndex + 1,
+        this.completions.length - 1
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this.selectedCompletionIndex = Math.max(this.selectedCompletionIndex - 1, -1);
+    } else if ((e.key === 'Tab' || e.key === 'Enter') && this.selectedCompletionIndex >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleSelectCompletion(this.completions[this.selectedCompletionIndex].suggestion);
+    } else if (e.key === 'Escape') {
+      this.showCompletions = false;
+      this.selectedCompletionIndex = -1;
+    }
+  }
+
+  private handleWorkingDirBlur() {
+    // Hide completions after a delay to allow clicking on them
+    setTimeout(() => {
+      this.showCompletions = false;
+      this.selectedCompletionIndex = -1;
+    }, 200);
   }
 
   render() {
@@ -581,15 +592,19 @@ export class SessionCreateForm extends LitElement {
             <!-- Working Directory -->
             <div class="mb-2 sm:mb-3 lg:mb-5">
               <label class="form-label text-text-muted text-[10px] sm:text-xs lg:text-sm">Working Directory:</label>
-              <div class="flex gap-1.5 sm:gap-2">
+              <div class="relative">
+                <div class="flex gap-1.5 sm:gap-2">
                 <input
                   type="text"
-                  class="input-field py-1.5 sm:py-2 lg:py-3 text-xs sm:text-sm"
+                  class="input-field py-1.5 sm:py-2 lg:py-3 text-xs sm:text-sm flex-1"
                   .value=${this.workingDir}
                   @input=${this.handleWorkingDirChange}
+                  @keydown=${this.handleWorkingDirKeydown}
+                  @blur=${this.handleWorkingDirBlur}
                   placeholder="~/"
                   ?disabled=${this.disabled || this.isCreating}
                   data-testid="working-dir-input"
+                  autocomplete="off"
                 />
                 <button
                   class="bg-bg-tertiary border border-border/50 rounded-lg p-1.5 sm:p-2 lg:p-3 font-mono text-text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary/50 hover:shadow-sm flex-shrink-0"
@@ -606,21 +621,72 @@ export class SessionCreateForm extends LitElement {
                 </button>
                 <button
                   class="bg-bg-tertiary border border-border/50 rounded-lg p-1.5 sm:p-2 lg:p-3 font-mono text-text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary/50 hover:shadow-sm flex-shrink-0 ${
-                    this.showRepositoryDropdown ? 'text-primary border-primary/50' : ''
+                    this.showRepositoryDropdown || this.showCompletions
+                      ? 'text-primary border-primary/50'
+                      : ''
                   }"
-                  @click=${this.handleToggleRepositoryDropdown}
-                  ?disabled=${this.disabled || this.isCreating || this.repositories.length === 0 || this.isDiscovering}
-                  title="Choose from repositories"
+                  @click=${this.handleToggleAutocomplete}
+                  ?disabled=${this.disabled || this.isCreating}
+                  title="Choose from repositories or recent directories"
                   type="button"
                 >
-                  <svg width="12" height="12" class="sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4" viewBox="0 0 16 16" fill="currentColor">
+                  <svg 
+                    width="12" 
+                    height="12" 
+                    class="sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 transition-transform duration-200" 
+                    viewBox="0 0 16 16" 
+                    fill="currentColor"
+                    style="transform: ${this.showRepositoryDropdown || this.showCompletions ? 'rotate(90deg)' : 'rotate(0deg)'}"
+                  >
                     <path
                       d="M5.22 1.22a.75.75 0 011.06 0l6.25 6.25a.75.75 0 010 1.06l-6.25 6.25a.75.75 0 01-1.06-1.06L10.94 8 5.22 2.28a.75.75 0 010-1.06z"
-                      transform=${this.showRepositoryDropdown ? 'rotate(90 8 8)' : ''}
                     />
                   </svg>
                 </button>
               </div>
+              ${
+                this.showCompletions && this.completions.length > 0
+                  ? html`
+                    <div class="absolute left-0 right-0 mt-1 bg-bg-elevated border border-border/50 rounded-lg overflow-hidden shadow-lg z-50">
+                      <div class="max-h-48 sm:max-h-64 lg:max-h-80 overflow-y-auto">
+                        ${this.completions.map(
+                          (completion, index) => html`
+                            <button
+                              @click=${() => this.handleSelectCompletion(completion.suggestion)}
+                              class="w-full text-left px-3 py-2 hover:bg-surface-hover transition-colors duration-200 flex items-center gap-2 ${
+                                index === this.selectedCompletionIndex
+                                  ? 'bg-primary/20 border-l-2 border-primary'
+                                  : ''
+                              }"
+                              type="button"
+                            >
+                              <svg 
+                                width="12" 
+                                height="12" 
+                                viewBox="0 0 16 16" 
+                                fill="currentColor"
+                                class="${completion.isRepository ? 'text-primary' : 'text-text-muted'} flex-shrink-0"
+                              >
+                                ${
+                                  completion.isRepository
+                                    ? html`<path d="M4.177 7.823A4.5 4.5 0 118 12.5a4.474 4.474 0 01-1.653-.316.75.75 0 11.557-1.392 2.999 2.999 0 001.096.208 3 3 0 10-2.108-5.134.75.75 0 01.236.662l.428 3.009a.75.75 0 01-1.255.592L2.847 7.677a.75.75 0 01.426-1.27A4.476 4.476 0 014.177 7.823zM8 1a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 1zm3.197 2.197a.75.75 0 01.092.992l-1 1.25a.75.75 0 01-1.17-.938l1-1.25a.75.75 0 01.992-.092.75.75 0 01.086.038zM5.75 8a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 015.75 8zm5.447 2.197a.75.75 0 01.092.992l-1 1.25a.75.75 0 11-1.17-.938l1-1.25a.75.75 0 01.992-.092.75.75 0 01.086.038z" />`
+                                    : completion.type === 'directory'
+                                      ? html`<path d="M1.75 1h5.5c.966 0 1.75.784 1.75 1.75v1h4c.966 0 1.75.784 1.75 1.75v7.75A1.75 1.75 0 0113 15H3a1.75 1.75 0 01-1.75-1.75V2.75C1.25 1.784 1.784 1 1.75 1zM2.75 2.5v10.75c0 .138.112.25.25.25h10a.25.25 0 00.25-.25V5.5a.25.25 0 00-.25-.25H8.75v-2.5a.25.25 0 00-.25-.25h-5.5a.25.25 0 00-.25.25z" />`
+                                      : html`<path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 019 4.25V1.5H3.75zm6.75.062V4.25c0 .138.112.25.25.25h2.688a.252.252 0 00-.011-.013l-2.914-2.914a.272.272 0 00-.013-.011z" />`
+                                }
+                              </svg>
+                              <span class="text-text text-xs sm:text-sm truncate flex-1">
+                                ${completion.name}
+                              </span>
+                              <span class="text-text-muted text-[9px] sm:text-[10px] truncate max-w-[40%]">${completion.path}</span>
+                            </button>
+                          `
+                        )}
+                      </div>
+                    </div>
+                  `
+                  : ''
+              }
               ${
                 this.showRepositoryDropdown && this.repositories.length > 0
                   ? html`
@@ -683,11 +749,11 @@ export class SessionCreateForm extends LitElement {
             }
 
             <!-- Terminal Title Mode -->
-            <div class="mb-2 sm:mb-4 lg:mb-6 flex items-center justify-between bg-bg-elevated border border-border/50 rounded-lg p-2 sm:p-3 lg:p-4">
+            <div class="${this.macAppConnected ? '' : 'mt-2 sm:mt-3 lg:mt-5'} mb-2 sm:mb-4 lg:mb-6 flex items-center justify-between bg-bg-elevated border border-border/50 rounded-lg p-2 sm:p-3 lg:p-4">
               <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
                 <span class="text-primary text-[10px] sm:text-xs lg:text-sm font-medium">Terminal Title Mode</span>
                 <p class="text-[9px] sm:text-[10px] lg:text-xs text-text-muted mt-0.5 hidden sm:block">
-                  ${this.getTitleModeDescription()}
+                  ${getTitleModeDescription(this.titleMode)}
                 </p>
               </div>
               <div class="relative">
