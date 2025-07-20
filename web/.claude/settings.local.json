@@ -6,12 +6,7 @@
       "Bash(grep:*)",
       "Bash(pnpm run format:*)",
       "Bash(pnpm run lint:*)",
-      "Bash(pnpm run precommit)",
-      "Bash(pnpm run:*)",
-      "Bash(./scripts/lint.sh:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(pnpm run precommit)"
     ],
     "deny": []
   }
