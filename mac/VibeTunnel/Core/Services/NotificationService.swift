@@ -1,6 +1,7 @@
 import Foundation
+import AppKit
 import os.log
-import UserNotifications
+@preconcurrency import UserNotifications
 
 /// Manages native macOS notifications for VibeTunnel events.
 ///
