@@ -3,8 +3,6 @@
   <img src="assets/banner.png" alt="VibeTunnel Banner" />
 </p>
 
-<h1 align="center">VibeTunnel</h1>
-
 <p align="center">
   <strong>Turn any browser into your Mac terminal.</strong><br>
   VibeTunnel proxies your terminals right into the browser, so you can vibe-code anywhere.
@@ -34,8 +32,6 @@
   <a href="https://discord.gg/3Ub3EUwrcR">Discord</a> •
   <a href="https://twitter.com/vibetunnel">Twitter</a>
 </p>
-
----
 
 ## Table of Contents
 
