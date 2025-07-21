@@ -273,9 +273,9 @@ export class VibeTunnelApp extends LitElement {
       }
     }
 
-    // Legacy browser shortcut checking for non-session views
+    // Browser shortcut checking for non-session views
     const shouldAllowBrowserShortcut = (): boolean => {
-      // If we're not in session view or capture is disabled, use the legacy allow list
+      // If we're not in session view or capture is disabled, use the browser shortcut allow list
       if (this.currentView !== 'session' || !this.keyboardCaptureActive) {
         const key = e.key.toLowerCase();
         const hasModifier = e.ctrlKey || e.metaKey;
@@ -1677,6 +1677,7 @@ export class VibeTunnelApp extends LitElement {
       <!-- Unified Settings Modal -->
       <unified-settings
         .visible=${this.showSettings}
+        .authClient=${authClient}
         @close=${this.handleCloseSettings}
         @notifications-enabled=${() => this.showSuccess('Notifications enabled')}
         @notifications-disabled=${() => this.showSuccess('Notifications disabled')}
@@ -1704,7 +1705,7 @@ export class VibeTunnelApp extends LitElement {
       ${
         this.showLogLink
           ? html`
-        <div class="fixed ${this.getLogButtonPosition()} right-4 text-muted text-xs font-mono bg-secondary px-3 py-1.5 rounded-lg border border-base shadow-sm transition-all duration-200" style="z-index: ${Z_INDEX.LOG_BUTTON};">
+        <div class="fixed ${this.getLogButtonPosition()} right-4 text-muted text-xs font-mono bg-secondary px-3 py-1.5 rounded-lg border border-border/30 shadow-sm transition-all duration-200" style="z-index: ${Z_INDEX.LOG_BUTTON};">
           <a href="/logs" class="hover:text-text transition-colors">Logs</a>
           <span class="ml-2 opacity-75">v${VERSION}</span>
         </div>

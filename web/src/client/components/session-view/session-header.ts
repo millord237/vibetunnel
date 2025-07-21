@@ -6,7 +6,7 @@
  */
 import { html, LitElement } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { Session } from '../session-list.js';
+import type { Session } from '../../../shared/types.js';
 import '../clickable-path.js';
 import './width-selector.js';
 import '../inline-edit.js';
@@ -18,6 +18,7 @@ import { createLogger } from '../../utils/logger.js';
 import './mobile-menu.js';
 import '../theme-toggle-icon.js';
 import './image-upload-menu.js';
+import './session-status-dropdown.js';
 
 const logger = createLogger('session-header');
 
@@ -51,6 +52,8 @@ export class SessionHeader extends LitElement {
   @property({ type: Boolean }) keyboardCaptureActive = true;
   @property({ type: Boolean }) isMobile = false;
   @property({ type: Boolean }) macAppConnected = false;
+  @property({ type: Function }) onTerminateSession?: () => void;
+  @property({ type: Function }) onClearSession?: () => void;
   @state() private isHovered = false;
 
   connectedCallback() {
@@ -159,7 +162,7 @@ export class SessionHeader extends LitElement {
           }
           <div class="text-primary min-w-0 flex-1 overflow-hidden">
             <div class="text-bright font-medium text-xs sm:text-sm min-w-0 overflow-hidden">
-              <div class="grid grid-cols-[1fr_auto] items-center gap-2 min-w-0" @mouseenter=${this.handleMouseEnter} @mouseleave=${this.handleMouseLeave}>
+              <div class="flex items-center gap-1 min-w-0" @mouseenter=${this.handleMouseEnter} @mouseleave=${this.handleMouseLeave}>
                 <inline-edit
                   class="min-w-0"
                   .value=${
@@ -179,16 +182,26 @@ export class SessionHeader extends LitElement {
                   isAIAssistantSession(this.session)
                     ? html`
                       <button
-                        class="bg-transparent border-0 p-0 cursor-pointer transition-opacity duration-200 text-primary magic-button flex-shrink-0 ${this.isHovered ? 'opacity-50 hover:opacity-100' : 'opacity-0'}"
+                        class="bg-transparent border-0 p-0 cursor-pointer transition-opacity duration-200 text-primary magic-button flex-shrink-0 ${this.isHovered ? 'opacity-50 hover:opacity-100' : 'opacity-0'} ml-1"
                         @click=${(e: Event) => {
                           e.stopPropagation();
                           this.handleMagicButton();
                         }}
                         title="Send prompt to update terminal title"
                       >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M14.9 0.3a1 1 0 01-.2 1.4l-4 3a1 1 0 01-1.4-.2l-.3-.4a1 1 0 01.2-1.4l4-3a1 1 0 011.4.2l.3.4zM11.5 2.5l-1.5 1-1 1.5L3.5 10.5l-.3.3a2 2 0 00-.5.8l-.7 2.4a.5.5 0 00.6.6l2.4-.7a2 2 0 00.8-.5l.3-.3L11.5 7.5l1.5-1 1-1.5-2.5-2.5zM3 13l-.7.2.2-.7a1 1 0 01.2-.4l.3-.1v.5a.5.5 0 00.5.5h.5l-.1.3a1 1 0 01-.4.2L3 13z"/>
-                          <path d="M9 1a1 1 0 100 2 1 1 0 000-2zM5 0a1 1 0 100 2 1 1 0 000-2zM2 3a1 1 0 100 2 1 1 0 000-2zM14 6a1 1 0 100 2 1 1 0 000-2zM15 10a1 1 0 100 2 1 1 0 000-2zM12 13a1 1 0 100 2 1 1 0 000-2z" opacity="0.5"/>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <!-- Wand -->
+                          <path d="M9.5 21.5L21.5 9.5a1 1 0 000-1.414l-1.086-1.086a1 1 0 00-1.414 0L7 19l2.5 2.5z" opacity="0.9"/>
+                          <path d="M6 18l-1.5 3.5a.5.5 0 00.7.7L8.5 21l-2.5-3z" opacity="0.9"/>
+                          <!-- Sparkles/Rays -->
+                          <circle cx="8" cy="4" r="1"/>
+                          <circle cx="4" cy="8" r="1"/>
+                          <circle cx="16" cy="4" r="1"/>
+                          <circle cx="20" cy="8" r="1"/>
+                          <circle cx="12" cy="2" r=".5"/>
+                          <circle cx="2" cy="12" r=".5"/>
+                          <circle cx="22" cy="12" r=".5"/>
+                          <circle cx="18" cy="2" r=".5"/>
                         </svg>
                       </button>
                       <style>
@@ -216,11 +229,13 @@ export class SessionHeader extends LitElement {
           </div>
         </div>
         <div class="flex items-center gap-2 text-xs flex-shrink-0 ml-2">
-          <!-- Notification status - desktop only -->
+          <!-- Status dropdown - desktop only -->
           <div class="hidden sm:block">
-            <notification-status
-              @open-settings=${() => this.onOpenSettings?.()}
-            ></notification-status>
+            <session-status-dropdown
+              .session=${this.session}
+              .onTerminate=${this.onTerminateSession}
+              .onClear=${this.onClearSession}
+            ></session-status-dropdown>
           </div>
           
           <!-- Keyboard capture indicator -->
@@ -240,14 +255,6 @@ export class SessionHeader extends LitElement {
           
           <!-- Desktop buttons - hidden on mobile -->
           <div class="hidden sm:flex items-center gap-2">
-            <!-- Theme toggle -->
-            <theme-toggle-icon
-              .theme=${this.currentTheme}
-              @theme-changed=${(e: CustomEvent) => {
-                this.currentTheme = e.detail.theme;
-              }}
-            ></theme-toggle-icon>
-            
             <!-- Image Upload Menu -->
             <image-upload-menu
               .onPasteImage=${() => this.handlePasteImage()}
@@ -257,6 +264,20 @@ export class SessionHeader extends LitElement {
               .isMobile=${this.isMobile}
             ></image-upload-menu>
             
+            <!-- Theme toggle -->
+            <theme-toggle-icon
+              .theme=${this.currentTheme}
+              @theme-changed=${(e: CustomEvent) => {
+                this.currentTheme = e.detail.theme;
+              }}
+            ></theme-toggle-icon>
+            
+            <!-- Settings button -->
+            <notification-status
+              @open-settings=${() => this.onOpenSettings?.()}
+            ></notification-status>
+            
+            <!-- Terminal size button -->
             <button
               class="bg-bg-tertiary border border-border rounded-lg px-3 py-2 font-mono text-xs text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary hover:shadow-sm flex-shrink-0 width-selector-button"
               @click=${() => this.onMaxWidthToggle?.()}
@@ -280,23 +301,6 @@ export class SessionHeader extends LitElement {
               .currentTheme=${this.currentTheme}
               .macAppConnected=${this.macAppConnected}
             ></mobile-menu>
-          </div>
-          
-          <!-- Status indicator - desktop only (mobile shows it on the left) -->
-          <div class="hidden sm:flex flex-col items-end gap-0">
-            <span class="text-xs flex items-center gap-2 font-medium ${
-              this.getStatusText() === 'running' ? 'text-status-success' : 'text-status-warning'
-            }">
-              <div class="relative">
-                <div class="w-2.5 h-2.5 rounded-full ${this.getStatusDotColor()}"></div>
-                ${
-                  this.getStatusText() === 'running'
-                    ? html`<div class="absolute inset-0 w-2.5 h-2.5 rounded-full bg-status-success animate-ping opacity-50"></div>`
-                    : ''
-                }
-              </div>
-              ${this.getStatusText().toUpperCase()}
-            </span>
           </div>
         </div>
       </div>

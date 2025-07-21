@@ -19,8 +19,6 @@ interface MessageHandler {
 }
 
 class TerminalHandler implements MessageHandler {
-  constructor(private controlUnixHandler: ControlUnixHandler) {}
-
   async handleMessage(message: ControlMessage): Promise<ControlMessage> {
     logger.log(`Terminal handler: ${message.action}`);
 
@@ -48,16 +46,10 @@ class TerminalHandler implements MessageHandler {
         // Execute vibetunnel command
         logger.log(`Spawning terminal with args: ${args.join(' ')}`);
 
-        // Set CWD to the web directory to ensure node-pty can be found
-        const repoPath = this.controlUnixHandler.getRepositoryPath();
-        const webPath = repoPath ? path.join(repoPath, 'web') : undefined;
-        logger.log(`Using web path for cwd: ${webPath}`);
-
         // Use spawn to avoid shell injection
         const vt = child_process.spawn('vibetunnel', args, {
           detached: true,
           stdio: 'ignore',
-          cwd: webPath,
         });
 
         vt.unref();
@@ -88,37 +80,6 @@ class SystemHandler implements MessageHandler {
     logger.log(`System handler: ${message.action}, type: ${message.type}, id: ${message.id}`);
 
     switch (message.action) {
-      case 'repository-path-update': {
-        const payload = message.payload as { path: string };
-        logger.log(`Repository path update received: ${JSON.stringify(payload)}`);
-
-        if (!payload?.path) {
-          logger.error('Missing path in payload');
-          return createControlResponse(message, null, 'Missing path in payload');
-        }
-
-        try {
-          // Update the server configuration
-          logger.log(`Calling updateRepositoryPath with: ${payload.path}`);
-          const updateSuccess = await this.controlUnixHandler.updateRepositoryPath(payload.path);
-
-          if (updateSuccess) {
-            logger.log(`Successfully updated repository path to: ${payload.path}`);
-            return createControlResponse(message, { success: true, path: payload.path });
-          } else {
-            logger.error('updateRepositoryPath returned false');
-            return createControlResponse(message, null, 'Failed to update repository path');
-          }
-        } catch (error) {
-          logger.error('Failed to update repository path:', error);
-          return createControlResponse(
-            message,
-            null,
-            error instanceof Error ? error.message : 'Failed to update repository path'
-          );
-        }
-      }
-
       case 'ping':
         // Already handled in handleMacMessage
         return null;
@@ -141,8 +102,6 @@ export class ControlUnixHandler {
   private readonly socketPath: string;
   private handlers = new Map<ControlCategory, MessageHandler>();
   private messageBuffer = Buffer.alloc(0);
-  private configUpdateCallback: ((config: { repositoryBasePath: string }) => void) | null = null;
-  private currentRepositoryPath: string | null = null;
 
   constructor() {
     // Use a unique socket path in user's home directory to avoid /tmp issues
@@ -159,7 +118,7 @@ export class ControlUnixHandler {
     this.socketPath = path.join(socketDir, 'control.sock');
 
     // Initialize handlers
-    this.handlers.set('terminal', new TerminalHandler(this));
+    this.handlers.set('terminal', new TerminalHandler());
     this.handlers.set('system', new SystemHandler(this));
   }
 
@@ -435,11 +394,6 @@ export class ControlUnixHandler {
       return;
     }
 
-    // Log repository-path-update messages specifically
-    if (message.category === 'system' && message.action === 'repository-path-update') {
-      logger.log(`🔍 Repository path update message details:`, JSON.stringify(message));
-    }
-
     // Check if this is a response to a pending request
     if (message.type === 'response' && this.pendingRequests.has(message.id)) {
       const resolver = this.pendingRequests.get(message.id);
@@ -583,67 +537,6 @@ export class ControlUnixHandler {
       this.macSocket?.destroy();
       this.macSocket = null;
     }
-  }
-
-  /**
-   * Set a callback to be called when configuration is updated
-   */
-  setConfigUpdateCallback(callback: (config: { repositoryBasePath: string }) => void): void {
-    this.configUpdateCallback = callback;
-  }
-
-  /**
-   * Update the repository path and notify all connected clients
-   */
-  async updateRepositoryPath(path: string): Promise<boolean> {
-    logger.log(`updateRepositoryPath called with path: ${path}`);
-
-    try {
-      this.currentRepositoryPath = path;
-      logger.log(`Set currentRepositoryPath to: ${this.currentRepositoryPath}`);
-
-      // Call the callback to update server configuration and broadcast to web clients
-      if (this.configUpdateCallback) {
-        logger.log('Calling configUpdateCallback...');
-        this.configUpdateCallback({ repositoryBasePath: path });
-        logger.log('configUpdateCallback completed successfully');
-        return true;
-      }
-
-      logger.warn('No config update callback set - is the server initialized?');
-      return false;
-    } catch (error) {
-      logger.error('Failed to update repository path:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Get the current repository path
-   */
-  getRepositoryPath(): string | null {
-    return this.currentRepositoryPath;
-  }
-
-  /**
-   * Send a notification to the Mac app
-   */
-  sendNotification(title: string, body: string, sound: boolean): void {
-    logger.info(`🔔 NOTIFICATION DEBUG: sendNotification called - title="${title}", body="${body}", sound=${sound}`);
-    if (!this.isMacAppConnected()) {
-      logger.warn('🔔 NOTIFICATION DEBUG: Cannot send notification - Mac app not connected');
-      return;
-    }
-
-    const event = createControlEvent('notification', 'show', {
-      title,
-      body,
-      sound,
-    });
-
-    logger.info(`🔔 NOTIFICATION DEBUG: Sending notification event to Mac - eventId: ${event.id}`);
-    this.sendToMac(event);
-    logger.info('🔔 NOTIFICATION DEBUG: Notification event sent to Mac app successfully');
   }
 }
 

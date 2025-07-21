@@ -72,6 +72,10 @@ struct VibeTunnelApp: App {
                     .environment(terminalLauncher)
                     .environment(gitRepositoryMonitor)
                     .environment(repositoryDiscoveryService)
+                    .environment(sessionService ?? SessionService(
+                        serverManager: serverManager,
+                        sessionMonitor: sessionMonitor
+                    ))
             } else {
                 Text("Session not found")
                     .frame(width: 400, height: 300)
@@ -257,15 +261,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         // Start the shared unix socket manager after all handlers are registered
         SharedUnixSocketManager.shared.connect()
-
-        // Initialize repository path sync service after Unix socket is connected
-        repositoryPathSync = RepositoryPathSyncService()
-        // Sync current path after initial connection
-        Task { [weak self] in
-            // Give socket time to connect
-            try? await Task.sleep(for: .seconds(1))
-            await self?.repositoryPathSync?.syncCurrentPath()
-        }
 
         // Start Git monitoring early
         app?.gitRepositoryMonitor.startMonitoring()

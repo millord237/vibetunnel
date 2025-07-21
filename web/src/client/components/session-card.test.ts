@@ -185,7 +185,7 @@ describe('SessionCard', () => {
       element.session = createMockSession({ pid: mockPid });
       await element.updateComplete;
 
-      const pidElement = element.querySelector('[title="Click to copy PID"]');
+      const pidElement = element.querySelector('#session-pid-copy');
       if (pidElement) {
         (pidElement as HTMLElement).click();
 
@@ -197,7 +197,7 @@ describe('SessionCard', () => {
       const selectHandler = vi.fn();
       element.addEventListener('session-select', selectHandler);
 
-      const killButton = element.querySelector('[title="Kill session"]');
+      const killButton = element.querySelector('#session-kill-button');
       if (killButton) {
         (killButton as HTMLElement).click();
 
@@ -212,7 +212,7 @@ describe('SessionCard', () => {
       element.session = createMockSession({ status: 'running' });
       await element.updateComplete;
 
-      const killButton = element.querySelector('[title="Kill session"]');
+      const killButton = element.querySelector('#session-kill-button');
       expect(killButton).toBeTruthy();
     });
 
@@ -220,7 +220,7 @@ describe('SessionCard', () => {
       element.session = createMockSession({ status: 'exited' });
       await element.updateComplete;
 
-      const cleanupButton = element.querySelector('[title="Clean up session"]');
+      const cleanupButton = element.querySelector('#session-kill-button');
       expect(cleanupButton).toBeTruthy();
     });
 
@@ -228,7 +228,7 @@ describe('SessionCard', () => {
       element.session = createMockSession({ status: 'unknown' as 'running' | 'exited' });
       await element.updateComplete;
 
-      const killButton = element.querySelector('button[title*="session"]');
+      const killButton = element.querySelector('#session-kill-button');
       expect(killButton).toBeFalsy();
     });
 
@@ -267,7 +267,7 @@ describe('SessionCard', () => {
         expect.objectContaining({
           detail: {
             sessionId: element.session.id,
-            error: expect.stringContaining('kill failed'),
+            error: expect.stringContaining('Failed to terminate session'),
           },
         })
       );
@@ -316,18 +316,20 @@ describe('SessionCard', () => {
       element.session = createMockSession({ status: 'exited' });
       await element.updateComplete;
 
-      fetchMock.mockResponse(`/api/sessions/${element.session.id}/cleanup`, { success: true });
+      fetchMock.mockResponse(`/api/sessions/${element.session.id}`, { success: true });
 
       const killedHandler = vi.fn();
       element.addEventListener('session-killed', killedHandler);
 
       await element.kill();
 
-      // Should use cleanup endpoint for exited sessions
+      // Should use DELETE endpoint for exited sessions
       const calls = fetchMock.getCalls();
-      const cleanupCall = calls.find((call) => call[0].includes('/cleanup'));
-      expect(cleanupCall).toBeDefined();
-      expect(cleanupCall?.[0]).toContain('/cleanup');
+      const deleteCall = calls.find((call) =>
+        call[0].includes(`/api/sessions/${element.session.id}`)
+      );
+      expect(deleteCall).toBeDefined();
+      expect(deleteCall?.[1]?.method).toBe('DELETE');
       expect(killedHandler).toHaveBeenCalled();
     });
   });
