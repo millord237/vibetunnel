@@ -15,6 +15,7 @@ struct NewSessionForm: View {
     private var sessionService
     @Environment(RepositoryDiscoveryService.self)
     private var repositoryDiscovery
+    @StateObject private var configManager = ConfigManager.shared
 
     // Form fields
     @State private var command = "zsh"
@@ -28,7 +29,6 @@ struct NewSessionForm: View {
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var isHoveringCreate = false
-    @State private var showingRepositoryDropdown = false
     @FocusState private var focusedField: Field?
 
     enum Field: Hashable {
@@ -37,31 +37,6 @@ struct NewSessionForm: View {
         case directory
     }
 
-    enum TitleMode: String, CaseIterable {
-        case none = "none"
-        case filter = "filter"
-        case `static` = "static"
-        case dynamic = "dynamic"
-
-        var displayName: String {
-            switch self {
-            case .none: "None"
-            case .filter: "Filter"
-            case .static: "Static"
-            case .dynamic: "Dynamic"
-            }
-        }
-    }
-
-    /// Quick commands synced with frontend
-    private let quickCommands = [
-        ("claude", "✨"),
-        ("gemini", "✨"),
-        ("zsh", nil),
-        ("python3", nil),
-        ("node", nil),
-        ("pnpm run dev", nil)
-    ]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -147,8 +122,7 @@ struct NewSessionForm: View {
 
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 8) {
-                                TextField("~/", text: $workingDirectory)
-                                    .textFieldStyle(.roundedBorder)
+                                AutocompleteTextField(text: $workingDirectory, placeholder: "~/")
                                     .focused($focusedField, equals: .directory)
 
                                 Button(action: selectDirectory) {
@@ -160,29 +134,6 @@ struct NewSessionForm: View {
                                 }
                                 .buttonStyle(.borderless)
                                 .help("Choose directory")
-
-                                Button(action: { showingRepositoryDropdown.toggle() }, label: {
-                                    Image(systemName: "arrow.trianglehead.pull")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.secondary)
-                                        .animation(.easeInOut(duration: 0.2), value: showingRepositoryDropdown)
-                                        .frame(width: 20, height: 20)
-                                        .contentShape(Rectangle())
-                                })
-                                .buttonStyle(.borderless)
-                                .help("Choose from repositories")
-                                .disabled(repositoryDiscovery.repositories.isEmpty || repositoryDiscovery.isDiscovering)
-                            }
-
-                            // Repository dropdown
-                            if showingRepositoryDropdown && !repositoryDiscovery.repositories.isEmpty {
-                                RepositoryDropdownList(
-                                    repositories: repositoryDiscovery.repositories,
-                                    isDiscovering: repositoryDiscovery.isDiscovering,
-                                    selectedPath: $workingDirectory,
-                                    isShowing: $showingRepositoryDropdown
-                                )
-                                .padding(.top, 4)
                             }
                         }
                     }
@@ -198,31 +149,31 @@ struct NewSessionForm: View {
                             GridItem(.flexible()),
                             GridItem(.flexible())
                         ], spacing: 8) {
-                            ForEach(quickCommands, id: \.0) { cmd in
+                            ForEach(configManager.quickStartCommands) { cmd in
                                 Button(action: {
-                                    command = cmd.0
+                                    command = cmd.command
                                     sessionName = ""
                                 }, label: {
-                                    HStack(spacing: 4) {
-                                        if let emoji = cmd.1 {
-                                            Text(emoji)
-                                                .font(.system(size: 12))
-                                        }
-                                        Text(cmd.0)
-                                            .font(.system(size: 11))
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .fill(Color.primary.opacity(0.05))
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                                    )
+                                    Text(cmd.displayName)
+                                        .font(.system(size: 11))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
                                 })
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(command == cmd.command ? Color.accentColor.opacity(0.15) : Color.primary
+                                            .opacity(0.05)
+                                        )
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(
+                                            command == cmd.command ? Color.accentColor.opacity(0.5) : Color.primary
+                                                .opacity(0.1),
+                                            lineWidth: 1
+                                        )
+                                )
                                 .buttonStyle(.plain)
                             }
                         }
@@ -351,8 +302,7 @@ struct NewSessionForm: View {
             focusedField = .name
         }
         .task {
-            let repositoryBasePath = AppConstants.stringValue(for: AppConstants.UserDefaultsKeys.repositoryBasePath)
-            await repositoryDiscovery.discoverRepositories(in: repositoryBasePath)
+            await repositoryDiscovery.discoverRepositories(in: configManager.repositoryBasePath)
         }
         .alert("Error", isPresented: $showError) {
             Button("OK") {}

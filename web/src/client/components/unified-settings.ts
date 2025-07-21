@@ -6,6 +6,8 @@ import {
   type PushSubscription,
   pushNotificationService,
 } from '../services/push-notification-service.js';
+import { RepositoryService } from '../services/repository-service.js';
+import { ServerConfigService } from '../services/server-config-service.js';
 import { createLogger } from '../utils/logger.js';
 import { type MediaQueryState, responsiveObserver } from '../utils/responsive-utils.js';
 
@@ -15,19 +17,12 @@ export interface AppPreferences {
   useDirectKeyboard: boolean;
   useBinaryMode: boolean;
   showLogLink: boolean;
-  repositoryBasePath: string;
-}
-
-interface ServerConfig {
-  repositoryBasePath: string;
-  serverConfigured?: boolean;
 }
 
 const DEFAULT_APP_PREFERENCES: AppPreferences = {
   useDirectKeyboard: true, // Default to modern direct keyboard for new users
   useBinaryMode: false, // Default to SSE/RSC mode for compatibility
   showLogLink: false,
-  repositoryBasePath: '~/',
 };
 
 export const STORAGE_KEY = 'vibetunnel_app_preferences';
@@ -60,8 +55,8 @@ export class UnifiedSettings extends LitElement {
 
   // App settings state
   @state() private appPreferences: AppPreferences = DEFAULT_APP_PREFERENCES;
+  @state() private repositoryBasePath = '~/';
   @state() private mediaState: MediaQueryState = responsiveObserver.getCurrentState();
-  @state() private serverConfig: ServerConfig | null = null;
   @state() private isServerConfigured = false;
   @state() private repositoryCount = 0;
   @state() private isDiscoveringRepositories = false;
@@ -69,14 +64,21 @@ export class UnifiedSettings extends LitElement {
   private permissionChangeUnsubscribe?: () => void;
   private subscriptionChangeUnsubscribe?: () => void;
   private unsubscribeResponsive?: () => void;
-  private configWebSocket?: WebSocket;
+  private repositoryService?: RepositoryService;
+  private serverConfigService?: ServerConfigService;
 
   connectedCallback() {
     super.connectedCallback();
     this.initializeNotifications();
     this.loadAppPreferences();
-    this.connectConfigWebSocket();
-    this.discoverRepositories();
+
+    // Initialize services
+    this.serverConfigService = new ServerConfigService(this.authClient);
+
+    // Initialize repository service if authClient is available
+    if (this.authClient) {
+      this.repositoryService = new RepositoryService(this.authClient, this.serverConfigService);
+    }
 
     // Subscribe to responsive changes
     this.unsubscribeResponsive = responsiveObserver.subscribe((state) => {
@@ -95,10 +97,6 @@ export class UnifiedSettings extends LitElement {
     if (this.unsubscribeResponsive) {
       this.unsubscribeResponsive();
     }
-    if (this.configWebSocket) {
-      this.configWebSocket.close();
-      this.configWebSocket = undefined;
-    }
     // Clean up keyboard listener
     document.removeEventListener('keydown', this.handleKeyDown);
   }
@@ -110,8 +108,25 @@ export class UnifiedSettings extends LitElement {
         document.startViewTransition?.(() => {
           this.requestUpdate();
         });
+        // Discover repositories when settings are opened
+        this.discoverRepositories();
       } else {
         document.removeEventListener('keydown', this.handleKeyDown);
+      }
+    }
+
+    // Initialize repository service when authClient becomes available
+    if (changedProperties.has('authClient') && this.authClient) {
+      if (!this.repositoryService && this.serverConfigService) {
+        this.repositoryService = new RepositoryService(this.authClient, this.serverConfigService);
+      }
+      // Update server config service's authClient
+      if (this.serverConfigService) {
+        this.serverConfigService.setAuthClient(this.authClient);
+      }
+      // Discover repositories if settings are already visible
+      if (this.visible) {
+        this.discoverRepositories();
       }
     }
   }
@@ -143,28 +158,20 @@ export class UnifiedSettings extends LitElement {
       }
 
       // Fetch server configuration
-      try {
-        const response = await fetch('/api/config');
-        if (response.ok) {
-          const serverConfig: ServerConfig = await response.json();
-          this.serverConfig = serverConfig;
+      if (this.serverConfigService) {
+        try {
+          const serverConfig = await this.serverConfigService.loadConfig();
           this.isServerConfigured = serverConfig.serverConfigured ?? false;
-
-          // If server-configured, always use server's path
-          if (this.isServerConfigured) {
-            this.appPreferences.repositoryBasePath = serverConfig.repositoryBasePath;
-            // Save the updated preferences
-            this.saveAppPreferences();
-          } else if (!stored || !JSON.parse(stored).repositoryBasePath) {
-            // If we don't have a local repository base path and not server-configured, use the server's default
-            this.appPreferences.repositoryBasePath =
-              serverConfig.repositoryBasePath || DEFAULT_APP_PREFERENCES.repositoryBasePath;
-            // Save the updated preferences
-            this.saveAppPreferences();
-          }
+          // Always use server's repository base path
+          this.repositoryBasePath = serverConfig.repositoryBasePath || '~/';
+        } catch (error) {
+          logger.warn('Failed to fetch server config', error);
         }
-      } catch (error) {
-        logger.warn('Failed to fetch server config', error);
+      }
+
+      // Discover repositories after preferences are loaded if visible
+      if (this.visible && this.repositoryService) {
+        this.discoverRepositories();
       }
     } catch (error) {
       logger.error('Failed to load app preferences', error);
@@ -183,6 +190,27 @@ export class UnifiedSettings extends LitElement {
       );
     } catch (error) {
       logger.error('Failed to save app preferences', error);
+    }
+  }
+
+  private async discoverRepositories() {
+    if (!this.repositoryService || this.isDiscoveringRepositories) {
+      return;
+    }
+
+    this.isDiscoveringRepositories = true;
+    try {
+      // Add a small delay to ensure preferences are loaded
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const repositories = await this.repositoryService.discoverRepositories();
+      this.repositoryCount = repositories.length;
+      logger.log(`Discovered ${this.repositoryCount} repositories in ${this.repositoryBasePath}`);
+    } catch (error) {
+      logger.error('Failed to discover repositories', error);
+      this.repositoryCount = 0;
+    } finally {
+      this.isDiscoveringRepositories = false;
     }
   }
 
@@ -271,104 +299,25 @@ export class UnifiedSettings extends LitElement {
   }
 
   private handleAppPreferenceChange(key: keyof AppPreferences, value: boolean | string) {
-    // Don't allow changes to repository path if server-configured
-    if (key === 'repositoryBasePath' && this.isServerConfigured) {
-      return;
-    }
+    // Update locally
     this.appPreferences = { ...this.appPreferences, [key]: value };
     this.saveAppPreferences();
-
-    // Send repository path updates to server/Mac app
-    if (key === 'repositoryBasePath' && this.configWebSocket?.readyState === WebSocket.OPEN) {
-      logger.log('Sending repository path update to server:', value);
-      this.configWebSocket.send(
-        JSON.stringify({
-          type: 'update-repository-path',
-          path: value as string,
-        })
-      );
-      // Re-discover repositories when path changes
-      this.discoverRepositories();
-    }
   }
 
-  private async discoverRepositories() {
-    this.isDiscoveringRepositories = true;
-
-    try {
-      const basePath = this.appPreferences.repositoryBasePath || '~/';
-      const response = await fetch(
-        `/api/repositories/discover?path=${encodeURIComponent(basePath)}`,
-        {
-          headers: this.authClient?.getAuthHeader() || {},
-        }
-      );
-
-      if (response.ok) {
-        const repositories = await response.json();
-        this.repositoryCount = repositories.length;
-        logger.debug(`Discovered ${this.repositoryCount} repositories in ${basePath}`);
-      } else {
-        logger.error('Failed to discover repositories');
-        this.repositoryCount = 0;
+  private async handleRepositoryBasePathChange(value: string) {
+    if (this.serverConfigService) {
+      try {
+        // Update server config
+        await this.serverConfigService.updateConfig({ repositoryBasePath: value });
+        // Update local state
+        this.repositoryBasePath = value;
+        // Rediscover repositories
+        this.discoverRepositories();
+      } catch (error) {
+        logger.error('Failed to update repository base path:', error);
+        // Revert the change on error
+        this.requestUpdate();
       }
-    } catch (error) {
-      logger.error('Error discovering repositories:', error);
-      this.repositoryCount = 0;
-    } finally {
-      this.isDiscoveringRepositories = false;
-    }
-  }
-
-  private connectConfigWebSocket() {
-    try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/config`;
-
-      this.configWebSocket = new WebSocket(wsUrl);
-
-      this.configWebSocket.onopen = () => {
-        logger.log('Config WebSocket connected');
-      };
-
-      this.configWebSocket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.type === 'config' && message.data) {
-            const { repositoryBasePath } = message.data;
-
-            // Update server config state
-            this.serverConfig = message.data;
-            this.isServerConfigured = message.data.serverConfigured ?? false;
-
-            // If server-configured, update the app preferences
-            if (this.isServerConfigured && repositoryBasePath) {
-              this.appPreferences.repositoryBasePath = repositoryBasePath;
-              this.saveAppPreferences();
-              logger.log('Repository path updated from server:', repositoryBasePath);
-            }
-          }
-        } catch (error) {
-          logger.error('Failed to parse config WebSocket message:', error);
-        }
-      };
-
-      this.configWebSocket.onerror = (error) => {
-        logger.error('Config WebSocket error:', error);
-      };
-
-      this.configWebSocket.onclose = () => {
-        logger.log('Config WebSocket closed');
-        // Attempt to reconnect after a delay
-        setTimeout(() => {
-          // Check if component is still connected to DOM
-          if (this.isConnected) {
-            this.connectConfigWebSocket();
-          }
-        }, 5000);
-      };
-    } catch (error) {
-      logger.error('Failed to connect config WebSocket:', error);
     }
   }
 
@@ -433,7 +382,7 @@ export class UnifiedSettings extends LitElement {
           style="view-transition-name: settings-modal"
         >
           <!-- Header -->
-          <div class="p-4 pb-4 border-b border-base relative flex-shrink-0">
+          <div class="p-4 pb-4 border-b border-border/50 relative flex-shrink-0">
             <h2 class="text-primary text-lg font-bold">Settings</h2>
             <button
               class="absolute top-4 right-4 text-muted hover:text-primary transition-colors p-1"
@@ -493,7 +442,7 @@ export class UnifiedSettings extends LitElement {
             `
             : html`
               <!-- Main toggle -->
-              <div class="flex items-center justify-between p-4 bg-tertiary rounded-lg border border-base">
+              <div class="flex items-center justify-between p-4 bg-tertiary rounded-lg border border-border/50">
                 <div class="flex-1">
                   <label class="text-primary font-medium">Enable Notifications</label>
                   <p class="text-muted text-xs mt-1">
@@ -543,7 +492,7 @@ export class UnifiedSettings extends LitElement {
                     </div>
 
                     <!-- Test button -->
-                    <div class="flex items-center justify-between pt-3 mt-3 border-t border-base">
+                    <div class="flex items-center justify-between pt-3 mt-3 border-t border-border/50">
                       <p class="text-xs text-muted">Test your notification settings</p>
                       <button
                         class="btn-secondary text-xs px-3 py-1.5"
@@ -601,7 +550,7 @@ export class UnifiedSettings extends LitElement {
         ${
           this.mediaState.isMobile
             ? html`
-              <div class="flex items-center justify-between p-4 bg-tertiary rounded-lg border border-base">
+              <div class="flex items-center justify-between p-4 bg-tertiary rounded-lg border border-border/50">
                 <div class="flex-1">
                   <label class="text-primary font-medium">
                     Use Direct Keyboard
@@ -630,7 +579,7 @@ export class UnifiedSettings extends LitElement {
         }
 
         <!-- Show log link -->
-        <div class="flex items-center justify-between p-4 bg-tertiary rounded-lg border border-base">
+        <div class="flex items-center justify-between p-4 bg-tertiary rounded-lg border border-border/50">
           <div class="flex-1">
             <label class="text-primary font-medium">Show Log Link</label>
             <p class="text-muted text-xs mt-1">
@@ -654,15 +603,28 @@ export class UnifiedSettings extends LitElement {
         </div>
 
         <!-- Repository Base Path -->
-        <div class="p-4 bg-tertiary rounded-lg border border-base">
+        <div class="p-4 bg-tertiary rounded-lg border border-border/50">
           <div class="mb-3">
             <div class="flex items-center justify-between">
               <label class="text-primary font-medium">Repository Base Path</label>
-              ${
-                this.isDiscoveringRepositories
-                  ? html`<span class="text-muted text-xs">Scanning...</span>`
-                  : html`<span class="text-muted text-xs">${this.repositoryCount} repositories found</span>`
-              }
+              <div class="flex items-center gap-2">
+                ${
+                  this.isDiscoveringRepositories
+                    ? html`<span id="repository-status" class="text-muted text-xs">Scanning...</span>`
+                    : html`<span id="repository-status" class="text-muted text-xs">${this.repositoryCount} repositories found</span>`
+                }
+                <button
+                  @click=${() => this.discoverRepositories()}
+                  ?disabled=${this.isDiscoveringRepositories}
+                  class="text-primary hover:text-primary-hover text-xs transition-colors duration-200"
+                  title="Refresh repository list"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <p class="text-muted text-xs mt-1">
               ${
@@ -675,10 +637,10 @@ export class UnifiedSettings extends LitElement {
           <div class="flex gap-2">
             <input
               type="text"
-              .value=${this.appPreferences.repositoryBasePath}
+              .value=${this.repositoryBasePath}
               @input=${(e: Event) => {
                 const input = e.target as HTMLInputElement;
-                this.handleAppPreferenceChange('repositoryBasePath', input.value);
+                this.handleRepositoryBasePathChange(input.value);
               }}
               placeholder="~/"
               class="input-field py-2 text-sm flex-1 ${

@@ -15,7 +15,7 @@
  */
 import { html, LitElement, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { Session } from './session-list.js';
+import type { Session } from '../../shared/types.js';
 import './terminal.js';
 import './vibe-terminal-binary.js';
 import './file-browser.js';
@@ -29,6 +29,7 @@ import './session-view/ctrl-alpha-overlay.js';
 import './session-view/width-selector.js';
 import './session-view/session-header.js';
 import { authClient } from '../services/auth-client.js';
+import { sessionActionService } from '../services/session-action-service.js';
 import { createLogger } from '../utils/logger.js';
 import {
   COMMON_TERMINAL_WIDTHS,
@@ -400,6 +401,8 @@ export class SessionView extends LitElement {
     this.lifecycleEventManager.setSessionViewElement(this);
     this.lifecycleEventManager.setCallbacks(this.createLifecycleEventManagerCallbacks());
     this.lifecycleEventManager.setSession(this.session);
+
+    // Session action callbacks will be provided per-call to the service
 
     // Load direct keyboard preference (needed before lifecycle setup)
     try {
@@ -1433,6 +1436,8 @@ export class SessionView extends LitElement {
           .onFontSizeChange=${(size: number) => this.handleFontSizeChange(size)}
           .onOpenSettings=${() => this.handleOpenSettings()}
           .macAppConnected=${this.macAppConnected}
+          .onTerminateSession=${() => this.handleTerminateSession()}
+          .onClearSession=${() => this.handleClearSession()}
           @close-width-selector=${() => {
             this.showWidthSelector = false;
             this.customWidth = '';
@@ -1750,5 +1755,48 @@ export class SessionView extends LitElement {
         }
       </div>
     `;
+  }
+
+  private async handleTerminateSession() {
+    if (!this.session) return;
+    await sessionActionService.terminateSession(this.session, {
+      authClient: authClient,
+      callbacks: {
+        onError: (message: string) => {
+          this.dispatchEvent(
+            new CustomEvent('error', {
+              detail: message,
+              bubbles: true,
+              composed: true,
+            })
+          );
+        },
+        onSuccess: () => {
+          // For terminate, session status will be updated via SSE
+        },
+      },
+    });
+  }
+
+  private async handleClearSession() {
+    if (!this.session) return;
+    await sessionActionService.clearSession(this.session, {
+      authClient: authClient,
+      callbacks: {
+        onError: (message: string) => {
+          this.dispatchEvent(
+            new CustomEvent('error', {
+              detail: message,
+              bubbles: true,
+              composed: true,
+            })
+          );
+        },
+        onSuccess: () => {
+          // Session cleared successfully - navigate back to list
+          this.handleBack();
+        },
+      },
+    });
   }
 }

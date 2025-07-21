@@ -112,69 +112,11 @@ jobs:
         echo "xcbeautify: $(xcbeautify --version || echo 'not found')"
         echo "jq: $(which jq || echo 'not found')"
     
-    # Skip pnpm cache - testing if fresh installs are faster
-    # The cache was extremely large and might be slower than fresh install
-    
-    - name: Download web artifacts from Node.js CI
-      uses: actions/download-artifact@v4
-      with:
-        name: web-build
-        path: web-artifacts-temp/
-    
-    - name: Move web artifacts to correct location
-      run: |
-        # Debug: Show what was downloaded
-        echo "=== Contents of web-artifacts-temp ==="
-        find web-artifacts-temp -type f | head -20 || echo "No files found"
-        
-        # Ensure web directory structure exists
-        mkdir -p web/dist web/public/bundle web/native web/bin
-        
-        # The artifacts are uploaded without the web/ prefix
-        # So they're at web-artifacts-temp/dist, web-artifacts-temp/public/bundle, etc.
-        if [ -d "web-artifacts-temp/dist" ]; then
-          # Copy from the root of artifacts
-          cp -r web-artifacts-temp/dist/* web/dist/ 2>/dev/null || true
-          echo "Copied dist files"
-        fi
-        if [ -d "web-artifacts-temp/public/bundle" ]; then
-          cp -r web-artifacts-temp/public/bundle/* web/public/bundle/ 2>/dev/null || true
-          echo "Copied bundle files"
-        fi
-        if [ -d "web-artifacts-temp/native" ]; then
-          cp -r web-artifacts-temp/native/* web/native/ 2>/dev/null || true
-          echo "Copied native binaries"
-        fi
-        if [ -d "web-artifacts-temp/bin" ]; then
-          cp -r web-artifacts-temp/bin/* web/bin/ 2>/dev/null || true
-          echo "Copied bin scripts"
-        fi
-        
-        # Debug: Show what we have
-        echo "=== Web directory structure ==="
-        ls -la web/ || true
-        echo "=== Dist contents ==="
-        ls -la web/dist/ | head -10 || true
-        echo "=== Bundle contents ==="
-        ls -la web/public/bundle/ | head -10 || true
-        echo "=== Native contents ==="
-        ls -la web/native/ | head -10 || true
-        
-        # Clean up temp directory
-        rm -rf web-artifacts-temp
-        
-        # Verify we have the required files
-        if [ ! -f "web/dist/server/server.js" ]; then
-          echo "ERROR: web/dist/server/server.js not found after artifact extraction!"
-          exit 1
-        fi
-        
-        echo "Web artifacts successfully downloaded and positioned"
+    # No web artifact caching - Mac build will handle web build directly
     
     - name: Resolve Dependencies (once)
       env:
         CI: "true"  # Ensure CI environment variable is set
-        SKIP_NODE_CHECK: "true"  # Skip Node.js check in CI since we download pre-built artifacts
       run: |
         echo "Resolving Swift package dependencies..."
         # Workspace is at root level
@@ -190,7 +132,6 @@ jobs:
       id: build
       env:
         CI: "true"  # Ensure CI environment variable is set for build scripts
-        SKIP_NODE_CHECK: "true"  # Skip Node.js check in CI since we download pre-built artifacts
       run: |
         # Always use Debug for now to match test expectations
         BUILD_CONFIG="Debug"
@@ -235,18 +176,9 @@ jobs:
       id: test-coverage
       timeout-minutes: 20  # Increased from 15 for CI stability
       env:
-        SKIP_NODE_CHECK: "true"  # Skip Node.js check in CI since we download pre-built artifacts
         RUN_SLOW_TESTS: "false"  # Skip slow tests in CI by default
         RUN_FLAKY_TESTS: "false"  # Skip flaky tests in CI by default
       run: |
-        # Debug: Check if web build artifacts were downloaded
-        echo "=== Checking web build artifacts ==="
-        if [ -d "web/dist" ]; then
-          echo "web/dist exists"
-          ls -la web/dist | head -10
-        else
-          echo "web/dist does not exist"
-        fi
         
         # Use xcodebuild test for workspace testing
         # Only enable coverage on main branch

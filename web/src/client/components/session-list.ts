@@ -24,15 +24,13 @@ import type { AuthClient } from '../services/auth-client.js';
 import './session-card.js';
 import './inline-edit.js';
 import { formatSessionDuration } from '../../shared/utils/time.js';
+import { sessionActionService } from '../services/session-action-service.js';
 import { sendAIPrompt } from '../utils/ai-sessions.js';
 import { Z_INDEX } from '../utils/constants.js';
 import { createLogger } from '../utils/logger.js';
 import { formatPathForDisplay } from '../utils/path-utils.js';
 
 const logger = createLogger('session-list');
-
-// Re-export Session type for backward compatibility
-export type { Session };
 
 @customElement('session-list')
 export class SessionList extends LitElement {
@@ -266,31 +264,23 @@ export class SessionList extends LitElement {
   };
 
   private async handleDeleteSession(sessionId: string) {
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: 'DELETE',
-        headers: {
-          ...this.authClient.getAuthHeader(),
+    await sessionActionService.deleteSessionById(sessionId, {
+      authClient: this.authClient,
+      callbacks: {
+        onError: (errorMessage) => {
+          this.handleSessionKillError({
+            detail: {
+              sessionId,
+              error: errorMessage,
+            },
+          } as CustomEvent);
         },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        logger.error('Failed to delete session', { errorData, sessionId });
-        throw new Error(`Delete failed: ${response.status}`);
-      }
-
-      // Session killed successfully - update local state and trigger refresh
-      this.handleSessionKilled({ detail: { sessionId } } as CustomEvent);
-    } catch (error) {
-      logger.error('Error deleting session', { error, sessionId });
-      this.handleSessionKillError({
-        detail: {
-          sessionId,
-          error: error instanceof Error ? error.message : 'Unknown error',
+        onSuccess: () => {
+          // Session killed successfully - update local state and trigger refresh
+          this.handleSessionKilled({ detail: { sessionId } } as CustomEvent);
         },
-      } as CustomEvent);
-    }
+      },
+    });
   }
 
   private async handleSendAIPrompt(sessionId: string) {
@@ -366,19 +356,25 @@ export class SessionList extends LitElement {
   }
 
   render() {
-    // Group sessions by status
-    const runningSessions = this.sessions.filter((session) => session.status === 'running');
+    // Group sessions by status and activity
+    const activeSessions = this.sessions.filter(
+      (session) => session.status === 'running' && session.activityStatus?.isActive !== false
+    );
+    const idleSessions = this.sessions.filter(
+      (session) => session.status === 'running' && session.activityStatus?.isActive === false
+    );
     const exitedSessions = this.sessions.filter((session) => session.status === 'exited');
 
-    const hasRunningSessions = runningSessions.length > 0;
+    const hasActiveSessions = activeSessions.length > 0;
+    const hasIdleSessions = idleSessions.length > 0;
     const hasExitedSessions = exitedSessions.length > 0;
-    const showExitedSection = !this.hideExited && hasExitedSessions;
+    const showExitedSection = !this.hideExited && (hasIdleSessions || hasExitedSessions);
 
     return html`
       <div class="font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 focus:ring-offset-bg-primary rounded-lg" data-testid="session-list-container">
         <div class="p-4 pt-5">
         ${
-          !hasRunningSessions && (!hasExitedSessions || this.hideExited)
+          !hasActiveSessions && !hasIdleSessions && (!hasExitedSessions || this.hideExited)
             ? html`
               <div class="text-text-muted text-center py-8">
                 ${
@@ -454,15 +450,15 @@ export class SessionList extends LitElement {
             : html`
               <!-- Active Sessions -->
               ${
-                hasRunningSessions
+                hasActiveSessions
                   ? html`
                     <div class="mb-6">
                       <h3 class="text-xs font-semibold text-text-muted uppercase tracking-wider mb-4">
-                        Active <span class="text-text-dim">(${runningSessions.length})</span>
+                        Active <span class="text-text-dim">(${activeSessions.length})</span>
                       </h3>
                       <div class="${this.compactMode ? 'space-y-2' : 'session-flex-responsive'} relative">
                         ${repeat(
-                          runningSessions,
+                          activeSessions,
                           (session) => session.id,
                           (session) => html`
                     ${
@@ -657,13 +653,146 @@ export class SessionList extends LitElement {
                   : ''
               }
               
-              <!-- Idle/Exited Sessions -->
+              <!-- Idle Sessions -->
               ${
-                showExitedSection
+                hasIdleSessions
+                  ? html`
+                    <div class="mb-6">
+                      <h3 class="text-xs font-semibold text-text-muted uppercase tracking-wider mb-4">
+                        Idle <span class="text-text-dim">(${idleSessions.length})</span>
+                      </h3>
+                      <div class="${this.compactMode ? 'space-y-2' : 'session-flex-responsive'} relative">
+                        ${repeat(
+                          idleSessions,
+                          (session) => session.id,
+                          (session) => html`
+                            ${
+                              this.compactMode
+                                ? html`
+                                  <!-- Enhanced compact list item for sidebar -->
+                                  <div
+                                    class="group flex items-center gap-3 p-3 rounded-lg cursor-pointer ${
+                                      session.id === this.selectedSessionId
+                                        ? 'bg-bg-elevated border border-accent-primary shadow-card-hover'
+                                        : 'bg-bg-secondary border border-border hover:bg-bg-tertiary hover:border-border-light hover:shadow-card'
+                                    }"
+                                    @click=${() =>
+                                      this.handleSessionSelect({ detail: session } as CustomEvent)}
+                                  >
+                                    <!-- Status indicator for idle sessions -->
+                                    <div class="relative flex-shrink-0">
+                                      <div class="w-2.5 h-2.5 rounded-full bg-status-success ring-1 ring-status-success ring-opacity-50"
+                                           title="Idle"></div>
+                                    </div>
+                                    
+                                    <!-- Elegant divider line -->
+                                    <div class="w-px h-8 bg-gradient-to-b from-transparent via-border to-transparent"></div>
+                                    
+                                    <!-- Session content -->
+                                    <div class="flex-1 min-w-0">
+                                      <div
+                                        class="text-sm font-mono truncate ${
+                                          session.id === this.selectedSessionId
+                                            ? 'text-accent-primary font-medium'
+                                            : 'text-text group-hover:text-accent-primary transition-colors'
+                                        }"
+                                        title="${
+                                          session.name ||
+                                          (Array.isArray(session.command)
+                                            ? session.command.join(' ')
+                                            : session.command)
+                                        }"
+                                      >
+                                        ${
+                                          session.name ||
+                                          (Array.isArray(session.command)
+                                            ? session.command.join(' ')
+                                            : session.command)
+                                        }
+                                      </div>
+                                      <div class="text-xs text-text-dim truncate">
+                                        ${formatPathForDisplay(session.workingDir)}
+                                      </div>
+                                    </div>
+                                    
+                                    <!-- Right side: duration and close button -->
+                                    <div class="relative flex items-center flex-shrink-0 gap-1">
+                                      <!-- Session duration -->
+                                      <div class="text-xs text-text-dim font-mono">
+                                        ${session.startedAt ? formatSessionDuration(session.startedAt, session.status === 'exited' ? session.lastModified : undefined) : ''}
+                                      </div>
+                                      
+                                      <!-- Clean up button -->
+                                      <button
+                                        class="btn-ghost text-text-muted p-1.5 rounded-md transition-all flex-shrink-0 hover:text-status-warning hover:bg-bg-elevated hover:shadow-sm"
+                                        @click=${async (e: Event) => {
+                                          e.stopPropagation();
+                                          try {
+                                            const response = await fetch(
+                                              `/api/sessions/${session.id}/cleanup`,
+                                              {
+                                                method: 'DELETE',
+                                                headers: this.authClient.getAuthHeader(),
+                                              }
+                                            );
+                                            if (response.ok) {
+                                              this.handleSessionKilled({
+                                                detail: { sessionId: session.id },
+                                              } as CustomEvent);
+                                            }
+                                          } catch (error) {
+                                            logger.error('Failed to clean up session', error);
+                                          }
+                                        }}
+                                        title="Clean up session"
+                                      >
+                                        <svg
+                                          class="w-4 h-4"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M6 18L18 6M6 6l12 12"
+                                          />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                `
+                                : html`
+                                  <!-- Full session card for main view -->
+                                  <session-card
+                                    .session=${session}
+                                    .authClient=${this.authClient}
+                                    .selected=${session.id === this.selectedSessionId}
+                                    @session-select=${this.handleSessionSelect}
+                                    @session-killed=${this.handleSessionKilled}
+                                    @session-kill-error=${this.handleSessionKillError}
+                                    @session-renamed=${this.handleSessionRenamed}
+                                    @session-rename-error=${this.handleSessionRenameError}
+                                  >
+                                  </session-card>
+                                `
+                            }
+                          `
+                        )}
+                      </div>
+                    </div>
+                  `
+                  : ''
+              }
+              
+              <!-- Exited Sessions -->
+              ${
+                showExitedSection && hasExitedSessions
                   ? html`
                     <div>
                       <h3 class="text-xs font-semibold text-text-muted uppercase tracking-wider mb-4">
-                        Idle <span class="text-text-dim">(${exitedSessions.length})</span>
+                        Exited <span class="text-text-dim">(${exitedSessions.length})</span>
                       </h3>
                       <div class="${this.compactMode ? 'space-y-2' : 'session-flex-responsive'} relative">
                         ${repeat(
@@ -817,6 +946,7 @@ export class SessionList extends LitElement {
                       ? 'border-border bg-bg-elevated text-text-muted hover:bg-surface-hover hover:text-accent-primary hover:border-accent-primary hover:shadow-sm active:scale-95'
                       : 'border-accent-primary bg-accent-primary bg-opacity-10 text-accent-primary hover:bg-opacity-20 hover:shadow-glow-primary-sm active:scale-95'
                   }"
+                  id="${this.hideExited ? 'show-exited-button' : 'hide-exited-button'}"
                   @click=${() =>
                     this.dispatchEvent(
                       new CustomEvent('hide-exited-change', { detail: !this.hideExited })
@@ -833,6 +963,7 @@ export class SessionList extends LitElement {
                     ? html`
                       <button
                         class="font-mono text-xs px-4 py-2 rounded-lg border transition-all duration-200 border-status-warning bg-status-warning bg-opacity-10 text-status-warning hover:bg-opacity-20 hover:shadow-glow-warning-sm active:scale-95 disabled:opacity-50"
+                        id="clean-exited-button"
                         @click=${this.handleCleanupExited}
                         ?disabled=${this.cleaningExited}
                         data-testid="clean-exited-button"
@@ -852,6 +983,7 @@ export class SessionList extends LitElement {
             ? html`
               <button
                 class="font-mono text-xs px-4 py-2 rounded-lg border transition-all duration-200 border-status-error bg-status-error bg-opacity-10 text-status-error hover:bg-opacity-20 hover:shadow-glow-error-sm active:scale-95"
+                id="kill-all-button"
                 @click=${() => this.dispatchEvent(new CustomEvent('kill-all-sessions'))}
                 data-testid="kill-all-button"
               >

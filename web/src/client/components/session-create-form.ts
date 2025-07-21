@@ -14,9 +14,13 @@
 import { html, LitElement, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import './file-browser.js';
+import './quick-start-editor.js';
+import type { Session } from '../../shared/types.js';
 import { TitleMode } from '../../shared/types.js';
+import type { QuickStartCommand } from '../../types/config.js';
 import type { AuthClient } from '../services/auth-client.js';
 import { RepositoryService } from '../services/repository-service.js';
+import { ServerConfigService } from '../services/server-config-service.js';
 import { type SessionCreateData, SessionService } from '../services/session-service.js';
 import { parseCommand } from '../utils/command-utils.js';
 import { createLogger } from '../utils/logger.js';
@@ -34,11 +38,6 @@ import {
   AutocompleteManager,
   type Repository,
 } from './autocomplete-manager.js';
-import type { Session } from './session-list.js';
-import {
-  STORAGE_KEY as APP_PREFERENCES_STORAGE_KEY,
-  type AppPreferences,
-} from './unified-settings.js';
 
 const logger = createLogger('session-create-form');
 
@@ -69,35 +68,41 @@ export class SessionCreateForm extends LitElement {
   @state() private completions: AutocompleteItem[] = [];
   @state() private selectedCompletionIndex = -1;
   @state() private isLoadingCompletions = false;
+  @state() private showOptions = false;
+  @state() private quickStartEditMode = false;
 
-  quickStartCommands = [
-    { label: 'claude', command: 'claude' },
-    { label: 'gemini', command: 'gemini' },
+  @state() private quickStartCommands = [
+    { label: '✨ claude', command: 'claude' },
+    { label: '✨ gemini', command: 'gemini' },
     { label: 'zsh', command: 'zsh' },
     { label: 'python3', command: 'python3' },
     { label: 'node', command: 'node' },
-    { label: 'pnpm run dev', command: 'pnpm run dev' },
+    { label: '▶️ pnpm run dev', command: 'pnpm run dev' },
   ];
 
   private completionsDebounceTimer?: NodeJS.Timeout;
   private autocompleteManager!: AutocompleteManager;
   private repositoryService?: RepositoryService;
   private sessionService?: SessionService;
+  private serverConfigService?: ServerConfigService;
 
-  connectedCallback() {
+  async connectedCallback() {
     super.connectedCallback();
     // Initialize services - AutocompleteManager handles optional authClient
     this.autocompleteManager = new AutocompleteManager(this.authClient);
+    this.serverConfigService = new ServerConfigService(this.authClient);
 
     // Initialize other services only if authClient is available
     if (this.authClient) {
-      this.repositoryService = new RepositoryService(this.authClient);
+      this.repositoryService = new RepositoryService(this.authClient, this.serverConfigService);
       this.sessionService = new SessionService(this.authClient);
     }
     // Load from localStorage when component is first created
-    this.loadFromLocalStorage();
+    await this.loadFromLocalStorage();
     // Check server status
     this.checkServerStatus();
+    // Load server configuration including quick start commands
+    this.loadServerConfig();
   }
 
   disconnectedCallback() {
@@ -147,18 +152,17 @@ export class SessionCreateForm extends LitElement {
     }
   };
 
-  private loadFromLocalStorage() {
+  private async loadFromLocalStorage() {
     const formData = loadSessionFormData();
 
-    // Get app preferences for repository base path to use as default working dir
+    // Get repository base path from server config to use as default working dir
     let appRepoBasePath = '~/';
-    const savedPreferences = localStorage.getItem(APP_PREFERENCES_STORAGE_KEY);
-    if (savedPreferences) {
+    if (this.serverConfigService) {
       try {
-        const preferences: AppPreferences = JSON.parse(savedPreferences);
-        appRepoBasePath = preferences.repositoryBasePath || '~/';
+        appRepoBasePath = await this.serverConfigService.getRepositoryBasePath();
       } catch (error) {
-        logger.error('Failed to parse app preferences:', error);
+        logger.error('Failed to get repository base path from server:', error);
+        appRepoBasePath = '~/';
       }
     }
 
@@ -187,6 +191,49 @@ export class SessionCreateForm extends LitElement {
       spawnWindow: this.spawnWindow,
       titleMode: this.titleMode,
     });
+  }
+
+  private async loadServerConfig() {
+    if (!this.serverConfigService) {
+      return;
+    }
+
+    try {
+      const quickStartCommands = await this.serverConfigService.getQuickStartCommands();
+      if (quickStartCommands && quickStartCommands.length > 0) {
+        // Map server config to our format
+        this.quickStartCommands = quickStartCommands.map((cmd: QuickStartCommand) => ({
+          label: cmd.name || cmd.command,
+          command: cmd.command,
+        }));
+        logger.debug('Loaded quick start commands from server:', this.quickStartCommands);
+      }
+    } catch (error) {
+      logger.error('Failed to load server config:', error);
+      // Keep default quick start commands on error
+    }
+  }
+
+  private async handleQuickStartChanged(e: CustomEvent<QuickStartCommand[]>) {
+    const commands = e.detail;
+
+    if (!this.serverConfigService) {
+      logger.error('Server config service not initialized');
+      return;
+    }
+
+    try {
+      await this.serverConfigService.updateQuickStartCommands(commands);
+
+      // Update local state
+      this.quickStartCommands = commands.map((cmd: QuickStartCommand) => ({
+        label: cmd.name || cmd.command,
+        command: cmd.command,
+      }));
+      logger.debug('Updated quick start commands:', this.quickStartCommands);
+    } catch (error) {
+      logger.error('Failed to save quick start commands:', error);
+    }
   }
 
   private async checkServerStatus() {
@@ -219,14 +266,18 @@ export class SessionCreateForm extends LitElement {
     // Handle authClient becoming available
     if (changedProperties.has('authClient') && this.authClient) {
       // Initialize services if they haven't been created yet
-      if (!this.repositoryService) {
-        this.repositoryService = new RepositoryService(this.authClient);
+      if (!this.repositoryService && this.serverConfigService) {
+        this.repositoryService = new RepositoryService(this.authClient, this.serverConfigService);
       }
       if (!this.sessionService) {
         this.sessionService = new SessionService(this.authClient);
       }
       // Update autocomplete manager's authClient
       this.autocompleteManager.setAuthClient(this.authClient);
+      // Update server config service's authClient
+      if (this.serverConfigService) {
+        this.serverConfigService.setAuthClient(this.authClient);
+      }
     }
 
     // Handle visibility changes
@@ -240,7 +291,10 @@ export class SessionCreateForm extends LitElement {
         this.titleMode = TitleMode.DYNAMIC;
 
         // Then load from localStorage which may override the defaults
-        this.loadFromLocalStorage();
+        // Don't await since we're in updated() lifecycle method
+        this.loadFromLocalStorage().catch((error) => {
+          logger.error('Failed to load from localStorage:', error);
+        });
 
         // Re-check server status when form becomes visible
         this.checkServerStatus();
@@ -501,6 +555,10 @@ export class SessionCreateForm extends LitElement {
     this.selectedCompletionIndex = -1;
   }
 
+  private handleToggleOptions() {
+    this.showOptions = !this.showOptions;
+  }
+
   private handleWorkingDirKeydown(e: KeyboardEvent) {
     if (!this.showCompletions || this.completions.length === 0) return;
 
@@ -539,12 +597,12 @@ export class SessionCreateForm extends LitElement {
     return html`
       <div class="modal-backdrop flex items-center justify-center" @click=${this.handleBackdropClick} role="dialog" aria-modal="true">
         <div
-          class="modal-content font-mono text-sm w-full max-w-[calc(100vw-1rem)] sm:max-w-md lg:max-w-[576px] mx-2 sm:mx-4"
+          class="modal-content font-mono text-sm w-full max-w-[calc(100vw-1rem)] sm:max-w-md lg:max-w-[576px] mx-2 sm:mx-4 overflow-hidden"
           style="pointer-events: auto;"
           @click=${(e: Event) => e.stopPropagation()}
           data-testid="session-create-modal"
         >
-          <div class="p-3 sm:p-4 lg:p-6 mb-1 sm:mb-2 lg:mb-3 border-b border-border/50 relative bg-gradient-to-r from-bg-secondary to-bg-tertiary flex-shrink-0">
+          <div class="p-3 sm:p-4 lg:p-6 mb-1 sm:mb-2 lg:mb-3 border-b border-border/50 relative bg-gradient-to-r from-bg-secondary to-bg-tertiary flex-shrink-0 rounded-t-xl">
             <h2 id="modal-title" class="text-primary text-base sm:text-lg lg:text-xl font-bold">New Session</h2>
             <button
               class="absolute top-2 right-2 sm:top-3 sm:right-3 lg:top-5 lg:right-5 text-text-muted hover:text-text transition-all duration-200 p-1.5 sm:p-2 hover:bg-bg-elevated/30 rounded-lg"
@@ -599,7 +657,7 @@ export class SessionCreateForm extends LitElement {
             </div>
 
             <!-- Working Directory -->
-            <div class="mb-2 sm:mb-3 lg:mb-5">
+            <div class="mb-4 sm:mb-5 lg:mb-6">
               <label class="form-label text-text-muted text-[10px] sm:text-xs lg:text-sm">Working Directory:</label>
               <div class="relative">
                 <div class="flex gap-1.5 sm:gap-2">
@@ -616,6 +674,7 @@ export class SessionCreateForm extends LitElement {
                   autocomplete="off"
                 />
                 <button
+                  id="session-browse-button"
                   class="bg-bg-tertiary border border-border/50 rounded-lg p-1.5 sm:p-2 lg:p-3 font-mono text-text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary/50 hover:shadow-sm flex-shrink-0"
                   @click=${this.handleBrowse}
                   ?disabled=${this.disabled || this.isCreating}
@@ -629,6 +688,7 @@ export class SessionCreateForm extends LitElement {
                   </svg>
                 </button>
                 <button
+                  id="session-autocomplete-button"
                   class="bg-bg-tertiary border border-border/50 rounded-lg p-1.5 sm:p-2 lg:p-3 font-mono text-text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary/50 hover:shadow-sm flex-shrink-0 ${
                     this.showRepositoryDropdown || this.showCompletions
                       ? 'text-primary border-primary/50'
@@ -727,93 +787,168 @@ export class SessionCreateForm extends LitElement {
               }
             </div>
 
-            <!-- Spawn Window Toggle - Only show when Mac app is connected -->
-            ${
-              this.macAppConnected
-                ? html`
-                  <div class="mb-2 sm:mb-3 lg:mb-5 flex items-center justify-between bg-bg-elevated border border-border/50 rounded-lg p-2 sm:p-3 lg:p-4">
-                    <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
-                      <span class="text-primary text-[10px] sm:text-xs lg:text-sm font-medium">Spawn window</span>
-                      <p class="text-[9px] sm:text-[10px] lg:text-xs text-text-muted mt-0.5 hidden sm:block">Opens native terminal window</p>
+            <!-- Quick Start Section -->
+            <div class="${this.quickStartEditMode ? '' : 'mb-4 sm:mb-5 lg:mb-6'}">
+              ${
+                this.quickStartEditMode
+                  ? html`
+                    <!-- Full width editor when in edit mode -->
+                    <div class="-mx-3 sm:-mx-4 lg:-mx-6">
+                      <quick-start-editor
+                        .commands=${this.quickStartCommands.map((cmd) => ({
+                          name: cmd.label === cmd.command ? undefined : cmd.label,
+                          command: cmd.command,
+                        }))}
+                        .editing=${true}
+                        @quick-start-changed=${this.handleQuickStartChanged}
+                        @editing-changed=${(e: CustomEvent) => {
+                          this.quickStartEditMode = e.detail.editing;
+                        }}
+                      ></quick-start-editor>
                     </div>
-                    <button
-                      role="switch"
-                      aria-checked="${this.spawnWindow}"
-                      @click=${this.handleSpawnWindowChange}
-                      class="relative inline-flex h-4 w-8 sm:h-5 sm:w-10 lg:h-6 lg:w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-bg-secondary ${
-                        this.spawnWindow ? 'bg-primary' : 'bg-border/50'
-                      }"
-                      ?disabled=${this.disabled || this.isCreating}
-                      data-testid="spawn-window-toggle"
-                    >
-                      <span
-                        class="inline-block h-3 w-3 sm:h-4 sm:w-4 lg:h-5 lg:w-5 transform rounded-full bg-bg-elevated transition-transform ${
-                          this.spawnWindow ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0.5'
-                        }"
-                      ></span>
-                    </button>
+                  `
+                  : html`
+                    <!-- Normal mode with Edit button -->
+                    <div class="flex items-center justify-between mb-1 sm:mb-2 lg:mb-3 mt-4 sm:mt-5 lg:mt-6">
+                      <label class="form-label text-text-muted uppercase text-[9px] sm:text-[10px] lg:text-xs tracking-wider"
+                        >Quick Start</label
+                      >
+                      <quick-start-editor
+                        .commands=${this.quickStartCommands.map((cmd) => ({
+                          name: cmd.label === cmd.command ? undefined : cmd.label,
+                          command: cmd.command,
+                        }))}
+                        .editing=${false}
+                        @quick-start-changed=${this.handleQuickStartChanged}
+                        @editing-changed=${(e: CustomEvent) => {
+                          this.quickStartEditMode = e.detail.editing;
+                        }}
+                      ></quick-start-editor>
+                    </div>
+                  `
+              }
+              ${
+                !this.quickStartEditMode
+                  ? html`
+                  <div class="grid grid-cols-2 gap-2 sm:gap-2.5 lg:gap-3 mt-1.5 sm:mt-2">
+                    ${this.quickStartCommands.map(
+                      ({ label, command }) => html`
+                        <button
+                          @click=${() => this.handleQuickStart(command)}
+                          class="${
+                            this.command === command
+                              ? 'px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3 rounded-lg border text-left transition-all bg-primary bg-opacity-10 border-primary/50 text-primary hover:bg-opacity-20 font-medium text-[10px] sm:text-xs lg:text-sm'
+                              : 'px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3 rounded-lg border text-left transition-all bg-bg-elevated border-border/50 text-text hover:bg-hover hover:border-primary/50 hover:text-primary text-[10px] sm:text-xs lg:text-sm'
+                          }"
+                          ?disabled=${this.disabled || this.isCreating}
+                        >
+                          ${label}
+                        </button>
+                      `
+                    )}
                   </div>
                 `
-                : ''
-            }
-
-            <!-- Terminal Title Mode -->
-            <div class="${this.macAppConnected ? '' : 'mt-2 sm:mt-3 lg:mt-5'} mb-2 sm:mb-4 lg:mb-6 flex items-center justify-between bg-bg-elevated border border-border/50 rounded-lg p-2 sm:p-3 lg:p-4">
-              <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
-                <span class="text-primary text-[10px] sm:text-xs lg:text-sm font-medium">Terminal Title Mode</span>
-                <p class="text-[9px] sm:text-[10px] lg:text-xs text-text-muted mt-0.5 hidden sm:block">
-                  ${getTitleModeDescription(this.titleMode)}
-                </p>
-              </div>
-              <div class="relative">
-                <select
-                  .value=${this.titleMode}
-                  @change=${this.handleTitleModeChange}
-                  class="bg-bg-tertiary border border-border/50 rounded-lg px-1.5 py-1 pr-6 sm:px-2 sm:py-1.5 sm:pr-7 lg:px-3 lg:py-2 lg:pr-8 text-text text-[10px] sm:text-xs lg:text-sm transition-all duration-200 hover:border-primary/50 focus:border-primary focus:outline-none appearance-none cursor-pointer"
-                  style="min-width: 80px"
-                  ?disabled=${this.disabled || this.isCreating}
-                >
-                  <option value="${TitleMode.NONE}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.NONE}>None</option>
-                  <option value="${TitleMode.FILTER}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.FILTER}>Filter</option>
-                  <option value="${TitleMode.STATIC}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.STATIC}>Static</option>
-                  <option value="${TitleMode.DYNAMIC}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.DYNAMIC}>Dynamic</option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 sm:px-1.5 lg:px-2 text-text-muted">
-                  <svg class="h-2.5 w-2.5 sm:h-3 sm:w-3 lg:h-4 lg:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
+                  : ''
+              }
             </div>
 
-            <!-- Quick Start Section -->
+            <!-- Options Section (collapsible) -->
             <div class="mb-2 sm:mb-4 lg:mb-6">
-              <label class="form-label text-text-muted uppercase text-[9px] sm:text-[10px] lg:text-xs tracking-wider mb-1 sm:mb-2 lg:mb-3"
-                >Quick Start</label
+              <button
+                id="session-options-button"
+                @click=${this.handleToggleOptions}
+                class="flex items-center gap-1.5 sm:gap-2 text-text-muted hover:text-primary transition-colors duration-200"
+                type="button"
+                aria-expanded="${this.showOptions}"
               >
-              <div class="grid grid-cols-2 gap-2 sm:gap-2.5 lg:gap-3 mt-1.5 sm:mt-2">
-                ${this.quickStartCommands.map(
-                  ({ label, command }) => html`
-                    <button
-                      @click=${() => this.handleQuickStart(command)}
-                      class="${
-                        this.command === command
-                          ? 'px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3 rounded-lg border text-left transition-all bg-primary bg-opacity-10 border-primary/50 text-primary hover:bg-opacity-20 font-medium text-[10px] sm:text-xs lg:text-sm'
-                          : 'px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3 rounded-lg border text-left transition-all bg-bg-elevated border-border/50 text-text hover:bg-hover hover:border-primary/50 hover:text-primary text-[10px] sm:text-xs lg:text-sm'
-                      }"
-                      ?disabled=${this.disabled || this.isCreating}
-                    >
-                      <span class="hidden sm:inline">${label === 'gemini' ? '✨ ' : ''}${label === 'claude' ? '✨ ' : ''}${
-                        label === 'pnpm run dev' ? '▶️ ' : ''
-                      }</span><span class="sm:hidden">${label === 'pnpm run dev' ? '▶️ ' : ''}</span>${label}
-                    </button>
-                  `
-                )}
-              </div>
+                <svg 
+                  width="8" 
+                  height="8" 
+                  class="sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 transition-transform duration-200 flex-shrink-0" 
+                  viewBox="0 0 16 16" 
+                  fill="currentColor"
+                  style="transform: ${this.showOptions ? 'rotate(90deg)' : 'rotate(0deg)'}"
+                >
+                  <path
+                    d="M5.22 1.22a.75.75 0 011.06 0l6.25 6.25a.75.75 0 010 1.06l-6.25 6.25a.75.75 0 01-1.06-1.06L10.94 8 5.22 2.28a.75.75 0 010-1.06z"
+                  />
+                </svg>
+                <span class="form-label text-text-muted uppercase text-[9px] sm:text-[10px] lg:text-xs tracking-wider">Options</span>
+              </button>
+
+              ${
+                this.showOptions
+                  ? html`
+                <div class="space-y-2 sm:space-y-3 mt-2 sm:mt-4 lg:mt-6">
+                  <!-- Spawn Window Toggle - Only show when Mac app is connected -->
+                  ${
+                    this.macAppConnected
+                      ? html`
+                        <div class="flex items-center justify-between bg-bg-elevated border border-border/50 rounded-lg p-2 sm:p-3 lg:p-4">
+                          <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
+                            <span class="text-primary text-[10px] sm:text-xs lg:text-sm font-medium">Spawn window</span>
+                            <p class="text-[9px] sm:text-[10px] lg:text-xs text-text-muted mt-0.5 hidden sm:block">Opens native terminal window</p>
+                          </div>
+                          <button
+                            role="switch"
+                            aria-checked="${this.spawnWindow}"
+                            @click=${this.handleSpawnWindowChange}
+                            class="relative inline-flex h-4 w-8 sm:h-5 sm:w-10 lg:h-6 lg:w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-bg-secondary ${
+                              this.spawnWindow ? 'bg-primary' : 'bg-border/50'
+                            }"
+                            ?disabled=${this.disabled || this.isCreating}
+                            data-testid="spawn-window-toggle"
+                          >
+                            <span
+                              class="inline-block h-3 w-3 sm:h-4 sm:w-4 lg:h-5 lg:w-5 transform rounded-full bg-bg-elevated transition-transform ${
+                                this.spawnWindow
+                                  ? 'translate-x-4 sm:translate-x-5'
+                                  : 'translate-x-0.5'
+                              }"
+                            ></span>
+                          </button>
+                        </div>
+                      `
+                      : ''
+                  }
+
+                  <!-- Terminal Title Mode -->
+                  <div class="flex items-center justify-between bg-bg-elevated border border-border/50 rounded-lg p-2 sm:p-3 lg:p-4">
+                    <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
+                      <span class="text-primary text-[10px] sm:text-xs lg:text-sm font-medium">Terminal Title Mode</span>
+                      <p class="text-[9px] sm:text-[10px] lg:text-xs text-text-muted mt-0.5 hidden sm:block">
+                        ${getTitleModeDescription(this.titleMode)}
+                      </p>
+                    </div>
+                    <div class="relative">
+                      <select
+                        .value=${this.titleMode}
+                        @change=${this.handleTitleModeChange}
+                        class="bg-bg-tertiary border border-border/50 rounded-lg px-1.5 py-1 pr-6 sm:px-2 sm:py-1.5 sm:pr-7 lg:px-3 lg:py-2 lg:pr-8 text-text text-[10px] sm:text-xs lg:text-sm transition-all duration-200 hover:border-primary/50 focus:border-primary focus:outline-none appearance-none cursor-pointer"
+                        style="min-width: 80px"
+                        ?disabled=${this.disabled || this.isCreating}
+                      >
+                        <option value="${TitleMode.NONE}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.NONE}>None</option>
+                        <option value="${TitleMode.FILTER}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.FILTER}>Filter</option>
+                        <option value="${TitleMode.STATIC}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.STATIC}>Static</option>
+                        <option value="${TitleMode.DYNAMIC}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.DYNAMIC}>Dynamic</option>
+                      </select>
+                      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 sm:px-1.5 lg:px-2 text-text-muted">
+                        <svg class="h-2.5 w-2.5 sm:h-3 sm:w-3 lg:h-4 lg:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              `
+                  : ''
+              }
             </div>
 
             <div class="flex gap-1.5 sm:gap-2 lg:gap-3 mt-2 sm:mt-3 lg:mt-4 xl:mt-6">
               <button
+                id="session-cancel-button"
                 class="flex-1 bg-bg-elevated border border-border/50 text-text px-2 py-1 sm:px-3 sm:py-1.5 lg:px-4 lg:py-2 xl:px-6 xl:py-3 rounded-lg font-mono text-[10px] sm:text-xs lg:text-sm transition-all duration-200 hover:bg-hover hover:border-border"
                 @click=${this.handleCancel}
                 ?disabled=${this.isCreating}
@@ -821,6 +956,7 @@ export class SessionCreateForm extends LitElement {
                 Cancel
               </button>
               <button
+                id="session-create-button"
                 class="flex-1 bg-primary text-text-bright px-2 py-1 sm:px-3 sm:py-1.5 lg:px-4 lg:py-2 xl:px-6 xl:py-3 rounded-lg font-mono text-[10px] sm:text-xs lg:text-sm font-medium transition-all duration-200 hover:bg-primary-hover hover:shadow-glow disabled:opacity-50 disabled:cursor-not-allowed"
                 @click=${this.handleCreate}
                 ?disabled=${

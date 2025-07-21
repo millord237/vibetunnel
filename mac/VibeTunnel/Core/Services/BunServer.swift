@@ -121,13 +121,33 @@ final class BunServer {
         guard let binaryPath = Bundle.main.path(forResource: "vibetunnel", ofType: nil) else {
             let error = BunServerError.binaryNotFound
             logger.error("vibetunnel binary not found in bundle")
+            
+            // Additional diagnostics for CI debugging
+            logger.error("Bundle path: \(Bundle.main.bundlePath)")
+            logger.error("Resources path: \(Bundle.main.resourcePath ?? "nil")")
+            
+            // List contents of Resources directory
+            if let resourcesPath = Bundle.main.resourcePath {
+                do {
+                    let contents = try FileManager.default.contentsOfDirectory(atPath: resourcesPath)
+                    logger.error("Resources directory contents: \(contents.joined(separator: ", "))")
+                } catch {
+                    logger.error("Failed to list Resources directory: \(error)")
+                }
+            }
+            
             throw error
         }
 
         logger.info("Using Bun executable at: \(binaryPath)")
 
         // Ensure binary is executable
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binaryPath)
+        do {
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binaryPath)
+        } catch {
+            logger.error("Failed to set executable permissions on binary: \(error.localizedDescription)")
+            throw BunServerError.binaryNotFound
+        }
 
         // Verify binary exists and is executable
         var isDirectory: ObjCBool = false
@@ -193,12 +213,8 @@ final class BunServer {
             logger.info("Local authentication bypass enabled for Mac app")
         }
 
-        // Add repository base path
-        let repositoryBasePath = AppConstants.stringValue(for: AppConstants.UserDefaultsKeys.repositoryBasePath)
-        if !repositoryBasePath.isEmpty {
-            vibetunnelArgs.append(contentsOf: ["--repository-base-path", repositoryBasePath])
-            logger.info("Repository base path: \(repositoryBasePath)")
-        }
+        // Repository base path is now loaded from config.json by the server
+        // No CLI argument needed
 
         // Create wrapper to run vibetunnel with parent death monitoring AND crash detection
         let parentPid = ProcessInfo.processInfo.processIdentifier
@@ -301,8 +317,11 @@ final class BunServer {
             if !process.isRunning {
                 let exitCode = process.terminationStatus
 
-                // Special handling for exit code 9 (port in use)
-                if exitCode == 9 {
+                // Special handling for specific exit codes
+                if exitCode == 126 {
+                    logger.error("Process exited immediately: Command not executable (exit code: 126)")
+                    throw BunServerError.binaryNotFound
+                } else if exitCode == 9 {
                     logger.error("Process exited immediately: Port \(self.port) is already in use (exit code: 9)")
                 } else {
                     logger.error("Process exited immediately with code: \(exitCode)")

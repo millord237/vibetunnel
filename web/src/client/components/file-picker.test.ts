@@ -73,8 +73,7 @@ describe('FilePicker Component', () => {
     element.uploading = false;
     await element.updateComplete;
 
-    const buttons = element.querySelectorAll('button');
-    const fileButton = Array.from(buttons).find((btn) => btn.textContent?.includes('Choose File'));
+    const fileButton = element.querySelector('#file-picker-choose-button');
     expect(fileButton).toBeTruthy();
   });
 
@@ -85,8 +84,7 @@ describe('FilePicker Component', () => {
     const cancelEventSpy = vi.fn();
     element.addEventListener('file-cancel', cancelEventSpy);
 
-    const buttons = element.querySelectorAll('button');
-    const cancelButton = Array.from(buttons).find((btn) => btn.textContent?.includes('Cancel'));
+    const cancelButton = element.querySelector('#file-picker-cancel-button');
 
     expect(cancelButton).toBeTruthy();
     cancelButton?.click();
@@ -129,8 +127,7 @@ describe('FilePicker Component', () => {
     element.uploading = true;
     await element.updateComplete;
 
-    const buttons = element.querySelectorAll('button');
-    const cancelButton = Array.from(buttons).find((btn) => btn.textContent?.includes('Cancel'));
+    const cancelButton = element.querySelector('#file-picker-cancel-button');
 
     expect(cancelButton?.hasAttribute('disabled')).toBe(true);
   });
@@ -145,9 +142,7 @@ describe('FilePicker Component', () => {
     element.visible = true;
     await element.updateComplete;
 
-    const fileButton = Array.from(element.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Choose File')
-    );
+    const fileButton = element.querySelector('#file-picker-choose-button');
 
     expect(fileButton).toBeTruthy();
 

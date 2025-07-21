@@ -1,35 +1,69 @@
 # Changelog
 
-## [1.0.0-beta.14] - 2025-07-20
+## [1.0.0-beta.14] - 2025-07-21
 
-### **Linux Systemd Support**
-- Added systemd service management for Linux deployments (#426)
-- Simple installation with `vibetunnel systemd` command
-- User-level service with automatic startup on boot
-- Smart wrapper script handles nvm/fnm Node.js installations
-- Comprehensive documentation at `web/docs/systemd.md`
+#### **Customizable Quick Start Commands**
+- Quick Start commands are now fully customizable - previously hardcoded buttons can be edited
+- Add your own commands with custom names and emoji (e.g., "✨ claude" or "▶️ dev server")
+- Drag & drop reordering with smooth animations in macOS settings
+- Inline editing without popup dialogs
+- Reset to defaults button when you want the original set back
+- File-based persistence in `~/.vibetunnel/config.json`
 
-### **Enhanced Terminal Experience**
-- ngrok URLs are now clickable in terminal output (#422)
+#### **New Session Path Autocomplete**
+- Intelligent path autocomplete when creating sessions (#435)
+- Home directory expansion (`~/` shortcuts work properly)
+- Visual file browser with folder icon
+- Git repository discovery in selected directories
+- Repository status shown in welcome screen
 
-### **Infrastructure Improvements**
-- Major codebase cleanup and simplification (#419)
-- Improved release scripts and Node.js detection
-- Enhanced CI/CD pipeline reliability
+#### **Session Status Management**
+- New dropdown menu in session headers for running/exited sessions
+- Terminate running sessions without closing the tab
+- Clear exited sessions individually with one click
+- Visual status indicators - pulsing dot for running, static for exited
+- Keyboard navigation support (Arrow keys, Enter, Escape)
 
-### 📚 Documentation
-- Added systemd documentation for Linux users
-- Created release guide with troubleshooting steps
-- Updated README with clearer Linux instructions
+#### **Linux Systemd Support** (#426)
+- Run VibeTunnel as a persistent service with `vibetunnel systemd install`
+- User-level service - no root required
+- Automatic startup on boot
+- Smart Node.js detection works with nvm, fnm, or global npm
+- Comprehensive systemd commands for status, logs, start/stop
+
+#### **UI Improvements**
+- New image upload menu with paste, select from library, camera, and browse options (#432)
+- Improves experimental binary terminal mode (no more long scrolling - see Terminal Settings)
+- Clickable ngrok URLs in Settings with copy button (#422)
+- Cleaner session headers with better-positioned controls
+- Fixed magic wand icon alignment for AI sessions
+- Improved theme toggle with better icon and tooltips (#438, fixes #368)
 
 ### 🐛 Bug Fixes
-- Fixed incorrect systemd documentation
-- Resolved release script Node.js detection issues
-- Fixed Mintlify deployment configuration
+
+- Fixed session timers continuing to run after sessions exited (#428)
+- Fixed sessions with undefined activity status showing as idle instead of active
+- Fixed new session dialog styling for dark mode (#433)
+- Fixed Mintlify documentation generation (#434)
+- Fixed ConfigManager threading crash when moving quick start items in macOS
+- Improved Chinese input method support (#431, duplicate of #421)
+- Removed legacy WebSocket config sync code and simplify logic
+
+#### **Under the Hood**
+- New configuration service with file watching and validation
+- Zod schema validation for all configuration data
+- Improved test maintainability by adding element IDs to web components
+- REST API at `/api/config/quick-start` replacing WebSocket sync
+- Major codebase cleanup - removed Tauri project and 17k lines of unused code (#419)
+- Enhanced release process with better troubleshooting documentation
 
 ### 👥 Contributors
 First-time contributors to VibeTunnel:
-- [@hewigovens](https://github.com/hewigovens) - Added systemd service management for Linux deployments (#426)
+- [@gopi-kori](https://github.com/gopi-kori) - Made ngrok URLs clickable with copy button in Settings (#422)
+- [@claudemini](https://github.com/claudemini) - Improved theme toggle UI with better icon and tooltips (cherry-picked from #429 into #438, fixes #368)
+
+Additional contributors:
+- [@hewigovens](https://github.com/hewigovens) - Co-authored systemd service management for Linux deployments (#426)
 
 ## [1.0.0-beta.13] - 2025-07-19
 

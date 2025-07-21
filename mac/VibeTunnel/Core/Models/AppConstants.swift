@@ -14,7 +14,6 @@ enum AppConstants {
     enum UserDefaultsKeys {
         static let welcomeVersion = "welcomeVersion"
         static let preventSleepWhenRunning = "preventSleepWhenRunning"
-        static let repositoryBasePath = "repositoryBasePath"
 
         // Server Configuration
         static let serverPort = "serverPort"
@@ -39,6 +38,9 @@ enum AppConstants {
         static let newSessionWorkingDirectory = "NewSession.workingDirectory"
         static let newSessionSpawnWindow = "NewSession.spawnWindow"
         static let newSessionTitleMode = "NewSession.titleMode"
+
+        /// Quick Start Commands
+        static let quickStartCommands = "quickStartCommands"
     }
 
     /// Raw string values for DashboardAccessMode
@@ -51,8 +53,6 @@ enum AppConstants {
     enum Defaults {
         /// Sleep prevention is enabled by default for better user experience
         static let preventSleepWhenRunning = true
-        /// Default repository base path for auto-discovery
-        static let repositoryBasePath = "~/"
 
         // Server Configuration
         static let serverPort = 4_020
@@ -103,8 +103,6 @@ enum AppConstants {
         // If the key doesn't exist at all, return our default
         if UserDefaults.standard.object(forKey: key) == nil {
             switch key {
-            case UserDefaultsKeys.repositoryBasePath:
-                return Defaults.repositoryBasePath
             case UserDefaultsKeys.dashboardAccessMode:
                 return Defaults.dashboardAccessMode
             case UserDefaultsKeys.authenticationMode:
@@ -250,5 +248,16 @@ extension AppConstants {
         } else {
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.preferredTerminal)
         }
+    }
+    
+    /// Get current dashboard access mode
+    static func getDashboardAccessMode() -> DashboardAccessMode {
+        let rawValue = stringValue(for: UserDefaultsKeys.dashboardAccessMode)
+        return DashboardAccessMode(rawValue: rawValue) ?? .network
+    }
+    
+    /// Set dashboard access mode
+    static func setDashboardAccessMode(_ mode: DashboardAccessMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: UserDefaultsKeys.dashboardAccessMode)
     }
 }
