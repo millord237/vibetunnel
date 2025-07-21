@@ -127,12 +127,13 @@ export class NativeModuleLoader {
           // Find the web directory by locating the 'package.json'
           const currentDir = dirname(fileURLToPath(import.meta.url));
           let projectRoot = currentDir;
-          while (!existsSync(join(projectRoot, 'package.json')) && projectRoot !== '/') {
-            projectRoot = dirname(projectRoot);
-          }
-
-          if (projectRoot === '/') {
-            throw new Error('Could not find project root (package.json).');
+          // Search up the directory tree for package.json
+          while (!existsSync(join(projectRoot, 'package.json'))) {
+            const parentDir = dirname(projectRoot);
+            if (parentDir === projectRoot) { // Reached the root
+              throw new Error('Could not find project root (package.json).');
+            }
+            projectRoot = parentDir;
           }
           
           logger.log(`Found project root for rebuild at: ${projectRoot}`);
