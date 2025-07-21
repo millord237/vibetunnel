@@ -6,7 +6,8 @@
       "Bash(grep:*)",
       "Bash(pnpm run format:*)",
       "Bash(pnpm run lint:*)",
-      "Bash(pnpm run precommit)"
+      "Bash(pnpm run precommit)",
+      "Bash(echo:*)"
     ],
     "deny": []
   }

@@ -40,6 +40,11 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
         ...data,
       };
 
+      // Enhanced logging for all notification events
+      if (type === 'bell' || type === 'command-finished' || type === 'command-error' || type === 'claude-turn') {
+        logger.info(`🔔 NOTIFICATION DEBUG: Actually sending SSE event - type: ${type}, sessionId: ${data.sessionId}`);
+      }
+
       // Enhanced logging for Claude-related events
       if (
         (type === 'command-finished' || type === 'command-error') &&
@@ -74,6 +79,7 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
     }
 
     const onBell = (data: BellEvent) => {
+      logger.info(`🔔 NOTIFICATION DEBUG: SSE forwarding bell event - sessionId: ${data.sessionInfo.id}, bellCount: ${data.bellCount}`);
       sendEvent('bell', {
         sessionId: data.sessionInfo.id,
         sessionName: data.sessionInfo.name || data.sessionInfo.command.join(' '),
@@ -96,6 +102,9 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
         logger.debug(`📨 SSE Route: Received Claude commandFinished event - preparing to send SSE`);
       }
 
+      const eventType = data.exitCode === 0 ? 'command-finished' : 'command-error';
+      logger.info(`🔔 NOTIFICATION DEBUG: SSE forwarding ${eventType} event - sessionId: ${data.sessionId}, command: "${data.command}", duration: ${data.duration}ms, exitCode: ${data.exitCode}`);
+      
       if (data.exitCode === 0) {
         sendEvent('command-finished', {
           sessionId: data.sessionId,
@@ -114,7 +123,7 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
     };
 
     const onClaudeTurn = (sessionId: string, sessionName: string) => {
-      logger.debug(`🔔 SSE Route: Claude turn detected for session ${sessionId}`);
+      logger.info(`🔔 NOTIFICATION DEBUG: SSE forwarding claude-turn event - sessionId: ${sessionId}, sessionName: "${sessionName}"`);
       sendEvent('claude-turn', {
         sessionId,
         sessionName,

@@ -616,6 +616,27 @@ export class ControlUnixHandler {
   getRepositoryPath(): string | null {
     return this.currentRepositoryPath;
   }
+
+  /**
+   * Send a notification to the Mac app
+   */
+  sendNotification(title: string, body: string, sound: boolean): void {
+    logger.info(`🔔 NOTIFICATION DEBUG: sendNotification called - title="${title}", body="${body}", sound=${sound}`);
+    if (!this.isMacAppConnected()) {
+      logger.warn('🔔 NOTIFICATION DEBUG: Cannot send notification - Mac app not connected');
+      return;
+    }
+
+    const event = createControlEvent('notification', 'show', {
+      title,
+      body,
+      sound,
+    });
+
+    logger.info(`🔔 NOTIFICATION DEBUG: Sending notification event to Mac - eventId: ${event.id}`);
+    this.sendToMac(event);
+    logger.info('🔔 NOTIFICATION DEBUG: Notification event sent to Mac app successfully');
+  }
 }
 
 export const controlUnixHandler = new ControlUnixHandler();

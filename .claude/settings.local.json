@@ -8,7 +8,11 @@
       "Bash(./scripts/clean.sh:*)",
       "Bash(./scripts/build.sh:*)",
       "Bash(pkill:*)",
-      "Bash(open:*)"
+      "Bash(open:*)",
+      "Bash(web/bin/vt:*)",
+      "Bash(sudo cp:*)",
+      "Bash(sudo chmod:*)",
+      "Bash(alias vt='/Users/alex/Documents/Develop/vibetunnel/web/bin/vt')"
     ],
     "deny": []
   },
