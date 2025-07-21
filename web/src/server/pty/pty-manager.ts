@@ -248,7 +248,9 @@ export class PtyManager extends EventEmitter {
   ): Promise<SessionCreationResult> {
     const sessionId = options.sessionId || uuidv4();
     const sessionName = options.name || path.basename(command[0]);
-    const workingDir = options.workingDir || process.cwd();
+    // Correctly determine the web directory path
+    const webDir = path.resolve(__dirname, '..', '..');
+    const workingDir = options.workingDir || webDir;
     const term = this.defaultTerm;
     // For external spawns without dimensions, let node-pty use the terminal's natural size
     // For other cases, use reasonable defaults

@@ -141,7 +141,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "AppDelegate")
     private(set) var statusBarController: StatusBarController?
     private let notificationService = NotificationService.shared
-    private var repositoryPathSync: RepositoryPathSyncService?
 
     /// Distributed notification name used to ask an existing instance to show the Settings window.
     private static let showSettingsNotification = Notification.Name("sh.vibetunnel.vibetunnel.showSettings")
