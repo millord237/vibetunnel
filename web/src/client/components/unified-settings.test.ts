@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fixture, html } from '@open-wc/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MockWebSocket } from '@/test/utils/lit-test-utils';
 import type { AppPreferences } from './unified-settings';
 import './unified-settings';
 import type { UnifiedSettings } from './unified-settings';

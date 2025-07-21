@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as net from 'net';
 import type { IPty } from 'node-pty';
 import * as path from 'path';
+
 // Import node-pty with fallback support
 let pty: typeof import('node-pty');
 
@@ -39,6 +40,7 @@ import {
 } from '../utils/terminal-title.js';
 import { WriteQueue } from '../utils/write-queue.js';
 import { VERSION } from '../version.js';
+import { controlUnixHandler } from '../websocket/control-unix-handler.js';
 import { AsciinemaWriter } from './asciinema-writer.js';
 import { FishHandler } from './fish-handler.js';
 import { ProcessUtils } from './process-utils.js';
@@ -50,7 +52,6 @@ import {
   MessageType,
   parsePayload,
 } from './socket-protocol.js';
-import { controlUnixHandler } from '../websocket/control-unix-handler.js';
 import {
   type KillControlMessage,
   PtyError,
@@ -120,14 +121,14 @@ export class PtyManager extends EventEmitter {
    * Initialize PtyManager with fallback support for node-pty
    */
   public static async initialize(): Promise<void> {
-    if (this.initialized) {
+    if (PtyManager.initialized) {
       return;
     }
 
     try {
       logger.log('Initializing PtyManager with native module loader...');
       pty = await NativeModuleLoader.loadNodePty();
-      this.initialized = true;
+      PtyManager.initialized = true;
       logger.log('✅ PtyManager initialized successfully');
     } catch (error) {
       logger.error('Failed to initialize PtyManager:', error);
@@ -1783,7 +1784,9 @@ export class PtyManager extends EventEmitter {
       if (!sessionPid) {
         logger.warn(`Cannot capture process info for session ${session.id}: no PID available`);
         // Emit basic bell event without process info
-        logger.info(`🔔 NOTIFICATION DEBUG: Emitting bell event (no PID) - sessionId: ${session.id}, bellCount: ${bellCount}`);
+        logger.info(
+          `🔔 NOTIFICATION DEBUG: Emitting bell event (no PID) - sessionId: ${session.id}, bellCount: ${bellCount}`
+        );
         this.emit('bell', {
           sessionInfo: session.sessionInfo,
           timestamp: new Date(),
@@ -1800,7 +1803,9 @@ export class PtyManager extends EventEmitter {
       const processSnapshot = await this.processTreeAnalyzer.captureProcessSnapshot(sessionPid);
 
       // Emit enhanced bell event with process information
-      logger.info(`🔔 NOTIFICATION DEBUG: Emitting bell event with process info - sessionId: ${session.id}, bellCount: ${bellCount}, suspectedSource: ${processSnapshot.suspectedBellSource?.command || 'unknown'}`);
+      logger.info(
+        `🔔 NOTIFICATION DEBUG: Emitting bell event with process info - sessionId: ${session.id}, bellCount: ${bellCount}, suspectedSource: ${processSnapshot.suspectedBellSource?.command || 'unknown'}`
+      );
       this.emit('bell', {
         sessionInfo: session.sessionInfo,
         timestamp: new Date(),
@@ -1818,7 +1823,9 @@ export class PtyManager extends EventEmitter {
       logger.warn(`Failed to capture process info for bell in session ${session.id}:`, error);
 
       // Fallback: emit basic bell event without process info
-      logger.info(`🔔 NOTIFICATION DEBUG: Emitting bell event (error fallback) - sessionId: ${session.id}, bellCount: ${bellCount}`);
+      logger.info(
+        `🔔 NOTIFICATION DEBUG: Emitting bell event (error fallback) - sessionId: ${session.id}, bellCount: ${bellCount}`
+      );
       this.emit('bell', {
         sessionInfo: session.sessionInfo,
         timestamp: new Date(),
@@ -2282,7 +2289,9 @@ export class PtyManager extends EventEmitter {
         if (shellPgid) {
           session.shellPgid = shellPgid;
           session.currentForegroundPgid = shellPgid;
-          logger.info(`🔔 NOTIFICATION DEBUG: Starting command tracking for session ${session.id} - shellPgid: ${shellPgid}, polling every ${PROCESS_POLL_INTERVAL_MS}ms`);
+          logger.info(
+            `🔔 NOTIFICATION DEBUG: Starting command tracking for session ${session.id} - shellPgid: ${shellPgid}, polling every ${PROCESS_POLL_INTERVAL_MS}ms`
+          );
           logger.debug(`Session ${session.id}: Shell PGID is ${shellPgid}, starting polling`);
 
           // Start polling for foreground process changes
@@ -2413,7 +2422,9 @@ export class PtyManager extends EventEmitter {
 
       // Add debug logging
       if (currentPgid !== session.currentForegroundPgid) {
-        logger.info(`🔔 NOTIFICATION DEBUG: PGID change detected - sessionId: ${session.id}, from ${session.currentForegroundPgid} to ${currentPgid}, shellPgid: ${session.shellPgid}`);
+        logger.info(
+          `🔔 NOTIFICATION DEBUG: PGID change detected - sessionId: ${session.id}, from ${session.currentForegroundPgid} to ${currentPgid}, shellPgid: ${session.shellPgid}`
+        );
         logger.debug(
           chalk.yellow(
             `Session ${session.id}: Foreground PGID changed from ${session.currentForegroundPgid} to ${currentPgid}`
@@ -2577,17 +2588,24 @@ export class PtyManager extends EventEmitter {
       timestamp: new Date().toISOString(),
     };
 
-    logger.info(`🔔 NOTIFICATION DEBUG: Emitting commandFinished event - sessionId: ${session.id}, command: "${command}", duration: ${duration}ms, exitCode: ${exitCode}`);
+    logger.info(
+      `🔔 NOTIFICATION DEBUG: Emitting commandFinished event - sessionId: ${session.id}, command: "${command}", duration: ${duration}ms, exitCode: ${exitCode}`
+    );
     this.emit('commandFinished', eventData);
 
     // Send notification to Mac app
     if (controlUnixHandler.isMacAppConnected()) {
       const notifTitle = isClaudeCommand ? 'Claude Task Finished' : 'Command Finished';
       const notifBody = `"${command}" completed in ${Math.round(duration / 1000)}s.`;
-      logger.info(`🔔 NOTIFICATION DEBUG: Sending command notification to Mac - title: "${notifTitle}", body: "${notifBody}"`);
-      controlUnixHandler.sendNotification(notifTitle, notifBody, true);
+      logger.info(
+        `🔔 NOTIFICATION DEBUG: Sending command notification to Mac - title: "${notifTitle}", body: "${notifBody}"`
+      );
+      // TODO: Implement sendNotification in controlUnixHandler
+      // controlUnixHandler.sendNotification(notifTitle, notifBody, true);
     } else {
-      logger.warn('🔔 NOTIFICATION DEBUG: Cannot send command notification - Mac app not connected');
+      logger.warn(
+        '🔔 NOTIFICATION DEBUG: Cannot send command notification - Mac app not connected'
+      );
     }
 
     // Enhanced logging for events

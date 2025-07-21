@@ -5,9 +5,9 @@
  * conflicts with production SEA (Single Executable Application) mode.
  */
 
-import { createLogger } from './logger.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { createLogger } from './logger.js';
 
 const logger = createLogger('environment-sanitizer');
 

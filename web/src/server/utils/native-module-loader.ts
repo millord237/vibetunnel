@@ -5,10 +5,9 @@
  * to handle different environments (development, production, SEA mode, etc.)
  */
 
-import { createLogger } from './logger.js';
 import { existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { createLogger } from './logger.js';
 
 const logger = createLogger('native-module-loader');
 
@@ -28,9 +27,9 @@ export class NativeModuleLoader {
     const { moduleName, searchPaths = [], fallbackLoader } = options;
 
     // Check cache first
-    if (this.cache.has(moduleName)) {
+    if (NativeModuleLoader.cache.has(moduleName)) {
       logger.debug(`Returning cached module: ${moduleName}`);
-      return this.cache.get(moduleName);
+      return NativeModuleLoader.cache.get(moduleName);
     }
 
     // Strategy 1: Try normal import first (without VIBETUNNEL_SEA)
@@ -38,7 +37,7 @@ export class NativeModuleLoader {
       try {
         logger.debug(`Attempting standard import of ${moduleName}`);
         const module = await import(moduleName);
-        this.cache.set(moduleName, module);
+        NativeModuleLoader.cache.set(moduleName, module);
         logger.log(`✅ Loaded ${moduleName} via standard import`);
         return module;
       } catch (error) {
@@ -57,7 +56,7 @@ export class NativeModuleLoader {
         delete process.env.VIBETUNNEL_SEA;
         const module = await import(moduleName);
         process.env.VIBETUNNEL_SEA = originalSEA;
-        this.cache.set(moduleName, module);
+        NativeModuleLoader.cache.set(moduleName, module);
         logger.log(`✅ Loaded ${moduleName} after removing VIBETUNNEL_SEA`);
         return module;
       } catch (error) {
@@ -77,7 +76,7 @@ export class NativeModuleLoader {
           if (existsSync(fullPath)) {
             logger.debug(`Attempting to load from custom path: ${fullPath}`);
             const module = await import(fullPath);
-            this.cache.set(moduleName, module);
+            NativeModuleLoader.cache.set(moduleName, module);
             logger.log(`✅ Loaded ${moduleName} from custom path: ${searchPath}`);
             return module;
           }
@@ -95,7 +94,7 @@ export class NativeModuleLoader {
       try {
         logger.debug(`Using fallback loader for ${moduleName}`);
         const module = await fallbackLoader();
-        this.cache.set(moduleName, module);
+        NativeModuleLoader.cache.set(moduleName, module);
         logger.log(`✅ Loaded ${moduleName} via fallback loader`);
         return module;
       } catch (error) {
@@ -111,7 +110,7 @@ export class NativeModuleLoader {
    * Load node-pty with automatic fallback handling
    */
   public static async loadNodePty(): Promise<any> {
-    return this.load({
+    return NativeModuleLoader.load({
       moduleName: 'node-pty',
       searchPaths: [
         'node_modules/.pnpm/node-pty@file+node-pty/node_modules',
@@ -125,8 +124,7 @@ export class NativeModuleLoader {
         const { execSync } = await import('child_process');
         try {
           // Find the web directory by locating the 'package.json'
-          const currentDir = dirname(fileURLToPath(import.meta.url));
-          let projectRoot = currentDir;
+          let projectRoot = __dirname;
           while (!existsSync(join(projectRoot, 'package.json')) && projectRoot !== '/') {
             projectRoot = dirname(projectRoot);
           }
@@ -134,7 +132,7 @@ export class NativeModuleLoader {
           if (projectRoot === '/') {
             throw new Error('Could not find project root (package.json).');
           }
-          
+
           logger.log(`Found project root for rebuild at: ${projectRoot}`);
 
           execSync('pnpm rebuild node-pty', { cwd: projectRoot, stdio: 'inherit' });
@@ -152,9 +150,9 @@ export class NativeModuleLoader {
    */
   public static clearCache(moduleName?: string): void {
     if (moduleName) {
-      this.cache.delete(moduleName);
+      NativeModuleLoader.cache.delete(moduleName);
     } else {
-      this.cache.clear();
+      NativeModuleLoader.cache.clear();
     }
   }
 

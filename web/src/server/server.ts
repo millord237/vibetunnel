@@ -38,8 +38,8 @@ import { PushNotificationStatusService } from './services/push-notification-stat
 import { RemoteRegistry } from './services/remote-registry.js';
 import { StreamWatcher } from './services/stream-watcher.js';
 import { TerminalManager } from './services/terminal-manager.js';
+import { EnvironmentSanitizer, environmentSanitizer } from './utils/environment-sanitizer.js';
 import { closeLogger, createLogger, initLogger, setDebugMode } from './utils/logger.js';
-import { environmentSanitizer, EnvironmentSanitizer } from './utils/environment-sanitizer.js';
 import { VapidManager } from './utils/vapid-manager.js';
 import { getVersionInfo, printVersionBanner } from './version.js';
 import { controlUnixHandler } from './websocket/control-unix-handler.js';

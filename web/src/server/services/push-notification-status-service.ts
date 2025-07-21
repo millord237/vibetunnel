@@ -1,5 +1,5 @@
-import type { PushNotificationService } from './push-notification-service.js';
 import type { VapidManager } from '../utils/vapid-manager.js';
+import type { PushNotificationService } from './push-notification-service.js';
 
 export class PushNotificationStatusService {
   constructor(
