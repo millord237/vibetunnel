@@ -124,9 +124,23 @@ export class NativeModuleLoader {
         logger.warn('Attempting to rebuild node-pty...');
         const { execSync } = await import('child_process');
         try {
-          execSync('pnpm rebuild node-pty', { stdio: 'inherit' });
+          // Find the web directory by locating the 'package.json'
+          const currentDir = dirname(fileURLToPath(import.meta.url));
+          let projectRoot = currentDir;
+          while (!existsSync(join(projectRoot, 'package.json')) && projectRoot !== '/') {
+            projectRoot = dirname(projectRoot);
+          }
+
+          if (projectRoot === '/') {
+            throw new Error('Could not find project root (package.json).');
+          }
+          
+          logger.log(`Found project root for rebuild at: ${projectRoot}`);
+
+          execSync('pnpm rebuild node-pty', { cwd: projectRoot, stdio: 'inherit' });
           return import('node-pty');
         } catch (error) {
+          logger.error('Failed to rebuild node-pty:', error);
           throw new Error('Failed to rebuild node-pty');
         }
       },
