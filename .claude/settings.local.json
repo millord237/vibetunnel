@@ -12,7 +12,10 @@
       "Bash(web/bin/vt:*)",
       "Bash(sudo cp:*)",
       "Bash(sudo chmod:*)",
-      "Bash(alias vt='/Users/alex/Documents/Develop/vibetunnel/web/bin/vt')"
+      "Bash(alias vt='/Users/alex/Documents/Develop/vibetunnel/web/bin/vt')",
+      "Bash(git checkout:*)",
+      "Bash(git fetch:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   },

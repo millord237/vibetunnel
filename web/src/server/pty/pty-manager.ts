@@ -31,7 +31,6 @@ import { ProcessTreeAnalyzer } from '../services/process-tree-analyzer.js';
 import { ActivityDetector, type ActivityState } from '../utils/activity-detector.js';
 import { TitleSequenceFilter } from '../utils/ansi-title-filter.js';
 import { createLogger } from '../utils/logger.js';
-import { NativeModuleLoader } from '../utils/native-module-loader.js';
 import {
   extractCdDirectory,
   generateDynamicTitle,
@@ -126,8 +125,8 @@ export class PtyManager extends EventEmitter {
     }
 
     try {
-      logger.log('Initializing PtyManager with native module loader...');
-      pty = await NativeModuleLoader.loadNodePty();
+      logger.log('Initializing PtyManager...');
+      pty = await import('node-pty');
       PtyManager.initialized = true;
       logger.log('✅ PtyManager initialized successfully');
     } catch (error) {

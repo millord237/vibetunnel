@@ -269,11 +269,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             await self?.notificationService.start()
         }
 
-        // Start native notification service
-        Task { [weak self] in
-            await self?.notificationService.start()
-        }
-
         // Initialize and start HTTP server using ServerManager
         Task {
             guard let serverManager = app?.serverManager else { return }

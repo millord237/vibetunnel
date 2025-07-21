@@ -404,8 +404,6 @@ fi
 # Verify the executable works
 echo "Verifying vibetunnel executable..."
 echo "Full path: ${APP_RESOURCES}/vibetunnel"
-# Set the path for native modules before running verification
-export VIBETUNNEL_NATIVE_MODULE_PATH="${APP_RESOURCES}"
 if "${APP_RESOURCES}/vibetunnel" version &>/dev/null; then
     VERSION_OUTPUT=$("${APP_RESOURCES}/vibetunnel" version 2>&1 | head -1)
     echo "✓ VibeTunnel executable verified: $VERSION_OUTPUT"

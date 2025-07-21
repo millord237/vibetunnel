@@ -38,7 +38,6 @@ import { PushNotificationStatusService } from './services/push-notification-stat
 import { RemoteRegistry } from './services/remote-registry.js';
 import { StreamWatcher } from './services/stream-watcher.js';
 import { TerminalManager } from './services/terminal-manager.js';
-import { EnvironmentSanitizer, environmentSanitizer } from './utils/environment-sanitizer.js';
 import { closeLogger, createLogger, initLogger, setDebugMode } from './utils/logger.js';
 import { VapidManager } from './utils/vapid-manager.js';
 import { getVersionInfo, printVersionBanner } from './version.js';
@@ -1247,13 +1246,9 @@ export async function startVibeTunnelServer() {
   // Initialize logger if not already initialized (preserves debug mode from CLI)
   initLogger();
 
-  // Sanitize environment before starting - CRITICAL FIX
-  environmentSanitizer.sanitize();
 
   // Log diagnostic info if debug mode
   if (process.env.DEBUG === 'true' || process.argv.includes('--debug')) {
-    logger.debug('Environment Diagnostic Report:');
-    logger.debug(EnvironmentSanitizer.getDiagnosticReport());
   }
 
   // Prevent multiple server instances
