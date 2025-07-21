@@ -1342,10 +1342,10 @@ let serverStarted = false;
 export async function startVibeTunnelServer() {
   // Initialize logger if not already initialized (preserves debug mode from CLI)
   initLogger();
-  
+
   // Sanitize environment before starting - CRITICAL FIX
   environmentSanitizer.sanitize();
-  
+
   // Log diagnostic info if debug mode
   if (process.env.DEBUG === 'true' || process.argv.includes('--debug')) {
     logger.debug('Environment Diagnostic Report:');
