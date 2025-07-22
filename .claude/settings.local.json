@@ -2,27 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(pnpm test:*)",
-      "Bash(rg:*)",
-      "Bash(pnpm run:*)",
-      "Bash(ls:*)",
-      "Bash(./scripts/clean.sh:*)",
-      "Bash(./scripts/build.sh:*)",
-      "Bash(pkill:*)",
-      "Bash(open:*)",
-      "Bash(web/bin/vt:*)",
-      "Bash(sudo cp:*)",
-      "Bash(sudo chmod:*)",
-      "Bash(alias vt='/Users/alex/Documents/Develop/vibetunnel/web/bin/vt')",
-      "Bash(git checkout:*)",
-      "Bash(git fetch:*)",
-      "Bash(rm:*)",
-      "Bash(echo $VIBETUNNEL_LOG_LEVEL)",
-      "Bash(unset:*)"
+      "Bash(rg:*)"
     ],
     "deny": []
   },
-  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "playwright"
-  ]
+  ],
+  "enableAllProjectMcpServers": true
 }
