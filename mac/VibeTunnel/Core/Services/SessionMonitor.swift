@@ -59,6 +59,9 @@ final class SessionMonitor {
     /// Previous session states for exit detection
     private var previousSessions: [String: ServerSessionInfo] = [:]
     private var firstFetchDone = false
+    
+    /// Track last known activity state per session for Claude transition detection
+    private var lastActivityState: [String: Bool] = [:]
 
     /// Detect sessions that transitioned from running to not running
     static func detectEndedSessions(
@@ -192,6 +195,9 @@ final class SessionMonitor {
                             )
                     }
                 }
+                
+                // Detect Claude "Your Turn" transitions
+                await detectAndNotifyClaudeTurns(from: oldSessions, to: sessionsDict)
             }
 
             // Set firstFetchDone AFTER detecting ended sessions
@@ -230,6 +236,57 @@ final class SessionMonitor {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.refresh()
+            }
+        }
+    }
+    
+    /// Detect and notify when Claude sessions transition from active to inactive ("Your Turn")
+    private func detectAndNotifyClaudeTurns(
+        from old: [String: ServerSessionInfo],
+        to new: [String: ServerSessionInfo]
+    ) async {
+        // Check if Claude notifications are enabled (default to true if not set)
+        let claudeNotificationsEnabled = UserDefaults.standard.object(forKey: "notifications.claudeTurn") as? Bool ?? true
+        guard claudeNotificationsEnabled else { return }
+        
+        for (id, newSession) in new {
+            // Only process running sessions
+            guard newSession.isRunning else { continue }
+            
+            // Check if this is a Claude session
+            let isClaudeSession = newSession.activityStatus?.specificStatus?.app.lowercased().contains("claude") ?? false ||
+                                  newSession.command.joined(separator: " ").lowercased().contains("claude")
+            
+            guard isClaudeSession else { continue }
+            
+            // Get current activity state
+            let currentActive = newSession.activityStatus?.isActive ?? false
+            
+            // Get previous activity state (from our tracking or old session data)
+            let previousActive = lastActivityState[id] ?? (old[id]?.activityStatus?.isActive ?? false)
+            
+            // Update tracking
+            lastActivityState[id] = currentActive
+            
+            // Detect transition from active to inactive
+            if previousActive && !currentActive {
+                logger.info("🔔 Detected Claude transition to idle for session: \(id)")
+                
+                // Get session name for notification
+                let sessionName = newSession.name ?? newSession.command.joined(separator: " ")
+                
+                // Send "Your Turn" notification via NotificationService
+                await NotificationService.shared.sendCommandCompletionNotification(
+                    command: sessionName,
+                    duration: 0
+                )
+            }
+        }
+        
+        // Clean up tracking for ended sessions
+        for id in lastActivityState.keys {
+            if new[id] == nil || !(new[id]?.isRunning ?? false) {
+                lastActivityState.removeValue(forKey: id)
             }
         }
     }
