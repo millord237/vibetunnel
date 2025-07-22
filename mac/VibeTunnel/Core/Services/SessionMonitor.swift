@@ -62,6 +62,8 @@ final class SessionMonitor {
     
     /// Track last known activity state per session for Claude transition detection
     private var lastActivityState: [String: Bool] = [:]
+    /// Sessions that have already triggered a "Your Turn" alert
+    private var claudeIdleNotified: Set<String> = []
 
     /// Detect sessions that transitioned from running to not running
     static func detectEndedSessions(
@@ -265,28 +267,32 @@ final class SessionMonitor {
             // Get previous activity state (from our tracking or old session data)
             let previousActive = lastActivityState[id] ?? (old[id]?.activityStatus?.isActive ?? false)
             
-            // Update tracking
-            lastActivityState[id] = currentActive
-            
-            // Detect transition from active to inactive
-            if previousActive && !currentActive {
+            // Reset when Claude speaks again
+            if !previousActive && currentActive {
+                claudeIdleNotified.remove(id)
+            }
+
+            // First active ➜ idle transition ⇒ alert
+            let alreadyNotified = claudeIdleNotified.contains(id)
+            if previousActive && !currentActive && !alreadyNotified {
                 logger.info("🔔 Detected Claude transition to idle for session: \(id)")
-                
-                // Get session name for notification
                 let sessionName = newSession.name ?? newSession.command.joined(separator: " ")
-                
-                // Send "Your Turn" notification via NotificationService
                 await NotificationService.shared.sendCommandCompletionNotification(
                     command: sessionName,
                     duration: 0
                 )
+                claudeIdleNotified.insert(id)
             }
+
+            // Update tracking *after* detection logic
+            lastActivityState[id] = currentActive
         }
         
-        // Clean up tracking for ended sessions
+        // Clean up tracking for ended/closed sessions
         for id in lastActivityState.keys {
             if new[id] == nil || !(new[id]?.isRunning ?? false) {
                 lastActivityState.removeValue(forKey: id)
+                claudeIdleNotified.remove(id)
             }
         }
     }
