@@ -72,10 +72,6 @@ const PROCESS_POLL_INTERVAL_MS = 500; // How often to check foreground process
 const MIN_COMMAND_DURATION_MS = 3000; // Minimum duration for command completion notifications (3 seconds)
 const SHELL_COMMANDS = new Set(['cd', 'ls', 'pwd', 'echo', 'export', 'alias', 'unset']); // Built-in commands to ignore
 
-// Bell detection constants
-const BELL_CHAR = '\x07'; // ASCII bell character
-const BELL_DEBOUNCE_MS = 100; // Debounce multiple bells within this window
-
 export class PtyManager extends EventEmitter {
   private sessions = new Map<string, PtySession>();
   private sessionManager: SessionManager;
@@ -89,8 +85,9 @@ export class PtyManager extends EventEmitter {
   >();
   private static initialized = false;
   private sessionEventListeners = new Map<string, Set<(...args: unknown[]) => void>>();
-  private lastBellTime = new Map<string, number>(); // Track last bell time per session
-  private sessionExitTimes = new Map<string, number>(); // Track session exit times to avoid false bells
+  private pgidPollingIntervals = new Map<string, NodeJS.Timeout>();
+  private lastKnownPgids = new Map<string, number | null>();
+  private sessionExitTimes = new Map<string, number>();
   private processTreeAnalyzer = new ProcessTreeAnalyzer(); // Process tree analysis for bell source identification
   private activityFileWarningsLogged = new Set<string>(); // Track which sessions we've logged warnings for
   private lastWrittenActivityState = new Map<string, string>(); // Track last written activity state to avoid unnecessary writes
@@ -460,6 +457,15 @@ export class PtyManager extends EventEmitter {
 
       // Emit session started event
       this.emit('sessionStarted', sessionId, sessionInfo.name || sessionInfo.command.join(' '));
+      
+      // Send notification to Mac app
+      if (controlUnixHandler.isMacAppConnected()) {
+        controlUnixHandler.sendNotification('Session Started', sessionInfo.name || sessionInfo.command.join(' '), {
+          type: 'session-start',
+          sessionId: sessionId,
+          sessionName: sessionInfo.name || sessionInfo.command.join(' '),
+        });
+      }
 
       return {
         sessionId,
@@ -567,6 +573,25 @@ export class PtyManager extends EventEmitter {
                 `active=${activityState.isActive}, ` +
                 `status=${activityState.specificStatus?.status || 'none'}`
             );
+
+            // Send notification when activity becomes inactive (Claude's turn)
+            if (!activityState.isActive && activityState.specificStatus?.status === 'waiting') {
+              logger.info(`🔔 NOTIFICATION DEBUG: Claude turn detected for session ${session.id}`);
+              this.emit(
+                'claudeTurn',
+                session.id,
+                session.sessionInfo.name || session.sessionInfo.command.join(' ')
+              );
+              
+              // Send notification to Mac app directly
+              if (controlUnixHandler.isMacAppConnected()) {
+                controlUnixHandler.sendNotification('Your Turn', 'Claude has finished responding', {
+                  type: 'your-turn',
+                  sessionId: session.id,
+                  sessionName: session.sessionInfo.name || session.sessionInfo.command.join(' '),
+                });
+              }
+            }
           }
 
           // Always write activity state for external tools
@@ -581,11 +606,6 @@ export class PtyManager extends EventEmitter {
     // Handle PTY data output
     ptyProcess.onData((data: string) => {
       let processedData = data;
-
-      // Check for bell character
-      if (data.includes(BELL_CHAR)) {
-        this.handleBell(session);
-      }
 
       // If title mode is not NONE, filter out any title sequences the process might
       // have written to the stream.
@@ -672,13 +692,6 @@ export class PtyManager extends EventEmitter {
         // Remove from active sessions
         this.sessions.delete(session.id);
 
-        // Clean up bell tracking
-        this.lastBellTime.delete(session.id);
-        this.sessionExitTimes.delete(session.id);
-
-        // Stop foreground process tracking
-        this.stopForegroundProcessTracking(session);
-
         // Clean up command tracking
         this.commandTracking.delete(session.id);
 
@@ -689,6 +702,15 @@ export class PtyManager extends EventEmitter {
           session.sessionInfo.name || session.sessionInfo.command.join(' '),
           exitCode
         );
+        
+        // Send notification to Mac app
+        if (controlUnixHandler.isMacAppConnected()) {
+          controlUnixHandler.sendNotification('Session Ended', session.sessionInfo.name || session.sessionInfo.command.join(' '), {
+            type: 'session-exit',
+            sessionId: session.id,
+            sessionName: session.sessionInfo.name || session.sessionInfo.command.join(' '),
+          });
+        }
 
         // Call exit callback if provided (for fwd.ts)
         if (onExit) {
@@ -916,7 +938,9 @@ export class PtyManager extends EventEmitter {
           logger.debug(`Unknown message type ${type} for session ${session.id}`);
       }
     } catch (error) {
-      logger.error(`Failed to handle socket message for session ${session.id}:`, error);
+      // Don't log the full error object as it might contain buffers or circular references
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to handle socket message for session ${session.id}: ${errorMessage}`);
     }
   }
 
@@ -2599,8 +2623,11 @@ export class PtyManager extends EventEmitter {
       logger.info(
         `🔔 NOTIFICATION DEBUG: Sending command notification to Mac - title: "${notifTitle}", body: "${notifBody}"`
       );
-      // TODO: Implement sendNotification in controlUnixHandler
-      // controlUnixHandler.sendNotification(notifTitle, notifBody, true);
+      controlUnixHandler.sendNotification('Your Turn', notifBody, {
+        type: 'your-turn',
+        sessionId: session.id,
+        sessionName: session.sessionInfo.name || session.sessionInfo.command.join(' '),
+      });
     } else {
       logger.warn(
         '🔔 NOTIFICATION DEBUG: Cannot send command notification - Mac app not connected'
@@ -2640,21 +2667,21 @@ export class PtyManager extends EventEmitter {
       return;
     }
 
-    // Debounce bells
-    const lastBell = this.lastBellTime.get(sessionId);
-    if (lastBell && now - lastBell < BELL_DEBOUNCE_MS) {
-      logger.debug(`Debouncing bell for session ${sessionId}`);
-      return;
-    }
-
-    this.lastBellTime.set(sessionId, now);
-
     // Get session info for the event
     const sessionName = session.sessionInfo.name || session.sessionInfo.command.join(' ');
 
     logger.debug(`Bell detected in session ${sessionId}: ${sessionName}`);
 
-    // Emit bell event
+    // Send notification to Mac app
+    if (controlUnixHandler.isMacAppConnected()) {
+      controlUnixHandler.sendNotification('Your Turn', sessionName, {
+        type: 'your-turn',
+        sessionId: sessionId,
+        sessionName: sessionName,
+      });
+    }
+
+    // Emit bell event for other listeners
     this.emit('bell', {
       sessionInfo: {
         id: sessionId,

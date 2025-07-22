@@ -41,12 +41,7 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
       };
 
       // Enhanced logging for all notification events
-      if (
-        type === 'bell' ||
-        type === 'command-finished' ||
-        type === 'command-error' ||
-        type === 'claude-turn'
-      ) {
+      if (type === 'command-finished' || type === 'command-error' || type === 'claude-turn') {
         logger.info(
           `🔔 NOTIFICATION DEBUG: Actually sending SSE event - type: ${type}, sessionId: ${data.sessionId}`
         );
@@ -71,30 +66,6 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
 
     const onSessionExited = (sessionId: string, sessionName: string, exitCode?: number) => {
       sendEvent('session-exit', { sessionId, sessionName, exitCode });
-    };
-
-    interface BellEvent {
-      sessionInfo: {
-        id: string;
-        name?: string;
-        command: string[];
-      };
-      bellCount: number;
-      suspectedSource?: {
-        command?: string;
-      };
-    }
-
-    const onBell = (data: BellEvent) => {
-      logger.info(
-        `🔔 NOTIFICATION DEBUG: SSE forwarding bell event - sessionId: ${data.sessionInfo.id}, bellCount: ${data.bellCount}`
-      );
-      sendEvent('bell', {
-        sessionId: data.sessionInfo.id,
-        sessionName: data.sessionInfo.name || data.sessionInfo.command.join(' '),
-        bellCount: data.bellCount,
-        processInfo: data.suspectedSource?.command,
-      });
     };
 
     interface CommandFinishedEvent {
@@ -147,7 +118,6 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
     // Subscribe to events
     ptyManager.on('sessionStarted', onSessionStarted);
     ptyManager.on('sessionExited', onSessionExited);
-    ptyManager.on('bell', onBell);
     ptyManager.on('commandFinished', onCommandFinished);
     ptyManager.on('claudeTurn', onClaudeTurn);
 
@@ -159,7 +129,6 @@ export function createEventsRouter(ptyManager: PtyManager): Router {
       // Unsubscribe from events
       ptyManager.off('sessionStarted', onSessionStarted);
       ptyManager.off('sessionExited', onSessionExited);
-      ptyManager.off('bell', onBell);
       ptyManager.off('commandFinished', onCommandFinished);
       ptyManager.off('claudeTurn', onClaudeTurn);
     });

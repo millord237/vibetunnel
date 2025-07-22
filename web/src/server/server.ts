@@ -27,7 +27,6 @@ import { createSessionRoutes } from './routes/sessions.js';
 import { WebSocketInputHandler } from './routes/websocket-input.js';
 import { ActivityMonitor } from './services/activity-monitor.js';
 import { AuthService } from './services/auth-service.js';
-import { BellEventHandler } from './services/bell-event-handler.js';
 import { BufferAggregator } from './services/buffer-aggregator.js';
 import { ConfigService } from './services/config-service.js';
 import { ControlDirWatcher } from './services/control-dir-watcher.js';
@@ -468,7 +467,6 @@ export async function createApp(): Promise<AppInstance> {
   // Initialize push notification services
   let vapidManager: VapidManager | null = null;
   let pushNotificationService: PushNotificationService | null = null;
-  let bellEventHandler: BellEventHandler | null = null;
 
   if (config.pushEnabled) {
     try {
@@ -487,17 +485,12 @@ export async function createApp(): Promise<AppInstance> {
       pushNotificationService = new PushNotificationService(vapidManager);
       await pushNotificationService.initialize();
 
-      // Initialize bell event handler
-      bellEventHandler = new BellEventHandler();
-      bellEventHandler.setPushNotificationService(pushNotificationService);
-
       logger.log(chalk.green('Push notification services initialized'));
     } catch (error) {
       logger.error('Failed to initialize push notification services:', error);
       logger.warn('Continuing without push notifications');
       vapidManager = null;
       pushNotificationService = null;
-      bellEventHandler = null;
     }
   } else {
     logger.debug('Push notifications disabled');
@@ -681,16 +674,6 @@ export async function createApp(): Promise<AppInstance> {
     });
   });
 
-  // Connect bell event handler to PTY manager if push notifications are enabled
-  if (bellEventHandler) {
-    ptyManager.on('bell', (bellContext) => {
-      bellEventHandler.processBellEvent(bellContext).catch((error) => {
-        logger.error('Failed to process bell event:', error);
-      });
-    });
-    logger.debug('Connected bell event handler to PTY manager');
-  }
-
   // Connect session exit notifications if push notifications are enabled
   if (pushNotificationService) {
     ptyManager.on('sessionExited', (sessionId: string) => {
@@ -796,6 +779,38 @@ export async function createApp(): Promise<AppInstance> {
         });
     });
     logger.debug('Connected command finished notifications to PTY manager');
+
+    // Connect Claude turn notifications
+    ptyManager.on('claudeTurn', (sessionId: string, sessionName: string) => {
+      logger.info(
+        `🔔 NOTIFICATION DEBUG: Sending push notification for Claude turn - sessionId: ${sessionId}`
+      );
+
+      pushNotificationService
+        .sendNotification({
+          type: 'claude-turn',
+          title: 'Claude Ready',
+          body: `${sessionName} is waiting for your input.`,
+          icon: '/apple-touch-icon.png',
+          badge: '/favicon-32.png',
+          tag: `vibetunnel-claude-turn-${sessionId}`,
+          requireInteraction: true,
+          data: {
+            type: 'claude-turn',
+            sessionId,
+            sessionName,
+            timestamp: new Date().toISOString(),
+          },
+          actions: [
+            { action: 'view-session', title: 'View Session' },
+            { action: 'dismiss', title: 'Dismiss' },
+          ],
+        })
+        .catch((error) => {
+          logger.error('Failed to send Claude turn notification:', error);
+        });
+    });
+    logger.debug('Connected Claude turn notifications to PTY manager');
   }
 
   // Mount authentication routes (no auth required)
@@ -873,7 +888,6 @@ export async function createApp(): Promise<AppInstance> {
       createPushRoutes({
         vapidManager,
         pushNotificationService,
-        bellEventHandler: bellEventHandler ?? undefined,
       })
     );
     logger.debug('Mounted push notification routes');
@@ -1245,7 +1259,6 @@ let serverStarted = false;
 export async function startVibeTunnelServer() {
   // Initialize logger if not already initialized (preserves debug mode from CLI)
   initLogger();
-
 
   // Log diagnostic info if debug mode
   if (process.env.DEBUG === 'true' || process.argv.includes('--debug')) {

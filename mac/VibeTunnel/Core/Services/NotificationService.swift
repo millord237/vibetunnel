@@ -150,6 +150,73 @@ final class NotificationService: NSObject {
         }
     }
     
+    // MARK: - Public Notification Methods
+    
+    /// Send a session start notification
+    func sendSessionStartNotification(sessionName: String) async {
+        guard preferences.sessionStart else { return }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Session Started"
+        content.body = sessionName
+        content.sound = .default
+        content.categoryIdentifier = "SESSION"
+        content.interruptionLevel = .passive
+        
+        deliverNotificationWithAutoDismiss(content, identifier: "session-start-\(UUID().uuidString)", dismissAfter: 5.0)
+    }
+    
+    /// Send a session exit notification
+    func sendSessionExitNotification(sessionName: String, exitCode: Int) async {
+        guard preferences.sessionExit else { return }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Session Ended"
+        content.body = sessionName
+        content.sound = .default
+        content.categoryIdentifier = "SESSION"
+        
+        if exitCode != 0 {
+            content.subtitle = "Exit code: \(exitCode)"
+        }
+        
+        deliverNotification(content, identifier: "session-exit-\(UUID().uuidString)")
+    }
+    
+    /// Send a command completion notification (also used for "Your Turn")
+    func sendCommandCompletionNotification(command: String, duration: Int) async {
+        guard preferences.commandCompletion else { return }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Your Turn"
+        content.body = command
+        content.sound = .default
+        content.categoryIdentifier = "COMMAND"
+        content.interruptionLevel = .active
+        
+        if duration > 0 {
+            let seconds = duration / 1_000
+            if seconds > 60 {
+                content.subtitle = "Duration: \(seconds / 60)m \(seconds % 60)s"
+            } else {
+                content.subtitle = "Duration: \(seconds)s"
+            }
+        }
+        
+        deliverNotification(content, identifier: "command-\(UUID().uuidString)")
+    }
+    
+    /// Send a generic notification
+    func sendGenericNotification(title: String, body: String) async {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = "GENERAL"
+        
+        deliverNotification(content, identifier: "generic-\(UUID().uuidString)")
+    }
+    
     /// Open System Settings to the Notifications pane
     private func openNotificationSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {

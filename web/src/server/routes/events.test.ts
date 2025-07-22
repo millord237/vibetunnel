@@ -139,30 +139,6 @@ describe('Events Router', () => {
       );
     });
 
-    it('should forward bell events as SSE', async () => {
-      const routes = (eventsRouter as any).stack;
-      const notificationRoute = routes.find(
-        (r: any) => r.route && r.route.path === '/events/notifications' && r.route.methods.get
-      );
-
-      const handler = notificationRoute.route.stack[0].handle;
-      await handler(mockRequest, mockResponse);
-
-      // Emit a bell event
-      const eventData = {
-        sessionId: 'test-123',
-        sessionName: 'Test Session',
-        timestamp: new Date().toISOString(),
-      };
-      mockPtyManager.emit('bell', eventData);
-
-      // Verify SSE was sent
-      expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('event: bell\n'));
-      expect(mockResponse.write).toHaveBeenCalledWith(
-        expect.stringContaining(`data: ${JSON.stringify(eventData)}\n\n`)
-      );
-    });
-
     it('should handle multiple events', async () => {
       const routes = (eventsRouter as any).stack;
       const notificationRoute = routes.find(
@@ -178,7 +154,7 @@ describe('Events Router', () => {
       // Emit multiple events
       mockPtyManager.emit('sessionExited', 'session-1');
       mockPtyManager.emit('commandFinished', { sessionId: 'session-2', command: 'ls' });
-      mockPtyManager.emit('bell', { sessionId: 'session-3' });
+      mockPtyManager.emit('claudeTurn', 'session-3', 'Session 3');
 
       // Should have written 3 events
       const writeCalls = (mockResponse.write as ReturnType<typeof vi.fn>).mock.calls;
@@ -225,7 +201,7 @@ describe('Events Router', () => {
       // Verify listeners are attached
       expect(mockPtyManager.listenerCount('sessionExited')).toBeGreaterThan(0);
       expect(mockPtyManager.listenerCount('commandFinished')).toBeGreaterThan(0);
-      expect(mockPtyManager.listenerCount('bell')).toBeGreaterThan(0);
+      expect(mockPtyManager.listenerCount('claudeTurn')).toBeGreaterThan(0);
 
       // Simulate client disconnect
       closeHandler();
@@ -233,7 +209,7 @@ describe('Events Router', () => {
       // Verify listeners are removed
       expect(mockPtyManager.listenerCount('sessionExited')).toBe(0);
       expect(mockPtyManager.listenerCount('commandFinished')).toBe(0);
-      expect(mockPtyManager.listenerCount('bell')).toBe(0);
+      expect(mockPtyManager.listenerCount('claudeTurn')).toBe(0);
     });
 
     it('should handle response errors gracefully', async () => {
@@ -252,7 +228,7 @@ describe('Events Router', () => {
 
       // Should not throw even if write fails
       expect(() => {
-        mockPtyManager.emit('bell', { sessionId: 'test' });
+        mockPtyManager.emit('claudeTurn', 'test', 'Test Session');
       }).not.toThrow();
     });
 
@@ -269,14 +245,14 @@ describe('Events Router', () => {
       vi.clearAllMocks();
 
       // Emit an event
-      mockPtyManager.emit('bell', { sessionId: 'test-123' });
+      mockPtyManager.emit('claudeTurn', 'test-123', 'Test Session');
 
       // Verify SSE format includes id
       const writeCalls = (mockResponse.write as ReturnType<typeof vi.fn>).mock.calls;
       const sseData = writeCalls.map((call) => call[0]).join('');
 
       expect(sseData).toMatch(/id: \d+\n/);
-      expect(sseData).toMatch(/event: bell\n/);
+      expect(sseData).toMatch(/event: claude-turn\n/);
       expect(sseData).toMatch(/data: {.*}\n\n/);
     });
 
@@ -298,7 +274,7 @@ describe('Events Router', () => {
 
       // Should not throw
       expect(() => {
-        mockPtyManager.emit('bell', circularData);
+        mockPtyManager.emit('claudeTurn', 'test-123', 'Test Session');
       }).not.toThrow();
 
       // Should have attempted to write something
@@ -337,11 +313,15 @@ describe('Events Router', () => {
       vi.clearAllMocks();
 
       // Emit an event
-      mockPtyManager.emit('bell', { sessionId: 'test-123' });
+      mockPtyManager.emit('claudeTurn', 'test-123', 'Test Session');
 
       // Both clients should receive the event
-      expect(client1Response.write).toHaveBeenCalledWith(expect.stringContaining('event: bell'));
-      expect(client2Response.write).toHaveBeenCalledWith(expect.stringContaining('event: bell'));
+      expect(client1Response.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: claude-turn')
+      );
+      expect(client2Response.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: claude-turn')
+      );
     });
   });
 });

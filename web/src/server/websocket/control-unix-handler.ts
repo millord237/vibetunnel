@@ -11,6 +11,7 @@ import type {
   TerminalSpawnResponse,
 } from './control-protocol.js';
 import { createControlEvent, createControlResponse } from './control-protocol.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = createLogger('control-unix');
 
@@ -462,6 +463,39 @@ export class ControlUnixHandler {
         }
       }, 10000); // 10 second timeout
     });
+  }
+
+  /**
+   * Send a notification to the Mac app via the Unix socket
+   */
+  sendNotification(
+    title: string,
+    body: string,
+    options?: {
+      type?: 'session-start' | 'session-exit' | 'your-turn';
+      sessionId?: string;
+      sessionName?: string;
+    }
+  ): void {
+    if (!this.macSocket) {
+      logger.warn('[ControlUnixHandler] Cannot send notification - Mac app not connected');
+      return;
+    }
+
+    const message: ControlMessage = {
+      id: uuidv4(),
+      type: 'event',
+      category: 'notification',
+      action: 'show',
+      payload: {
+        title,
+        body,
+        ...options,
+      },
+    };
+
+    this.sendToMac(message);
+    logger.info('[ControlUnixHandler] Sent notification:', { title, body, options });
   }
 
   sendToMac(message: ControlMessage): void {

@@ -15,7 +15,9 @@
       "Bash(alias vt='/Users/alex/Documents/Develop/vibetunnel/web/bin/vt')",
       "Bash(git checkout:*)",
       "Bash(git fetch:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(echo $VIBETUNNEL_LOG_LEVEL)",
+      "Bash(unset:*)"
     ],
     "deny": []
   },
