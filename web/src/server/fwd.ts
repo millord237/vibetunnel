@@ -15,12 +15,14 @@ import chalk from 'chalk';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { promisify } from 'util';
 import { type SessionInfo, TitleMode } from '../shared/types.js';
 import { PtyManager } from './pty/index.js';
 import { SessionManager } from './pty/session-manager.js';
 import { VibeTunnelSocketClient } from './pty/socket-client.js';
 import { ActivityDetector } from './utils/activity-detector.js';
 import { checkAndPatchClaude } from './utils/claude-patcher.js';
+import { detectGitInfo } from './utils/git-info.js';
 import {
   closeLogger,
   createLogger,
@@ -35,6 +37,7 @@ import { parseVerbosityFromEnv } from './utils/verbosity-parser.js';
 import { BUILD_DATE, GIT_COMMIT, VERSION } from './version.js';
 
 const logger = createLogger('fwd');
+const _execFile = promisify(require('child_process').execFile);
 
 function showUsage() {
   console.log(chalk.blue(`VibeTunnel Forward v${VERSION}`) + chalk.gray(` (${BUILD_DATE})`));
@@ -373,6 +376,9 @@ export async function startVibeTunnelForward(args: string[]) {
       logger.log(chalk.cyan(`✓ ${modeDescriptions[titleMode]}`));
     }
 
+    // Detect Git information
+    const gitInfo = await detectGitInfo(cwd);
+
     // Variables that need to be accessible in cleanup
     let sessionFileWatcher: fs.FSWatcher | undefined;
     let fileWatchDebounceTimer: NodeJS.Timeout | undefined;
@@ -383,6 +389,13 @@ export async function startVibeTunnelForward(args: string[]) {
       workingDir: cwd,
       titleMode: titleMode,
       forwardToStdout: true,
+      gitRepoPath: gitInfo.gitRepoPath,
+      gitBranch: gitInfo.gitBranch,
+      gitAheadCount: gitInfo.gitAheadCount,
+      gitBehindCount: gitInfo.gitBehindCount,
+      gitHasChanges: gitInfo.gitHasChanges,
+      gitIsWorktree: gitInfo.gitIsWorktree,
+      gitMainRepoPath: gitInfo.gitMainRepoPath,
       onExit: async (exitCode: number) => {
         // Show exit message
         logger.log(
@@ -422,9 +435,14 @@ export async function startVibeTunnelForward(args: string[]) {
         // Stop watching the file
         fs.unwatchFile(sessionJsonPath);
 
-        // Shutdown PTY manager and exit
-        logger.debug('Shutting down PTY manager');
-        await ptyManager.shutdown();
+        // Clean up only this session, not all sessions
+        logger.debug(`Cleaning up session ${finalSessionId}`);
+        try {
+          await ptyManager.killSession(finalSessionId);
+        } catch (error) {
+          // Session might already be cleaned up
+          logger.debug(`Session ${finalSessionId} cleanup error (likely already cleaned):`, error);
+        }
 
         // Force exit
         closeLogger();

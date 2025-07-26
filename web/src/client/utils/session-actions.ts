@@ -5,6 +5,7 @@
  * that can be reused across components.
  */
 
+import { HttpMethod } from '../../shared/types.js';
 import type { AuthClient } from '../services/auth-client.js';
 import { createLogger } from './logger.js';
 
@@ -31,7 +32,7 @@ export async function terminateSession(
 
   try {
     const response = await fetch(`/api/sessions/${sessionId}`, {
-      method: 'DELETE',
+      method: HttpMethod.DELETE,
       headers: {
         ...authClient.getAuthHeader(),
       },
@@ -55,6 +56,45 @@ export async function terminateSession(
 }
 
 /**
+ * Renames a session
+ * @param sessionId - The ID of the session to rename
+ * @param newName - The new name for the session
+ * @param authClient - The auth client for authentication headers
+ * @returns Result indicating success or failure with error message
+ */
+export async function renameSession(
+  sessionId: string,
+  newName: string,
+  authClient: AuthClient
+): Promise<SessionActionResult> {
+  try {
+    const response = await fetch(`/api/sessions/${sessionId}`, {
+      method: HttpMethod.PATCH,
+      headers: {
+        'Content-Type': 'application/json',
+        ...authClient.getAuthHeader(),
+      },
+      body: JSON.stringify({ name: newName }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      logger.error('Failed to rename session', { errorData, sessionId });
+      throw new Error(`Rename failed: ${response.status}`);
+    }
+
+    logger.debug('Session rename successful', { sessionId, newName });
+    return { success: true };
+  } catch (error) {
+    logger.error('Failed to rename session:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
  * Cleans up all exited sessions
  * @param authClient - The auth client for authentication headers
  * @returns Result indicating success or failure with error message
@@ -64,7 +104,7 @@ export async function cleanupAllExitedSessions(
 ): Promise<SessionActionResult> {
   try {
     const response = await fetch('/api/cleanup-exited', {
-      method: 'POST',
+      method: HttpMethod.POST,
       headers: {
         ...authClient.getAuthHeader(),
       },

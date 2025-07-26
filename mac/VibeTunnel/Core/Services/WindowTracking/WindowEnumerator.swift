@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Foundation
 import OSLog
 
@@ -6,47 +7,30 @@ import OSLog
 @MainActor
 final class WindowEnumerator {
     private let logger = Logger(
-        subsystem: "sh.vibetunnel.vibetunnel",
+        subsystem: BundleIdentifiers.loggerSubsystem,
         category: "WindowEnumerator"
     )
-
-    /// Information about a tracked terminal window
-    struct WindowInfo {
-        let windowID: CGWindowID
-        let ownerPID: pid_t
-        let terminalApp: Terminal
-        let sessionID: String
-        let createdAt: Date
-
-        // Tab-specific information
-        let tabReference: String? // AppleScript reference for Terminal.app tabs
-        let tabID: String? // Tab identifier for iTerm2
-
-        // Window properties from Accessibility APIs
-        let bounds: CGRect?
-        let title: String?
-    }
 
     /// Gets all terminal windows currently visible on screen using Accessibility APIs.
     static func getAllTerminalWindows() -> [WindowInfo] {
         // Get bundle identifiers for all terminal types
         let terminalBundleIDs = Terminal.allCases.compactMap(\.bundleIdentifier)
-        
+
         // Use AXElement to enumerate windows
         let axWindows = AXElement.enumerateWindows(
             bundleIdentifiers: terminalBundleIDs,
             includeMinimized: false
         )
-        
+
         // Convert AXElement.WindowInfo to our WindowInfo
         return axWindows.compactMap { axWindow in
             // Find the matching Terminal enum
-            guard let terminal = Terminal.allCases.first(where: { 
-                $0.bundleIdentifier == axWindow.bundleIdentifier 
+            guard let terminal = Terminal.allCases.first(where: {
+                $0.bundleIdentifier == axWindow.bundleIdentifier
             }) else {
                 return nil
             }
-            
+
             return WindowInfo(
                 windowID: axWindow.windowID,
                 ownerPID: axWindow.pid,

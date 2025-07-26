@@ -41,6 +41,7 @@
 - [Features](#features)
 - [Architecture](#architecture)
 - [Remote Access Options](#remote-access-options)
+- [Git Follow Mode](#git-follow-mode)
 - [Terminal Title Management](#terminal-title-management)
 - [Authentication](#authentication)
 - [npm Package](#npm-package)
@@ -130,6 +131,11 @@ vt claude-danger   # Custom aliases are resolved
 # Open an interactive shell
 vt --shell         # or vt -i
 
+# Git follow mode
+vt follow          # Follow current branch
+vt follow main     # Switch to main and follow
+vt unfollow       # Stop following
+
 # For more examples and options, see "The vt Forwarding Command" section below
 ```
 
@@ -153,7 +159,8 @@ Visit [http://localhost:4020](http://localhost:4020) to see all your terminal se
 - **🚀 Zero Configuration** - No SSH keys, no port forwarding, no complexity
 - **🤖 AI Agent Friendly** - Perfect for monitoring Claude Code, ChatGPT, or any terminal-based AI tools
 - **📊 Dynamic Terminal Titles** - Real-time activity tracking shows what's happening in each session
-- **⌨️ Smart Keyboard Handling** - Intelligent shortcut routing with toggleable capture modes
+- **🔄 Git Follow Mode** - Terminal automatically follows your IDE's branch switching
+- **⌨️ Smart Keyboard Handling** - Intelligent shortcut routing with toggleable capture modes. When capture is active, use Cmd+1...9/0 (Mac) or Ctrl+1...9/0 (Linux) to quickly switch between sessions
 - **🔒 Secure by Design** - Multiple authentication modes, localhost-only mode, or secure tunneling via Tailscale/ngrok
 - **📱 Mobile Ready** - Native iOS app and responsive web interface for phones and tablets
 - **🎬 Session Recording** - All sessions recorded in asciinema format for later playback
@@ -227,6 +234,74 @@ The server runs as a standalone Node.js executable with embedded modules, provid
 1. Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
 2. Run `cloudflared tunnel --url http://localhost:4020`
 3. Access via the generated `*.trycloudflare.com` URL
+
+## Git Follow Mode
+
+Git Follow Mode keeps your main repository checkout synchronized with the branch you're working on in a Git worktree. This allows agents to work in worktrees while your IDE, server, and other tools stay open on the main repository - they'll automatically update when the worktree switches branches.
+
+### What is Follow Mode?
+
+Follow mode creates a seamless workflow for agent-assisted development:
+- Agents work in worktrees → Main repository automatically follows their branch switches
+- Keep Xcode/IDE open → It updates automatically without reopening projects
+- Server stays running → No need to restart servers in different folders
+- Zero manual intervention → Main repo stays in sync with active development
+
+### Quick Start
+
+```bash
+# From a worktree - enable follow mode for this worktree
+vt follow
+
+# From main repo - follow current branch's worktree (if it exists)
+vt follow
+
+# From main repo - follow a specific branch's worktree
+vt follow feature/new-api
+
+# From main repo - follow a worktree by path
+vt follow ~/project-feature
+
+# Disable follow mode
+vt unfollow
+```
+
+### How It Works
+
+1. **Git Hooks**: VibeTunnel installs lightweight Git hooks (post-commit, post-checkout) in worktrees that detect branch changes
+2. **Main Repo Sync**: When you switch branches in a worktree, the main repository automatically checks out to the same branch
+3. **Smart Handling**: If the main repo has uncommitted changes, follow mode pauses to prevent data loss
+4. **Development Continuity**: Your IDE, servers, and tools running on the main repo seamlessly follow your active work
+5. **Clean Uninstall**: When you run `vt unfollow`, Git hooks are automatically removed and any original hooks are restored
+
+### Common Workflows
+
+#### Agent Development with Worktrees
+```bash
+# Create a worktree for agent development
+git worktree add ../project-agent feature/new-feature
+
+# Enable follow mode on the main repo
+cd ../project && vt follow
+
+# Agent works in the worktree while you stay in main repo
+# When agent switches branches in worktree, your main repo follows!
+# Your Xcode/IDE and servers stay running without interruption
+```
+
+
+### Technical Details
+
+Follow mode stores the worktree path in your main repository's Git config:
+```bash
+# Check which worktree is being followed
+git config vibetunnel.followWorktree
+
+# Follow mode is active when this returns a path
+# The config is managed by vt commands - manual editing not recommended
+```
+
+For more advanced Git worktree workflows, see our [detailed worktree documentation](docs/worktree.md).
 
 ## Terminal Title Management
 

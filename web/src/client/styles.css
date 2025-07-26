@@ -37,7 +37,7 @@
   --vt-breakpoint-desktop: 1280px;
 
   /* Sidebar dimensions */
-  --vt-sidebar-default-width: 320px;
+  --vt-sidebar-default-width: 420px;
   --vt-sidebar-min-width: 240px;
   --vt-sidebar-max-width: 600px;
   --vt-sidebar-mobile-right-margin: 80px;
@@ -270,6 +270,8 @@
     @apply transition-all duration-200 ease-in-out text-text-muted;
     @apply hover:border-primary hover:text-primary hover:shadow-glow-sm;
     @apply active:scale-95;
+    touch-action: manipulation; /* Eliminates 300ms delay */
+    -webkit-tap-highlight-color: transparent;
   }
 
   .quick-start-btn.active {
@@ -281,6 +283,9 @@
     @apply fixed inset-0 bg-bg bg-opacity-80;
     z-index: 1000;
     backdrop-filter: blur(4px);
+    /* Disable all transitions and animations */
+    transition: none !important;
+    animation: none !important;
   }
 
   /* Modal content */
@@ -289,6 +294,9 @@
     @apply shadow-2xl shadow-black/50;
     position: relative;
     z-index: 1001;
+    /* Disable all transitions and animations */
+    transition: none !important;
+    animation: none !important;
   }
 
   /* Modal positioning when used as sibling to backdrop */
@@ -309,7 +317,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     grid-auto-rows: 400px;
-    gap: 1.25rem;
+    gap: 1.5rem;
     padding: 0.5rem 0.75rem;
     /* Enable smooth grid transitions - disabled in session view */
     transition: grid-template-columns 0.3s ease-out;
@@ -538,6 +546,10 @@
     animation: slideInFromBottom 0.3s ease-out;
   }
   
+  .animate-slide-in-right {
+    animation: slideInFromRight 0.3s ease-out;
+  }
+  
   @keyframes slideInFromRight {
     from {
       transform: translateX(100%);
@@ -603,6 +615,30 @@ body {
   overscroll-behavior: none;
   touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Grid layout touch optimization for session view */
+.session-view-grid {
+  contain: layout style;
+  will-change: contents;
+}
+
+.terminal-area {
+  contain: strict;
+  isolation: isolate;
+  touch-action: pan-y;
+}
+
+.overlay-container {
+  contain: layout style;
+  isolation: isolate;
+}
+
+/* Ensure touch targets in overlay are stable */
+.overlay-container button,
+.overlay-container [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Prevent pull-to-refresh on mobile */
@@ -1608,10 +1644,6 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
   }
 
 
-  /* Ensure smooth backdrop fade */
-  .modal-backdrop {
-    animation: fade-in 0.3s ease-out;
-  }
 
 
 
@@ -1826,4 +1858,67 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
 .session-view .interactive-fast,
 .session-view .interactive-slow {
   transition: none !important;
+}
+
+/* Dark mode checkbox styling */
+.session-toggle-checkbox {
+  /* Remove default styling */
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  
+  /* Custom styling */
+  width: 1rem;
+  height: 1rem;
+  background-color: rgb(var(--color-bg-primary));
+  border: 2px solid rgb(var(--color-border) / 0.5);
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin: 0;
+  
+  /* Grid for centering checkmark */
+  display: grid;
+  place-content: center;
+}
+
+/* Hover state */
+.session-toggle-checkbox:hover:not(:checked) {
+  border-color: rgb(var(--color-border));
+  background-color: rgb(var(--color-bg-secondary));
+}
+
+/* Checked state */
+.session-toggle-checkbox:checked {
+  background-color: rgb(var(--color-primary) / 0.15);
+  border-color: rgb(var(--color-primary) / 0.5);
+}
+
+/* Checkmark using pseudo-element */
+.session-toggle-checkbox::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  transform: scale(0);
+  transition: transform 0.15s ease-in-out;
+  background-color: rgb(var(--color-primary));
+  
+  /* Create checkmark shape using clip-path */
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+/* Show checkmark when checked */
+.session-toggle-checkbox:checked::before {
+  transform: scale(1);
+}
+
+/* Focus state */
+.session-toggle-checkbox:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.25);
+}
+
+/* Focus visible for keyboard navigation */
+.session-toggle-checkbox:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.4);
 }

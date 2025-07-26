@@ -10,7 +10,7 @@ import SwiftUI
 struct SessionDetailView: View {
     let session: ServerSessionInfo
     @State private var windowTitle = ""
-    @State private var windowInfo: WindowEnumerator.WindowInfo?
+    @State private var windowInfo: WindowInfo?
     @State private var isFindingWindow = false
     @State private var windowSearchAttempted = false
     @Environment(SystemPermissionManager.self)
@@ -20,7 +20,7 @@ struct SessionDetailView: View {
     @Environment(ServerManager.self)
     private var serverManager
 
-    private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "SessionDetailView")
+    private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "SessionDetailView")
 
     var body: some View {
         HStack(spacing: 30) {
@@ -256,7 +256,7 @@ struct SessionDetailView: View {
             // Log session details for debugging
             logger
                 .info(
-                    "Session details: id=\(session.id), pid=\(session.pid ?? -1), workingDir=\(session.workingDir), attachedViaVT=\(session.attachedViaVT ?? false)"
+                    "Session details: id=\(session.id), pid=\(session.pid ?? -1), workingDir=\(session.workingDir)"
                 )
 
             // Try to match by various criteria

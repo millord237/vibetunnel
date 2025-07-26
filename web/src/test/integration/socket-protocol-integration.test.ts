@@ -16,10 +16,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PtyManager } from '../../server/pty/pty-manager.js';
 import { VibeTunnelSocketClient } from '../../server/pty/socket-client.js';
 import { TitleMode } from '../../shared/types.js';
+import { SessionTestHelper } from '../helpers/session-test-helper.js';
 
 describe('Socket Protocol Integration', () => {
   let testDir: string;
   let ptyManager: PtyManager;
+  let sessionHelper: SessionTestHelper;
 
   beforeEach(() => {
     // IMPORTANT: macOS has a 104 character limit for Unix socket paths (103 usable).
@@ -30,10 +32,13 @@ describe('Socket Protocol Integration', () => {
     testDir = `/tmp/vt-${Date.now()}`;
     fs.mkdirSync(testDir, { recursive: true });
     ptyManager = new PtyManager(testDir);
+    sessionHelper = new SessionTestHelper(ptyManager);
   });
 
   afterEach(async () => {
-    await ptyManager.shutdown();
+    await sessionHelper.killTrackedSessions();
+    // NEVER call ptyManager.shutdown() as it would kill ALL sessions
+    // including the VibeTunnel session running Claude Code
     try {
       fs.rmSync(testDir, { recursive: true, force: true });
     } catch {
@@ -45,7 +50,7 @@ describe('Socket Protocol Integration', () => {
     it('should handle stdin/stdout through socket', async () => {
       // Note: This test requires real PTY support. It will fail if node-pty is mocked.
       // Create a session that echoes input
-      const { sessionId } = await ptyManager.createSession(['sh', '-c', 'cat'], {
+      const { sessionId } = await sessionHelper.createTrackedSession(['sh', '-c', 'cat'], {
         name: 'echo-test',
         workingDir: process.cwd(),
       });
@@ -101,11 +106,10 @@ describe('Socket Protocol Integration', () => {
       expect(foundEcho).toBe(true);
 
       client.disconnect();
-      await ptyManager.killSession(sessionId);
     });
 
     it('should handle resize commands through socket', async () => {
-      const { sessionId } = await ptyManager.createSession(['sh'], {
+      const { sessionId } = await sessionHelper.createTrackedSession(['sh'], {
         name: 'resize-test',
         workingDir: process.cwd(),
         cols: 80,
@@ -152,12 +156,11 @@ describe('Socket Protocol Integration', () => {
       expect(foundResize).toBe(true);
 
       client.disconnect();
-      await ptyManager.killSession(sessionId);
     });
 
     it('should handle kill command through socket', async () => {
       // Note: This test requires real PTY support. It will fail if node-pty is mocked.
-      const { sessionId } = await ptyManager.createSession(['sleep', '60'], {
+      const { sessionId } = await sessionHelper.createTrackedSession(['sleep', '60'], {
         name: 'kill-test',
         workingDir: process.cwd(),
       });
@@ -186,18 +189,13 @@ describe('Socket Protocol Integration', () => {
       expect(session?.status).toBe('exited');
 
       client.disconnect();
-
-      // Clean up if session is still running
-      if (session?.status === 'running') {
-        await ptyManager.killSession(sessionId);
-      }
     });
   });
 
   describe('Claude status tracking', () => {
     it('should track Claude status updates', async () => {
       // Create a session with dynamic title mode
-      const { sessionId } = await ptyManager.createSession(['echo', 'test'], {
+      const { sessionId } = await sessionHelper.createTrackedSession(['echo', 'test'], {
         name: 'claude-test',
         workingDir: process.cwd(),
         titleMode: TitleMode.DYNAMIC,
@@ -232,11 +230,10 @@ describe('Socket Protocol Integration', () => {
       });
 
       client.disconnect();
-      await ptyManager.killSession(sessionId);
     });
 
     it('should broadcast status to other clients', async () => {
-      const { sessionId } = await ptyManager.createSession(['sleep', '60'], {
+      const { sessionId } = await sessionHelper.createTrackedSession(['sleep', '60'], {
         name: 'broadcast-test',
         workingDir: process.cwd(),
       });
@@ -277,7 +274,6 @@ describe('Socket Protocol Integration', () => {
 
       client1.disconnect();
       client2.disconnect();
-      await ptyManager.killSession(sessionId);
     });
   });
 
@@ -293,7 +289,7 @@ describe('Socket Protocol Integration', () => {
     });
 
     it('should handle malformed messages gracefully', async () => {
-      const { sessionId } = await ptyManager.createSession(['sleep', '60'], {
+      const { sessionId } = await sessionHelper.createTrackedSession(['sleep', '60'], {
         name: 'malformed-test',
         workingDir: process.cwd(),
       });
@@ -321,13 +317,12 @@ describe('Socket Protocol Integration', () => {
       expect(client.sendStdin('test')).toBe(true);
 
       client.disconnect();
-      await ptyManager.killSession(sessionId);
     });
   });
 
   describe('Performance', () => {
     it('should handle high-throughput stdin data', async () => {
-      const { sessionId } = await ptyManager.createSession(['cat'], {
+      const { sessionId } = await sessionHelper.createTrackedSession(['cat'], {
         name: 'throughput-test',
         workingDir: process.cwd(),
       });
@@ -358,11 +353,10 @@ describe('Socket Protocol Integration', () => {
       expect(duration).toBeLessThan(1000);
 
       client.disconnect();
-      await ptyManager.killSession(sessionId);
     });
 
     it('should handle rapid status updates', async () => {
-      const { sessionId } = await ptyManager.createSession(['sleep', '60'], {
+      const { sessionId } = await sessionHelper.createTrackedSession(['sleep', '60'], {
         name: 'status-perf-test',
         workingDir: process.cwd(),
       });
@@ -401,18 +395,17 @@ describe('Socket Protocol Integration', () => {
       expect(session?.activityStatus?.specificStatus?.status).toMatch(/Status update \d+/);
 
       client.disconnect();
-      await ptyManager.killSession(sessionId);
     });
   });
 
   describe('Multiple sessions', () => {
     it('should handle multiple sessions with separate sockets', async () => {
       // Create two sessions
-      const { sessionId: sessionId1 } = await ptyManager.createSession(['sleep', '60'], {
+      const { sessionId: sessionId1 } = await sessionHelper.createTrackedSession(['sleep', '60'], {
         name: 'session-1',
       });
 
-      const { sessionId: sessionId2 } = await ptyManager.createSession(['sleep', '60'], {
+      const { sessionId: sessionId2 } = await sessionHelper.createTrackedSession(['sleep', '60'], {
         name: 'session-2',
       });
 
@@ -449,8 +442,6 @@ describe('Socket Protocol Integration', () => {
 
       client1.disconnect();
       client2.disconnect();
-      await ptyManager.killSession(sessionId1);
-      await ptyManager.killSession(sessionId2);
     });
   });
 });

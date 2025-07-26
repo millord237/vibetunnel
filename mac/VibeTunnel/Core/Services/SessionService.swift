@@ -1,6 +1,46 @@
 import Foundation
 import Observation
 
+/// Request body for creating a new session
+struct SessionCreateRequest: Encodable {
+    let command: [String]
+    let workingDir: String
+    let titleMode: String
+    let name: String?
+    let spawnTerminal: Bool?
+    let cols: Int?
+    let rows: Int?
+    let gitRepoPath: String?
+    let gitBranch: String?
+
+    enum CodingKeys: String, CodingKey {
+        case command
+        case workingDir
+        case titleMode
+        case name
+        case spawnTerminal = "spawn_terminal"
+        case cols
+        case rows
+        case gitRepoPath
+        case gitBranch
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(command, forKey: .command)
+        try container.encode(workingDir, forKey: .workingDir)
+        try container.encode(titleMode, forKey: .titleMode)
+
+        // Only encode optional values if they're present
+        try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(spawnTerminal, forKey: .spawnTerminal)
+        try container.encodeIfPresent(cols, forKey: .cols)
+        try container.encodeIfPresent(rows, forKey: .rows)
+        try container.encodeIfPresent(gitRepoPath, forKey: .gitRepoPath)
+        try container.encodeIfPresent(gitBranch, forKey: .gitBranch)
+    }
+}
+
 /// Service for managing session-related API operations.
 ///
 /// Provides high-level methods for interacting with terminal sessions through
@@ -24,28 +64,12 @@ final class SessionService {
             throw SessionServiceError.invalidName
         }
 
-        guard let url =
-            URL(string: "\(URLConstants.localServerBase):\(serverManager.port)\(APIEndpoints.sessions)/\(sessionId)")
-        else {
-            throw SessionServiceError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "PATCH"
-        request.setValue(NetworkConstants.contentTypeJSON, forHTTPHeaderField: NetworkConstants.contentTypeHeader)
-        request.setValue(NetworkConstants.localhost, forHTTPHeaderField: NetworkConstants.hostHeader)
-        try serverManager.authenticate(request: &request)
-
         let body = ["name": trimmedName]
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200
-        else {
-            throw SessionServiceError.requestFailed(statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1)
-        }
+        try await serverManager.performVoidRequest(
+            endpoint: "\(APIEndpoints.sessions)/\(sessionId)",
+            method: "PATCH",
+            body: body
+        )
 
         // Force refresh the session monitor to see the update immediately
         await sessionMonitor.refresh()
@@ -68,24 +92,10 @@ final class SessionService {
     /// - Note: The server implements graceful termination (SIGTERM → SIGKILL)
     ///         with a 3-second timeout before force-killing processes.
     func terminateSession(sessionId: String) async throws {
-        guard let url =
-            URL(string: "\(URLConstants.localServerBase):\(serverManager.port)\(APIEndpoints.sessions)/\(sessionId)")
-        else {
-            throw SessionServiceError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        request.setValue(NetworkConstants.localhost, forHTTPHeaderField: NetworkConstants.hostHeader)
-        try serverManager.authenticate(request: &request)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 || httpResponse.statusCode == 204
-        else {
-            throw SessionServiceError.requestFailed(statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1)
-        }
+        try await serverManager.performVoidRequest(
+            endpoint: "\(APIEndpoints.sessions)/\(sessionId)",
+            method: "DELETE"
+        )
 
         // After successfully terminating the session, close the window if we opened it.
         // This is the key feature that prevents orphaned terminal windows.
@@ -110,30 +120,12 @@ final class SessionService {
             throw SessionServiceError.serverNotRunning
         }
 
-        guard let url =
-            URL(
-                string: "\(URLConstants.localServerBase):\(serverManager.port)\(APIEndpoints.sessions)/\(sessionId)/input"
-            )
-        else {
-            throw SessionServiceError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue(NetworkConstants.contentTypeJSON, forHTTPHeaderField: NetworkConstants.contentTypeHeader)
-        request.setValue(NetworkConstants.localhost, forHTTPHeaderField: NetworkConstants.hostHeader)
-        try serverManager.authenticate(request: &request)
-
         let body = ["text": text]
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 || httpResponse.statusCode == 204
-        else {
-            throw SessionServiceError.requestFailed(statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1)
-        }
+        try await serverManager.performVoidRequest(
+            endpoint: "\(APIEndpoints.sessions)/\(sessionId)/input",
+            method: "POST",
+            body: body
+        )
     }
 
     /// Send a key command to a session
@@ -142,30 +134,12 @@ final class SessionService {
             throw SessionServiceError.serverNotRunning
         }
 
-        guard let url =
-            URL(
-                string: "\(URLConstants.localServerBase):\(serverManager.port)\(APIEndpoints.sessions)/\(sessionId)/input"
-            )
-        else {
-            throw SessionServiceError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue(NetworkConstants.contentTypeJSON, forHTTPHeaderField: NetworkConstants.contentTypeHeader)
-        request.setValue(NetworkConstants.localhost, forHTTPHeaderField: NetworkConstants.hostHeader)
-        try serverManager.authenticate(request: &request)
-
         let body = ["key": key]
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 || httpResponse.statusCode == 204
-        else {
-            throw SessionServiceError.requestFailed(statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1)
-        }
+        try await serverManager.performVoidRequest(
+            endpoint: "\(APIEndpoints.sessions)/\(sessionId)/input",
+            method: "POST",
+            body: body
+        )
     }
 
     /// Create a new session
@@ -176,7 +150,9 @@ final class SessionService {
         titleMode: String = "dynamic",
         spawnTerminal: Bool = false,
         cols: Int = 120,
-        rows: Int = 30
+        rows: Int = 30,
+        gitRepoPath: String? = nil,
+        gitBranch: String? = nil
     )
         async throws -> String
     {
@@ -184,60 +160,35 @@ final class SessionService {
             throw SessionServiceError.serverNotRunning
         }
 
-        guard let url = URL(string: "\(URLConstants.localServerBase):\(serverManager.port)\(APIEndpoints.sessions)")
-        else {
-            throw SessionServiceError.invalidURL
-        }
+        // Trim the name if provided
+        let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalName = (trimmedName?.isEmpty ?? true) ? nil : trimmedName
 
-        var body: [String: Any] = [
-            "command": command,
-            "workingDir": workingDir,
-            "titleMode": titleMode
-        ]
+        // Create the strongly-typed request
+        let requestBody = SessionCreateRequest(
+            command: command,
+            workingDir: workingDir,
+            titleMode: titleMode,
+            name: finalName,
+            spawnTerminal: spawnTerminal ? true : nil,
+            cols: spawnTerminal ? nil : cols,
+            rows: spawnTerminal ? nil : rows,
+            gitRepoPath: gitRepoPath,
+            gitBranch: gitBranch
+        )
 
-        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
-            body["name"] = name
-        }
-
-        if spawnTerminal {
-            body["spawn_terminal"] = true
-        } else {
-            // Web sessions need terminal dimensions
-            body["cols"] = cols
-            body["rows"] = rows
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue(NetworkConstants.contentTypeJSON, forHTTPHeaderField: NetworkConstants.contentTypeHeader)
-        request.setValue(NetworkConstants.localhost, forHTTPHeaderField: NetworkConstants.hostHeader)
-        try serverManager.authenticate(request: &request)
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200
-        else {
-            var errorMessage = "Failed to create session"
-            if let errorData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let error = errorData["error"] as? String
-            {
-                errorMessage = error
-            }
-            throw SessionServiceError.createFailed(message: errorMessage)
-        }
-
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let sessionId = json["sessionId"] as? String
-        else {
-            throw SessionServiceError.invalidResponse
-        }
+        // Use performRequest to create the session
+        let createResponse = try await serverManager.performRequest(
+            endpoint: APIEndpoints.sessions,
+            method: "POST",
+            body: requestBody,
+            responseType: CreateSessionResponse.self
+        )
 
         // Refresh session list
         await sessionMonitor.refresh()
 
-        return sessionId
+        return createResponse.sessionId
     }
 }
 

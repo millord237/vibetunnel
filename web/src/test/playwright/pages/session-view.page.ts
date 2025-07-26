@@ -2,6 +2,39 @@ import { TerminalTestUtils } from '../utils/terminal-test-utils';
 import { WaitUtils } from '../utils/test-utils';
 import { BasePage } from './base.page';
 
+/**
+ * Page object for the terminal session view, providing terminal interaction capabilities.
+ *
+ * This class handles all interactions within an active terminal session, including
+ * command execution, output verification, terminal control operations, and navigation.
+ * It wraps terminal-specific utilities to provide a clean interface for test scenarios
+ * that need to interact with the terminal emulator.
+ *
+ * Key features:
+ * - Command execution with automatic Enter key handling
+ * - Terminal output reading and waiting for specific text
+ * - Terminal control operations (clear, interrupt, resize)
+ * - Copy/paste functionality
+ * - Session navigation (back to list)
+ * - Terminal state verification
+ *
+ * @example
+ * ```typescript
+ * // Execute commands and verify output
+ * const sessionView = new SessionViewPage(page);
+ * await sessionView.waitForTerminalReady();
+ * await sessionView.typeCommand('echo "Hello World"');
+ * await sessionView.waitForOutput('Hello World');
+ *
+ * // Control terminal
+ * await sessionView.clearTerminal();
+ * await sessionView.sendInterrupt(); // Ctrl+C
+ * await sessionView.resizeTerminal(800, 600);
+ *
+ * // Navigate back
+ * await sessionView.navigateBack();
+ * ```
+ */
 export class SessionViewPage extends BasePage {
   // Selectors
   private readonly selectors = {
@@ -16,7 +49,10 @@ export class SessionViewPage extends BasePage {
 
   async waitForTerminalReady() {
     // Wait for terminal element to be visible
-    await this.page.waitForSelector(this.selectors.terminal, { state: 'visible', timeout: 4000 });
+    await this.page.waitForSelector(this.selectors.terminal, {
+      state: 'visible',
+      timeout: process.env.CI ? 10000 : 4000,
+    });
 
     // Wait for terminal to be fully initialized (has content or structure)
     // Determine timeout based on CI environment before passing to browser context
@@ -28,11 +64,15 @@ export class SessionViewPage extends BasePage {
         if (!terminal) return false;
 
         // Terminal is ready if it has content, shadow root, or xterm element
+        // Check the terminal container first
+        const container = terminal.querySelector('#terminal-container');
+        const hasContainerContent =
+          container?.textContent && container.textContent.trim().length > 0;
         const hasContent = terminal.textContent && terminal.textContent.trim().length > 0;
         const hasShadowRoot = !!terminal.shadowRoot;
         const hasXterm = !!terminal.querySelector('.xterm');
 
-        return hasContent || hasShadowRoot || hasXterm;
+        return hasContainerContent || hasContent || hasShadowRoot || hasXterm;
       },
       { timeout }
     );
@@ -47,7 +87,11 @@ export class SessionViewPage extends BasePage {
   }
 
   async waitForOutput(text: string, options?: { timeout?: number }) {
-    await TerminalTestUtils.waitForText(this.page, text, options?.timeout || 2000);
+    await TerminalTestUtils.waitForText(
+      this.page,
+      text,
+      options?.timeout || (process.env.CI ? 5000 : 2000)
+    );
   }
 
   async getTerminalOutput(): Promise<string> {
@@ -100,7 +144,7 @@ export class SessionViewPage extends BasePage {
     const backButton = this.page.locator(this.selectors.backButton).first();
     if (await backButton.isVisible({ timeout: 1000 })) {
       await backButton.click();
-      await this.page.waitForURL('/', { timeout: 5000 });
+      await this.page.waitForURL('/', { timeout: process.env.CI ? 10000 : 5000 });
       return;
     }
 

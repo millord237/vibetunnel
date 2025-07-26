@@ -21,7 +21,6 @@ import type {
   SpecialKey,
 } from '../../shared/types.js';
 import { TitleMode } from '../../shared/types.js';
-import { ProcessTreeAnalyzer } from '../services/process-tree-analyzer.js';
 import { ActivityDetector, type ActivityState } from '../utils/activity-detector.js';
 import { TitleSequenceFilter } from '../utils/ansi-title-filter.js';
 import { createLogger } from '../utils/logger.js';
@@ -60,6 +59,54 @@ const TITLE_UPDATE_INTERVAL_MS = 1000; // How often to check if title needs upda
 const TITLE_INJECTION_QUIET_PERIOD_MS = 50; // Minimum quiet period before injecting title
 const TITLE_INJECTION_CHECK_INTERVAL_MS = 10; // How often to check for quiet period
 
+/**
+ * PtyManager handles the lifecycle and I/O operations of pseudo-terminal (PTY) sessions.
+ *
+ * This class provides comprehensive terminal session management including:
+ * - Creating and managing PTY processes using node-pty
+ * - Handling terminal input/output with proper buffering and queuing
+ * - Managing terminal resizing from both browser and host terminal
+ * - Recording sessions in asciinema format for playback
+ * - Communicating with external sessions via Unix domain sockets
+ * - Dynamic terminal title management with activity detection
+ * - Session persistence and recovery across server restarts
+ *
+ * The PtyManager supports both in-memory sessions (where the PTY is managed directly)
+ * and external sessions (where communication happens via IPC sockets).
+ *
+ * @extends EventEmitter
+ *
+ * @fires PtyManager#sessionExited - When a session terminates
+ * @fires PtyManager#sessionNameChanged - When a session name is updated
+ * @fires PtyManager#bell - When a bell character is detected in terminal output
+ *
+ * @example
+ * ```typescript
+ * // Create a PTY manager instance
+ * const ptyManager = new PtyManager('/path/to/control/dir');
+ *
+ * // Create a new session
+ * const { sessionId, sessionInfo } = await ptyManager.createSession(
+ *   ['bash', '-l'],
+ *   {
+ *     name: 'My Terminal',
+ *     workingDir: '/home/user',
+ *     cols: 80,
+ *     rows: 24,
+ *     titleMode: TitleMode.DYNAMIC
+ *   }
+ * );
+ *
+ * // Send input to the session
+ * ptyManager.sendInput(sessionId, { text: 'ls -la\n' });
+ *
+ * // Resize the terminal
+ * ptyManager.resizeSession(sessionId, 100, 30);
+ *
+ * // Kill the session gracefully
+ * await ptyManager.killSession(sessionId);
+ * ```
+ */
 export class PtyManager extends EventEmitter {
   private sessions = new Map<string, PtySession>();
   private sessionManager: SessionManager;
@@ -74,7 +121,6 @@ export class PtyManager extends EventEmitter {
   private sessionEventListeners = new Map<string, Set<(...args: unknown[]) => void>>();
   private lastBellTime = new Map<string, number>(); // Track last bell time per session
   private sessionExitTimes = new Map<string, number>(); // Track session exit times to avoid false bells
-  private processTreeAnalyzer = new ProcessTreeAnalyzer(); // Process tree analysis for bell source identification
   private activityFileWarningsLogged = new Set<string>(); // Track which sessions we've logged warnings for
   private lastWrittenActivityState = new Map<string, string>(); // Track last written activity state to avoid unnecessary writes
 
@@ -248,6 +294,13 @@ export class PtyManager extends EventEmitter {
         initialRows: rows,
         lastClearOffset: 0,
         version: VERSION,
+        gitRepoPath: options.gitRepoPath,
+        gitBranch: options.gitBranch,
+        gitAheadCount: options.gitAheadCount,
+        gitBehindCount: options.gitBehindCount,
+        gitHasChanges: options.gitHasChanges,
+        gitIsWorktree: options.gitIsWorktree,
+        gitMainRepoPath: options.gitMainRepoPath,
       };
 
       // Save initial session info
@@ -542,6 +595,63 @@ export class PtyManager extends EventEmitter {
 
       // Write to asciinema file (it has its own internal queue)
       asciinemaWriter?.writeOutput(Buffer.from(processedData, 'utf8'));
+
+      // Check for clear sequences in the data and update lastClearOffset
+      const CLEAR_SEQUENCE = '\x1b[3J';
+      if (processedData.includes(CLEAR_SEQUENCE) && asciinemaWriter) {
+        // Find all occurrences of clear sequences
+        let searchIndex = 0;
+        const clearPositions: number[] = [];
+
+        while (searchIndex < processedData.length) {
+          const clearIndex = processedData.indexOf(CLEAR_SEQUENCE, searchIndex);
+          if (clearIndex === -1) break;
+
+          clearPositions.push(clearIndex);
+          searchIndex = clearIndex + CLEAR_SEQUENCE.length;
+        }
+
+        // If we found clear sequences, schedule an update after a short delay
+        // This ensures the asciinema writer has flushed the data to disk
+        if (clearPositions.length > 0) {
+          // Use a short timeout to ensure the write has completed
+          setTimeout(async () => {
+            try {
+              // Get the session paths
+              const sessionPaths = this.sessionManager.getSessionPaths(session.id);
+              if (!sessionPaths) {
+                logger.error(`Failed to get session paths for session ${session.id}`);
+                return;
+              }
+
+              // Get the current file size (which is the position after the write)
+              const stats = await fs.promises.stat(sessionPaths.stdoutPath);
+              const currentFileSize = stats.size;
+
+              // Get the full session info to update
+              const sessionInfo = this.sessionManager.loadSessionInfo(session.id);
+              if (!sessionInfo) {
+                logger.error(`Failed to get session info for session ${session.id}`);
+                return;
+              }
+
+              // Update lastClearOffset to the current file position
+              // This is approximate but good enough - when replay happens,
+              // stream-watcher will find the exact position of the last clear
+              sessionInfo.lastClearOffset = currentFileSize;
+
+              // Save the updated session info
+              await this.sessionManager.saveSessionInfo(session.id, sessionInfo);
+
+              logger.debug(
+                `Updated lastClearOffset for session ${session.id} to ${currentFileSize} after detecting ${clearPositions.length} clear sequence(s)`
+              );
+            } catch (error) {
+              logger.error(`Failed to update lastClearOffset for session ${session.id}:`, error);
+            }
+          }, 100); // 100ms delay to ensure write completes
+        }
+      }
 
       // Forward to stdout if requested (using queue for ordering)
       if (forwardToStdout && stdoutQueue) {
@@ -1268,21 +1378,10 @@ export class PtyManager extends EventEmitter {
       if (memorySession?.ptyProcess) {
         // If signal is already SIGKILL, send it immediately and wait briefly
         if (signal === 'SIGKILL' || signal === 9) {
-          const pid = memorySession.ptyProcess.pid;
           memorySession.ptyProcess.kill('SIGKILL');
 
-          // Also kill the entire process group if on Unix
-          if (process.platform !== 'win32' && pid) {
-            try {
-              process.kill(-pid, 'SIGKILL');
-              logger.debug(`Sent SIGKILL to process group -${pid} for session ${sessionId}`);
-            } catch (groupKillError) {
-              logger.debug(
-                `Failed to SIGKILL process group for session ${sessionId}:`,
-                groupKillError
-              );
-            }
-          }
+          // Note: We no longer kill the process group to avoid affecting other sessions
+          // that might share the same process group (e.g., multiple fwd.ts instances)
 
           this.sessions.delete(sessionId);
           // Wait a bit for SIGKILL to take effect
@@ -1319,20 +1418,8 @@ export class PtyManager extends EventEmitter {
           if (signal === 'SIGKILL' || signal === 9) {
             process.kill(diskSession.pid, 'SIGKILL');
 
-            // Also kill the entire process group if on Unix
-            if (process.platform !== 'win32') {
-              try {
-                process.kill(-diskSession.pid, 'SIGKILL');
-                logger.debug(
-                  `Sent SIGKILL to process group -${diskSession.pid} for external session ${sessionId}`
-                );
-              } catch (groupKillError) {
-                logger.debug(
-                  `Failed to SIGKILL process group for external session ${sessionId}:`,
-                  groupKillError
-                );
-              }
-            }
+            // Note: We no longer kill the process group to avoid affecting other sessions
+            // that might share the same process group (e.g., multiple fwd.ts instances)
 
             await new Promise((resolve) => setTimeout(resolve, 100));
             return;
@@ -1341,22 +1428,8 @@ export class PtyManager extends EventEmitter {
           // Send SIGTERM first
           process.kill(diskSession.pid, 'SIGTERM');
 
-          // Also try to kill the entire process group if on Unix
-          if (process.platform !== 'win32') {
-            try {
-              // Kill the process group by using negative PID
-              process.kill(-diskSession.pid, 'SIGTERM');
-              logger.debug(
-                `Sent SIGTERM to process group -${diskSession.pid} for external session ${sessionId}`
-              );
-            } catch (groupKillError) {
-              // Process group might not exist or we might not have permission
-              logger.debug(
-                `Failed to kill process group for external session ${sessionId}:`,
-                groupKillError
-              );
-            }
-          }
+          // Note: We no longer kill the process group to avoid affecting other sessions
+          // that might share the same process group (e.g., multiple fwd.ts instances)
 
           // Wait up to 3 seconds for graceful termination
           const maxWaitTime = 3000;
@@ -1376,21 +1449,8 @@ export class PtyManager extends EventEmitter {
           logger.debug(chalk.yellow(`External session ${sessionId} requires SIGKILL`));
           process.kill(diskSession.pid, 'SIGKILL');
 
-          // Also force kill the entire process group if on Unix
-          if (process.platform !== 'win32') {
-            try {
-              // Kill the process group with SIGKILL
-              process.kill(-diskSession.pid, 'SIGKILL');
-              logger.debug(
-                `Sent SIGKILL to process group -${diskSession.pid} for external session ${sessionId}`
-              );
-            } catch (groupKillError) {
-              logger.debug(
-                `Failed to SIGKILL process group for external session ${sessionId}:`,
-                groupKillError
-              );
-            }
-          }
+          // Note: We no longer kill the process group to avoid affecting other sessions
+          // that might share the same process group (e.g., multiple fwd.ts instances)
 
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
@@ -1420,17 +1480,8 @@ export class PtyManager extends EventEmitter {
       // Send SIGTERM first
       session.ptyProcess.kill('SIGTERM');
 
-      // Also try to kill the entire process group if on Unix
-      if (process.platform !== 'win32' && pid) {
-        try {
-          // Kill the process group by using negative PID
-          process.kill(-pid, 'SIGTERM');
-          logger.debug(`Sent SIGTERM to process group -${pid} for session ${sessionId}`);
-        } catch (groupKillError) {
-          // Process group might not exist or we might not have permission
-          logger.debug(`Failed to kill process group for session ${sessionId}:`, groupKillError);
-        }
-      }
+      // Note: We no longer kill the process group to avoid affecting other sessions
+      // that might share the same process group (e.g., multiple fwd.ts instances)
 
       // Wait up to 3 seconds for graceful termination (check every 500ms)
       const maxWaitTime = 3000;
@@ -1459,18 +1510,8 @@ export class PtyManager extends EventEmitter {
         session.ptyProcess.kill('SIGKILL');
 
         // Also force kill the entire process group if on Unix
-        if (process.platform !== 'win32' && pid) {
-          try {
-            // Kill the process group with SIGKILL
-            process.kill(-pid, 'SIGKILL');
-            logger.debug(`Sent SIGKILL to process group -${pid} for session ${sessionId}`);
-          } catch (groupKillError) {
-            logger.debug(
-              `Failed to SIGKILL process group for session ${sessionId}:`,
-              groupKillError
-            );
-          }
-        }
+        // Note: We no longer kill the process group to avoid affecting other sessions
+        // that might share the same process group (e.g., multiple fwd.ts instances)
 
         // Wait a bit more for SIGKILL to take effect
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1688,75 +1729,18 @@ export class PtyManager extends EventEmitter {
   }
 
   /**
-   * Capture process information for bell source identification
-   */
-  private async captureProcessInfoForBell(session: PtySession, bellCount: number): Promise<void> {
-    try {
-      const sessionPid = session.ptyProcess?.pid;
-      if (!sessionPid) {
-        logger.warn(`Cannot capture process info for session ${session.id}: no PID available`);
-        // Emit basic bell event without process info
-        this.emit('bell', {
-          sessionInfo: session.sessionInfo,
-          timestamp: new Date(),
-          bellCount,
-        });
-        return;
-      }
-
-      logger.log(
-        `Capturing process snapshot for bell in session ${session.id} (PID: ${sessionPid})`
-      );
-
-      // Capture process information asynchronously
-      const processSnapshot = await this.processTreeAnalyzer.captureProcessSnapshot(sessionPid);
-
-      // Emit enhanced bell event with process information
-      this.emit('bell', {
-        sessionInfo: session.sessionInfo,
-        timestamp: new Date(),
-        bellCount,
-        processSnapshot,
-        suspectedSource: processSnapshot.suspectedBellSource,
-      });
-
-      logger.log(
-        `Bell event emitted for session ${session.id} with suspected source: ${
-          processSnapshot.suspectedBellSource?.command || 'unknown'
-        } (PID: ${processSnapshot.suspectedBellSource?.pid || 'unknown'})`
-      );
-    } catch (error) {
-      logger.warn(`Failed to capture process info for bell in session ${session.id}:`, error);
-
-      // Fallback: emit basic bell event without process info
-      this.emit('bell', {
-        sessionInfo: session.sessionInfo,
-        timestamp: new Date(),
-        bellCount,
-      });
-    }
-  }
-
-  /**
    * Shutdown all active sessions and clean up resources
    */
   async shutdown(): Promise<void> {
     for (const [sessionId, session] of Array.from(this.sessions.entries())) {
       try {
         if (session.ptyProcess) {
-          const pid = session.ptyProcess.pid;
           session.ptyProcess.kill();
 
-          // Also kill the entire process group if on Unix
-          if (process.platform !== 'win32' && pid) {
-            try {
-              process.kill(-pid, 'SIGTERM');
-              logger.debug(`Sent SIGTERM to process group -${pid} during shutdown`);
-            } catch (groupKillError) {
-              // Process group might not exist
-              logger.debug(`Failed to kill process group during shutdown:`, groupKillError);
-            }
-          }
+          // Note: We no longer kill the process group to avoid affecting other sessions
+          // that might share the same process group (e.g., multiple fwd.ts instances)
+          // The shutdown() method is only called during server shutdown where we DO want
+          // to clean up all sessions, but we still avoid process group kills to be safe
         }
         if (session.asciinemaWriter?.isOpen()) {
           await session.asciinemaWriter.close();
@@ -1796,20 +1780,6 @@ export class PtyManager extends EventEmitter {
    */
   getSessionManager(): SessionManager {
     return this.sessionManager;
-  }
-
-  /**
-   * Setup stdin forwarding for fwd mode
-   */
-  private setupStdinForwarding(session: PtySession): void {
-    if (!session.ptyProcess) return;
-
-    // IMPORTANT: stdin forwarding is now handled via IPC socket in fwd.ts
-    // This method is kept for backward compatibility but should not be used
-    // as it would cause stdin duplication if multiple sessions are created
-    logger.warn(
-      `setupStdinForwarding called for session ${session.id} - stdin should be handled via IPC socket`
-    );
   }
 
   /**
@@ -2170,7 +2140,9 @@ export class PtyManager extends EventEmitter {
         currentDir,
         session.sessionInfo.command,
         activity,
-        session.sessionInfo.name
+        session.sessionInfo.name,
+        session.sessionInfo.gitRepoPath,
+        undefined // Git branch will be fetched dynamically when needed
       );
     }
 

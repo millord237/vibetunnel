@@ -11,15 +11,20 @@
  * @listens file-selected - From file browser when directory is selected
  * @listens browser-cancel - From file browser when cancelled
  */
-import { html, LitElement, type PropertyValues } from 'lit';
+import { html, LitElement, nothing, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import './file-browser.js';
-import './quick-start-editor.js';
+import './session-create-form/git-branch-selector.js';
+import './session-create-form/quick-start-section.js';
+import './session-create-form/form-options-section.js';
+import './session-create-form/directory-autocomplete.js';
+import './session-create-form/repository-dropdown.js';
 import { DEFAULT_REPOSITORY_BASE_PATH } from '../../shared/constants.js';
 import type { Session } from '../../shared/types.js';
 import { TitleMode } from '../../shared/types.js';
 import type { QuickStartCommand } from '../../types/config.js';
 import type { AuthClient } from '../services/auth-client.js';
+import { type GitRepoInfo, GitService } from '../services/git-service.js';
 import { RepositoryService } from '../services/repository-service.js';
 import { ServerConfigService } from '../services/server-config-service.js';
 import { type SessionCreateData, SessionService } from '../services/session-service.js';
@@ -33,12 +38,19 @@ import {
   saveSessionFormData,
   setSessionFormValue,
 } from '../utils/storage-utils.js';
-import { getTitleModeDescription } from '../utils/title-mode-utils.js';
 import {
   type AutocompleteItem,
   AutocompleteManager,
   type Repository,
 } from './autocomplete-manager.js';
+import type { WorktreeInfo } from './session-create-form/git-branch-selector.js';
+import {
+  checkFollowMode,
+  enableFollowMode,
+  generateWorktreePath,
+  loadBranches,
+} from './session-create-form/git-utils.js';
+import type { QuickStartItem } from './session-create-form/quick-start-section.js';
 
 const logger = createLogger('session-create-form');
 
@@ -60,19 +72,31 @@ export class SessionCreateForm extends LitElement {
 
   @state() private isCreating = false;
   @state() private showFileBrowser = false;
-  @state() private selectedQuickStart = 'zsh';
   @state() private showRepositoryDropdown = false;
   @state() private repositories: Repository[] = [];
-  @state() private isDiscovering = false;
   @state() private macAppConnected = false;
   @state() private showCompletions = false;
   @state() private completions: AutocompleteItem[] = [];
   @state() private selectedCompletionIndex = -1;
   @state() private isLoadingCompletions = false;
-  @state() private showOptions = false;
-  @state() private quickStartEditMode = false;
+  @state() private gitRepoInfo: GitRepoInfo | null = null;
+  @state() private availableBranches: string[] = [];
 
-  @state() private quickStartCommands = [
+  // New properties for split branch/worktree selectors
+  @state() private currentBranch: string = '';
+  @state() private selectedBaseBranch: string = '';
+  @state() private selectedWorktree?: string;
+  @state() private branchSwitchWarning?: string;
+  @state() private availableWorktrees: WorktreeInfo[] = [];
+  @state() private isLoadingBranches = false;
+  @state() private isLoadingWorktrees = false;
+
+  // Follow mode state
+  @state() private followMode = false;
+  @state() private followBranch: string | null = null;
+  @state() private showFollowMode = false;
+
+  @state() private quickStartCommands: QuickStartItem[] = [
     { label: '✨ claude', command: 'claude' },
     { label: '✨ gemini', command: 'gemini' },
     { label: 'zsh', command: 'zsh' },
@@ -81,11 +105,23 @@ export class SessionCreateForm extends LitElement {
     { label: '▶️ pnpm run dev', command: 'pnpm run dev' },
   ];
 
+  // State properties for UI
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Used in template
+  @state() private selectedQuickStart = '';
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Used in discoverDirectories method
+  @state() private isDiscovering = false;
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Used in checkGitEnabled method
+  @state() private isCheckingGit = false;
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Used in checkFollowMode method
+  @state() private isCheckingFollowMode = false;
+
   private completionsDebounceTimer?: NodeJS.Timeout;
+  private gitCheckDebounceTimer?: NodeJS.Timeout;
   private autocompleteManager!: AutocompleteManager;
   private repositoryService?: RepositoryService;
   private sessionService?: SessionService;
   private serverConfigService?: ServerConfigService;
+  private gitService?: GitService;
 
   async connectedCallback() {
     super.connectedCallback();
@@ -97,6 +133,7 @@ export class SessionCreateForm extends LitElement {
     if (this.authClient) {
       this.repositoryService = new RepositoryService(this.authClient, this.serverConfigService);
       this.sessionService = new SessionService(this.authClient);
+      this.gitService = new GitService(this.authClient);
     }
     // Load from localStorage when component is first created
     await this.loadFromLocalStorage();
@@ -112,9 +149,12 @@ export class SessionCreateForm extends LitElement {
     if (this.visible) {
       document.removeEventListener('keydown', this.handleGlobalKeyDown);
     }
-    // Clean up debounce timer
+    // Clean up debounce timers
     if (this.completionsDebounceTimer) {
       clearTimeout(this.completionsDebounceTimer);
+    }
+    if (this.gitCheckDebounceTimer) {
+      clearTimeout(this.gitCheckDebounceTimer);
     }
   }
 
@@ -273,6 +313,9 @@ export class SessionCreateForm extends LitElement {
       if (!this.sessionService) {
         this.sessionService = new SessionService(this.authClient);
       }
+      if (!this.gitService) {
+        this.gitService = new GitService(this.authClient);
+      }
       // Update autocomplete manager's authClient
       this.autocompleteManager.setAuthClient(this.authClient);
       // Update server config service's authClient
@@ -290,12 +333,19 @@ export class SessionCreateForm extends LitElement {
         this.sessionName = '';
         this.spawnWindow = false;
         this.titleMode = TitleMode.DYNAMIC;
+        this.branchSwitchWarning = undefined;
 
         // Then load from localStorage which may override the defaults
         // Don't await since we're in updated() lifecycle method
-        this.loadFromLocalStorage().catch((error) => {
-          logger.error('Failed to load from localStorage:', error);
-        });
+        this.loadFromLocalStorage()
+          .then(() => {
+            // Check if the loaded working directory is a Git repository
+            // This must happen AFTER localStorage is loaded
+            this.checkGitRepository();
+          })
+          .catch((error) => {
+            logger.error('Failed to load from localStorage:', error);
+          });
 
         // Re-check server status when form becomes visible
         this.checkServerStatus();
@@ -340,6 +390,15 @@ export class SessionCreateForm extends LitElement {
     this.completionsDebounceTimer = setTimeout(() => {
       this.fetchCompletions();
     }, 300);
+
+    // Check if directory is a Git repository with debounce
+    if (this.gitCheckDebounceTimer) {
+      clearTimeout(this.gitCheckDebounceTimer);
+    }
+
+    this.gitCheckDebounceTimer = setTimeout(() => {
+      this.checkGitRepository();
+    }, 500);
   }
 
   private handleCommandChange(e: Event) {
@@ -357,13 +416,16 @@ export class SessionCreateForm extends LitElement {
     this.sessionName = input.value;
   }
 
-  private handleSpawnWindowChange() {
-    this.spawnWindow = !this.spawnWindow;
+  private handleSpawnWindowChanged(e: CustomEvent) {
+    this.spawnWindow = e.detail.enabled;
   }
 
-  private handleTitleModeChange(e: Event) {
-    const select = e.target as HTMLSelectElement;
-    this.titleMode = select.value as TitleMode;
+  private handleTitleModeChanged(e: CustomEvent) {
+    this.titleMode = e.detail.mode as TitleMode;
+  }
+
+  private handleFollowModeChanged(e: CustomEvent) {
+    this.showFollowMode = e.detail.enabled;
   }
 
   private handleBrowse() {
@@ -375,6 +437,8 @@ export class SessionCreateForm extends LitElement {
   private handleDirectorySelected(e: CustomEvent) {
     this.workingDir = formatPathForDisplay(e.detail);
     this.showFileBrowser = false;
+    // Check Git repository after directory selection
+    this.checkGitRepository();
   }
 
   private handleBrowserCancel() {
@@ -396,12 +460,65 @@ export class SessionCreateForm extends LitElement {
     // Determine if we're actually spawning a terminal window
     const effectiveSpawnTerminal = this.spawnWindow && this.macAppConnected;
 
+    // Determine the working directory and branch
+    let effectiveWorkingDir = this.workingDir?.trim() || '';
+    let effectiveBranch = '';
+
+    if (this.selectedWorktree && this.availableWorktrees.length > 0) {
+      // Using a worktree - use its path and branch
+      const selectedWorktreeInfo = this.availableWorktrees.find(
+        (wt) => wt.branch === this.selectedWorktree
+      );
+      if (selectedWorktreeInfo?.path) {
+        effectiveWorkingDir = formatPathForDisplay(selectedWorktreeInfo.path);
+        effectiveBranch = this.selectedWorktree;
+        logger.log(
+          `Using worktree path: ${effectiveWorkingDir} for branch: ${this.selectedWorktree}`
+        );
+      }
+    } else if (
+      this.gitRepoInfo?.isGitRepo &&
+      this.selectedBaseBranch &&
+      this.selectedBaseBranch !== this.currentBranch
+    ) {
+      // Not using worktree but selected a different branch - attempt to switch
+      logger.log(`Attempting to switch from ${this.currentBranch} to ${this.selectedBaseBranch}`);
+
+      try {
+        if (this.gitService && this.gitRepoInfo.repoPath) {
+          await this.gitService.switchBranch(this.gitRepoInfo.repoPath, this.selectedBaseBranch);
+          effectiveBranch = this.selectedBaseBranch;
+          logger.log(`Successfully switched to branch: ${this.selectedBaseBranch}`);
+        }
+      } catch (error) {
+        // Branch switch failed - show warning but continue with current branch
+        logger.warn(`Failed to switch branch: ${error}`);
+        effectiveBranch = this.currentBranch;
+
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const isUncommittedChanges = errorMessage.toLowerCase().includes('uncommitted changes');
+
+        this.branchSwitchWarning = isUncommittedChanges
+          ? `Cannot switch to ${this.selectedBaseBranch} due to uncommitted changes. Creating session on ${this.currentBranch}.`
+          : `Failed to switch to ${this.selectedBaseBranch}: ${errorMessage}. Creating session on ${this.currentBranch}.`;
+      }
+    } else {
+      // Using current branch
+      effectiveBranch = this.selectedBaseBranch || this.currentBranch;
+    }
+
     const sessionData: SessionCreateData = {
       command: parseCommand(this.command?.trim() || ''),
-      workingDir: this.workingDir?.trim() || '',
+      workingDir: effectiveWorkingDir,
       spawn_terminal: effectiveSpawnTerminal,
       titleMode: this.titleMode,
     };
+
+    // Add Git information if available
+    if (this.gitRepoInfo?.isGitRepo && this.gitRepoInfo.repoPath && effectiveBranch) {
+      sessionData.gitRepoPath = this.gitRepoInfo.repoPath;
+      sessionData.gitBranch = effectiveBranch;
+    }
 
     // Only add dimensions for web sessions (not external terminal spawns)
     if (!effectiveSpawnTerminal) {
@@ -414,6 +531,57 @@ export class SessionCreateForm extends LitElement {
     // Add session name if provided
     if (this.sessionName?.trim()) {
       sessionData.name = this.sessionName.trim();
+    }
+
+    // Handle follow mode - only enable when a worktree is selected
+    if (
+      this.showFollowMode &&
+      this.selectedWorktree &&
+      this.selectedWorktree !== 'none' &&
+      this.gitRepoInfo?.repoPath &&
+      effectiveBranch &&
+      this.authClient
+    ) {
+      try {
+        // Check if follow mode is already active for a different branch
+        if (this.followMode && this.followBranch && this.followBranch !== effectiveBranch) {
+          logger.log(
+            `Follow mode is already active for branch: ${this.followBranch}, switching to: ${effectiveBranch}`
+          );
+        }
+
+        logger.log(`Enabling follow mode for worktree branch: ${effectiveBranch}`);
+        const success = await enableFollowMode(
+          this.gitRepoInfo.repoPath,
+          effectiveBranch,
+          this.authClient
+        );
+
+        if (!success) {
+          // Show error to user
+          this.dispatchEvent(
+            new CustomEvent('error', {
+              detail: 'Failed to enable follow mode. Session will be created without follow mode.',
+              bubbles: true,
+              composed: true,
+            })
+          );
+        } else {
+          logger.log('Follow mode enabled successfully for worktree');
+          // Update local state
+          this.followMode = true;
+          this.followBranch = effectiveBranch;
+        }
+      } catch (error) {
+        logger.error('Error enabling follow mode:', error);
+        this.dispatchEvent(
+          new CustomEvent('error', {
+            detail: 'Error enabling follow mode. Session will be created without follow mode.',
+            bubbles: true,
+            composed: true,
+          })
+        );
+      }
     }
 
     try {
@@ -473,7 +641,8 @@ export class SessionCreateForm extends LitElement {
     }
   }
 
-  private handleQuickStart(command: string) {
+  private handleQuickStartSelected(e: CustomEvent) {
+    const command = e.detail.command;
     this.command = command;
     this.selectedQuickStart = command;
 
@@ -481,6 +650,106 @@ export class SessionCreateForm extends LitElement {
     if (command.toLowerCase().includes('claude')) {
       this.titleMode = TitleMode.DYNAMIC;
     }
+  }
+
+  private handleBranchChanged(e: CustomEvent) {
+    this.selectedBaseBranch = e.detail.branch;
+    // Clear any previous warning
+    this.branchSwitchWarning = undefined;
+  }
+
+  private handleWorktreeChanged(e: CustomEvent) {
+    this.selectedWorktree = e.detail.worktree;
+    // Clear any previous warning
+    this.branchSwitchWarning = undefined;
+
+    // Reset follow mode toggle when no worktree is selected
+    if (!this.selectedWorktree || this.selectedWorktree === 'none') {
+      this.showFollowMode = false;
+    }
+  }
+
+  private async handleCreateWorktreeRequest(e: CustomEvent) {
+    const { branchName, baseBranch, customPath } = e.detail;
+    if (!this.gitRepoInfo?.repoPath || !this.gitService) {
+      return;
+    }
+
+    try {
+      // Use custom path if provided, otherwise generate default
+      const worktreePath =
+        customPath || generateWorktreePath(this.gitRepoInfo.repoPath, branchName);
+
+      // Create the worktree
+      await this.gitService.createWorktree(
+        this.gitRepoInfo.repoPath,
+        branchName,
+        worktreePath,
+        baseBranch
+      );
+
+      // Update working directory to the new worktree
+      this.workingDir = worktreePath;
+
+      // Update selected base branch to the new branch
+      this.selectedBaseBranch = branchName;
+
+      // Add new branch to available branches
+      if (!this.availableBranches.includes(branchName)) {
+        this.availableBranches = [...this.availableBranches, branchName];
+      }
+
+      // Reload worktrees
+      await this.loadWorktrees(this.gitRepoInfo.repoPath, worktreePath);
+
+      // Select the newly created worktree
+      this.selectedWorktree = branchName;
+
+      // Git branch selector will reset its own state after successful creation
+
+      // Show success message
+      this.dispatchEvent(
+        new CustomEvent('success', {
+          detail: `Created worktree for branch '${branchName}'`,
+          bubbles: true,
+          composed: true,
+        })
+      );
+    } catch (error) {
+      logger.error('Failed to create worktree:', error);
+
+      // Git branch selector will reset its own state on error
+
+      // Determine specific error message
+      let errorMessage = 'Failed to create worktree';
+      if (error instanceof Error) {
+        if (error.message.includes('already exists')) {
+          errorMessage = `Worktree path already exists. Try a different branch name.`;
+        } else if (error.message.includes('already checked out')) {
+          errorMessage = `Branch '${branchName}' is already checked out in another worktree`;
+        } else if (error.message.includes('Permission denied')) {
+          errorMessage = 'Permission denied. Check directory permissions.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      this.dispatchEvent(
+        new CustomEvent('error', {
+          detail: errorMessage,
+          bubbles: true,
+          composed: true,
+        })
+      );
+    }
+  }
+
+  private handleAutocompleteItemSelected(e: CustomEvent) {
+    this.handleSelectCompletion(e.detail.suggestion);
+  }
+
+  private handleRepositorySelected(e: CustomEvent) {
+    this.handleSelectRepository(e.detail.path);
   }
 
   private async discoverRepositories() {
@@ -498,10 +767,6 @@ export class SessionCreateForm extends LitElement {
     } finally {
       this.isDiscovering = false;
     }
-  }
-
-  private handleToggleRepositoryDropdown() {
-    this.showRepositoryDropdown = !this.showRepositoryDropdown;
   }
 
   private handleToggleAutocomplete() {
@@ -522,6 +787,8 @@ export class SessionCreateForm extends LitElement {
   private handleSelectRepository(repoPath: string) {
     this.workingDir = formatPathForDisplay(repoPath);
     this.showRepositoryDropdown = false;
+    // Check Git repository after selection
+    this.checkGitRepository();
   }
 
   private async fetchCompletions() {
@@ -554,10 +821,8 @@ export class SessionCreateForm extends LitElement {
     this.showCompletions = false;
     this.completions = [];
     this.selectedCompletionIndex = -1;
-  }
-
-  private handleToggleOptions() {
-    this.showOptions = !this.showOptions;
+    // Check Git repository after autocomplete selection
+    this.checkGitRepository();
   }
 
   private handleWorkingDirKeydown(e: KeyboardEvent) {
@@ -590,23 +855,199 @@ export class SessionCreateForm extends LitElement {
     }, 200);
   }
 
+  private async checkGitRepository() {
+    const path = this.workingDir?.trim();
+    logger.log(`🔍 Checking Git repository for path: ${path}`);
+
+    if (!path || !this.gitService) {
+      logger.debug('No path or gitService, clearing Git info');
+      this.gitRepoInfo = null;
+      this.availableBranches = [];
+      this.selectedBaseBranch = '';
+      this.followMode = false;
+      this.followBranch = null;
+      return;
+    }
+
+    this.isCheckingGit = true;
+    try {
+      const repoInfo = await this.gitService.checkGitRepo(path);
+      logger.log(`✅ Git check result:`, repoInfo);
+
+      if (repoInfo.isGitRepo && repoInfo.repoPath) {
+        logger.log(`🎉 Git repository detected at: ${repoInfo.repoPath}`);
+        this.gitRepoInfo = repoInfo;
+        // Trigger re-render after updating gitRepoInfo
+        this.requestUpdate();
+
+        // Load branches, worktrees, and follow mode status in parallel
+        await Promise.all([
+          this.loadBranches(repoInfo.repoPath),
+          this.loadWorktrees(repoInfo.repoPath, path),
+          this.checkFollowMode(repoInfo.repoPath),
+        ]);
+      } else {
+        logger.log(`❌ Not a Git repository: ${path}`, repoInfo);
+        this.gitRepoInfo = null;
+        this.availableBranches = [];
+        this.selectedBaseBranch = '';
+        this.currentBranch = '';
+        this.selectedBaseBranch = '';
+        this.availableWorktrees = [];
+        this.selectedWorktree = undefined;
+        this.followMode = false;
+        this.followBranch = null;
+        // Trigger re-render to clear Git UI
+        this.requestUpdate();
+      }
+    } catch (error) {
+      logger.error('❌ Error checking Git repository:', error);
+      this.gitRepoInfo = null;
+      this.availableBranches = [];
+      this.selectedBaseBranch = '';
+      this.currentBranch = '';
+      this.selectedBaseBranch = '';
+      this.availableWorktrees = [];
+      this.selectedWorktree = undefined;
+      this.followMode = false;
+      this.followBranch = null;
+    } finally {
+      this.isCheckingGit = false;
+    }
+  }
+
+  private async loadBranches(repoPath: string): Promise<void> {
+    if (!this.authClient) {
+      return;
+    }
+
+    this.isLoadingBranches = true;
+    try {
+      const { branches, currentBranch } = await loadBranches(repoPath, this.authClient);
+      this.availableBranches = branches;
+
+      if (currentBranch) {
+        this.currentBranch = currentBranch;
+        if (!this.selectedBaseBranch) {
+          this.selectedBaseBranch = this.currentBranch;
+        }
+      }
+    } finally {
+      this.isLoadingBranches = false;
+    }
+  }
+
+  private async loadWorktrees(repoPath: string, currentPath: string): Promise<void> {
+    if (!this.gitService) {
+      return;
+    }
+
+    this.isLoadingWorktrees = true;
+    try {
+      const response = await this.gitService.listWorktrees(repoPath);
+      this.availableWorktrees = response.worktrees.map((wt) => ({
+        // Strip refs/heads/ prefix for display
+        branch: wt.branch.replace(/^refs\/heads\//, ''),
+        path: wt.path,
+        isMainWorktree: wt.isMainWorktree,
+        isCurrentWorktree: wt.path === currentPath,
+      }));
+
+      // Update current branch based on worktree info
+      const currentWorktree = response.worktrees.find(
+        (wt) => wt.isCurrentWorktree || wt.path === currentPath
+      );
+      if (currentWorktree) {
+        // Strip refs/heads/ prefix from branch name
+        this.currentBranch = currentWorktree.branch.replace(/^refs\/heads\//, '');
+        if (!this.selectedBaseBranch) {
+          this.selectedBaseBranch = this.currentBranch;
+        }
+
+        // Pre-select the current worktree if we're already in one (not the main worktree)
+        if (!currentWorktree.isMainWorktree && !this.selectedWorktree) {
+          this.selectedWorktree = currentWorktree.branch.replace(/^refs\/heads\//, '');
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to load worktrees:', error);
+      this.availableWorktrees = [];
+    } finally {
+      this.isLoadingWorktrees = false;
+    }
+  }
+
+  private renderGitBranchIndicator() {
+    if (
+      !this.gitRepoInfo?.isGitRepo ||
+      !this.currentBranch ||
+      document.activeElement?.getAttribute('data-testid') === 'working-dir-input'
+    ) {
+      return nothing;
+    }
+
+    return html`
+      <div class="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+        <span class="text-[10px] sm:text-xs text-primary font-medium flex items-center gap-1">[${this.currentBranch}]
+          ${this.gitRepoInfo.hasChanges ? html`<span class="text-yellow-500" title="Modified">●</span>` : ''}
+          ${
+            this.gitRepoInfo.isWorktree
+              ? html`
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" class="text-purple-400" title="Git worktree">
+              <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z"/>
+            </svg>
+          `
+              : ''
+          }
+        </span>
+      </div>
+    `;
+  }
+
+  private handleWorkingDirFocus() {
+    // Force re-render to hide the branch indicator
+    this.requestUpdate();
+  }
+
+  private async checkFollowMode(repoPath: string): Promise<void> {
+    if (!this.authClient) {
+      return;
+    }
+
+    this.isCheckingFollowMode = true;
+    try {
+      const { followMode: mode, followBranch: branch } = await checkFollowMode(
+        repoPath,
+        this.authClient
+      );
+      this.followMode = mode;
+      this.followBranch = branch;
+      logger.log('Follow mode status:', {
+        followMode: this.followMode,
+        followBranch: this.followBranch,
+      });
+    } finally {
+      this.isCheckingFollowMode = false;
+    }
+  }
+
   render() {
     if (!this.visible) {
       return html``;
     }
 
     return html`
-      <div class="modal-backdrop flex items-center justify-center" @click=${this.handleBackdropClick} role="dialog" aria-modal="true">
+      <div class="modal-backdrop flex items-center justify-center py-4 sm:py-6 lg:py-8" @click=${this.handleBackdropClick} role="dialog" aria-modal="true">
         <div
           class="modal-content font-mono text-sm w-full max-w-[calc(100vw-1rem)] sm:max-w-md lg:max-w-[576px] mx-2 sm:mx-4 overflow-hidden"
           style="pointer-events: auto;"
           @click=${(e: Event) => e.stopPropagation()}
           data-testid="session-create-modal"
         >
-          <div class="p-3 sm:p-4 lg:p-6 mb-1 sm:mb-2 lg:mb-3 border-b border-border/50 relative bg-gradient-to-r from-bg-secondary to-bg-tertiary flex-shrink-0 rounded-t-xl">
+          <div class="p-3 sm:p-4 mb-1 sm:mb-2 border-b border-border/50 relative bg-gradient-to-r from-bg-secondary to-bg-tertiary flex-shrink-0 rounded-t-xl flex items-center justify-between">
             <h2 id="modal-title" class="text-primary text-base sm:text-lg lg:text-xl font-bold">New Session</h2>
             <button
-              class="absolute top-2 right-2 sm:top-3 sm:right-3 lg:top-5 lg:right-5 text-text-muted hover:text-text transition-all duration-200 p-1.5 sm:p-2 hover:bg-bg-elevated/30 rounded-lg"
+              class="text-text-muted hover:text-text transition-all duration-200 p-1.5 sm:p-2 hover:bg-bg-elevated/30 rounded-lg"
               @click=${this.handleCancel}
               title="Close (Esc)"
               aria-label="Close modal"
@@ -628,9 +1069,27 @@ export class SessionCreateForm extends LitElement {
             </button>
           </div>
 
-          <div class="p-3 sm:p-4 lg:p-6 overflow-y-auto flex-grow max-h-[65vh] sm:max-h-[75vh] lg:max-h-[80vh]">
+          <div class="p-3 sm:p-4 overflow-y-auto flex-grow max-h-[calc(100vh-8rem)] sm:max-h-[calc(100vh-6rem)] lg:max-h-[calc(100vh-4rem)]">
+            <!-- Branch Switch Warning -->
+            ${
+              this.branchSwitchWarning
+                ? html`
+                  <div class="mb-2 sm:mb-3 p-2 sm:p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <div class="flex items-start gap-2">
+                      <svg class="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <p class="text-[10px] sm:text-xs text-yellow-200">
+                        ${this.branchSwitchWarning}
+                      </p>
+                    </div>
+                  </div>
+                `
+                : nothing
+            }
+            
             <!-- Session Name -->
-            <div class="mb-2 sm:mb-3 lg:mb-5">
+            <div class="mb-2 sm:mb-3">
               <label class="form-label text-text-muted text-[10px] sm:text-xs lg:text-sm">Session Name (Optional):</label>
               <input
                 type="text"
@@ -644,7 +1103,7 @@ export class SessionCreateForm extends LitElement {
             </div>
 
             <!-- Command -->
-            <div class="mb-2 sm:mb-3 lg:mb-5">
+            <div class="mb-2 sm:mb-3">
               <label class="form-label text-text-muted text-[10px] sm:text-xs lg:text-sm">Command:</label>
               <input
                 type="text"
@@ -658,22 +1117,26 @@ export class SessionCreateForm extends LitElement {
             </div>
 
             <!-- Working Directory -->
-            <div class="mb-4 sm:mb-5 lg:mb-6">
+            <div class="mb-3 sm:mb-4">
               <label class="form-label text-text-muted text-[10px] sm:text-xs lg:text-sm">Working Directory:</label>
               <div class="relative">
                 <div class="flex gap-1.5 sm:gap-2">
-                <input
-                  type="text"
-                  class="input-field py-1.5 sm:py-2 lg:py-3 text-xs sm:text-sm flex-1"
-                  .value=${this.workingDir}
-                  @input=${this.handleWorkingDirChange}
-                  @keydown=${this.handleWorkingDirKeydown}
-                  @blur=${this.handleWorkingDirBlur}
-                  placeholder="~/"
-                  ?disabled=${this.disabled || this.isCreating}
-                  data-testid="working-dir-input"
-                  autocomplete="off"
-                />
+                <div class="relative flex-1">
+                  <input
+                    type="text"
+                    class="input-field py-1.5 sm:py-2 lg:py-3 text-xs sm:text-sm w-full pr-24"
+                    .value=${this.workingDir}
+                    @input=${this.handleWorkingDirChange}
+                    @keydown=${this.handleWorkingDirKeydown}
+                    @blur=${this.handleWorkingDirBlur}
+                    @focus=${this.handleWorkingDirFocus}
+                    placeholder="~/"
+                    ?disabled=${this.disabled || this.isCreating}
+                    data-testid="working-dir-input"
+                    autocomplete="off"
+                  />
+                  ${this.renderGitBranchIndicator()}
+                </div>
                 <button
                   id="session-browse-button"
                   class="bg-bg-tertiary border border-border/50 rounded-lg p-1.5 sm:p-2 lg:p-3 font-mono text-text-muted transition-all duration-200 hover:text-primary hover:bg-surface-hover hover:border-primary/50 hover:shadow-sm flex-shrink-0"
@@ -714,240 +1177,69 @@ export class SessionCreateForm extends LitElement {
                   </svg>
                 </button>
               </div>
-              ${
-                this.showCompletions && this.completions.length > 0
-                  ? html`
-                    <div class="absolute left-0 right-0 mt-1 bg-bg-elevated border border-border/50 rounded-lg overflow-hidden shadow-lg z-50">
-                      <div class="max-h-48 sm:max-h-64 lg:max-h-80 overflow-y-auto">
-                        ${this.completions.map(
-                          (completion, index) => html`
-                            <button
-                              @click=${() => this.handleSelectCompletion(completion.suggestion)}
-                              class="w-full text-left px-3 py-2 hover:bg-surface-hover transition-colors duration-200 flex items-center gap-2 ${
-                                index === this.selectedCompletionIndex
-                                  ? 'bg-primary/20 border-l-2 border-primary'
-                                  : ''
-                              }"
-                              type="button"
-                            >
-                              <svg 
-                                width="12" 
-                                height="12" 
-                                viewBox="0 0 16 16" 
-                                fill="currentColor"
-                                class="${completion.isRepository ? 'text-primary' : 'text-text-muted'} flex-shrink-0"
-                              >
-                                ${
-                                  completion.isRepository
-                                    ? html`<path d="M4.177 7.823A4.5 4.5 0 118 12.5a4.474 4.474 0 01-1.653-.316.75.75 0 11.557-1.392 2.999 2.999 0 001.096.208 3 3 0 10-2.108-5.134.75.75 0 01.236.662l.428 3.009a.75.75 0 01-1.255.592L2.847 7.677a.75.75 0 01.426-1.27A4.476 4.476 0 014.177 7.823zM8 1a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 1zm3.197 2.197a.75.75 0 01.092.992l-1 1.25a.75.75 0 01-1.17-.938l1-1.25a.75.75 0 01.992-.092.75.75 0 01.086.038zM5.75 8a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 015.75 8zm5.447 2.197a.75.75 0 01.092.992l-1 1.25a.75.75 0 11-1.17-.938l1-1.25a.75.75 0 01.992-.092.75.75 0 01.086.038z" />`
-                                    : completion.type === 'directory'
-                                      ? html`<path d="M1.75 1h5.5c.966 0 1.75.784 1.75 1.75v1h4c.966 0 1.75.784 1.75 1.75v7.75A1.75 1.75 0 0113 15H3a1.75 1.75 0 01-1.75-1.75V2.75C1.25 1.784 1.784 1 1.75 1zM2.75 2.5v10.75c0 .138.112.25.25.25h10a.25.25 0 00.25-.25V5.5a.25.25 0 00-.25-.25H8.75v-2.5a.25.25 0 00-.25-.25h-5.5a.25.25 0 00-.25.25z" />`
-                                      : html`<path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 019 4.25V1.5H3.75zm6.75.062V4.25c0 .138.112.25.25.25h2.688a.252.252 0 00-.011-.013l-2.914-2.914a.272.272 0 00-.013-.011z" />`
-                                }
-                              </svg>
-                              <span class="text-text text-xs sm:text-sm truncate flex-1">
-                                ${completion.name}
-                              </span>
-                              <span class="text-text-muted text-[9px] sm:text-[10px] truncate max-w-[40%]">${completion.path}</span>
-                            </button>
-                          `
-                        )}
-                      </div>
-                    </div>
-                  `
-                  : ''
-              }
-              ${
-                this.showRepositoryDropdown && this.repositories.length > 0
-                  ? html`
-                    <div class="mt-2 bg-bg-elevated border border-border/50 rounded-lg overflow-hidden">
-                      <div class="max-h-48 overflow-y-auto">
-                        ${this.repositories.map(
-                          (repo) => html`
-                            <button
-                              @click=${() => this.handleSelectRepository(repo.path)}
-                              class="w-full text-left px-3 py-2 hover:bg-surface-hover transition-colors duration-200 border-b border-border/30 last:border-b-0"
-                              type="button"
-                            >
-                              <div class="flex items-center justify-between">
-                                <div>
-                                  <div class="text-text text-xs sm:text-sm font-medium">${repo.folderName}</div>
-                                  <div class="text-text-muted text-[9px] sm:text-[10px] mt-0.5">${repo.relativePath}</div>
-                                </div>
-                                <div class="text-text-muted text-[9px] sm:text-[10px]">
-                                  ${new Date(repo.lastModified).toLocaleDateString()}
-                                </div>
-                              </div>
-                            </button>
-                          `
-                        )}
-                      </div>
-                    </div>
-                  `
-                  : ''
-              }
+              <directory-autocomplete
+                .visible=${this.showCompletions}
+                .items=${this.completions}
+                .selectedIndex=${this.selectedCompletionIndex}
+                .isLoading=${this.isLoadingCompletions}
+                @item-selected=${this.handleAutocompleteItemSelected}
+              ></directory-autocomplete>
+              <repository-dropdown
+                .visible=${this.showRepositoryDropdown}
+                .repositories=${this.repositories}
+                @repository-selected=${this.handleRepositorySelected}
+              ></repository-dropdown>
             </div>
+
+            <!-- Git Branch/Worktree Selection (shown when Git repository detected) -->
+            <git-branch-selector
+              .gitRepoInfo=${this.gitRepoInfo}
+              .disabled=${this.disabled}
+              .isCreating=${this.isCreating}
+              .currentBranch=${this.currentBranch}
+              .selectedBaseBranch=${this.selectedBaseBranch}
+              .selectedWorktree=${this.selectedWorktree}
+              .availableBranches=${this.availableBranches}
+              .availableWorktrees=${this.availableWorktrees}
+              .isLoadingBranches=${this.isLoadingBranches}
+              .isLoadingWorktrees=${this.isLoadingWorktrees}
+              .followMode=${this.followMode}
+              .followBranch=${this.followBranch}
+              .showFollowMode=${this.showFollowMode}
+              .branchSwitchWarning=${this.branchSwitchWarning}
+              @branch-changed=${this.handleBranchChanged}
+              @worktree-changed=${this.handleWorktreeChanged}
+              @create-worktree=${this.handleCreateWorktreeRequest}
+            ></git-branch-selector>
 
             <!-- Quick Start Section -->
-            <div class="${this.quickStartEditMode ? '' : 'mb-4 sm:mb-5 lg:mb-6'}">
-              ${
-                this.quickStartEditMode
-                  ? html`
-                    <!-- Full width editor when in edit mode -->
-                    <div class="-mx-3 sm:-mx-4 lg:-mx-6">
-                      <quick-start-editor
-                        .commands=${this.quickStartCommands.map((cmd) => ({
-                          name: cmd.label === cmd.command ? undefined : cmd.label,
-                          command: cmd.command,
-                        }))}
-                        .editing=${true}
-                        @quick-start-changed=${this.handleQuickStartChanged}
-                        @editing-changed=${(e: CustomEvent) => {
-                          this.quickStartEditMode = e.detail.editing;
-                        }}
-                      ></quick-start-editor>
-                    </div>
-                  `
-                  : html`
-                    <!-- Normal mode with Edit button -->
-                    <div class="flex items-center justify-between mb-1 sm:mb-2 lg:mb-3 mt-4 sm:mt-5 lg:mt-6">
-                      <label class="form-label text-text-muted uppercase text-[9px] sm:text-[10px] lg:text-xs tracking-wider"
-                        >Quick Start</label
-                      >
-                      <quick-start-editor
-                        .commands=${this.quickStartCommands.map((cmd) => ({
-                          name: cmd.label === cmd.command ? undefined : cmd.label,
-                          command: cmd.command,
-                        }))}
-                        .editing=${false}
-                        @quick-start-changed=${this.handleQuickStartChanged}
-                        @editing-changed=${(e: CustomEvent) => {
-                          this.quickStartEditMode = e.detail.editing;
-                        }}
-                      ></quick-start-editor>
-                    </div>
-                  `
-              }
-              ${
-                !this.quickStartEditMode
-                  ? html`
-                  <div class="grid grid-cols-2 gap-2 sm:gap-2.5 lg:gap-3 mt-1.5 sm:mt-2">
-                    ${this.quickStartCommands.map(
-                      ({ label, command }) => html`
-                        <button
-                          @click=${() => this.handleQuickStart(command)}
-                          class="${
-                            this.command === command
-                              ? 'px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3 rounded-lg border text-left transition-all bg-primary bg-opacity-10 border-primary/50 text-primary hover:bg-opacity-20 font-medium text-[10px] sm:text-xs lg:text-sm'
-                              : 'px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3 rounded-lg border text-left transition-all bg-bg-elevated border-border/50 text-text hover:bg-hover hover:border-primary/50 hover:text-primary text-[10px] sm:text-xs lg:text-sm'
-                          }"
-                          ?disabled=${this.disabled || this.isCreating}
-                        >
-                          ${label}
-                        </button>
-                      `
-                    )}
-                  </div>
-                `
-                  : ''
-              }
-            </div>
+            <quick-start-section
+              .commands=${this.quickStartCommands}
+              .selectedCommand=${this.command}
+              .disabled=${this.disabled}
+              .isCreating=${this.isCreating}
+              @quick-start-selected=${this.handleQuickStartSelected}
+              @quick-start-changed=${this.handleQuickStartChanged}
+            ></quick-start-section>
 
             <!-- Options Section (collapsible) -->
-            <div class="mb-2 sm:mb-4 lg:mb-6">
-              <button
-                id="session-options-button"
-                @click=${this.handleToggleOptions}
-                class="flex items-center gap-1.5 sm:gap-2 text-text-muted hover:text-primary transition-colors duration-200"
-                type="button"
-                aria-expanded="${this.showOptions}"
-              >
-                <svg 
-                  width="8" 
-                  height="8" 
-                  class="sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 transition-transform duration-200 flex-shrink-0" 
-                  viewBox="0 0 16 16" 
-                  fill="currentColor"
-                  style="transform: ${this.showOptions ? 'rotate(90deg)' : 'rotate(0deg)'}"
-                >
-                  <path
-                    d="M5.22 1.22a.75.75 0 011.06 0l6.25 6.25a.75.75 0 010 1.06l-6.25 6.25a.75.75 0 01-1.06-1.06L10.94 8 5.22 2.28a.75.75 0 010-1.06z"
-                  />
-                </svg>
-                <span class="form-label mb-0 text-text-muted uppercase text-[9px] sm:text-[10px] lg:text-xs tracking-wider">Options</span>
-              </button>
+            <form-options-section
+              .macAppConnected=${this.macAppConnected}
+              .spawnWindow=${this.spawnWindow}
+              .titleMode=${this.titleMode}
+              .gitRepoInfo=${this.gitRepoInfo}
+              .followMode=${this.followMode}
+              .followBranch=${this.followBranch}
+              .showFollowMode=${this.showFollowMode}
+              .selectedWorktree=${this.selectedWorktree}
+              .disabled=${this.disabled}
+              .isCreating=${this.isCreating}
+              @spawn-window-changed=${this.handleSpawnWindowChanged}
+              @title-mode-changed=${this.handleTitleModeChanged}
+              @follow-mode-changed=${this.handleFollowModeChanged}
+            ></form-options-section>
 
-              ${
-                this.showOptions
-                  ? html`
-                <div class="space-y-2 sm:space-y-3 mt-2 sm:mt-4 lg:mt-6">
-                  <!-- Spawn Window Toggle - Only show when Mac app is connected -->
-                  ${
-                    this.macAppConnected
-                      ? html`
-                        <div class="flex items-center justify-between bg-bg-elevated border border-border/50 rounded-lg p-2 sm:p-3 lg:p-4">
-                          <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
-                            <span class="text-primary text-[10px] sm:text-xs lg:text-sm font-medium">Spawn window</span>
-                            <p class="text-[9px] sm:text-[10px] lg:text-xs text-text-muted mt-0.5 hidden sm:block">Opens native terminal window</p>
-                          </div>
-                          <button
-                            role="switch"
-                            aria-checked="${this.spawnWindow}"
-                            @click=${this.handleSpawnWindowChange}
-                            class="relative inline-flex h-4 w-8 sm:h-5 sm:w-10 lg:h-6 lg:w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-bg-secondary ${
-                              this.spawnWindow ? 'bg-primary' : 'bg-border/50'
-                            }"
-                            ?disabled=${this.disabled || this.isCreating}
-                            data-testid="spawn-window-toggle"
-                          >
-                            <span
-                              class="inline-block h-3 w-3 sm:h-4 sm:w-4 lg:h-5 lg:w-5 transform rounded-full bg-bg-elevated transition-transform ${
-                                this.spawnWindow
-                                  ? 'translate-x-4 sm:translate-x-5'
-                                  : 'translate-x-0.5'
-                              }"
-                            ></span>
-                          </button>
-                        </div>
-                      `
-                      : ''
-                  }
-
-                  <!-- Terminal Title Mode -->
-                  <div class="flex items-center justify-between bg-bg-elevated border border-border/50 rounded-lg p-2 sm:p-3 lg:p-4">
-                    <div class="flex-1 pr-2 sm:pr-3 lg:pr-4">
-                      <span class="text-primary text-[10px] sm:text-xs lg:text-sm font-medium">Terminal Title Mode</span>
-                      <p class="text-[9px] sm:text-[10px] lg:text-xs text-text-muted mt-0.5 hidden sm:block">
-                        ${getTitleModeDescription(this.titleMode)}
-                      </p>
-                    </div>
-                    <div class="relative">
-                      <select
-                        .value=${this.titleMode}
-                        @change=${this.handleTitleModeChange}
-                        class="bg-bg-tertiary border border-border/50 rounded-lg px-1.5 py-1 pr-6 sm:px-2 sm:py-1.5 sm:pr-7 lg:px-3 lg:py-2 lg:pr-8 text-text text-[10px] sm:text-xs lg:text-sm transition-all duration-200 hover:border-primary/50 focus:border-primary focus:outline-none appearance-none cursor-pointer"
-                        style="min-width: 80px"
-                        ?disabled=${this.disabled || this.isCreating}
-                      >
-                        <option value="${TitleMode.NONE}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.NONE}>None</option>
-                        <option value="${TitleMode.FILTER}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.FILTER}>Filter</option>
-                        <option value="${TitleMode.STATIC}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.STATIC}>Static</option>
-                        <option value="${TitleMode.DYNAMIC}" class="bg-bg-tertiary text-text" ?selected=${this.titleMode === TitleMode.DYNAMIC}>Dynamic</option>
-                      </select>
-                      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 sm:px-1.5 lg:px-2 text-text-muted">
-                        <svg class="h-2.5 w-2.5 sm:h-3 sm:w-3 lg:h-4 lg:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              `
-                  : ''
-              }
-            </div>
-
-            <div class="flex gap-1.5 sm:gap-2 lg:gap-3 mt-2 sm:mt-3 lg:mt-4 xl:mt-6">
+            <div class="flex gap-1.5 sm:gap-2 mt-2 sm:mt-3">
               <button
                 id="session-cancel-button"
                 class="flex-1 bg-bg-elevated border border-border/50 text-text px-2 py-1 sm:px-3 sm:py-1.5 lg:px-4 lg:py-2 xl:px-6 xl:py-3 rounded-lg font-mono text-[10px] sm:text-xs lg:text-sm transition-all duration-200 hover:bg-hover hover:border-border"

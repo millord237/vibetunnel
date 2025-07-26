@@ -1,4 +1,7 @@
+import os.log
 import SwiftUI
+
+private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "NewSessionForm")
 
 /// Compact new session form designed for the popover.
 ///
@@ -15,7 +18,10 @@ struct NewSessionForm: View {
     private var sessionService
     @Environment(RepositoryDiscoveryService.self)
     private var repositoryDiscovery
-    @StateObject private var configManager = ConfigManager.shared
+    @Environment(GitRepositoryMonitor.self)
+    private var gitMonitor
+    @Environment(ConfigManager.self)
+    private var configManager
 
     // Form fields
     @State private var command = "zsh"
@@ -23,6 +29,19 @@ struct NewSessionForm: View {
     @State private var workingDirectory = FilePathConstants.defaultRepositoryBasePath
     @State private var spawnWindow = true
     @State private var titleMode: TitleMode = .dynamic
+
+    // Git worktree state
+    @State private var isGitRepository = false
+    @State private var gitRepoPath: String?
+    @State private var selectedWorktreePath: String?
+    @State private var selectedWorktreeBranch: String?
+    @State private var checkingGitStatus = false
+    @State private var worktreeService: WorktreeService?
+
+    // Branch state (matching web version)
+    @State private var currentBranch = ""
+    @State private var selectedBaseBranch = ""
+    @State private var branchSwitchWarning: String?
 
     // UI state
     @State private var isCreating = false
@@ -83,6 +102,31 @@ struct NewSessionForm: View {
             // Form content
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    // Branch Switch Warning
+                    if let warning = branchSwitchWarning {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.yellow)
+
+                            Text(warning)
+                                .font(.system(size: 11))
+                                .foregroundColor(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Spacer(minLength: 0)
+                        }
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.yellow.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                        )
+                    }
+
                     // Name field (first)
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Name")
@@ -123,6 +167,9 @@ struct NewSessionForm: View {
                             HStack(spacing: 8) {
                                 AutocompleteTextField(text: $workingDirectory, placeholder: "~/")
                                     .focused($focusedField, equals: .directory)
+                                    .onChange(of: workingDirectory) { _, newValue in
+                                        checkForGitRepository(at: newValue)
+                                    }
 
                                 Button(action: selectDirectory) {
                                     Image(systemName: "folder")
@@ -135,6 +182,60 @@ struct NewSessionForm: View {
                                 .help("Choose directory")
                             }
                         }
+                    }
+
+                    // Git branch and worktree selection when Git repository is detected
+                    if isGitRepository, let repoPath = gitRepoPath, let service = worktreeService {
+                        GitBranchWorktreeSelector(
+                            repoPath: repoPath,
+                            gitMonitor: gitMonitor,
+                            worktreeService: service,
+                            onBranchChanged: { branch in
+                                selectedBaseBranch = branch
+                                branchSwitchWarning = nil
+                            },
+                            onWorktreeChanged: { worktree in
+                                if let worktree {
+                                    // Find the worktree info to get the path
+                                    if let worktreeInfo = service.worktrees.first(where: { $0.branch == worktree }) {
+                                        selectedWorktreePath = worktreeInfo.path
+                                        selectedWorktreeBranch = worktreeInfo.branch
+                                        workingDirectory = worktreeInfo.path
+                                    }
+                                } else {
+                                    selectedWorktreePath = nil
+                                    selectedWorktreeBranch = nil
+                                    // Don't change workingDirectory here - keep the original git repo path
+                                }
+                            },
+                            onCreateWorktree: { branchName, baseBranch in
+                                // Create the worktree
+                                try await service.createWorktree(
+                                    gitRepoPath: repoPath,
+                                    branch: branchName,
+                                    createBranch: true,
+                                    baseBranch: baseBranch
+                                )
+
+                                // After creation, select the new worktree
+                                await service.fetchWorktrees(for: repoPath)
+                                if let newWorktree = service.worktrees.first(where: { $0.branch == branchName }) {
+                                    selectedWorktreePath = newWorktree.path
+                                    selectedWorktreeBranch = newWorktree.branch
+                                    workingDirectory = newWorktree.path
+                                }
+                            }
+                        )
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color(NSColor.controlBackgroundColor).opacity(0.05))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+                        )
                     }
 
                     // Quick Start
@@ -299,6 +400,8 @@ struct NewSessionForm: View {
         .onAppear {
             loadPreferences()
             focusedField = .name
+            // Check if the default/loaded directory is a Git repository
+            checkForGitRepository(at: workingDirectory)
         }
         .task {
             await repositoryDiscovery.discoverRepositories(in: configManager.repositoryBasePath)
@@ -353,11 +456,52 @@ struct NewSessionForm: View {
 
         Task {
             do {
+                var finalWorkingDir: String
+                var effectiveBranch = ""
+
+                // Clear any previous warning
+                await MainActor.run {
+                    branchSwitchWarning = nil
+                }
+
+                // If using a specific worktree
+                if let selectedWorktreePath, let selectedBranch = selectedWorktreeBranch {
+                    // Using a specific worktree
+                    finalWorkingDir = selectedWorktreePath
+                    effectiveBranch = selectedBranch
+                } else if isGitRepository && !selectedBaseBranch.isEmpty && selectedBaseBranch != currentBranch {
+                    // Not using worktree but selected a different branch - attempt to switch
+                    finalWorkingDir = workingDirectory
+
+                    if let service = worktreeService, let repoPath = gitRepoPath {
+                        do {
+                            try await service.switchBranch(gitRepoPath: repoPath, branch: selectedBaseBranch)
+                            effectiveBranch = selectedBaseBranch
+                        } catch {
+                            // Branch switch failed - show warning but continue with current branch
+                            effectiveBranch = currentBranch
+
+                            let errorMessage = error.localizedDescription
+                            let isUncommittedChanges = errorMessage.lowercased().contains("uncommitted changes")
+
+                            await MainActor.run {
+                                branchSwitchWarning = isUncommittedChanges
+                                    ? "Cannot switch to \(selectedBaseBranch) due to uncommitted changes. Creating session on \(currentBranch)."
+                                    : "Failed to switch to \(selectedBaseBranch): \(errorMessage). Creating session on \(currentBranch)."
+                            }
+                        }
+                    }
+                } else {
+                    // Use current branch
+                    finalWorkingDir = workingDirectory
+                    effectiveBranch = selectedBaseBranch.isEmpty ? currentBranch : selectedBaseBranch
+                }
+
                 // Parse command into array
                 let commandArray = parseCommand(command.trimmingCharacters(in: .whitespacesAndNewlines))
 
                 // Expand tilde in working directory
-                let expandedWorkingDir = NSString(string: workingDirectory).expandingTildeInPath
+                let expandedWorkingDir = NSString(string: finalWorkingDir).expandingTildeInPath
 
                 // Create session using SessionService
                 let sessionId = try await sessionService.createSession(
@@ -365,7 +509,9 @@ struct NewSessionForm: View {
                     workingDir: expandedWorkingDir,
                     name: sessionName.isEmpty ? nil : sessionName.trimmingCharacters(in: .whitespacesAndNewlines),
                     titleMode: titleMode.rawValue,
-                    spawnTerminal: spawnWindow
+                    spawnTerminal: spawnWindow,
+                    gitRepoPath: gitRepoPath,
+                    gitBranch: effectiveBranch.isEmpty ? nil : effectiveBranch
                 )
 
                 // If not spawning window, open in browser
@@ -456,6 +602,75 @@ struct NewSessionForm: View {
         UserDefaults.standard.set(workingDirectory, forKey: AppConstants.UserDefaultsKeys.newSessionWorkingDirectory)
         UserDefaults.standard.set(spawnWindow, forKey: AppConstants.UserDefaultsKeys.newSessionSpawnWindow)
         UserDefaults.standard.set(titleMode.rawValue, forKey: AppConstants.UserDefaultsKeys.newSessionTitleMode)
+    }
+
+    private func checkForGitRepository(at path: String) {
+        guard !checkingGitStatus else { return }
+
+        logger.info("🔍 Checking for Git repository at: \(path)")
+        checkingGitStatus = true
+
+        Task {
+            let expandedPath = NSString(string: path).expandingTildeInPath
+            logger.debug("🔍 Expanded path: \(expandedPath)")
+
+            if let repo = await gitMonitor.findRepository(for: expandedPath) {
+                logger.info("✅ Found Git repository: \(repo.path)")
+                await MainActor.run {
+                    self.isGitRepository = true
+                    self.gitRepoPath = repo.path
+                    self.worktreeService = WorktreeService(serverManager: serverManager)
+                    self.checkingGitStatus = false
+                }
+
+                // Fetch branches and worktrees in parallel
+                if let service = self.worktreeService {
+                    await withTaskGroup(of: Void.self) { group in
+                        group.addTask {
+                            await service.fetchBranches(for: repo.path)
+                        }
+                        group.addTask {
+                            await service.fetchWorktrees(for: repo.path)
+                        }
+                    }
+
+                    // Update UI state with fetched data
+                    await MainActor.run {
+                        // Set available branches
+                        // Branches are now loaded by GitBranchWorktreeSelector
+
+                        // Find and set current branch
+                        if let currentBranchData = service.branches.first(where: { $0.current }) {
+                            self.currentBranch = currentBranchData.name
+                            if self.selectedBaseBranch.isEmpty {
+                                self.selectedBaseBranch = currentBranchData.name
+                            }
+                        }
+
+                        // Pre-select current worktree if we're in one (not the main worktree)
+                        if let currentWorktree = service.worktrees.first(where: {
+                            $0.path == expandedPath && !($0.isMainWorktree ?? false)
+                        }) {
+                            self.selectedWorktreePath = currentWorktree.path
+                            self.selectedWorktreeBranch = currentWorktree.branch
+                        }
+                    }
+                }
+            } else {
+                logger.info("❌ No Git repository found")
+                await MainActor.run {
+                    self.isGitRepository = false
+                    self.gitRepoPath = nil
+                    self.selectedWorktreePath = nil
+                    self.selectedWorktreeBranch = nil
+                    self.worktreeService = nil
+                    self.currentBranch = ""
+                    self.selectedBaseBranch = ""
+                    self.branchSwitchWarning = nil
+                    self.checkingGitStatus = false
+                }
+            }
+        }
     }
 }
 

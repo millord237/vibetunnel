@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 import Observation
 import SwiftUI
 
@@ -25,10 +24,11 @@ final class StatusBarController: NSObject {
     private let terminalLauncher: TerminalLauncher
     private let gitRepositoryMonitor: GitRepositoryMonitor
     private let repositoryDiscovery: RepositoryDiscoveryService
+    private let configManager: ConfigManager
+    private let worktreeService: WorktreeService
 
     // MARK: - State Tracking
 
-    private var cancellables = Set<AnyCancellable>()
     private var updateTimer: Timer?
     private var hasNetworkAccess = true
 
@@ -41,7 +41,9 @@ final class StatusBarController: NSObject {
         tailscaleService: TailscaleService,
         terminalLauncher: TerminalLauncher,
         gitRepositoryMonitor: GitRepositoryMonitor,
-        repositoryDiscovery: RepositoryDiscoveryService
+        repositoryDiscovery: RepositoryDiscoveryService,
+        configManager: ConfigManager,
+        worktreeService: WorktreeService
     ) {
         self.sessionMonitor = sessionMonitor
         self.serverManager = serverManager
@@ -50,6 +52,8 @@ final class StatusBarController: NSObject {
         self.terminalLauncher = terminalLauncher
         self.gitRepositoryMonitor = gitRepositoryMonitor
         self.repositoryDiscovery = repositoryDiscovery
+        self.configManager = configManager
+        self.worktreeService = worktreeService
 
         self.menuManager = StatusBarMenuManager()
 
@@ -83,19 +87,28 @@ final class StatusBarController: NSObject {
             // Initialize the icon controller
             iconController = StatusBarIconController(button: button)
 
+            // Perform initial update immediately for instant feedback
             updateStatusItemDisplay()
+
+            // Schedule another update after a short delay to catch server startup
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(100))
+                updateStatusItemDisplay()
+            }
         }
     }
 
     private func setupMenuManager() {
-        let configuration = StatusBarMenuManager.Configuration(
+        let configuration = StatusBarMenuConfiguration(
             sessionMonitor: sessionMonitor,
             serverManager: serverManager,
             ngrokService: ngrokService,
             tailscaleService: tailscaleService,
             terminalLauncher: terminalLauncher,
             gitRepositoryMonitor: gitRepositoryMonitor,
-            repositoryDiscovery: repositoryDiscovery
+            repositoryDiscovery: repositoryDiscovery,
+            configManager: configManager,
+            worktreeService: worktreeService
         )
         menuManager.setup(with: configuration)
     }
@@ -105,13 +118,16 @@ final class StatusBarController: NSObject {
         observeServerState()
 
         // Create a timer to periodically update the display
-        // since SessionMonitor doesn't have a publisher
+        // This serves dual purpose: updating session counts and ensuring server state is reflected
         updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 _ = await self?.sessionMonitor.getSessions()
                 self?.updateStatusItemDisplay()
             }
         }
+
+        // Fire timer immediately to catch any early state changes
+        updateTimer?.fire()
     }
 
     private func observeServerState() {

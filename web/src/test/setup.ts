@@ -108,6 +108,63 @@ global.IntersectionObserver = class IntersectionObserver {
   thresholds = [];
 };
 
+// Mock localStorage for tests
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+  length: 0,
+  key: vi.fn(),
+};
+
+// Add localStorage to global scope
+if (typeof global !== 'undefined') {
+  // biome-ignore lint/suspicious/noExplicitAny: Test setup requires any for global mocking
+  (global as any).localStorage = localStorageMock;
+}
+
+// Prevent duplicate custom element registration in tests
+// We need to patch the registration after each test to handle module re-imports
+const registeredElements = new Set<string>();
+
+// Helper to patch customElements.define
+function patchCustomElements() {
+  if (typeof window !== 'undefined' && window.customElements) {
+    const originalDefine = window.customElements.define.bind(window.customElements);
+    const originalGet = window.customElements.get.bind(window.customElements);
+
+    window.customElements.define = (
+      name: string,
+      elementConstructor: CustomElementConstructor,
+      options?: ElementDefinitionOptions
+    ) => {
+      // Check both our registry and the real registry
+      if (registeredElements.has(name) || originalGet(name)) {
+        return;
+      }
+      registeredElements.add(name);
+      try {
+        originalDefine(name, elementConstructor, options);
+      } catch (e) {
+        // Ignore duplicate registration errors
+        if (e instanceof Error && e.message.includes('already been used')) {
+          return;
+        }
+        throw e;
+      }
+    };
+  }
+}
+
+// Apply patch immediately for module imports
+patchCustomElements();
+
+// Re-apply patch before each test in case happy-dom resets it
+beforeEach(() => {
+  patchCustomElements();
+});
+
 // Mock matchMedia (only if window exists - for browser tests)
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'matchMedia', {
@@ -123,6 +180,10 @@ if (typeof window !== 'undefined') {
       dispatchEvent: vi.fn(),
     })),
   });
+
+  // Also add localStorage to window for browser tests
+  // biome-ignore lint/suspicious/noExplicitAny: Test setup requires any for window mocking
+  (window as any).localStorage = localStorageMock;
 }
 
 // Mock WebSocket for tests that need it
@@ -202,4 +263,55 @@ beforeAll(() => {
 afterAll(() => {
   console.error = originalError;
   console.warn = originalWarn;
+});
+
+// Patch addEventListener for custom elements in test environment
+// This is to handle cases where vibe-terminal is created but doesn't have addEventListener
+if (typeof window !== 'undefined') {
+  const originalCreateElement = document.createElement;
+  document.createElement = function (tagName: string) {
+    const element = originalCreateElement.call(this, tagName);
+
+    // Add addEventListener if it's missing for vibe-terminal elements
+    if (tagName === 'vibe-terminal' && !element.addEventListener) {
+      element.addEventListener = vi.fn();
+      element.removeEventListener = vi.fn();
+    }
+
+    return element;
+  };
+}
+
+// Clean up any hanging processes before each test suite
+beforeAll(async () => {
+  // Kill any leftover vibetunnel server processes
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+    // Kill any processes listening on test ports
+    const testPorts = [3000, 3001, 3002, 3003, 3004, 3005];
+    for (const port of testPorts) {
+      try {
+        // Find process using the port
+        const { stdout } = await execAsync(`lsof -ti:${port} || true`);
+        const pid = stdout.trim();
+        if (pid) {
+          await execAsync(`kill -9 ${pid}`);
+        }
+      } catch {
+        // Ignore errors - port might not be in use
+      }
+    }
+  } catch {
+    // Ignore errors in process cleanup
+  }
+});
+
+// Force garbage collection between test suites if available
+afterEach(() => {
+  if (global.gc) {
+    global.gc();
+  }
 });

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { fixture, html } from '@open-wc/testing';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getAllElements, setupFetchMock } from '@/test/utils/component-helpers';
+// import { setupFetchMock } from '@/test/utils/component-helpers'; // Removed - doesn't exist
 import { createMockSession } from '@/test/utils/lit-test-utils';
 import type { AuthClient } from '../services/auth-client';
 
@@ -12,10 +12,16 @@ import type { SessionCard } from './session-card';
 // Import component types
 import type { SessionList } from './session-list';
 
+// Helper function to get all elements of a specific type
+function getAllElements<T extends Element>(parent: Element, selector: string): T[] {
+  return Array.from(parent.querySelectorAll(selector));
+}
+
 describe('SessionList', () => {
   let element: SessionList;
-  let fetchMock: ReturnType<typeof setupFetchMock>;
+  let fetchMock: { calls: Map<string, number> };
   let mockAuthClient: AuthClient;
+  let originalFetch: typeof global.fetch;
 
   beforeAll(async () => {
     // Import components to register custom elements
@@ -26,7 +32,27 @@ describe('SessionList', () => {
 
   beforeEach(async () => {
     // Setup fetch mock
-    fetchMock = setupFetchMock();
+    originalFetch = global.fetch;
+    fetchMock = { calls: new Map() };
+    global.fetch = vi.fn((url: string, _options?: RequestInit) => {
+      const urlString = typeof url === 'string' ? url : url.toString();
+      fetchMock.calls.set(urlString, (fetchMock.calls.get(urlString) || 0) + 1);
+
+      // Default responses
+      if (urlString.includes('/api/sessions')) {
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      }
+      if (urlString.includes('/api/cleanup-exited')) {
+        return new Promise((resolve) =>
+          setTimeout(
+            () => resolve(new Response(JSON.stringify({ removed: 1 }), { status: 200 })),
+            100
+          )
+        );
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+    }) as typeof fetch;
 
     // Create mock auth client
     mockAuthClient = {
@@ -43,12 +69,19 @@ describe('SessionList', () => {
 
   afterEach(() => {
     element.remove();
-    fetchMock.clear();
+    global.fetch = originalFetch;
+    vi.clearAllMocks();
   });
 
   describe('initialization', () => {
-    it('should create component with default state', () => {
+    it('should create component with default state', async () => {
       expect(element).toBeDefined();
+      // Wait for the component to be fully initialized
+      await element.updateComplete;
+
+      // Check if the element is actually a SessionList
+      expect(element.tagName.toLowerCase()).toBe('session-list');
+      expect(element.sessions).toBeDefined();
       expect(element.sessions).toEqual([]);
       expect(element.loading).toBe(false);
       expect(element.hideExited).toBe(true);
@@ -268,13 +301,40 @@ describe('SessionList', () => {
     });
 
     it('should handle cleanup of exited sessions', async () => {
-      // Mock successful cleanup
-      fetchMock.mockResponse('/api/cleanup-exited', { removed: 2 });
+      // Mock successful cleanup - already handled in beforeEach
+      // Reset call tracking
+      fetchMock.calls.clear();
 
       const refreshHandler = vi.fn();
       element.addEventListener('refresh', refreshHandler);
 
+      // Add some exited sessions
+      element.sessions = [
+        createMockSession({ id: 'session-1', status: 'running' }),
+        createMockSession({ id: 'session-2', status: 'exited' }),
+        createMockSession({ id: 'session-3', status: 'exited' }),
+      ];
+      element.hideExited = false; // Show exited sessions
+      await element.updateComplete;
+
+      // Mock querySelectorAll to return session cards
+      const mockSessionCards = [
+        { session: { id: 'session-2', status: 'exited' }, classList: { add: vi.fn() } },
+        { session: { id: 'session-3', status: 'exited' }, classList: { add: vi.fn() } },
+      ];
+      vi.spyOn(element, 'querySelectorAll').mockReturnValue(
+        mockSessionCards as unknown as NodeListOf<Element>
+      );
+
       await element.handleCleanupExited();
+
+      // Should apply black-hole animation to exited sessions
+      expect(mockSessionCards[0].classList.add).toHaveBeenCalledWith('black-hole-collapsing');
+      expect(mockSessionCards[1].classList.add).toHaveBeenCalledWith('black-hole-collapsing');
+
+      // Should remove exited sessions from list
+      expect(element.sessions).toHaveLength(1);
+      expect(element.sessions[0].status).toBe('running');
 
       // Should trigger refresh after cleanup
       expect(refreshHandler).toHaveBeenCalled();
@@ -283,7 +343,9 @@ describe('SessionList', () => {
 
     it('should handle cleanup error', async () => {
       // Mock cleanup error
-      fetchMock.mockResponse('/api/cleanup-exited', { error: 'Cleanup failed' }, { status: 500 });
+      global.fetch = vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify({ error: 'Cleanup failed' }), { status: 500 }))
+      ) as typeof fetch;
 
       const errorHandler = vi.fn();
       element.addEventListener('error', errorHandler);
@@ -292,9 +354,30 @@ describe('SessionList', () => {
 
       expect(errorHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          detail: expect.stringContaining('Failed to clean'),
+          detail: 'Failed to cleanup exited sessions',
         })
       );
+    });
+
+    it('should prevent concurrent cleanup operations', async () => {
+      // Reset fetch mock calls tracking
+      fetchMock.calls.clear();
+
+      // Mock successful cleanup with delay (already set up in beforeEach)
+      // The default mock already has a 100ms delay for /api/cleanup-exited
+
+      // Start first cleanup
+      const promise1 = element.handleCleanupExited();
+
+      // Try to start second cleanup immediately
+      const promise2 = element.handleCleanupExited();
+
+      // Second call should return immediately without making a fetch
+      await promise2;
+      expect(fetchMock.calls.get('/api/cleanup-exited') || 0).toBe(1); // Only one fetch call
+
+      // Wait for first cleanup to complete
+      await promise1;
     });
 
     it('should handle kill all sessions', async () => {
@@ -316,12 +399,12 @@ describe('SessionList', () => {
       ];
       await element.updateComplete;
 
-      // Find toggle button - when hideExited is true (default), button shows "Show Exited"
-      const toggleButton = element.querySelector('#show-exited-button');
-      expect(toggleButton).toBeTruthy();
+      // Find toggle checkbox - when hideExited is true (default), checkbox is unchecked
+      const toggleCheckbox = element.querySelector('#show-exited-toggle') as HTMLInputElement;
+      expect(toggleCheckbox).toBeTruthy();
 
-      if (toggleButton) {
-        (toggleButton as HTMLElement).click();
+      if (toggleCheckbox) {
+        toggleCheckbox.click();
 
         // The component doesn't directly change hideExited - it emits an event
         // The parent should handle the event and update the property

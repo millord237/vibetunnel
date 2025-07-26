@@ -17,13 +17,12 @@ import type { AuthClient } from '../services/auth-client.js';
 import { sessionActionService } from '../services/session-action-service.js';
 import { isAIAssistantSession, sendAIPrompt } from '../utils/ai-sessions.js';
 import { createLogger } from '../utils/logger.js';
-import { copyToClipboard } from '../utils/path-utils.js';
+import { renameSession } from '../utils/session-actions.js';
 import { TerminalPreferencesManager } from '../utils/terminal-preferences.js';
 import type { TerminalThemeId } from '../utils/terminal-themes.js';
 
 const logger = createLogger('session-card');
 import './vibe-terminal-buffer.js';
-import './copy-icon.js';
 import './clickable-path.js';
 import './inline-edit.js';
 
@@ -64,9 +63,10 @@ export class SessionCard extends LitElement {
   @state() private killing = false;
   @state() private killingFrame = 0;
   @state() private isActive = false;
-  @state() private isHovered = false;
   @state() private isSendingPrompt = false;
   @state() private terminalTheme: TerminalThemeId = 'auto';
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Used in render method
+  @state() private isHovered = false;
 
   private killingInterval: number | null = null;
   private activityTimeout: number | null = null;
@@ -270,22 +270,9 @@ export class SessionCard extends LitElement {
   }
 
   private async handleRename(newName: string) {
-    try {
-      const response = await fetch(`/api/sessions/${this.session.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...this.authClient.getAuthHeader(),
-        },
-        body: JSON.stringify({ name: newName }),
-      });
+    const result = await renameSession(this.session.id, newName, this.authClient);
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        logger.error('Failed to rename session', { errorData, sessionId: this.session.id });
-        throw new Error(`Rename failed: ${response.status}`);
-      }
-
+    if (result.success) {
       // Update the local session object
       this.session = { ...this.session, name: newName };
 
@@ -302,34 +289,18 @@ export class SessionCard extends LitElement {
       );
 
       logger.log(`Session ${this.session.id} renamed to: ${newName}`);
-    } catch (error) {
-      logger.error('Error renaming session', { error, sessionId: this.session.id });
-
+    } else {
       // Show error to user
       this.dispatchEvent(
         new CustomEvent('session-rename-error', {
           detail: {
             sessionId: this.session.id,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: result.error || 'Unknown error',
           },
           bubbles: true,
           composed: true,
         })
       );
-    }
-  }
-
-  private async handlePidClick(e: Event) {
-    e.stopPropagation();
-    e.preventDefault();
-
-    if (this.session.pid) {
-      const success = await copyToClipboard(this.session.pid.toString());
-      if (success) {
-        logger.log('PID copied to clipboard', { pid: this.session.pid });
-      } else {
-        logger.error('Failed to copy PID to clipboard', { pid: this.session.pid });
-      }
     }
   }
 
@@ -405,18 +376,20 @@ export class SessionCard extends LitElement {
           class="flex justify-between items-center px-3 py-2 border-b border-base bg-gradient-to-r from-secondary to-tertiary"
         >
           <div class="text-xs font-mono pr-2 flex-1 min-w-0 text-primary">
-            <inline-edit
-              .value=${this.session.name || this.session.command?.join(' ') || ''}
-              .placeholder=${this.session.command?.join(' ') || ''}
-              .onSave=${async (newName: string) => {
-                try {
-                  await this.handleRename(newName);
-                } catch (error) {
-                  // Error is already handled in handleRename
-                  logger.debug('Rename error caught in onSave', { error });
-                }
-              }}
-            ></inline-edit>
+            <div class="flex items-center gap-2">
+              <inline-edit
+                .value=${this.session.name || this.session.command?.join(' ') || ''}
+                .placeholder=${this.session.command?.join(' ') || ''}
+                .onSave=${async (newName: string) => {
+                  try {
+                    await this.handleRename(newName);
+                  } catch (error) {
+                    // Error is already handled in handleRename
+                    logger.debug('Rename error caught in onSave', { error });
+                  }
+                }}
+              ></inline-edit>
+            </div>
           </div>
           <div class="flex items-center gap-1 flex-shrink-0">
             ${
@@ -536,20 +509,7 @@ export class SessionCard extends LitElement {
                   : ''
               }
             </span>
-            ${
-              this.session.pid
-                ? html`
-                  <span
-                    class="cursor-pointer hover:text-primary transition-colors text-xs flex-shrink-0 ml-2 inline-flex items-center gap-1"
-                    id="session-pid-copy"
-                    @click=${this.handlePidClick}
-                    title="Click to copy PID"
-                  >
-                    PID: ${this.session.pid} <copy-icon size="14"></copy-icon>
-                  </span>
-                `
-                : ''
-            }
+            ${this.renderGitStatus()}
           </div>
           <div class="text-xs opacity-75 min-w-0 mt-1">
             <clickable-path .path=${this.session.workingDir} .iconSize=${12}></clickable-path>
@@ -559,11 +519,68 @@ export class SessionCard extends LitElement {
     `;
   }
 
-  private getStatusText(): string {
-    if (this.session.active === false) {
-      return 'waiting';
+  private renderGitStatus() {
+    if (!this.session.gitBranch) {
+      return '';
     }
-    return this.session.status;
+
+    return html`
+      <div class="flex items-center gap-1 text-[10px] flex-shrink-0">
+        ${
+          this.session.gitBranch
+            ? html`
+          <span class="px-1.5 py-0.5 bg-surface-2 rounded-sm">${this.session.gitBranch}</span>
+        `
+            : ''
+        }
+        
+        ${
+          this.session.gitAheadCount && this.session.gitAheadCount > 0
+            ? html`
+          <span class="text-status-success flex items-center gap-0.5">
+            <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 4l-4 4h3v4h2v-4h3L8 4z"/>
+            </svg>
+            ${this.session.gitAheadCount}
+          </span>
+        `
+            : ''
+        }
+        
+        ${
+          this.session.gitBehindCount && this.session.gitBehindCount > 0
+            ? html`
+          <span class="text-status-warning flex items-center gap-0.5">
+            <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 12l4-4h-3V4H7v4H4l4 4z"/>
+            </svg>
+            ${this.session.gitBehindCount}
+          </span>
+        `
+            : ''
+        }
+        
+        ${
+          this.session.gitHasChanges
+            ? html`
+          <span class="text-yellow-500">●</span>
+        `
+            : ''
+        }
+        
+        ${
+          this.session.gitIsWorktree
+            ? html`
+          <span class="text-purple-400" title="Git worktree">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z"/>
+            </svg>
+          </span>
+        `
+            : ''
+        }
+      </div>
+    `;
   }
 
   private getActivityStatusText(): string {
@@ -577,16 +594,6 @@ export class SessionCard extends LitElement {
       return this.session.activityStatus.specificStatus.status;
     }
     return this.session.status;
-  }
-
-  private getStatusColor(): string {
-    if (this.killing) {
-      return 'text-status-error';
-    }
-    if (this.session.active === false) {
-      return 'text-muted';
-    }
-    return this.session.status === 'running' ? 'text-status-success' : 'text-status-warning';
   }
 
   private getActivityStatusColor(): string {

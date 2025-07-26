@@ -12,7 +12,7 @@ import { ServerConfigService } from '../services/server-config-service.js';
 import { createLogger } from '../utils/logger.js';
 import { type MediaQueryState, responsiveObserver } from '../utils/responsive-utils.js';
 
-const logger = createLogger('unified-settings');
+const logger = createLogger('settings');
 
 export interface AppPreferences {
   useDirectKeyboard: boolean;
@@ -28,8 +28,8 @@ const DEFAULT_APP_PREFERENCES: AppPreferences = {
 
 export const STORAGE_KEY = 'vibetunnel_app_preferences';
 
-@customElement('unified-settings')
-export class UnifiedSettings extends LitElement {
+@customElement('vt-settings')
+export class Settings extends LitElement {
   // Disable shadow DOM to use Tailwind
   createRenderRoot() {
     return this;
@@ -52,7 +52,6 @@ export class UnifiedSettings extends LitElement {
   @state() private subscription: PushSubscription | null = null;
   @state() private isLoading = false;
   @state() private testingNotification = false;
-  @state() private hasNotificationChanges = false;
 
   // App settings state
   @state() private appPreferences: AppPreferences = DEFAULT_APP_PREFERENCES;
@@ -105,9 +104,8 @@ export class UnifiedSettings extends LitElement {
     if (changedProperties.has('visible')) {
       if (this.visible) {
         document.addEventListener('keydown', this.handleKeyDown);
-        document.startViewTransition?.(() => {
-          this.requestUpdate();
-        });
+        // Removed view transition for instant display
+        this.requestUpdate();
         // Discover repositories when settings are opened
         this.discoverRepositories();
       } else {
@@ -305,7 +303,6 @@ export class UnifiedSettings extends LitElement {
     value: boolean
   ) {
     this.notificationPreferences = { ...this.notificationPreferences, [key]: value };
-    this.hasNotificationChanges = true;
     pushNotificationService.savePreferences(this.notificationPreferences);
   }
 
@@ -390,7 +387,6 @@ export class UnifiedSettings extends LitElement {
       <div class="modal-backdrop flex items-center justify-center" @click=${this.handleBackdropClick}>
         <div
           class="modal-content font-mono text-sm w-full max-w-[calc(100vw-1rem)] sm:max-w-md lg:max-w-2xl mx-2 sm:mx-4 max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col"
-          style="view-transition-name: settings-modal"
         >
           <!-- Header -->
           <div class="p-4 pb-4 border-b border-border/50 relative flex-shrink-0">
@@ -638,7 +634,7 @@ export class UnifiedSettings extends LitElement {
               </div>
             </div>
             <p class="text-muted text-xs mt-1">
-              Default directory for new sessions and repository discovery. Changes are automatically synced with the VibeTunnel Mac app.
+              Default directory for new sessions and repository discovery.
             </p>
           </div>
           <div class="flex gap-2">

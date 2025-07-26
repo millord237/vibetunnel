@@ -1,12 +1,20 @@
 import SwiftUI
 
+/// Focus field enum that matches the one in VibeTunnelMenuView
+enum MenuFocusField: Hashable {
+    case sessionRow(String)
+    case settingsButton
+    case newSessionButton
+    case quitButton
+}
+
 /// Bottom action bar for the menu with New Session, Settings, and Quit buttons.
 ///
 /// Provides quick access to common actions with keyboard navigation support
 /// and visual feedback for hover and focus states.
 struct MenuActionBar: View {
     @Binding var showingNewSession: Bool
-    @Binding var focusedField: VibeTunnelMenuView.FocusField?
+    @Binding var focusedField: MenuFocusField?
     let hasStartedKeyboardNavigation: Bool
 
     @Environment(\.openWindow)
@@ -26,13 +34,13 @@ struct MenuActionBar: View {
                 Label("New Session", systemImage: "plus.circle")
                     .font(.system(size: 12))
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .fill(isHoveringNewSession ? AppColors.Fallback.controlBackground(for: colorScheme)
-                                .opacity(colorScheme == .light ? 0.35 : 0.4) : Color.clear
+                                .opacity(colorScheme == .light ? 0.6 : 0.7) : Color.clear
                             )
-                            .scaleEffect(isHoveringNewSession ? 1.05 : 1.0)
+                            .scaleEffect(isHoveringNewSession ? 1.08 : 1.0)
                             .animation(.easeInOut(duration: 0.15), value: isHoveringNewSession)
                     )
             })
@@ -58,13 +66,13 @@ struct MenuActionBar: View {
                 Label("Settings", systemImage: "gearshape")
                     .font(.system(size: 12))
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .fill(isHoveringSettings ? AppColors.Fallback.controlBackground(for: colorScheme)
-                                .opacity(colorScheme == .light ? 0.35 : 0.4) : Color.clear
+                                .opacity(colorScheme == .light ? 0.6 : 0.7) : Color.clear
                             )
-                            .scaleEffect(isHoveringSettings ? 1.05 : 1.0)
+                            .scaleEffect(isHoveringSettings ? 1.08 : 1.0)
                             .animation(.easeInOut(duration: 0.15), value: isHoveringSettings)
                     )
             })
@@ -92,13 +100,13 @@ struct MenuActionBar: View {
                 Label("Quit", systemImage: "power")
                     .font(.system(size: 12))
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .fill(isHoveringQuit ? AppColors.Fallback.controlBackground(for: colorScheme)
-                                .opacity(colorScheme == .light ? 0.35 : 0.4) : Color.clear
+                                .opacity(colorScheme == .light ? 0.6 : 0.7) : Color.clear
                             )
-                            .scaleEffect(isHoveringQuit ? 1.05 : 1.0)
+                            .scaleEffect(isHoveringQuit ? 1.08 : 1.0)
                             .animation(.easeInOut(duration: 0.15), value: isHoveringQuit)
                     )
             })
@@ -119,6 +127,6 @@ struct MenuActionBar: View {
             )
         }
         .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.vertical, 12)
     }
 }

@@ -14,7 +14,7 @@ import {
 } from '../../utils/terminal-preferences.js';
 import { TERMINAL_THEMES, type TerminalThemeId } from '../../utils/terminal-themes.js';
 import { getTextColorEncoded } from '../../utils/theme-utils.js';
-import { type AppPreferences, STORAGE_KEY } from '../unified-settings.js';
+import { type AppPreferences, STORAGE_KEY } from '../settings.js';
 
 const logger = createLogger('terminal-settings-modal');
 

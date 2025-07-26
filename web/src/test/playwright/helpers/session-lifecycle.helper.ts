@@ -1,8 +1,8 @@
 import type { Page } from '@playwright/test';
 import { SessionListPage } from '../pages/session-list.page';
 import { SessionViewPage } from '../pages/session-view.page';
-import { waitForButtonReady } from './common-patterns.helper';
 import { generateTestSessionName } from './terminal.helper';
+import { navigateToHome } from './test-optimization.helper';
 
 export interface SessionOptions {
   name?: string;
@@ -45,20 +45,18 @@ export async function createAndNavigateToSession(
   const command = options.command || 'zsh';
 
   // Navigate to list if not already there
-  if (!page.url().endsWith('/')) {
-    await sessionListPage.navigate();
-  }
+  await navigateToHome(page);
 
   // Create the session
   await sessionListPage.createNewSession(sessionName, spawnWindow, command);
 
   // For web sessions, wait for navigation and get session ID
   if (!spawnWindow) {
-    // In CI, navigation might be slower
-    const timeout = process.env.CI ? 15000 : 8000;
+    // Increased timeout for CI stability
+    const timeout = process.env.CI ? 15000 : 5000;
 
     try {
-      await page.waitForURL(/\?session=/, { timeout });
+      await page.waitForURL(/\/session\//, { timeout });
     } catch (_error) {
       // If navigation didn't happen automatically, check if we can extract session ID and navigate manually
       const currentUrl = page.url();
@@ -76,7 +74,7 @@ export async function createAndNavigateToSession(
 
       if (sessionResponse?.sessionId) {
         console.log(`Found session ID ${sessionResponse.sessionId}, navigating manually`);
-        await page.goto(`/?session=${sessionResponse.sessionId}`, {
+        await page.goto(`/session/${sessionResponse.sessionId}`, {
           waitUntil: 'domcontentloaded',
         });
       } else {
@@ -84,7 +82,9 @@ export async function createAndNavigateToSession(
       }
     }
 
-    const sessionId = new URL(page.url()).searchParams.get('session') || '';
+    // Extract session ID from path-based URL
+    const match = page.url().match(/\/session\/([^/?]+)/);
+    const sessionId = match ? match[1] : '';
     if (!sessionId) {
       throw new Error('No session ID found in URL after navigation');
     }
@@ -107,12 +107,15 @@ export async function verifySessionStatus(
   expectedStatus: 'RUNNING' | 'EXITED' | 'KILLED'
 ): Promise<boolean> {
   // Navigate to list if needed
-  if (page.url().includes('?session=')) {
+  if (page.url().includes('/session/')) {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
   }
 
   // Wait for session cards to load
-  await page.waitForSelector('session-card', { state: 'visible', timeout: 4000 });
+  await page.waitForSelector('session-card', {
+    state: 'visible',
+    timeout: process.env.CI ? 10000 : 4000,
+  });
 
   // Find the session card
   const sessionCard = page.locator(`session-card:has-text("${sessionName}")`);
@@ -133,7 +136,7 @@ export async function reconnectToSession(page: Page, sessionName: string): Promi
   const sessionViewPage = new SessionViewPage(page);
 
   // Navigate to list if needed
-  if (page.url().includes('?session=')) {
+  if (page.url().includes('/session/')) {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
   }
 
@@ -141,7 +144,7 @@ export async function reconnectToSession(page: Page, sessionName: string): Promi
   await sessionListPage.clickSession(sessionName);
 
   // Wait for session view to load
-  await page.waitForURL(/\?session=/, { timeout: 4000 });
+  await page.waitForURL(/\/session\//, { timeout: process.env.CI ? 10000 : 4000 });
   await sessionViewPage.waitForTerminalReady();
 }
 
@@ -166,16 +169,13 @@ export async function createMultipleSessions(
 
     // Navigate back to list for next creation (except last one)
     if (i < count - 1) {
-      await page.goto('/', { waitUntil: 'networkidle' });
+      await navigateToHome(page);
 
-      // Wait for session list to be visible
+      // Quick wait for session list
       await page.waitForSelector('session-card', {
         state: 'visible',
-        timeout: 5000,
+        timeout: process.env.CI ? 5000 : 2000,
       });
-
-      // Wait for app to be ready before creating next session
-      await waitForButtonReady(page, '[data-testid="create-session-button"]', { timeout: 5000 });
     }
   }
 
@@ -191,7 +191,7 @@ export async function waitForSessionState(
   targetState: 'RUNNING' | 'EXITED' | 'KILLED' | 'running' | 'exited' | 'killed',
   options: { timeout?: number } = {}
 ): Promise<void> {
-  const { timeout = 5000 } = options;
+  const { timeout = process.env.CI ? 15000 : 5000 } = options;
   const _startTime = Date.now();
 
   // Use waitForFunction instead of polling loop

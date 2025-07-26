@@ -34,7 +34,7 @@ export async function clickSessionCardWithRetry(page: Page, sessionName: string)
   // Wait for card to be stable
   await sessionCard.waitFor({ state: 'visible' });
   await sessionCard.scrollIntoViewIfNeeded();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 
   try {
     await sessionCard.click();
@@ -81,7 +81,15 @@ export async function waitForTerminalPrompt(page: Page, timeout = 5000): Promise
   await page.waitForFunction(
     () => {
       const terminal = document.querySelector('vibe-terminal');
-      const text = terminal?.textContent || '';
+      if (!terminal) return false;
+
+      // Check the terminal container first
+      const container = terminal.querySelector('#terminal-container');
+      const containerText = container?.textContent || '';
+
+      // Fall back to terminal content
+      const text = terminal?.textContent || containerText;
+
       // Terminal is ready when it ends with a prompt character
       return text.trim().endsWith('$') || text.trim().endsWith('>') || text.trim().endsWith('#');
     },
@@ -96,7 +104,15 @@ export async function waitForTerminalBusy(page: Page, timeout = 2000): Promise<v
   await page.waitForFunction(
     () => {
       const terminal = document.querySelector('vibe-terminal');
-      const text = terminal?.textContent || '';
+      if (!terminal) return false;
+
+      // Check the terminal container first
+      const container = terminal.querySelector('#terminal-container');
+      const containerText = container?.textContent || '';
+
+      // Fall back to terminal content
+      const text = terminal?.textContent || containerText;
+
       // Terminal is busy when it doesn't end with prompt
       return !text.trim().endsWith('$') && !text.trim().endsWith('>') && !text.trim().endsWith('#');
     },
@@ -109,7 +125,7 @@ export async function waitForTerminalBusy(page: Page, timeout = 2000): Promise<v
  */
 export async function waitForPageReady(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 
   // Also wait for app-specific ready state
   await page.waitForSelector('body.ready', { state: 'attached', timeout: 5000 }).catch(() => {
@@ -177,9 +193,22 @@ export async function openCreateSessionDialog(
  * Disable spawn window toggle in create session dialog
  */
 export async function disableSpawnWindow(page: Page): Promise<void> {
-  const spawnWindowToggle = page.locator('button[role="switch"]');
-  if ((await spawnWindowToggle.getAttribute('aria-checked')) === 'true') {
-    await spawnWindowToggle.click();
+  // First expand the options section where spawn window toggle is located
+  const optionsButton = page.locator('#session-options-button');
+
+  // Options button should always exist in current UI
+  await optionsButton.waitFor({ state: 'visible', timeout: 3000 });
+  await optionsButton.click();
+  await page.waitForTimeout(300); // Wait for expansion animation
+
+  // Now look for the spawn window toggle with specific data-testid
+  const spawnWindowToggle = page.locator('[data-testid="spawn-window-toggle"]');
+
+  // Only try to disable if the toggle exists (Mac app connected)
+  if ((await spawnWindowToggle.count()) > 0) {
+    if ((await spawnWindowToggle.getAttribute('aria-checked')) === 'true') {
+      await spawnWindowToggle.click();
+    }
   }
 }
 
@@ -260,14 +289,14 @@ export async function refreshAndVerifySession(page: Page, sessionName: string): 
   await page.waitForLoadState('domcontentloaded');
 
   const currentUrl = page.url();
-  if (currentUrl.includes('?session=')) {
+  if (currentUrl.includes('/session/')) {
     await page.waitForSelector('vibe-terminal', { state: 'visible', timeout: 4000 });
   } else {
     // We got redirected to list, reconnect
     await page.waitForSelector('session-card', { state: 'visible' });
     const sessionListPage = new SessionListPage(page);
     await sessionListPage.clickSession(sessionName);
-    await expect(page).toHaveURL(/\?session=/);
+    await expect(page).toHaveURL(/\/session\//);
   }
 }
 
@@ -298,6 +327,15 @@ export async function waitForTerminalText(
   await page.waitForFunction(
     (text) => {
       const terminal = document.querySelector('vibe-terminal');
+      if (!terminal) return false;
+
+      // Check the terminal container first
+      const container = terminal.querySelector('#terminal-container');
+      if (container?.textContent?.includes(text)) {
+        return true;
+      }
+
+      // Fall back to terminal content
       return terminal?.textContent?.includes(text);
     },
     searchText,
@@ -315,9 +353,14 @@ export async function waitForTerminalReady(page: Page, timeout = 4000): Promise<
   await page.waitForFunction(
     () => {
       const terminal = document.querySelector('vibe-terminal');
+      if (!terminal) return false;
+
+      // Check the terminal container for content
+      const container = terminal.querySelector('#terminal-container');
       return (
         terminal &&
-        (terminal.textContent?.trim().length > 0 ||
+        ((container?.textContent?.trim().length || 0) > 0 ||
+          terminal.textContent?.trim().length > 0 ||
           !!terminal.shadowRoot ||
           !!terminal.querySelector('.xterm'))
       );

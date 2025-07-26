@@ -31,7 +31,7 @@ struct SessionRow: View {
     @State private var isHoveringFolder = false
     @FocusState private var isEditFieldFocused: Bool
 
-    private static let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "SessionRow")
+    private static let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "SessionRow")
 
     /// Computed property that reads directly from the monitor's cache
     /// This will automatically update when the monitor refreshes
@@ -90,12 +90,12 @@ struct SessionRow: View {
                             .truncationMode(.tail)
 
                         // Show session name if available
-                        if let name = session.value.name, !name.isEmpty {
+                        if !session.value.name.isEmpty {
                             Text("–")
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary.opacity(0.6))
 
-                            Text(name)
+                            Text(session.value.name)
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
@@ -143,29 +143,28 @@ struct SessionRow: View {
                 HStack(alignment: .center, spacing: 6) {
                     // Left side: Path and git info
                     HStack(alignment: .center, spacing: 4) {
-                        // Folder icon and path - clickable as one unit
+                        // Folder icon - clickable
                         Button(action: {
                             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: session.value.workingDir)
                         }, label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "folder")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.secondary)
-
-                                Text(compactPath)
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.head)
-                            }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(isHoveringFolder ? AppColors.Fallback.controlBackground(for: colorScheme)
-                                        .opacity(0.15) : Color.clear
-                                    )
-                            )
+                            Image(systemName: "folder")
+                                .font(.system(size: 10))
+                                .foregroundColor(isHoveringFolder ? .primary : .secondary)
+                                .padding(4)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(isHoveringFolder ? AppColors.Fallback.controlBackground(for: colorScheme)
+                                            .opacity(0.3) : Color.clear
+                                        )
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .strokeBorder(
+                                            isHoveringFolder ? AppColors.Fallback.gitBorder(for: colorScheme)
+                                                .opacity(0.4) : Color.clear,
+                                            lineWidth: 0.5
+                                        )
+                                )
                         })
                         .buttonStyle(.plain)
                         .onHover { hovering in
@@ -173,8 +172,17 @@ struct SessionRow: View {
                         }
                         .help("Open in Finder")
 
+                        // Path text - not clickable
+                        Text(compactPath)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                            .layoutPriority(-1) // Lowest priority
+
                         if let repo = gitRepository {
                             GitRepositoryRow(repository: repo)
+                                .layoutPriority(1) // Highest priority
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -402,15 +410,15 @@ struct SessionRow: View {
 
     private var sessionName: String {
         // Use the session name if available, otherwise fall back to directory name
-        if let name = session.value.name, !name.isEmpty {
-            return name
+        if !session.value.name.isEmpty {
+            return session.value.name
         }
         let workingDir = session.value.workingDir
         return (workingDir as NSString).lastPathComponent
     }
 
     private func startEditing() {
-        editedName = session.value.name ?? ""
+        editedName = session.value.name
         isEditing = true
         isEditFieldFocused = true
     }
@@ -499,8 +507,8 @@ struct SessionRow: View {
         var tooltip = ""
 
         // Session name
-        if let name = session.value.name, !name.isEmpty {
-            tooltip += "Session: \(name)\n"
+        if !session.value.name.isEmpty {
+            tooltip += "Session: \(session.value.name)\n"
         }
 
         // Command

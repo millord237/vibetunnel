@@ -1,82 +1,51 @@
-import Combine
 import Foundation
+import Observation
 import OSLog
 
 /// Manager for VibeTunnel configuration stored in ~/.vibetunnel/config.json
 /// Provides centralized configuration management for all app settings
 @MainActor
-class ConfigManager: ObservableObject {
+@Observable
+final class ConfigManager {
     static let shared = ConfigManager()
 
-    private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "ConfigManager")
+    private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "ConfigManager")
     private let configDir: URL
     private let configPath: URL
     private var fileMonitor: DispatchSourceFileSystemObject?
 
     // Core configuration
-    @Published private(set) var quickStartCommands: [QuickStartCommand] = []
-    @Published var repositoryBasePath: String = FilePathConstants.defaultRepositoryBasePath
+    private(set) var quickStartCommands: [QuickStartCommand] = []
+    var repositoryBasePath: String = FilePathConstants.defaultRepositoryBasePath
 
     // Server settings
-    @Published var serverPort: Int = 4_020
-    @Published var dashboardAccessMode: DashboardAccessMode = .network
-    @Published var cleanupOnStartup: Bool = true
-    @Published var authenticationMode: AuthenticationMode = .osAuth
+    var serverPort: Int = 4_020
+    var dashboardAccessMode: DashboardAccessMode = .network
+    var cleanupOnStartup: Bool = true
+    var authenticationMode: AuthenticationMode = .osAuth
 
     // Development settings
-    @Published var debugMode: Bool = false
-    @Published var useDevServer: Bool = false
-    @Published var devServerPath: String = ""
-    @Published var logLevel: String = "info"
+    var debugMode: Bool = false
+    var useDevServer: Bool = false
+    var devServerPath: String = ""
+    var logLevel: String = "info"
 
     // Application preferences
-    @Published var preferredGitApp: String?
-    @Published var preferredTerminal: String?
-    @Published var updateChannel: UpdateChannel = .stable
-    @Published var showInDock: Bool = false
-    @Published var preventSleepWhenRunning: Bool = true
+    var preferredGitApp: String?
+    var preferredTerminal: String?
+    var updateChannel: UpdateChannel = .stable
+    var showInDock: Bool = false
+    var preventSleepWhenRunning: Bool = true
 
     // Remote access
-    @Published var ngrokEnabled: Bool = false
-    @Published var ngrokTokenPresent: Bool = false
+    var ngrokEnabled: Bool = false
+    var ngrokTokenPresent: Bool = false
 
     // Session defaults
-    @Published var sessionCommand: String = "zsh"
-    @Published var sessionWorkingDirectory: String = FilePathConstants.defaultRepositoryBasePath
-    @Published var sessionSpawnWindow: Bool = true
-    @Published var sessionTitleMode: TitleMode = .dynamic
-
-    /// Quick start command structure matching the web interface
-    struct QuickStartCommand: Identifiable, Codable, Equatable {
-        var id: String
-        var name: String?
-        var command: String
-
-        /// Display name for the UI - uses name if available, otherwise command
-        var displayName: String {
-            name ?? command
-        }
-
-        init(id: String = UUID().uuidString, name: String? = nil, command: String) {
-            self.id = id
-            self.name = name
-            self.command = command
-        }
-
-        /// Custom Codable implementation to handle missing id
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
-            self.name = try container.decodeIfPresent(String.self, forKey: .name)
-            self.command = try container.decode(String.self, forKey: .command)
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case id
-            case name
-            case command
-        }
-    }
+    var sessionCommand: String = "zsh"
+    var sessionWorkingDirectory: String = FilePathConstants.defaultRepositoryBasePath
+    var sessionSpawnWindow: Bool = true
+    var sessionTitleMode: TitleMode = .dynamic
 
     /// Comprehensive configuration structure
     private struct VibeTunnelConfig: Codable {

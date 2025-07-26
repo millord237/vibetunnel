@@ -2,6 +2,30 @@ import type { Locator, Page } from '@playwright/test';
 import { screenshotOnError } from '../helpers/screenshot.helper';
 import { WaitUtils } from '../utils/test-utils';
 
+/**
+ * Base page object class that provides common functionality for all page objects.
+ *
+ * This class serves as the foundation for the Page Object Model pattern in Playwright tests,
+ * providing shared utilities for navigation, element interaction, and state management.
+ * It handles common tasks like navigating to pages, waiting for app initialization,
+ * dismissing errors, and closing modals.
+ *
+ * @example
+ * ```typescript
+ * // Create a custom page object extending BasePage
+ * class MyCustomPage extends BasePage {
+ *   async doSomething() {
+ *     await this.clickByTestId('my-button');
+ *     await this.waitForText('Success!');
+ *   }
+ * }
+ *
+ * // Use in a test
+ * const myPage = new MyCustomPage(page);
+ * await myPage.navigate('/my-route');
+ * await myPage.doSomething();
+ * ```
+ */
 export class BasePage {
   readonly page: Page;
 
@@ -15,25 +39,37 @@ export class BasePage {
     url.searchParams.set('test', 'true');
     const finalPath = url.pathname + url.search;
 
-    await this.page.goto(finalPath, { waitUntil: 'domcontentloaded', timeout: 10000 });
+    await this.page.goto(finalPath, {
+      waitUntil: 'domcontentloaded',
+      timeout: process.env.CI ? 15000 : 10000,
+    });
 
     // Wait for app to attach
-    await this.page.waitForSelector('vibetunnel-app', { state: 'attached', timeout: 5000 });
-
-    // Clear localStorage for test isolation
-    await this.page.evaluate(() => {
-      try {
-        localStorage.clear();
-        sessionStorage.clear();
-      } catch (e) {
-        console.warn('Could not clear storage:', e);
-      }
+    await this.page.waitForSelector('vibetunnel-app', {
+      state: 'attached',
+      timeout: process.env.CI ? 10000 : 5000,
     });
   }
 
   async waitForLoadComplete() {
     // Wait for the main app to be loaded
-    await this.page.waitForSelector('vibetunnel-app', { state: 'attached', timeout: 5000 });
+    await this.page.waitForSelector('vibetunnel-app', {
+      state: 'attached',
+      timeout: process.env.CI ? 10000 : 5000,
+    });
+
+    // Check if we're on auth screen
+    const authForm = await this.page.locator('auth-login').count();
+    if (authForm > 0) {
+      // With --no-auth, we should automatically bypass auth
+      console.log('Auth form detected, waiting for automatic bypass...');
+
+      // Wait for auth to be bypassed and session list to appear
+      await this.page.waitForSelector('session-list', {
+        state: 'attached',
+        timeout: process.env.CI ? 15000 : 10000,
+      });
+    }
 
     // Wait for app to be fully initialized
     try {
@@ -43,7 +79,7 @@ export class BasePage {
         '[data-testid="create-session-button"], button[title="Create New Session"], button[title="Create New Session (⌘K)"]',
         {
           state: 'visible',
-          timeout: 5000,
+          timeout: process.env.CI ? 15000 : 10000,
         }
       );
     } catch (_error) {
@@ -57,16 +93,28 @@ export class BasePage {
 
       // Wait for the button to become visible - this automatically retries
       try {
-        await createBtn.waitFor({ state: 'visible', timeout: 5000 });
+        await createBtn.waitFor({ state: 'visible', timeout: process.env.CI ? 15000 : 10000 });
       } catch (_waitError) {
-        // Check if we're on auth screen
-        const authForm = await this.page.locator('auth-login').isVisible();
-        if (authForm) {
-          throw new Error('Authentication required but server should be running with --no-auth');
-        }
+        // Log current page state for debugging
+        const currentUrl = this.page.url();
+        const hasSessionList = await this.page.locator('session-list').count();
+        const hasSidebar = await this.page.locator('sidebar-header').count();
+        const hasAuthForm = await this.page.locator('auth-login').count();
+
+        console.error('Failed to find create button. Page state:', {
+          url: currentUrl,
+          hasSessionList,
+          hasSidebar,
+          hasAuthForm,
+        });
+
+        // Take screenshot for debugging
+        await this.page.screenshot({ path: 'test-results/load-complete-failure.png' });
 
         // If still no create button after extended wait, something is wrong
-        throw new Error('Create button did not appear within timeout');
+        throw new Error(
+          `Create button did not appear. State: sessionList=${hasSessionList}, sidebar=${hasSidebar}, auth=${hasAuthForm}`
+        );
       }
     }
 

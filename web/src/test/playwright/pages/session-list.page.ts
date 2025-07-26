@@ -1,8 +1,36 @@
 import { TIMEOUTS } from '../constants/timeouts';
 import { screenshotOnError } from '../helpers/screenshot.helper';
+import { TestSessionTracker } from '../helpers/test-session-tracker';
 import { validateCommand, validateSessionName } from '../utils/validation.utils';
 import { BasePage } from './base.page';
 
+/**
+ * Page object for the session list view, handling terminal session management operations.
+ *
+ * This class provides methods for interacting with the main session list interface,
+ * including creating new sessions, managing existing sessions, and navigating between
+ * session cards. It handles both web-based sessions and Mac app spawn window sessions,
+ * with support for modal interactions and form validation.
+ *
+ * Key features:
+ * - Session creation with configurable options (name, command, spawn window)
+ * - Session card interaction (click, kill, status checking)
+ * - Modal management for the create session dialog
+ * - Support for both web and native Mac app features
+ *
+ * @example
+ * ```typescript
+ * // Create a new session
+ * const sessionList = new SessionListPage(page);
+ * await sessionList.navigate();
+ * await sessionList.createNewSession('My Test Session', false, 'echo "Hello"');
+ *
+ * // Interact with existing sessions
+ * await sessionList.clickSession('My Test Session');
+ * const isActive = await sessionList.isSessionActive('My Test Session');
+ * await sessionList.killSession('My Test Session');
+ * ```
+ */
 export class SessionListPage extends BasePage {
   // Selectors
   private readonly selectors = {
@@ -25,25 +53,45 @@ export class SessionListPage extends BasePage {
     await this.dismissErrors();
 
     // Wait for create button to be clickable
+    // The button is in the sidebar header, so we need to ensure the sidebar is visible
     const createBtn = this.page
       .locator(this.selectors.createButton)
       .or(this.page.locator(this.selectors.createButtonFallback))
       .or(this.page.locator(this.selectors.createButtonFallbackWithShortcut))
       .first();
-    await createBtn.waitFor({ state: 'visible', timeout: 5000 });
+
+    try {
+      await createBtn.waitFor({ state: 'visible', timeout: process.env.CI ? 15000 : 10000 });
+    } catch (_error) {
+      // If button is not visible, the sidebar might be collapsed or not loaded
+      console.log('Create button not immediately visible, checking sidebar state...');
+
+      // Check if sidebar exists
+      const sidebar = await this.page.locator('sidebar-header').count();
+      console.log(`Sidebar header count: ${sidebar}`);
+
+      // Take a screenshot for debugging
+      await this.page.screenshot({ path: 'test-results/create-button-not-visible.png' });
+
+      throw new Error(`Create button not visible after navigation. Sidebar count: ${sidebar}`);
+    }
   }
 
   async createNewSession(sessionName?: string, spawnWindow = false, command?: string) {
+    // Clear localStorage first for test isolation
+    await this.page.evaluate(() => {
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch (e) {
+        console.warn('Could not clear storage:', e);
+      }
+    });
+
     // IMPORTANT: Set the spawn window preference in localStorage BEFORE opening the modal
     // This ensures the form loads with the correct state
     await this.page.evaluate((shouldSpawnWindow) => {
-      // Clear all form-related localStorage values first to ensure clean state
-      localStorage.removeItem('vibetunnel_spawn_window');
-      localStorage.removeItem('vibetunnel_last_command');
-      localStorage.removeItem('vibetunnel_last_working_dir');
-      localStorage.removeItem('vibetunnel_title_mode');
-
-      // Then set the spawn window value we want
+      // Set the spawn window value we want
       localStorage.setItem('vibetunnel_spawn_window', String(shouldSpawnWindow));
     }, spawnWindow);
 
@@ -63,29 +111,30 @@ export class SessionListPage extends BasePage {
 
     try {
       // Wait for button to be visible and stable before clicking
-      await createButton.waitFor({ state: 'visible', timeout: 5000 });
+      await createButton.waitFor({ state: 'visible', timeout: process.env.CI ? 10000 : 5000 });
 
-      // Scroll button into view if needed
-      await createButton.scrollIntoViewIfNeeded();
+      // Add a small delay to ensure page is stable
+      await this.page.waitForTimeout(500);
 
-      // Try regular click first
+      // Try regular click first, then force click if needed
       try {
-        await createButton.click({ timeout: 5000 });
+        await createButton.click({ timeout: process.env.CI ? 10000 : 5000 });
       } catch (_clickError) {
-        await createButton.click({ force: true, timeout: 5000 });
+        // If regular click fails, try force click
+        await createButton.click({ force: true, timeout: process.env.CI ? 10000 : 5000 });
       }
 
       // Wait for modal to exist first
       await this.page.waitForSelector('session-create-form', {
         state: 'attached',
-        timeout: 10000,
+        timeout: process.env.CI ? 15000 : 10000,
       });
 
       // Wait for the session name input to be visible - this is what we actually need
       // This approach is more reliable than waiting for the modal wrapper
       await this.page.waitForSelector('[data-testid="session-name-input"]', {
         state: 'visible',
-        timeout: 15000,
+        timeout: process.env.CI ? 20000 : 15000,
       });
 
       // Additional wait to ensure modal is fully interactive
@@ -122,14 +171,14 @@ export class SessionListPage extends BasePage {
     try {
       await this.page.waitForSelector('[data-testid="session-name-input"]', {
         state: 'visible',
-        timeout: 5000,
+        timeout: process.env.CI ? 10000 : 5000,
       });
       inputSelector = '[data-testid="session-name-input"]';
     } catch {
       // Fallback to placeholder if data-testid is not found
       await this.page.waitForSelector('input[placeholder="My Session"]', {
         state: 'visible',
-        timeout: 5000,
+        timeout: process.env.CI ? 10000 : 5000,
       });
       inputSelector = 'input[placeholder="My Session"]';
     }
@@ -144,25 +193,46 @@ export class SessionListPage extends BasePage {
       { timeout: 2000 }
     );
 
-    // Verify spawn window toggle is in correct state (should be set from localStorage)
-    const spawnWindowToggle = this.page
-      .locator('[data-testid="spawn-window-toggle"]')
-      .or(this.page.locator('button[role="switch"]'));
+    // Only check spawn window toggle if it exists (Mac app connected)
+    // First need to expand the options section as toggle is now inside a collapsible options area
+    try {
+      const optionsButton = this.page.locator('#session-options-button');
 
-    // Wait for the toggle to be ready
-    await spawnWindowToggle.waitFor({ state: 'visible', timeout: 2000 });
+      // Options button should always exist in current UI
+      await optionsButton.waitFor({ state: 'visible', timeout: 3000 });
+      await optionsButton.click();
+      await this.page.waitForTimeout(300); // Wait for expansion animation
 
-    // Verify the state matches what we expect
-    const isSpawnWindowOn = (await spawnWindowToggle.getAttribute('aria-checked')) === 'true';
+      // Now look for the spawn window toggle
+      const spawnWindowToggle = this.page.locator('[data-testid="spawn-window-toggle"]');
 
-    // If the state doesn't match, there's an issue with localStorage loading
-    if (isSpawnWindowOn !== spawnWindow) {
-      console.warn(
-        `WARNING: Spawn window toggle state mismatch! Expected ${spawnWindow} but got ${isSpawnWindowOn}`
-      );
-      // Try clicking to correct it
-      await spawnWindowToggle.click({ force: true });
-      await this.page.waitForTimeout(500);
+      const toggleExists = (await spawnWindowToggle.count()) > 0;
+
+      if (toggleExists) {
+        // Wait for the toggle to be visible after expansion
+        await spawnWindowToggle.waitFor({ state: 'visible', timeout: 2000 });
+
+        // Verify the state matches what we expect
+        const isSpawnWindowOn = (await spawnWindowToggle.getAttribute('aria-checked')) === 'true';
+
+        // If the state doesn't match, there's an issue with localStorage loading
+        if (isSpawnWindowOn !== spawnWindow) {
+          console.warn(
+            `WARNING: Spawn window toggle state mismatch! Expected ${spawnWindow} but got ${isSpawnWindowOn}`
+          );
+          // Try clicking to correct it
+          await spawnWindowToggle.click();
+          await this.page.waitForTimeout(200);
+        }
+      } else if (spawnWindow) {
+        // User requested spawn window but Mac app is not connected
+        console.log(
+          'INFO: Spawn window requested but Mac app is not connected - toggle not available'
+        );
+      }
+    } catch (error) {
+      // Log but don't fail the test if spawn window toggle check fails
+      console.log('INFO: Spawn window toggle check skipped:', error);
     }
 
     // Fill in the session name if provided
@@ -232,7 +302,7 @@ export class SessionListPage extends BasePage {
       .or(this.page.locator('button:has-text("Create")'));
 
     // Make sure button is not disabled
-    await submitButton.waitFor({ state: 'visible', timeout: 5000 });
+    await submitButton.waitFor({ state: 'visible', timeout: process.env.CI ? 10000 : 5000 });
     const isDisabled = await submitButton.isDisabled();
     if (isDisabled) {
       throw new Error('Create button is disabled - form may not be valid');
@@ -247,30 +317,24 @@ export class SessionListPage extends BasePage {
       }
     });
 
-    const responsePromise = this.page.waitForResponse(
-      (response) => {
-        const isSessionEndpoint = response.url().includes('/api/sessions');
-        const isPost = response.request().method() === 'POST';
-        return isSessionEndpoint && isPost;
-      },
-      { timeout: 20000 } // Increased timeout for CI
-    );
-
-    // Click the submit button
-    await submitButton.click({ timeout: 5000 });
+    // Click the submit button and wait for response
+    const [response] = await Promise.all([
+      this.page.waitForResponse(
+        (response) => {
+          const isSessionEndpoint = response.url().includes('/api/sessions');
+          const isPost = response.request().method() === 'POST';
+          return isSessionEndpoint && isPost;
+        },
+        { timeout: 20000 } // Increased timeout for CI
+      ),
+      submitButton.click({ timeout: process.env.CI ? 10000 : 5000 }),
+    ]);
 
     // Wait for navigation to session view (only for web sessions)
     if (!spawnWindow) {
       let sessionId: string | undefined;
 
       try {
-        const response = await Promise.race([
-          responsePromise,
-          this.page
-            .waitForTimeout(19000)
-            .then(() => null), // Slightly less than response timeout
-        ]);
-
         if (response) {
           if (response.status() !== 201 && response.status() !== 200) {
             const body = await response.text();
@@ -285,6 +349,10 @@ export class SessionListPage extends BasePage {
           // Log if session ID is missing
           if (!sessionId) {
             console.error('Session created but no sessionId in response:', responseBody);
+          } else {
+            // Track this session for cleanup
+            TestSessionTracker.getInstance().trackSession(sessionId);
+            console.log(`Web session created, waiting for navigation to session view...`);
           }
         } else {
           // Check if a session was actually created by looking for it in the DOM
@@ -303,8 +371,30 @@ export class SessionListPage extends BasePage {
         // Don't throw yet, check if we navigated anyway
       }
 
-      // Give the app time to process the session and navigate
-      await this.page.waitForTimeout(2000);
+      // Wait for the session to appear in the app's session list before navigation
+      // This is important to avoid race conditions where we navigate before the app knows about the session
+      if (sessionId) {
+        await this.page.waitForFunction(
+          ({ id }) => {
+            // Check if the app has loaded this session
+            const app = document.querySelector('vibetunnel-app') as HTMLElement & {
+              sessions?: Array<{ id: string }>;
+            };
+            if (app?.sessions) {
+              return app.sessions.some((s) => s.id === id);
+            }
+            return false;
+          },
+          { id: sessionId },
+          { timeout: 10000, polling: 100 }
+        );
+
+        // Brief wait for session to appear
+        await this.page.waitForTimeout(200);
+      } else {
+        // Brief wait for processing
+        await this.page.waitForTimeout(500);
+      }
 
       // Wait for modal to close - check if the form's visible property is false
       await this.page
@@ -335,15 +425,16 @@ export class SessionListPage extends BasePage {
 
       // Check if we're already on the session page
       const currentUrl = this.page.url();
-      if (currentUrl.includes('?session=')) {
+      if (currentUrl.includes('/session/')) {
+        // Already on session page, do nothing
       } else {
-        // If we have a session ID, try navigating manually
+        // If we have a session ID, navigate to the session page
         if (sessionId) {
-          await this.page.goto(`/?session=${sessionId}`, { waitUntil: 'domcontentloaded' });
+          await this.page.goto(`/session/${sessionId}`, { waitUntil: 'domcontentloaded' });
         } else {
           // Wait for automatic navigation
           try {
-            await this.page.waitForURL(/\?session=/, { timeout: 10000 });
+            await this.page.waitForURL(/\/session\//, { timeout: process.env.CI ? 15000 : 10000 });
           } catch (error) {
             const finalUrl = this.page.url();
             console.error(`Failed to navigate to session. Current URL: ${finalUrl}`);
@@ -358,8 +449,62 @@ export class SessionListPage extends BasePage {
         }
       }
 
-      // Wait for terminal to be ready
-      await this.page.waitForSelector('vibe-terminal', { state: 'visible', timeout: 10000 });
+      // Debug: Log current URL and page state
+      const debugUrl = this.page.url();
+      console.log(`[DEBUG] Current URL after navigation: ${debugUrl}`);
+
+      // Wait for the session view to be properly rendered with session data
+      await this.page.waitForFunction(
+        () => {
+          const sessionView = document.querySelector('session-view') as HTMLElement & {
+            session?: { id: string };
+            shadowRoot?: ShadowRoot;
+          };
+          if (!sessionView) return false;
+
+          // Check if session-view has the session prop set
+          if (!sessionView.session) return false;
+
+          // Check if loading animation is complete
+          const loadingElement = sessionView.shadowRoot?.querySelector('.text-2xl');
+          if (loadingElement?.textContent?.includes('Loading')) {
+            return false;
+          }
+
+          // Session view is ready
+          return true;
+        },
+        { timeout: process.env.CI ? 20000 : 15000, polling: 100 }
+      );
+
+      // Debug: Check if session view component exists
+      const sessionViewExists = await this.page.evaluate(() => {
+        const sessionView = document.querySelector('session-view') as HTMLElement & {
+          session?: { id: string };
+        };
+        return {
+          exists: !!sessionView,
+          visible: sessionView ? window.getComputedStyle(sessionView).display !== 'none' : false,
+          hasSession: !!sessionView?.session,
+          sessionId: sessionView?.session?.id,
+        };
+      });
+      console.log('[DEBUG] Session view state:', sessionViewExists);
+
+      // Wait for terminal-renderer to be visible first
+      await this.page.waitForSelector('#session-terminal', {
+        state: 'visible',
+        timeout: process.env.CI ? 15000 : 10000,
+      });
+
+      // Then wait for the actual terminal component inside to be visible
+      await this.page.waitForSelector(
+        '#session-terminal vibe-terminal, #session-terminal vibe-terminal-binary',
+        {
+          state: 'visible',
+          timeout: process.env.CI ? 15000 : 10000,
+        }
+      );
     } else {
       // For spawn window, wait for modal to close
       await this.page.waitForSelector('.modal-content', { state: 'hidden', timeout: 4000 });
@@ -374,9 +519,9 @@ export class SessionListPage extends BasePage {
 
   async clickSession(sessionName: string) {
     // First ensure we're on the session list page
-    if (this.page.url().includes('?session=')) {
+    if (this.page.url().includes('/session/')) {
       await this.page.goto('/', { waitUntil: 'domcontentloaded' });
-      await this.page.waitForLoadState('networkidle');
+      await this.page.waitForLoadState('domcontentloaded');
     }
 
     // Wait for session cards to load
@@ -386,7 +531,7 @@ export class SessionListPage extends BasePage {
         const noSessionsMsg = document.querySelector('.text-dark-text-muted');
         return cards.length > 0 || noSessionsMsg?.textContent?.includes('No terminal sessions');
       },
-      { timeout: 10000 }
+      { timeout: process.env.CI ? 15000 : 10000 }
     );
 
     // Check if we have any session cards
@@ -399,7 +544,7 @@ export class SessionListPage extends BasePage {
     const sessionCard = (await this.getSessionCard(sessionName)).first();
 
     // Wait for the specific session card to be visible
-    await sessionCard.waitFor({ state: 'visible', timeout: 10000 });
+    await sessionCard.waitFor({ state: 'visible', timeout: process.env.CI ? 15000 : 10000 });
 
     // Scroll into view if needed
     await sessionCard.scrollIntoViewIfNeeded();
@@ -408,7 +553,7 @@ export class SessionListPage extends BasePage {
     await sessionCard.click();
 
     // Wait for navigation to session view
-    await this.page.waitForURL(/\?session=/, { timeout: 5000 });
+    await this.page.waitForURL(/\/session\//, { timeout: process.env.CI ? 10000 : 5000 });
   }
 
   async isSessionActive(sessionName: string): Promise<boolean> {

@@ -1,3 +1,4 @@
+import { HttpMethod } from '../../shared/types.js';
 import { createLogger } from '../utils/logger.js';
 import { BrowserSSHAgent } from './ssh-agent.js';
 
@@ -24,6 +25,37 @@ interface User {
   loginTime: number;
 }
 
+/**
+ * Authentication client for managing user authentication state and operations.
+ *
+ * Handles multiple authentication methods including SSH key-based authentication
+ * (priority) and password-based authentication (fallback). Manages authentication
+ * tokens, user sessions, and provides authenticated API request capabilities.
+ *
+ * Features:
+ * - SSH key authentication using browser-based SSH agent
+ * - Password authentication fallback
+ * - Persistent token storage and validation
+ * - User avatar retrieval with platform-specific support
+ * - Automatic authentication flow (tries SSH keys first)
+ *
+ * @example
+ * ```typescript
+ * const auth = new AuthClient();
+ *
+ * // Check authentication status
+ * if (!auth.isAuthenticated()) {
+ *   // Try SSH key auth first, then password
+ *   const result = await auth.authenticate(userId);
+ * }
+ *
+ * // Make authenticated API requests
+ * const response = await auth.fetch('/api/sessions');
+ * ```
+ *
+ * @see BrowserSSHAgent - Browser-based SSH key management
+ * @see web/src/server/routes/auth.ts - Server-side authentication endpoints
+ */
 export class AuthClient {
   private static readonly TOKEN_KEY = 'vibetunnel_auth_token';
   private static readonly USER_KEY = 'vibetunnel_user_data';
@@ -147,7 +179,7 @@ export class AuthClient {
 
       // Send authentication request
       const response = await fetch('/api/auth/ssh-key', {
-        method: 'POST',
+        method: HttpMethod.POST,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           challengeId: challenge.challengeId,
@@ -185,7 +217,7 @@ export class AuthClient {
   async authenticateWithPassword(userId: string, password: string): Promise<AuthResponse> {
     try {
       const response = await fetch('/api/auth/password', {
-        method: 'POST',
+        method: HttpMethod.POST,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, password }),
       });
@@ -256,7 +288,7 @@ export class AuthClient {
       // Call server logout endpoint
       if (this.currentUser?.token) {
         await fetch('/api/auth/logout', {
-          method: 'POST',
+          method: HttpMethod.POST,
           headers: {
             Authorization: `Bearer ${this.currentUser.token}`,
             'Content-Type': 'application/json',
@@ -280,6 +312,21 @@ export class AuthClient {
     }
     // No warning needed when token is not available
     return {};
+  }
+
+  /**
+   * Authenticated fetch wrapper that adds authorization header
+   */
+  async fetch(url: string, options?: RequestInit): Promise<Response> {
+    const headers = {
+      ...this.getAuthHeader(),
+      ...(options?.headers || {}),
+    };
+
+    return fetch(url, {
+      ...options,
+      headers,
+    });
   }
 
   /**
@@ -326,7 +373,7 @@ export class AuthClient {
 
   private async createChallenge(userId: string): Promise<Challenge> {
     const response = await fetch('/api/auth/challenge', {
-      method: 'POST',
+      method: HttpMethod.POST,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId }),
     });

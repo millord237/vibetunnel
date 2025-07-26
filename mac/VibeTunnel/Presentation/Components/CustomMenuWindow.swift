@@ -187,6 +187,9 @@ final class CustomMenuWindow: NSPanel {
         orderFront(nil)
         makeKey()
 
+        // Ensure window can receive keyboard events for navigation
+        becomeKey()
+
         // Button state is managed by StatusBarMenuManager
 
         // Set first responder after window is visible
@@ -359,7 +362,7 @@ final class CustomMenuWindow: NSPanel {
 
     override func makeKey() {
         super.makeKey()
-        // Set the window itself as first responder to prevent auto-focus
+        // Set first responder after window is visible
         makeFirstResponder(self)
     }
 

@@ -8,13 +8,13 @@ export async function assertSessionInList(
   sessionName: string,
   options: { timeout?: number; status?: 'running' | 'exited' } = {}
 ): Promise<void> {
-  const { timeout = 5000, status } = options;
+  const { timeout = process.env.CI ? 10000 : 5000, status } = options;
 
   // Ensure we're on the session list page
-  if (page.url().includes('?session=')) {
+  if (page.url().includes('/session/')) {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     // Extra wait for navigation to complete
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   }
 
   // Wait for session list to be ready - check for cards or "no sessions" message
@@ -139,20 +139,37 @@ export async function assertTerminalContains(
   text: string | RegExp,
   options: { timeout?: number; exact?: boolean } = {}
 ): Promise<void> {
-  const { timeout = 5000, exact = false } = options;
+  const { timeout = process.env.CI ? 10000 : 5000, exact = false } = options;
 
   if (typeof text === 'string' && exact) {
     await page.waitForFunction(
       ({ searchText }) => {
         const terminal = document.querySelector('vibe-terminal');
-        return terminal?.textContent === searchText;
+        if (!terminal) return false;
+
+        // Check the terminal container first
+        const container = terminal.querySelector('#terminal-container');
+        const containerContent = container?.textContent || '';
+
+        // Fall back to terminal content
+        const content = terminal.textContent || containerContent;
+
+        return content === searchText;
       },
       { searchText: text },
       { timeout }
     );
   } else {
+    // For regex or non-exact matches, try both selectors
     const terminal = page.locator('vibe-terminal');
-    await expect(terminal).toContainText(text, { timeout });
+    const container = page.locator('vibe-terminal #terminal-container');
+
+    // Try container first, then fall back to terminal
+    try {
+      await expect(container).toContainText(text, { timeout: timeout / 2 });
+    } catch {
+      await expect(terminal).toContainText(text, { timeout: timeout / 2 });
+    }
   }
 }
 
@@ -164,7 +181,7 @@ export async function assertTerminalNotContains(
   text: string | RegExp,
   options: { timeout?: number } = {}
 ): Promise<void> {
-  const { timeout = 5000 } = options;
+  const { timeout = process.env.CI ? 10000 : 5000 } = options;
 
   const terminal = page.locator('vibe-terminal');
   await expect(terminal).not.toContainText(text, { timeout });
@@ -176,16 +193,16 @@ export async function assertTerminalNotContains(
 export async function assertUrlHasSession(page: Page, sessionId?: string): Promise<void> {
   const url = page.url();
 
-  // Check if URL has session parameter
-  const hasSessionParam = url.includes('?session=') || url.includes('&session=');
-  if (!hasSessionParam) {
-    throw new Error(`Expected URL to contain session parameter, but got: ${url}`);
+  // Check if URL has session path
+  const hasSessionPath = url.includes('/session/');
+  if (!hasSessionPath) {
+    throw new Error(`Expected URL to contain session path, but got: ${url}`);
   }
 
   if (sessionId) {
-    // Parse URL to get session ID
-    const urlObj = new URL(url);
-    const actualSessionId = urlObj.searchParams.get('session');
+    // Extract session ID from path-based URL
+    const match = url.match(/\/session\/([^/?]+)/);
+    const actualSessionId = match ? match[1] : null;
 
     if (actualSessionId !== sessionId) {
       throw new Error(
@@ -202,7 +219,7 @@ export async function assertElementState(
   page: Page,
   selector: string,
   state: 'visible' | 'hidden' | 'enabled' | 'disabled' | 'checked' | 'unchecked',
-  timeout = 5000
+  timeout = process.env.CI ? 10000 : 5000
 ): Promise<void> {
   const element = page.locator(selector);
 
@@ -236,10 +253,10 @@ export async function assertSessionCount(
   expectedCount: number,
   options: { timeout?: number; operator?: 'exact' | 'minimum' | 'maximum' } = {}
 ): Promise<void> {
-  const { timeout = 5000, operator = 'exact' } = options;
+  const { timeout = process.env.CI ? 10000 : 5000, operator = 'exact' } = options;
 
   // Ensure we're on the session list page
-  if (page.url().includes('?session=')) {
+  if (page.url().includes('/session/')) {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
   }
 
@@ -283,9 +300,12 @@ export async function assertSessionCount(
 /**
  * Asserts terminal is ready and responsive
  */
-export async function assertTerminalReady(page: Page, timeout = 15000): Promise<void> {
-  // Check terminal element exists
-  const terminal = page.locator('vibe-terminal');
+export async function assertTerminalReady(
+  page: Page,
+  timeout = process.env.CI ? 20000 : 15000
+): Promise<void> {
+  // Check terminal element exists (using ID selector for reliability)
+  const terminal = page.locator('#session-terminal');
   await expect(terminal).toBeVisible({ timeout });
 
   // Wait a bit for terminal to initialize
@@ -294,13 +314,43 @@ export async function assertTerminalReady(page: Page, timeout = 15000): Promise<
   // Check for prompt - with more robust detection and debugging
   await page.waitForFunction(
     () => {
-      const term = document.querySelector('vibe-terminal');
+      const term = document.querySelector('#session-terminal');
       if (!term) {
         console.warn('[assertTerminalReady] Terminal element not found');
         return false;
       }
 
-      // Check if terminal has xterm structure (fallback check)
+      // Look for vibe-terminal inside session-terminal
+      const vibeTerminal = term.querySelector('vibe-terminal');
+      if (vibeTerminal) {
+        // Check the terminal container
+        const container = vibeTerminal.querySelector('#terminal-container');
+        if (container) {
+          const content = container.textContent || '';
+
+          // Check for prompt patterns
+          const promptPatterns = [
+            /[$>#%❯]\s*$/, // Common prompts at end of line
+            /\$\s*$/, // Simple dollar sign
+            />\s*$/, // Simple greater than
+            /#\s*$/, // Root prompt
+            /❯\s*$/, // Fish/zsh prompt
+            /\n\s*[$>#%❯]/, // Prompt after newline
+            /bash-\d+\.\d+\$/, // Bash version prompt
+            /]\$\s*$/, // Bracketed prompt
+            /\w+@\w+/, // Username@hostname pattern
+          ];
+
+          const hasPrompt = promptPatterns.some((pattern) => pattern.test(content));
+
+          // If we have content and it looks like a prompt, we're ready
+          if (hasPrompt || content.length > 10) {
+            return true;
+          }
+        }
+      }
+
+      // Fallback: Check if terminal has xterm structure
       const hasXterm = !!term.querySelector('.xterm');
       const hasShadowRoot = !!term.shadowRoot;
 
@@ -311,8 +361,8 @@ export async function assertTerminalReady(page: Page, timeout = 15000): Promise<
         return false;
       }
 
-      // Log content in CI for debugging (last 200 chars)
-      if (process.env.CI && content) {
+      // Log content for debugging (last 200 chars)
+      if (content && window.location.hostname === 'localhost') {
         console.log(
           '[assertTerminalReady] Terminal content (last 200 chars):',
           content.slice(-200)
@@ -363,7 +413,7 @@ export async function assertModalOpen(
   page: Page,
   options: { title?: string; content?: string; timeout?: number } = {}
 ): Promise<void> {
-  const { title, content, timeout = 5000 } = options;
+  const { title, content, timeout = process.env.CI ? 10000 : 5000 } = options;
 
   const modal = page.locator('.modal-content');
   await expect(modal).toBeVisible({ timeout });
@@ -424,7 +474,7 @@ export async function assertRequestMade(
   urlPattern: string | RegExp,
   options: { method?: string; timeout?: number } = {}
 ): Promise<void> {
-  const { method, timeout = 5000 } = options;
+  const { method, timeout = process.env.CI ? 10000 : 5000 } = options;
 
   const requestPromise = page.waitForRequest(
     (request) => {

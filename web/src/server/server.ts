@@ -10,19 +10,23 @@ import * as os from 'os';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { WebSocketServer } from 'ws';
+import { apiSocketServer } from './api-socket-server.js';
 import type { AuthenticatedRequest } from './middleware/auth.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { PtyManager } from './pty/index.js';
 import { createAuthRoutes } from './routes/auth.js';
 import { createConfigRoutes } from './routes/config.js';
+import { createControlRoutes } from './routes/control.js';
 import { createFileRoutes } from './routes/files.js';
 import { createFilesystemRoutes } from './routes/filesystem.js';
+import { createGitRoutes } from './routes/git.js';
 import { createLogRoutes } from './routes/logs.js';
 import { createPushRoutes } from './routes/push.js';
 import { createRemoteRoutes } from './routes/remotes.js';
 import { createRepositoryRoutes } from './routes/repositories.js';
 import { createSessionRoutes } from './routes/sessions.js';
 import { WebSocketInputHandler } from './routes/websocket-input.js';
+import { createWorktreeRoutes } from './routes/worktrees.js';
 import { ActivityMonitor } from './services/activity-monitor.js';
 import { AuthService } from './services/auth-service.js';
 import { BellEventHandler } from './services/bell-event-handler.js';
@@ -751,6 +755,18 @@ export async function createApp(): Promise<AppInstance> {
   );
   logger.debug('Mounted config routes');
 
+  // Mount Git routes
+  app.use('/api', createGitRoutes());
+  logger.debug('Mounted Git routes');
+
+  // Mount worktree routes
+  app.use('/api', createWorktreeRoutes());
+  logger.debug('Mounted worktree routes');
+
+  // Mount control routes
+  app.use('/api', createControlRoutes());
+  logger.debug('Mounted control routes');
+
   // Mount push notification routes
   if (vapidManager) {
     app.use(
@@ -773,6 +789,15 @@ export async function createApp(): Promise<AppInstance> {
     logger.warn('Mac control features will not be available.');
     // Depending on the desired behavior, you might want to exit here
     // For now, we'll let the server continue without these features.
+  }
+
+  // Initialize API socket for CLI commands
+  try {
+    await apiSocketServer.start();
+    logger.log(chalk.green('API socket server: READY'));
+  } catch (error) {
+    logger.error('Failed to initialize API socket server:', error);
+    logger.warn('vt commands will not work via socket.');
   }
 
   // Handle WebSocket upgrade with authentication
@@ -945,6 +970,21 @@ export async function createApp(): Promise<AppInstance> {
     res.sendFile(path.join(publicPath, 'index.html'));
   });
 
+  // Handle /session/:id routes by serving the same index.html
+  app.get('/session/:id', (_req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+
+  // Handle /worktrees route by serving the same index.html
+  app.get('/worktrees', (_req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+
+  // Handle /file-browser route by serving the same index.html
+  app.get('/file-browser', (_req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+
   // 404 handler for all other routes
   app.use((req, res) => {
     if (req.path.startsWith('/api/')) {
@@ -1004,6 +1044,9 @@ export async function createApp(): Promise<AppInstance> {
       logger.log(
         chalk.green(`VibeTunnel Server running on http://${displayAddress}:${actualPort}`)
       );
+
+      // Update API socket server with actual port information
+      apiSocketServer.setServerInfo(actualPort, `http://${displayAddress}:${actualPort}`);
 
       if (config.noAuth) {
         logger.warn(chalk.yellow('Authentication: DISABLED (--no-auth)'));

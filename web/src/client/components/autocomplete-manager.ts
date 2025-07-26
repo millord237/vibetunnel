@@ -9,6 +9,12 @@ export interface AutocompleteItem {
   type: 'file' | 'directory';
   suggestion: string;
   isRepository?: boolean;
+  gitBranch?: string;
+  gitStatusCount?: number;
+  gitAddedCount?: number;
+  gitModifiedCount?: number;
+  gitDeletedCount?: number;
+  isWorktree?: boolean;
 }
 
 export interface Repository {
@@ -17,6 +23,11 @@ export interface Repository {
   folderName: string;
   lastModified: string;
   relativePath: string;
+  gitBranch?: string;
+  gitStatusCount?: number;
+  gitAddedCount?: number;
+  gitModifiedCount?: number;
+  gitDeletedCount?: number;
 }
 
 export class AutocompleteManager {
@@ -72,6 +83,8 @@ export class AutocompleteManager {
             type: 'directory' as const,
             suggestion: repo.path,
             isRepository: true,
+            gitBranch: repo.gitBranch,
+            gitStatusCount: 0, // Repository service doesn't provide this yet
           }));
 
         // Merge with filesystem completions, avoiding duplicates

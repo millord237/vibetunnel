@@ -6,7 +6,7 @@ import OSLog
 @MainActor
 final class WindowMatcher {
     private let logger = Logger(
-        subsystem: "sh.vibetunnel.vibetunnel",
+        subsystem: BundleIdentifiers.loggerSubsystem,
         category: "WindowMatcher"
     )
 
@@ -19,9 +19,9 @@ final class WindowMatcher {
         sessionInfo: ServerSessionInfo?,
         tabReference: String?,
         tabID: String?,
-        terminalWindows: [WindowEnumerator.WindowInfo]
+        terminalWindows: [WindowInfo]
     )
-        -> WindowEnumerator.WindowInfo?
+        -> WindowInfo?
     {
         // Filter windows for the specific terminal
         let filteredWindows = terminalWindows.filter { $0.terminalApp == terminal }
@@ -157,9 +157,9 @@ final class WindowMatcher {
     func findWindowForSession(
         _ sessionID: String,
         sessionInfo: ServerSessionInfo,
-        allWindows: [WindowEnumerator.WindowInfo]
+        allWindows: [WindowInfo]
     )
-        -> WindowEnumerator.WindowInfo?
+        -> WindowInfo?
     {
         // First try to find window by process PID traversal
         if let sessionPID = sessionInfo.pid {
@@ -259,7 +259,7 @@ final class WindowMatcher {
         logger.debug("Looking for tab matching session \(sessionID) in \(tabs.count) tabs")
         logger.debug("  Working dir: \(workingDir)")
         logger.debug("  Dir name: \(dirName)")
-        logger.debug("  Session name: \(sessionName ?? "none")")
+        logger.debug("  Session name: \(sessionName)")
         logger.debug("  Activity: \(activityStatus ?? "none")")
 
         for (index, tab) in tabs.enumerated() {
@@ -273,8 +273,8 @@ final class WindowMatcher {
                 }
 
                 // Check for session name match
-                if let name = sessionName, !name.isEmpty, title.contains(name) {
-                    logger.info("Found tab by session name match: \(name) at index \(index)")
+                if !sessionName.isEmpty, title.contains(sessionName) {
+                    logger.info("Found tab by session name match: \(sessionName) at index \(index)")
                     return tab
                 }
 

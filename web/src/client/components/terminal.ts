@@ -68,7 +68,6 @@ export class Terminal extends LitElement {
   @state() private cursorVisible = true; // Track cursor visibility state
 
   private container: HTMLElement | null = null;
-  private resizeTimeout: NodeJS.Timeout | null = null;
   private explicitSizeSet = false; // Flag to prevent auto-resize when size is explicitly set
 
   // Virtual scrolling optimization
@@ -107,6 +106,7 @@ export class Terminal extends LitElement {
     logger.debug('Requesting render buffer update');
     this.queueRenderOperation(() => {
       logger.debug('Executing render operation');
+      this.renderBuffer();
     });
   }
 
@@ -451,6 +451,7 @@ export class Terminal extends LitElement {
 
   private async initializeTerminal() {
     try {
+      logger.debug('initializeTerminal starting');
       this.requestUpdate();
 
       this.container = this.querySelector('#terminal-container') as HTMLElement;
@@ -460,6 +461,8 @@ export class Terminal extends LitElement {
         logger.error('terminal container not found', error);
         throw error;
       }
+
+      logger.debug('Terminal container found, proceeding with setup');
 
       await this.setupTerminal();
       this.setupResize();
@@ -518,6 +521,9 @@ export class Terminal extends LitElement {
 
       // Set terminal size - don't call .open() to keep it headless
       this.terminal.resize(this.cols, this.rows);
+
+      // Force initial render of the buffer
+      this.requestRenderBuffer();
     } catch (error) {
       logger.error('failed to create terminal:', error);
       throw error;
@@ -929,14 +935,6 @@ export class Terminal extends LitElement {
     this.container.addEventListener('pointercancel', handlePointerCancel);
   }
 
-  private scrollViewport(deltaLines: number) {
-    if (!this.terminal) return;
-
-    const lineHeight = this.fontSize * 1.2;
-    const deltaPixels = deltaLines * lineHeight;
-    this.scrollViewportPixels(deltaPixels);
-  }
-
   private scrollViewportPixels(deltaPixels: number) {
     if (!this.terminal) return;
 
@@ -1034,7 +1032,15 @@ export class Terminal extends LitElement {
   }
 
   private renderBuffer() {
-    if (!this.terminal || !this.container) return;
+    if (!this.terminal || !this.container) {
+      logger.warn('renderBuffer called but missing terminal or container', {
+        hasTerminal: !!this.terminal,
+        hasContainer: !!this.container,
+      });
+      return;
+    }
+
+    logger.debug('renderBuffer executing');
 
     const startTime = this.debugMode ? performance.now() : 0;
 
@@ -1266,7 +1272,12 @@ export class Terminal extends LitElement {
    * @param followCursor - If true, automatically scroll to keep cursor visible (default: true)
    */
   public write(data: string, followCursor: boolean = true) {
-    if (!this.terminal) return;
+    if (!this.terminal) {
+      logger.warn('Terminal.write called but no terminal instance exists');
+      return;
+    }
+
+    logger.debug(`Terminal.write called with ${data.length} chars, followCursor=${followCursor}`);
 
     // Check for cursor visibility sequences
     if (data.includes('\x1b[?25l')) {
@@ -1288,16 +1299,9 @@ export class Terminal extends LitElement {
         }
       });
 
-      // Follow cursor: scroll to bottom if enabled
+      // Follow cursor if requested
       if (followCursor && this.followCursorEnabled) {
-        const buffer = this.terminal.buffer.active;
-        const lineHeight = this.fontSize * 1.2;
-        const maxScrollPixels = Math.max(0, (buffer.length - this.actualRows) * lineHeight);
-
-        // Set programmatic scroll flag and scroll to bottom
-        this.programmaticScroll = true;
-        this.viewportY = maxScrollPixels;
-        this.programmaticScroll = false;
+        this.followCursor();
       }
     });
   }
@@ -1458,6 +1462,41 @@ export class Terminal extends LitElement {
   }
 
   /**
+   * Check if the terminal is currently scrolled to the bottom.
+   * @returns True if at bottom, false otherwise
+   */
+  private isScrolledToBottom(): boolean {
+    if (!this.terminal) return true;
+
+    const buffer = this.terminal.buffer.active;
+    const lineHeight = this.fontSize * 1.2;
+    const maxScrollPixels = Math.max(0, (buffer.length - this.actualRows) * lineHeight);
+
+    // Consider "at bottom" if within one line height of the bottom
+    return this.viewportY >= maxScrollPixels - lineHeight;
+  }
+
+  /**
+   * Update follow cursor state based on current scroll position.
+   * Disable follow cursor when user scrolls away from bottom.
+   * Re-enable when user scrolls back to bottom.
+   */
+  private updateFollowCursorState(): void {
+    // Don't update state during programmatic scrolling
+    if (this.programmaticScroll) return;
+
+    const wasAtBottom = this.isScrolledToBottom();
+
+    if (wasAtBottom && !this.followCursorEnabled) {
+      // User scrolled back to bottom - re-enable follow cursor
+      this.followCursorEnabled = true;
+    } else if (!wasAtBottom && this.followCursorEnabled) {
+      // User scrolled away from bottom - disable follow cursor
+      this.followCursorEnabled = false;
+    }
+  }
+
+  /**
    * Scroll the viewport to follow the cursor position.
    * This ensures the cursor stays visible during text input or playback.
    */
@@ -1493,41 +1532,6 @@ export class Terminal extends LitElement {
 
     // Clear programmatic scroll flag
     this.programmaticScroll = false;
-  }
-
-  /**
-   * Check if the terminal is currently scrolled to the bottom.
-   * @returns True if at bottom, false otherwise
-   */
-  private isScrolledToBottom(): boolean {
-    if (!this.terminal) return true;
-
-    const buffer = this.terminal.buffer.active;
-    const lineHeight = this.fontSize * 1.2;
-    const maxScrollPixels = Math.max(0, (buffer.length - this.actualRows) * lineHeight);
-
-    // Consider "at bottom" if within one line height of the bottom
-    return this.viewportY >= maxScrollPixels - lineHeight;
-  }
-
-  /**
-   * Update follow cursor state based on current scroll position.
-   * Disable follow cursor when user scrolls away from bottom.
-   * Re-enable when user scrolls back to bottom.
-   */
-  private updateFollowCursorState(): void {
-    // Don't update state during programmatic scrolling
-    if (this.programmaticScroll) return;
-
-    const wasAtBottom = this.isScrolledToBottom();
-
-    if (wasAtBottom && !this.followCursorEnabled) {
-      // User scrolled back to bottom - re-enable follow cursor
-      this.followCursorEnabled = true;
-    } else if (!wasAtBottom && this.followCursorEnabled) {
-      // User scrolled away from bottom - disable follow cursor
-      this.followCursorEnabled = false;
-    }
   }
 
   /**

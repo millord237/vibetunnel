@@ -14,45 +14,43 @@
  * @listens browser-cancel - From file browser when cancelled
  */
 import { html, LitElement, type PropertyValues } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, property } from 'lit/decorators.js';
 import type { Session } from '../../shared/types.js';
-import './terminal.js';
-import './vibe-terminal-binary.js';
-import './file-browser.js';
-import './file-picker.js';
-import type { FilePicker } from './file-picker.js';
 import './clickable-path.js';
-import './terminal-quick-keys.js';
-import './session-view/mobile-input-overlay.js';
-import { titleManager } from '../utils/title-manager.js';
-import './session-view/ctrl-alpha-overlay.js';
-import './session-view/width-selector.js';
 import './session-view/session-header.js';
+import './worktree-manager.js';
 import { authClient } from '../services/auth-client.js';
-import { sessionActionService } from '../services/session-action-service.js';
+import { GitService } from '../services/git-service.js';
 import { createLogger } from '../utils/logger.js';
-import {
-  COMMON_TERMINAL_WIDTHS,
-  TerminalPreferencesManager,
-} from '../utils/terminal-preferences.js';
 import type { TerminalThemeId } from '../utils/terminal-themes.js';
+// Manager imports
 import { ConnectionManager } from './session-view/connection-manager.js';
 import {
   type DirectKeyboardCallbacks,
   DirectKeyboardManager,
 } from './session-view/direct-keyboard-manager.js';
+// New managers
+import { FileOperationsManager } from './session-view/file-operations-manager.js';
 import { InputManager } from './session-view/input-manager.js';
 import type { LifecycleEventManagerCallbacks } from './session-view/interfaces.js';
 import { LifecycleEventManager } from './session-view/lifecycle-event-manager.js';
 import { LoadingAnimationManager } from './session-view/loading-animation-manager.js';
 import { MobileInputManager } from './session-view/mobile-input-manager.js';
+import { SessionActionsHandler } from './session-view/session-actions-handler.js';
 import {
   type TerminalEventHandlers,
   TerminalLifecycleManager,
   type TerminalStateCallbacks,
 } from './session-view/terminal-lifecycle-manager.js';
+import { TerminalSettingsManager } from './session-view/terminal-settings-manager.js';
+import { UIStateManager } from './session-view/ui-state-manager.js';
+import type { AppPreferences } from './settings.js';
+import { STORAGE_KEY } from './settings.js';
+
+// Components
+import './session-view/terminal-renderer.js';
+import './session-view/overlays-container.js';
 import type { Terminal } from './terminal.js';
-import { type AppPreferences, STORAGE_KEY } from './unified-settings.js';
 import type { VibeTerminalBinary } from './vibe-terminal-binary.js';
 
 // Extend Window interface to include our custom property
@@ -77,37 +75,8 @@ export class SessionView extends LitElement {
   @property({ type: Boolean }) sidebarCollapsed = false;
   @property({ type: Boolean }) disableFocusManagement = false;
   @property({ type: Boolean }) keyboardCaptureActive = true;
-  @state() private connected = false;
-  @state() private showMobileInput = false;
-  @state() private mobileInputText = '';
-  @state() private isMobile = false;
-  @state() private touchStartX = 0;
-  @state() private touchStartY = 0;
-  @state() private terminalCols = 0;
-  @state() private terminalRows = 0;
-  @state() private showCtrlAlpha = false;
-  @state() private terminalFitHorizontally = false;
-  @state() private terminalMaxCols = 0;
-  @state() private showWidthSelector = false;
-  @state() private customWidth = '';
-  @state() private showFileBrowser = false;
-  @state() private showImagePicker = false;
-  @state() private isDragOver = false;
-  @state() private terminalFontSize = 14;
-  @state() private terminalTheme: TerminalThemeId = 'auto';
-  @state() private terminalContainerHeight = '100%';
-  @state() private isLandscape = false;
-  @state() private useBinaryMode = false;
-  @state() private macAppConnected = false;
 
-  private preferencesManager = TerminalPreferencesManager.getInstance();
-
-  // Bound event handlers to ensure proper cleanup
-  private boundHandleDragOver = this.handleDragOver.bind(this);
-  private boundHandleDragLeave = this.handleDragLeave.bind(this);
-  private boundHandleDrop = this.handleDrop.bind(this);
-  private boundHandlePaste = this.handlePaste.bind(this);
-  private boundHandleOrientationChange?: () => void;
+  // Managers
   private connectionManager!: ConnectionManager;
   private inputManager!: InputManager;
   private mobileInputManager!: MobileInputManager;
@@ -115,33 +84,35 @@ export class SessionView extends LitElement {
   private terminalLifecycleManager!: TerminalLifecycleManager;
   private lifecycleEventManager!: LifecycleEventManager;
   private loadingAnimationManager = new LoadingAnimationManager();
-  @state() private ctrlSequence: string[] = [];
-  @state() private useDirectKeyboard = false;
-  @state() private showQuickKeys = false;
-  @state() private keyboardHeight = 0;
+  private fileOperationsManager = new FileOperationsManager();
+  private terminalSettingsManager = new TerminalSettingsManager();
+  private sessionActionsHandler = new SessionActionsHandler();
+  private uiStateManager = new UIStateManager();
+
+  private gitService = new GitService(authClient);
+  private boundHandleOrientationChange?: () => void;
+
+  // Bound terminal event handlers
+  private boundHandleTerminalClick = this.handleTerminalClick.bind(this);
+  private boundHandleTerminalInput = this.handleTerminalInput.bind(this);
+  private boundHandleTerminalResize = this.handleTerminalResize.bind(this);
+  private boundHandleTerminalReady = this.handleTerminalReady.bind(this);
 
   private instanceId = `session-view-${Math.random().toString(36).substr(2, 9)}`;
-  private createHiddenInputTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  // Removed methods that are now in LifecycleEventManager:
-  // - handlePreferencesChanged
-  // - keyboardHandler
-  // - touchStartHandler
-  // - touchEndHandler
-  // - handleClickOutside
+  private _updateTerminalTransformTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private createLifecycleEventManagerCallbacks(): LifecycleEventManagerCallbacks {
     return {
       requestUpdate: () => this.requestUpdate(),
       handleBack: () => this.handleBack(),
       handleKeyboardInput: (e: KeyboardEvent) => this.handleKeyboardInput(e),
-      getIsMobile: () => this.isMobile,
+      getIsMobile: () => this.uiStateManager.getState().isMobile,
       setIsMobile: (value: boolean) => {
-        this.isMobile = value;
+        this.uiStateManager.setIsMobile(value);
       },
-      getUseDirectKeyboard: () => this.useDirectKeyboard,
+      getUseDirectKeyboard: () => this.uiStateManager.getState().useDirectKeyboard,
       setUseDirectKeyboard: (value: boolean) => {
-        this.useDirectKeyboard = value;
+        this.uiStateManager.setUseDirectKeyboard(value);
       },
       getDirectKeyboardManager: () => ({
         getShowQuickKeys: () => this.directKeyboardManager.getShowQuickKeys(),
@@ -150,19 +121,19 @@ export class SessionView extends LitElement {
         cleanup: () => this.directKeyboardManager.cleanup(),
       }),
       setShowQuickKeys: (value: boolean) => {
-        this.showQuickKeys = value;
+        this.uiStateManager.setShowQuickKeys(value);
         this.updateTerminalTransform();
       },
       setShowFileBrowser: (value: boolean) => {
-        this.showFileBrowser = value;
+        this.uiStateManager.setShowFileBrowser(value);
       },
       getInputManager: () => this.inputManager,
-      getShowWidthSelector: () => this.showWidthSelector,
+      getShowWidthSelector: () => this.uiStateManager.getState().showWidthSelector,
       setShowWidthSelector: (value: boolean) => {
-        this.showWidthSelector = value;
+        this.uiStateManager.setShowWidthSelector(value);
       },
       setCustomWidth: (value: string) => {
-        this.customWidth = value;
+        this.uiStateManager.setCustomWidth(value);
       },
       querySelector: (selector: string) => this.querySelector(selector),
       setTabIndex: (value: number) => {
@@ -177,7 +148,7 @@ export class SessionView extends LitElement {
       startLoading: () => this.loadingAnimationManager.startLoading(() => this.requestUpdate()),
       stopLoading: () => this.loadingAnimationManager.stopLoading(),
       setKeyboardHeight: (value: number) => {
-        this.keyboardHeight = value;
+        this.uiStateManager.setKeyboardHeight(value);
         this.updateTerminalTransform();
       },
       getTerminalLifecycleManager: () =>
@@ -195,15 +166,65 @@ export class SessionView extends LitElement {
             }
           : null,
       setConnected: (connected: boolean) => {
-        this.connected = connected;
+        this.uiStateManager.setConnected(connected);
       },
-      getKeyboardCaptureActive: () => this.keyboardCaptureActive,
+      getKeyboardCaptureActive: () => this.uiStateManager.getState().keyboardCaptureActive,
     };
   }
 
   connectedCallback() {
     super.connectedCallback();
-    this.connected = true;
+
+    // Initialize UIStateManager callbacks
+    this.uiStateManager.setCallbacks({
+      requestUpdate: () => this.requestUpdate(),
+    });
+
+    // Initialize FileOperationsManager callbacks
+    this.fileOperationsManager.setCallbacks({
+      requestUpdate: () => this.requestUpdate(),
+      getSession: () => this.session,
+      getInputManager: () => this.inputManager,
+      querySelector: (selector: string) => this.querySelector(selector),
+      setIsDragOver: (isDragOver: boolean) => this.uiStateManager.setIsDragOver(isDragOver),
+      setShowFileBrowser: (value: boolean) => this.uiStateManager.setShowFileBrowser(value),
+      setShowImagePicker: (value: boolean) => this.uiStateManager.setShowImagePicker(value),
+      getIsMobile: () => this.uiStateManager.getState().isMobile,
+      getShowFileBrowser: () => this.uiStateManager.getState().showFileBrowser,
+      getShowImagePicker: () => this.uiStateManager.getState().showImagePicker,
+      getShowMobileInput: () => this.uiStateManager.getState().showMobileInput,
+      dispatchEvent: (event: Event) => this.dispatchEvent(event),
+    });
+
+    // Initialize TerminalSettingsManager
+    this.terminalSettingsManager.setCallbacks({
+      requestUpdate: () => this.requestUpdate(),
+      getSession: () => this.session,
+      getTerminalElement: () => this.getTerminalElement(),
+      setTerminalMaxCols: (cols: number) => this.uiStateManager.setTerminalMaxCols(cols),
+      setTerminalFontSize: (size: number) => this.uiStateManager.setTerminalFontSize(size),
+      setTerminalTheme: (theme: TerminalThemeId) => this.uiStateManager.setTerminalTheme(theme),
+      setShowWidthSelector: (show: boolean) => this.uiStateManager.setShowWidthSelector(show),
+      setCustomWidth: (width: string) => this.uiStateManager.setCustomWidth(width),
+      getTerminalLifecycleManager: () => this.terminalLifecycleManager,
+    });
+
+    // Initialize SessionActionsHandler
+    this.sessionActionsHandler.setCallbacks({
+      getSession: () => this.session,
+      setSession: (session: Session) => {
+        this.session = session;
+      },
+      requestUpdate: () => this.requestUpdate(),
+      dispatchEvent: (event: Event) => this.dispatchEvent(event),
+      getViewMode: () => this.uiStateManager.getState().viewMode,
+      setViewMode: (mode: 'terminal' | 'worktree') => this.uiStateManager.setViewMode(mode),
+      handleBack: () => this.handleBack(),
+      ensureTerminalInitialized: () => this.ensureTerminalInitialized(),
+    });
+
+    // Load direct keyboard preference
+    this.uiStateManager.loadDirectKeyboardPreference();
 
     // Check server status to see if Mac app is connected
     this.checkServerStatus();
@@ -270,11 +291,14 @@ export class SessionView extends LitElement {
     );
     this.connectionManager.setConnected(true);
 
+    // Set connected state in UI state manager
+    this.uiStateManager.setConnected(true);
+
     // Initialize input manager
     this.inputManager = new InputManager();
     this.inputManager.setCallbacks({
       requestUpdate: () => this.requestUpdate(),
-      getKeyboardCaptureActive: () => this.keyboardCaptureActive,
+      getKeyboardCaptureActive: () => this.uiStateManager.getState().keyboardCaptureActive,
     });
 
     // Initialize mobile input manager
@@ -288,8 +312,8 @@ export class SessionView extends LitElement {
 
     // Set up callbacks for direct keyboard manager
     const directKeyboardCallbacks: DirectKeyboardCallbacks = {
-      getShowMobileInput: () => this.showMobileInput,
-      getShowCtrlAlpha: () => this.showCtrlAlpha,
+      getShowMobileInput: () => this.uiStateManager.getState().showMobileInput,
+      getShowCtrlAlpha: () => this.uiStateManager.getState().showCtrlAlpha,
       getDisableFocusManagement: () => this.disableFocusManagement,
       getVisualViewportHandler: () => {
         // Trigger the visual viewport handler if it exists
@@ -297,15 +321,7 @@ export class SessionView extends LitElement {
           // Manually trigger keyboard height calculation
           const viewport = window.visualViewport;
           const keyboardHeight = window.innerHeight - viewport.height;
-          this.keyboardHeight = keyboardHeight;
-
-          // Update quick keys component if it exists
-          const quickKeys = this.querySelector('terminal-quick-keys') as HTMLElement & {
-            keyboardHeight: number;
-          };
-          if (quickKeys) {
-            quickKeys.keyboardHeight = keyboardHeight;
-          }
+          this.uiStateManager.setKeyboardHeight(keyboardHeight);
 
           logger.log(`Visual Viewport keyboard height (manual trigger): ${keyboardHeight}px`);
 
@@ -313,41 +329,38 @@ export class SessionView extends LitElement {
           return () => {
             if (window.visualViewport) {
               const currentHeight = window.innerHeight - window.visualViewport.height;
-              this.keyboardHeight = currentHeight;
-              if (quickKeys) {
-                quickKeys.keyboardHeight = currentHeight;
-              }
+              this.uiStateManager.setKeyboardHeight(currentHeight);
             }
           };
         }
         return null;
       },
-      getKeyboardHeight: () => this.keyboardHeight,
+      getKeyboardHeight: () => this.uiStateManager.getState().keyboardHeight,
       setKeyboardHeight: (height: number) => {
-        this.keyboardHeight = height;
+        this.uiStateManager.setKeyboardHeight(height);
         this.updateTerminalTransform();
         this.requestUpdate();
       },
       updateShowQuickKeys: (value: boolean) => {
-        this.showQuickKeys = value;
+        this.uiStateManager.setShowQuickKeys(value);
         this.requestUpdate();
         // Update terminal transform when quick keys visibility changes
         this.updateTerminalTransform();
       },
       toggleMobileInput: () => {
-        this.showMobileInput = !this.showMobileInput;
+        this.uiStateManager.toggleMobileInput();
         this.requestUpdate();
       },
       clearMobileInputText: () => {
-        this.mobileInputText = '';
+        this.uiStateManager.setMobileInputText('');
         this.requestUpdate();
       },
       toggleCtrlAlpha: () => {
-        this.showCtrlAlpha = !this.showCtrlAlpha;
+        this.uiStateManager.toggleCtrlAlpha();
         this.requestUpdate();
       },
       clearCtrlSequence: () => {
-        this.ctrlSequence = [];
+        this.uiStateManager.clearCtrlSequence();
         this.requestUpdate();
       },
     };
@@ -357,7 +370,7 @@ export class SessionView extends LitElement {
     this.terminalLifecycleManager = new TerminalLifecycleManager();
     this.terminalLifecycleManager.setConnectionManager(this.connectionManager);
     this.terminalLifecycleManager.setInputManager(this.inputManager);
-    this.terminalLifecycleManager.setConnected(this.connected);
+    this.terminalLifecycleManager.setConnected(this.uiStateManager.getState().connected);
     this.terminalLifecycleManager.setDomElement(this);
 
     // Set up event handlers for terminal lifecycle manager
@@ -375,8 +388,7 @@ export class SessionView extends LitElement {
     // Set up state callbacks for terminal lifecycle manager
     const stateCallbacks: TerminalStateCallbacks = {
       updateTerminalDimensions: (cols: number, rows: number) => {
-        this.terminalCols = cols;
-        this.terminalRows = rows;
+        this.uiStateManager.setTerminalDimensions(cols, rows);
         this.requestUpdate();
       },
     };
@@ -388,13 +400,16 @@ export class SessionView extends LitElement {
     }
 
     // Load terminal preferences
-    this.terminalMaxCols = this.preferencesManager.getMaxCols();
-    this.terminalFontSize = this.preferencesManager.getFontSize();
-    this.terminalTheme = this.preferencesManager.getTheme();
-    logger.debug('Loaded terminal theme:', this.terminalTheme);
-    this.terminalLifecycleManager.setTerminalFontSize(this.terminalFontSize);
-    this.terminalLifecycleManager.setTerminalMaxCols(this.terminalMaxCols);
-    this.terminalLifecycleManager.setTerminalTheme(this.terminalTheme);
+    const maxCols = this.terminalSettingsManager.getMaxCols();
+    const fontSize = this.terminalSettingsManager.getFontSize();
+    const theme = this.terminalSettingsManager.getTheme();
+    this.uiStateManager.setTerminalMaxCols(maxCols);
+    this.uiStateManager.setTerminalFontSize(fontSize);
+    this.uiStateManager.setTerminalTheme(theme);
+    logger.debug('Loaded terminal theme:', theme);
+    this.terminalLifecycleManager.setTerminalFontSize(fontSize);
+    this.terminalLifecycleManager.setTerminalMaxCols(maxCols);
+    this.terminalLifecycleManager.setTerminalTheme(theme);
 
     // Initialize lifecycle event manager
     this.lifecycleEventManager = new LifecycleEventManager();
@@ -409,23 +424,20 @@ export class SessionView extends LitElement {
       const stored = localStorage.getItem('vibetunnel_app_preferences');
       if (stored) {
         const preferences = JSON.parse(stored);
-        this.useDirectKeyboard = preferences.useDirectKeyboard ?? true; // Default to true for new users
+        this.uiStateManager.setUseDirectKeyboard(preferences.useDirectKeyboard ?? true); // Default to true for new users
       } else {
-        this.useDirectKeyboard = true; // Default to true when no settings exist
+        this.uiStateManager.setUseDirectKeyboard(true); // Default to true when no settings exist
       }
     } catch (error) {
       logger.error('Failed to load app preferences', error);
-      this.useDirectKeyboard = true; // Default to true on error
+      this.uiStateManager.setUseDirectKeyboard(true); // Default to true on error
     }
 
     // Set up lifecycle (replaces the extracted lifecycle logic)
     this.lifecycleEventManager.setupLifecycle();
 
-    // Add drag & drop and paste event listeners
-    this.addEventListener('dragover', this.boundHandleDragOver);
-    this.addEventListener('dragleave', this.boundHandleDragLeave);
-    this.addEventListener('drop', this.boundHandleDrop);
-    document.addEventListener('paste', this.boundHandlePaste);
+    // Use FileOperationsManager's event setup which includes dragend and global dragover
+    this.fileOperationsManager.setupEventListeners(this);
   }
 
   disconnectedCallback() {
@@ -440,17 +452,11 @@ export class SessionView extends LitElement {
     // Remove binary mode listener
     window.removeEventListener('terminal-binary-mode-changed', this.handleBinaryModeChange);
 
-    // Remove drag & drop and paste event listeners
-    this.removeEventListener('dragover', this.boundHandleDragOver);
-    this.removeEventListener('dragleave', this.boundHandleDragLeave);
-    this.removeEventListener('drop', this.boundHandleDrop);
-    document.removeEventListener('paste', this.boundHandlePaste);
+    // Remove drag & drop and paste event listeners using FileOperationsManager
+    this.fileOperationsManager.removeEventListeners(this);
 
-    // Clear any pending timeout
-    if (this.createHiddenInputTimeout) {
-      clearTimeout(this.createHiddenInputTimeout);
-      this.createHiddenInputTimeout = null;
-    }
+    // Reset drag state
+    this.fileOperationsManager.resetDragState();
 
     // Clear any pending updateTerminalTransform timeout
     if (this._updateTerminalTransformTimeout) {
@@ -471,7 +477,7 @@ export class SessionView extends LitElement {
   private checkOrientation() {
     // Check if we're in landscape mode
     const isLandscape = window.matchMedia('(orientation: landscape)').matches;
-    this.isLandscape = isLandscape;
+    this.uiStateManager.setIsLandscape(isLandscape);
   }
 
   private handleOrientationChange() {
@@ -485,7 +491,7 @@ export class SessionView extends LitElement {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const preferences = JSON.parse(stored) as AppPreferences;
-        this.useBinaryMode = preferences.useBinaryMode ?? false;
+        this.uiStateManager.setUseBinaryMode(preferences.useBinaryMode ?? false);
       }
     } catch (error) {
       logger.warn('Failed to load binary mode preference', error);
@@ -497,11 +503,12 @@ export class SessionView extends LitElement {
     const newValue = customEvent.detail;
 
     // Only update if value actually changed
-    if (this.useBinaryMode !== newValue) {
-      this.useBinaryMode = newValue;
+    const currentState = this.uiStateManager.getState();
+    if (currentState.useBinaryMode !== newValue) {
+      this.uiStateManager.setUseBinaryMode(newValue);
 
       // If we have an active session, reconnect with new mode
-      if (this.session && this.connected) {
+      if (this.session && currentState.connected) {
         // Disconnect current terminal
         this.connectionManager.cleanupStreamConnection();
 
@@ -517,7 +524,16 @@ export class SessionView extends LitElement {
   };
 
   private getTerminalElement(): Terminal | VibeTerminalBinary | null {
-    return this.useBinaryMode
+    // Look for terminal inside terminal-renderer (no shadow DOM, so direct descendant selector works)
+    const terminalRenderer = this.querySelector('terminal-renderer');
+    if (terminalRenderer) {
+      return this.uiStateManager.getState().useBinaryMode
+        ? (terminalRenderer.querySelector('vibe-terminal-binary') as VibeTerminalBinary | null)
+        : (terminalRenderer.querySelector('vibe-terminal') as Terminal | null);
+    }
+
+    // Fallback to direct search (shouldn't happen with new structure)
+    return this.uiStateManager.getState().useBinaryMode
       ? (this.querySelector('vibe-terminal-binary') as VibeTerminalBinary | null)
       : (this.querySelector('vibe-terminal') as Terminal | null);
   }
@@ -526,8 +542,8 @@ export class SessionView extends LitElement {
     super.firstUpdated(changedProperties);
 
     // Load terminal preferences BEFORE terminal setup to ensure proper initialization
-    this.terminalTheme = this.preferencesManager.getTheme();
-    logger.debug('Loaded terminal theme from preferences:', this.terminalTheme);
+    const terminalTheme = this.terminalSettingsManager.getTerminalTheme();
+    logger.debug('Loaded terminal theme from preferences:', terminalTheme);
 
     // Don't setup terminal here - wait for session data to be available
     // Terminal setup will be triggered in updated() when session becomes available
@@ -564,7 +580,7 @@ export class SessionView extends LitElement {
       }
 
       // Initialize terminal when session first becomes available
-      if (this.session && this.connected && !oldSession) {
+      if (this.session && this.uiStateManager.getState().connected && !oldSession) {
         logger.log('Session data now available, initializing terminal');
         this.ensureTerminalInitialized();
       }
@@ -581,15 +597,18 @@ export class SessionView extends LitElement {
     }
 
     // Ensure terminal is initialized when connected state changes
-    if (changedProperties.has('connected') && this.connected && this.session) {
+    if (
+      changedProperties.has('connected') &&
+      this.uiStateManager.getState().connected &&
+      this.session
+    ) {
       this.ensureTerminalInitialized();
     }
 
-    // Update input manager callbacks when keyboard capture state changes
-    if (changedProperties.has('keyboardCaptureActive') && this.inputManager) {
-      // The callback already returns this.keyboardCaptureActive which gets the updated value
-      // We don't need to update callbacks, but we can add logging for debugging
-      logger.log('Keyboard capture state updated:', this.keyboardCaptureActive);
+    // Update UIStateManager when keyboardCaptureActive prop changes
+    if (changedProperties.has('keyboardCaptureActive')) {
+      this.uiStateManager.setKeyboardCaptureActive(this.keyboardCaptureActive);
+      logger.log(`Keyboard capture state updated to: ${this.keyboardCaptureActive}`);
     }
   }
 
@@ -598,7 +617,7 @@ export class SessionView extends LitElement {
    * This method is idempotent and can be called multiple times safely.
    */
   private ensureTerminalInitialized() {
-    if (!this.session || !this.connected) {
+    if (!this.session || !this.uiStateManager.getState().connected) {
       logger.log('Cannot initialize terminal: missing session or not connected');
       return;
     }
@@ -613,10 +632,12 @@ export class SessionView extends LitElement {
     const terminalElement = this.getTerminalElement();
     if (!terminalElement) {
       logger.log('Terminal element not found in DOM, deferring initialization');
-      // Retry after next render cycle
-      requestAnimationFrame(() => {
-        this.ensureTerminalInitialized();
-      });
+      // Retry after next render cycle with a small delay to ensure terminal-renderer has rendered
+      setTimeout(() => {
+        requestAnimationFrame(() => {
+          this.ensureTerminalInitialized();
+        });
+      }, 100);
       return;
     }
 
@@ -679,13 +700,13 @@ export class SessionView extends LitElement {
       });
       if (response.ok) {
         const status = await response.json();
-        this.macAppConnected = status.macAppConnected || false;
+        this.uiStateManager.setMacAppConnected(status.macAppConnected || false);
         logger.debug('server status:', status);
       }
     } catch (error) {
       logger.warn('failed to check server status:', error);
       // Default to not connected if we can't check
-      this.macAppConnected = false;
+      this.uiStateManager.setMacAppConnected(false);
     }
   }
 
@@ -701,29 +722,16 @@ export class SessionView extends LitElement {
 
   private handleSessionExit(e: Event) {
     const customEvent = e as CustomEvent;
-    logger.log('session exit event received', customEvent.detail);
+    this.sessionActionsHandler.handleSessionExit(
+      customEvent.detail.sessionId,
+      customEvent.detail.exitCode
+    );
 
+    // Switch to snapshot mode - disconnect stream and load final snapshot
     if (this.session && customEvent.detail.sessionId === this.session.id) {
-      // Update session status to exited
-      this.session = { ...this.session, status: 'exited' };
-      this.requestUpdate();
-
-      // Switch to snapshot mode - disconnect stream and load final snapshot
       if (this.connectionManager) {
         this.connectionManager.cleanupStreamConnection();
       }
-
-      // Notify parent app that session status changed so it can refresh the session list
-      this.dispatchEvent(
-        new CustomEvent('session-status-changed', {
-          detail: {
-            sessionId: this.session.id,
-            newStatus: 'exited',
-            exitCode: customEvent.detail.exitCode,
-          },
-          bubbles: true,
-        })
-      );
     }
   }
 
@@ -734,55 +742,15 @@ export class SessionView extends LitElement {
 
   // Helper methods for MobileInputManager
   shouldUseDirectKeyboard(): boolean {
-    return this.useDirectKeyboard;
+    return this.uiStateManager.getState().useDirectKeyboard;
   }
 
   toggleMobileInputDisplay(): void {
-    this.showMobileInput = !this.showMobileInput;
-    if (!this.showMobileInput) {
+    this.uiStateManager.toggleMobileInput();
+    if (!this.uiStateManager.getState().showMobileInput) {
       // Refresh terminal scroll position after closing mobile input
       this.refreshTerminalAfterMobileInput();
     }
-  }
-
-  getMobileInputText(): string {
-    return this.mobileInputText;
-  }
-
-  clearMobileInputText(): void {
-    this.mobileInputText = '';
-  }
-
-  closeMobileInput(): void {
-    this.showMobileInput = false;
-  }
-
-  shouldRefocusHiddenInput(): boolean {
-    return this.directKeyboardManager.shouldRefocusHiddenInput();
-  }
-
-  refocusHiddenInput(): void {
-    this.directKeyboardManager.refocusHiddenInput();
-  }
-
-  startFocusRetention(): void {
-    this.directKeyboardManager.startFocusRetentionPublic();
-  }
-
-  delayedRefocusHiddenInput(): void {
-    this.directKeyboardManager.delayedRefocusHiddenInputPublic();
-  }
-
-  private async handleMobileInputSendOnly(text: string) {
-    await this.mobileInputManager.handleMobileInputSendOnly(text);
-  }
-
-  private async handleMobileInputSend(text: string) {
-    await this.mobileInputManager.handleMobileInputSend(text);
-  }
-
-  private handleMobileInputCancel() {
-    this.mobileInputManager.handleMobileInputCancel();
   }
 
   private async handleSpecialKey(key: string) {
@@ -791,28 +759,23 @@ export class SessionView extends LitElement {
     }
   }
 
-  private handleCtrlAlphaToggle() {
-    this.showCtrlAlpha = !this.showCtrlAlpha;
-  }
-
   private async handleCtrlKey(letter: string) {
     // Add to sequence instead of immediately sending
-    this.ctrlSequence = [...this.ctrlSequence, letter];
-    this.requestUpdate();
+    this.uiStateManager.addCtrlSequence(letter);
   }
 
   private async handleSendCtrlSequence() {
     // Send each ctrl key in sequence
+    const ctrlSequence = this.uiStateManager.getState().ctrlSequence;
     if (this.inputManager) {
-      for (const letter of this.ctrlSequence) {
+      for (const letter of ctrlSequence) {
         const controlCode = String.fromCharCode(letter.charCodeAt(0) - 64);
         await this.inputManager.sendInputText(controlCode);
       }
     }
     // Clear sequence and close overlay
-    this.ctrlSequence = [];
-    this.showCtrlAlpha = false;
-    this.requestUpdate();
+    this.uiStateManager.clearCtrlSequence();
+    this.uiStateManager.setShowCtrlAlpha(false);
 
     // Refocus the hidden input
     if (this.directKeyboardManager.shouldRefocusHiddenInput()) {
@@ -821,14 +784,12 @@ export class SessionView extends LitElement {
   }
 
   private handleClearCtrlSequence() {
-    this.ctrlSequence = [];
-    this.requestUpdate();
+    this.uiStateManager.clearCtrlSequence();
   }
 
   private handleCtrlAlphaCancel() {
-    this.showCtrlAlpha = false;
-    this.ctrlSequence = [];
-    this.requestUpdate();
+    this.uiStateManager.setShowCtrlAlpha(false);
+    this.uiStateManager.clearCtrlSequence();
 
     // Refocus the hidden input
     if (this.directKeyboardManager.shouldRefocusHiddenInput()) {
@@ -837,37 +798,18 @@ export class SessionView extends LitElement {
   }
 
   private toggleDirectKeyboard() {
-    this.useDirectKeyboard = !this.useDirectKeyboard;
-
-    // Save preference
-    try {
-      const stored = localStorage.getItem('vibetunnel_app_preferences');
-      const preferences = stored ? JSON.parse(stored) : {};
-      preferences.useDirectKeyboard = this.useDirectKeyboard;
-      localStorage.setItem('vibetunnel_app_preferences', JSON.stringify(preferences));
-
-      // Emit preference change event
-      window.dispatchEvent(
-        new CustomEvent('app-preferences-changed', {
-          detail: preferences,
-        })
-      );
-    } catch (error) {
-      logger.error('Failed to save direct keyboard preference', error);
-    }
-
-    // Update UI
-    this.requestUpdate();
+    this.uiStateManager.toggleDirectKeyboard();
 
     // If enabling direct keyboard on mobile, ensure hidden input
-    if (this.isMobile && this.useDirectKeyboard) {
+    const state = this.uiStateManager.getState();
+    if (state.isMobile && state.useDirectKeyboard) {
       this.directKeyboardManager.ensureHiddenInputVisible();
     }
   }
 
   private handleKeyboardButtonClick() {
     // Show quick keys immediately for visual feedback
-    this.showQuickKeys = true;
+    this.uiStateManager.setShowQuickKeys(true);
 
     // Update terminal transform immediately
     this.updateTerminalTransform();
@@ -880,393 +822,9 @@ export class SessionView extends LitElement {
     this.requestUpdate();
   }
 
-  private handleTerminalFitToggle() {
-    this.terminalFitHorizontally = !this.terminalFitHorizontally;
-    // Find the terminal component and call its handleFitToggle method
-    const terminal = this.getTerminalElement() as HTMLElement & {
-      handleFitToggle?: () => void;
-    };
-    if (terminal?.handleFitToggle) {
-      // Use the terminal's own toggle method which handles scroll position correctly
-      terminal.handleFitToggle();
-    }
-  }
-
-  private handleMaxWidthToggle() {
-    this.showWidthSelector = !this.showWidthSelector;
-  }
-
-  private handleWidthSelect(newMaxCols: number) {
-    this.terminalMaxCols = newMaxCols;
-    this.preferencesManager.setMaxCols(newMaxCols);
-    this.showWidthSelector = false;
-
-    // Update the terminal lifecycle manager
-    this.terminalLifecycleManager.setTerminalMaxCols(newMaxCols);
-
-    // Update the terminal component
-    const terminal = this.getTerminalElement();
-    if (terminal) {
-      terminal.maxCols = newMaxCols;
-      // Mark that user has manually selected a width
-      terminal.setUserOverrideWidth(true);
-      // Trigger a resize to apply the new constraint
-      terminal.requestUpdate();
-    } else {
-      logger.warn('Terminal component not found when setting width');
-    }
-  }
-
-  getCurrentWidthLabel(): string {
-    const terminal = this.getTerminalElement();
-    const userOverrideWidth = terminal?.userOverrideWidth || false;
-    const initialCols = terminal?.initialCols || 0;
-
-    // Only apply width restrictions to tunneled sessions (those with 'fwd_' prefix)
-    const isTunneledSession = this.session?.id?.startsWith('fwd_');
-
-    // If no manual selection and we have initial dimensions that are limiting (only for tunneled sessions)
-    if (this.terminalMaxCols === 0 && initialCols > 0 && !userOverrideWidth && isTunneledSession) {
-      return `≤${initialCols}`; // Shows "≤120" to indicate limited to session width
-    } else if (this.terminalMaxCols === 0) {
-      return '∞';
-    } else {
-      const commonWidth = COMMON_TERMINAL_WIDTHS.find((w) => w.value === this.terminalMaxCols);
-      return commonWidth ? commonWidth.label : this.terminalMaxCols.toString();
-    }
-  }
-
-  getWidthTooltip(): string {
-    const terminal = this.getTerminalElement();
-    const userOverrideWidth = terminal?.userOverrideWidth || false;
-    const initialCols = terminal?.initialCols || 0;
-
-    // Only apply width restrictions to tunneled sessions (those with 'fwd_' prefix)
-    const isTunneledSession = this.session?.id?.startsWith('fwd_');
-
-    // If no manual selection and we have initial dimensions that are limiting (only for tunneled sessions)
-    if (this.terminalMaxCols === 0 && initialCols > 0 && !userOverrideWidth && isTunneledSession) {
-      return `Terminal width: Limited to native terminal width (${initialCols} columns)`;
-    } else {
-      return `Terminal width: ${this.terminalMaxCols === 0 ? 'Unlimited' : `${this.terminalMaxCols} columns`}`;
-    }
-  }
-
-  private handleFontSizeChange(newSize: number) {
-    // Clamp to reasonable bounds
-    const clampedSize = Math.max(8, Math.min(32, newSize));
-    this.terminalFontSize = clampedSize;
-    this.preferencesManager.setFontSize(clampedSize);
-
-    // Update the terminal lifecycle manager
-    this.terminalLifecycleManager.setTerminalFontSize(clampedSize);
-
-    // Update the terminal component
-    const terminal = this.getTerminalElement();
-    if (terminal) {
-      terminal.fontSize = clampedSize;
-      terminal.requestUpdate();
-    }
-  }
-
-  private handleThemeChange(newTheme: TerminalThemeId) {
-    logger.debug('Changing terminal theme to:', newTheme);
-
-    this.terminalTheme = newTheme;
-    this.preferencesManager.setTheme(newTheme);
-    this.terminalLifecycleManager.setTerminalTheme(newTheme);
-
-    const terminal = this.getTerminalElement();
-    if (terminal) {
-      terminal.theme = newTheme;
-      terminal.requestUpdate();
-    }
-  }
-
-  private handleOpenFileBrowser() {
-    this.showFileBrowser = true;
-  }
-
-  private handleCloseFileBrowser() {
-    this.showFileBrowser = false;
-  }
-
-  private handleOpenFilePicker() {
-    if (!this.isMobile) {
-      // On desktop, directly open the file picker without showing the dialog
-      const filePicker = this.querySelector('file-picker') as FilePicker | null;
-      if (filePicker && typeof filePicker.openFilePicker === 'function') {
-        filePicker.openFilePicker();
-      }
-    } else {
-      // On mobile, show the file picker dialog
-      this.showImagePicker = true;
-    }
-  }
-
-  private handleCloseFilePicker() {
-    this.showImagePicker = false;
-  }
-
-  private async handlePasteImage() {
-    // Try to paste image from clipboard
-    try {
-      const clipboardItems = await navigator.clipboard.read();
-
-      for (const clipboardItem of clipboardItems) {
-        const imageTypes = clipboardItem.types.filter((type) => type.startsWith('image/'));
-
-        for (const imageType of imageTypes) {
-          const blob = await clipboardItem.getType(imageType);
-          const file = new File([blob], `pasted-image.${imageType.split('/')[1]}`, {
-            type: imageType,
-          });
-
-          await this.uploadFile(file);
-          logger.log(`Successfully pasted image from clipboard`);
-          return;
-        }
-      }
-
-      // No image found in clipboard
-      logger.log('No image found in clipboard');
-      this.dispatchEvent(
-        new CustomEvent('error', {
-          detail: 'No image found in clipboard',
-          bubbles: true,
-          composed: true,
-        })
-      );
-    } catch (error) {
-      logger.error('Failed to paste image from clipboard:', error);
-      this.dispatchEvent(
-        new CustomEvent('error', {
-          detail: 'Failed to access clipboard. Please check permissions.',
-          bubbles: true,
-          composed: true,
-        })
-      );
-    }
-  }
-
-  private handleSelectImage() {
-    // Use the file picker component to open image picker
-    const filePicker = this.querySelector('file-picker') as FilePicker | null;
-    if (filePicker && typeof filePicker.openImagePicker === 'function') {
-      filePicker.openImagePicker();
-    } else {
-      logger.error('File picker component not found or openImagePicker method not available');
-    }
-  }
-
-  private handleOpenCamera() {
-    // Use the file picker component to open camera
-    const filePicker = this.querySelector('file-picker') as FilePicker | null;
-    if (filePicker && typeof filePicker.openCamera === 'function') {
-      filePicker.openCamera();
-    } else {
-      logger.error('File picker component not found or openCamera method not available');
-    }
-  }
-
-  private async handleFileSelected(event: CustomEvent) {
-    const { path } = event.detail;
-    if (!path || !this.session) return;
-
-    // Close the file picker
-    this.showImagePicker = false;
-
-    // Escape the path for shell use (wrap in quotes if it contains spaces)
-    const escapedPath = path.includes(' ') ? `"${path}"` : path;
-
-    // Send the path to the terminal
-    if (this.inputManager) {
-      await this.inputManager.sendInputText(escapedPath);
-    }
-
-    logger.log(`inserted file path into terminal: ${escapedPath}`);
-  }
-
-  private handleFileError(event: CustomEvent) {
-    const error = event.detail;
-    logger.error('File picker error:', error);
-
-    // Show error to user (you might want to implement a toast notification system)
-    this.dispatchEvent(new CustomEvent('error', { detail: error }));
-  }
-
-  private async handleRename(event: CustomEvent) {
-    const { sessionId, newName } = event.detail;
-    if (!this.session || sessionId !== this.session.id) return;
-
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authClient.getAuthHeader(),
-        },
-        body: JSON.stringify({ name: newName }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        logger.error('Failed to rename session', { errorData, sessionId });
-        throw new Error(`Rename failed: ${response.status}`);
-      }
-
-      // Get the actual name from the server response
-      const result = await response.json();
-      const actualName = result.name || newName;
-
-      // Update the local session object with the server-assigned name
-      this.session = { ...this.session, name: actualName };
-
-      // Update the page title with the new session name
-      const sessionName = actualName || this.session.command.join(' ');
-      titleManager.setSessionTitle(sessionName);
-
-      // Dispatch event to notify parent components with the actual name
-      this.dispatchEvent(
-        new CustomEvent('session-renamed', {
-          detail: { sessionId, newName: actualName },
-          bubbles: true,
-          composed: true,
-        })
-      );
-
-      logger.log(`Session ${sessionId} renamed to: ${actualName}`);
-    } catch (error) {
-      logger.error('Error renaming session', { error, sessionId });
-
-      // Show error to user
-      this.dispatchEvent(
-        new CustomEvent('error', {
-          detail: `Failed to rename session: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        })
-      );
-    }
-  }
-
-  // Drag & Drop handlers
-  private handleDragOver(e: DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Check if the drag contains files
-    if (e.dataTransfer?.types.includes('Files')) {
-      this.isDragOver = true;
-    }
-  }
-
-  private handleDragLeave(e: DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Only hide drag overlay if we're leaving the main container
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX;
-    const y = e.clientY;
-
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      this.isDragOver = false;
-    }
-  }
-
-  private async handleDrop(e: DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    this.isDragOver = false;
-
-    const files = Array.from(e.dataTransfer?.files || []);
-
-    if (files.length === 0) {
-      logger.warn('No files found in drop');
-      return;
-    }
-
-    // Upload all files sequentially
-    for (const file of files) {
-      try {
-        await this.uploadFile(file);
-        logger.log(`Successfully uploaded file: ${file.name}`);
-      } catch (error) {
-        logger.error(`Failed to upload file: ${file.name}`, error);
-      }
-    }
-  }
-
-  // Paste handler
-  private async handlePaste(e: ClipboardEvent) {
-    // Only handle paste if session view is focused and no modal is open
-    if (this.showFileBrowser || this.showImagePicker || this.showMobileInput) {
-      return;
-    }
-
-    const items = Array.from(e.clipboardData?.items || []);
-    const fileItems = items.filter((item) => item.kind === 'file');
-
-    if (fileItems.length === 0) {
-      return; // Let normal paste handling continue
-    }
-
-    e.preventDefault(); // Prevent default paste behavior for files
-
-    // Upload all pasted files
-    for (const fileItem of fileItems) {
-      const file = fileItem.getAsFile();
-      if (file) {
-        try {
-          await this.uploadFile(file);
-          logger.log(`Successfully pasted and uploaded file: ${file.name}`);
-        } catch (error) {
-          logger.error(`Failed to upload pasted file: ${file?.name}`, error);
-        }
-      }
-    }
-  }
-
-  private async uploadFile(file: File) {
-    try {
-      // Get the file picker component and use its upload method
-      const filePicker = this.querySelector('file-picker') as FilePicker | null;
-      if (filePicker && typeof filePicker.uploadFile === 'function') {
-        await filePicker.uploadFile(file);
-      } else {
-        logger.error('File picker component not found or upload method not available');
-      }
-    } catch (error) {
-      logger.error('Failed to upload dropped/pasted file:', error);
-      this.dispatchEvent(
-        new CustomEvent('error', {
-          detail: error instanceof Error ? error.message : 'Failed to upload file',
-        })
-      );
-    }
-  }
-
-  private async handleInsertPath(event: CustomEvent) {
-    const { path, type } = event.detail;
-    if (!path || !this.session) return;
-
-    // Escape the path for shell use (wrap in quotes if it contains spaces)
-    const escapedPath = path.includes(' ') ? `"${path}"` : path;
-
-    // Send the path to the terminal
-    if (this.inputManager) {
-      await this.inputManager.sendInputText(escapedPath);
-    }
-
-    logger.log(`inserted ${type} path into terminal: ${escapedPath}`);
-  }
-
-  focusHiddenInput() {
-    // Delegate to the DirectKeyboardManager
-    this.directKeyboardManager.focusHiddenInput();
-  }
-
   private handleTerminalClick(e: Event) {
-    if (this.isMobile && this.useDirectKeyboard) {
+    const uiState = this.uiStateManager.getState();
+    if (uiState.isMobile && uiState.useDirectKeyboard) {
       // Prevent the event from bubbling and default action
       e.stopPropagation();
       e.preventDefault();
@@ -1295,44 +853,21 @@ export class SessionView extends LitElement {
     this.ensureTerminalInitialized();
   }
 
-  private _updateTerminalTransformTimeout: ReturnType<typeof setTimeout> | null = null;
-
   private updateTerminalTransform(): void {
     // Clear any existing timeout to debounce calls
     if (this._updateTerminalTransformTimeout) {
       clearTimeout(this._updateTerminalTransformTimeout);
     }
 
+    const state = this.uiStateManager.getState();
+
     this._updateTerminalTransformTimeout = setTimeout(() => {
-      // Calculate height reduction for keyboard and quick keys
-      let heightReduction = 0;
-
-      if (this.showQuickKeys) {
-        // Quick keys height (approximately 140px based on CSS)
-        // Add 10px buffer to ensure content is visible above quick keys
-        const quickKeysHeight = 150;
-        heightReduction += quickKeysHeight;
-      }
-
-      if (this.keyboardHeight > 0) {
-        // Add small buffer for keyboard too
-        heightReduction += this.keyboardHeight + 10;
-      }
-
-      // Calculate terminal container height
-      if (heightReduction > 0) {
-        // Use calc to subtract from full height (accounting for header)
-        this.terminalContainerHeight = `calc(100% - ${heightReduction}px)`;
-      } else {
-        this.terminalContainerHeight = '100%';
-      }
-
       // Log for debugging
       logger.log(
-        `Terminal height updated: quickKeys=${this.showQuickKeys}, keyboardHeight=${this.keyboardHeight}, reduction=${heightReduction}px`
+        `Terminal transform updated: quickKeys=${state.showQuickKeys}, keyboardHeight=${state.keyboardHeight}px`
       );
 
-      // Force immediate update to apply height change
+      // Force immediate update to apply CSS variable changes
       this.requestUpdate();
 
       // Always notify terminal to resize when there's a change
@@ -1346,8 +881,8 @@ export class SessionView extends LitElement {
             terminalElement.fitTerminal();
           }
 
-          // If height was reduced, scroll to keep cursor visible
-          if (heightReduction > 0) {
+          // If keyboard is visible, scroll to keep cursor visible
+          if (state.keyboardHeight > 0 || state.showQuickKeys) {
             // Small delay then scroll to bottom to keep cursor visible
             setTimeout(() => {
               if ('scrollToBottom' in terminal) {
@@ -1358,6 +893,39 @@ export class SessionView extends LitElement {
         }
       });
     }, 100); // Debounce by 100ms
+  }
+
+  // SessionViewInterface methods required by managers
+  focusHiddenInput(): void {
+    this.directKeyboardManager.focusHiddenInput();
+  }
+
+  getMobileInputText(): string {
+    return this.uiStateManager.getState().mobileInputText;
+  }
+
+  clearMobileInputText(): void {
+    this.uiStateManager.setMobileInputText('');
+  }
+
+  closeMobileInput(): void {
+    this.uiStateManager.setShowMobileInput(false);
+  }
+
+  shouldRefocusHiddenInput(): boolean {
+    return this.directKeyboardManager.shouldRefocusHiddenInput();
+  }
+
+  refocusHiddenInput(): void {
+    this.directKeyboardManager.refocusHiddenInput();
+  }
+
+  startFocusRetention(): void {
+    this.directKeyboardManager.startFocusRetentionPublic();
+  }
+
+  delayedRefocusHiddenInput(): void {
+    this.directKeyboardManager.delayedRefocusHiddenInputPublic();
   }
 
   refreshTerminalAfterMobileInput() {
@@ -1395,6 +963,9 @@ export class SessionView extends LitElement {
       `;
     }
 
+    // Get UI state once for the entire render method
+    const uiState = this.uiStateManager.getState();
+
     return html`
       <style>
         session-view *,
@@ -1407,68 +978,147 @@ export class SessionView extends LitElement {
           outline: 2px solid rgb(var(--color-primary)) !important;
           outline-offset: -2px;
         }
+        
+        /* Grid layout for stable touch handling */
+        .session-view-grid {
+          display: grid;
+          grid-template-areas:
+            "header"
+            "terminal"
+            "quickkeys";
+          grid-template-rows: auto 1fr auto;
+          grid-template-columns: 1fr;
+          height: 100vh;
+          height: 100dvh;
+          position: relative;
+          background-color: rgb(var(--color-bg));
+          font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+        }
+        
+        /* Adjust grid when keyboard is visible */
+        .session-view-grid[data-keyboard-visible="true"] {
+          height: calc(100vh - var(--keyboard-height, 0px) - var(--quickkeys-height, 0px));
+          height: calc(100dvh - var(--keyboard-height, 0px) - var(--quickkeys-height, 0px));
+          transition: height 0.2s ease-out;
+        }
+        
+        .session-header-area {
+          grid-area: header;
+        }
+        
+        .terminal-area {
+          grid-area: terminal;
+          position: relative;
+          overflow: hidden;
+          min-height: 0; /* Critical for grid */
+          contain: layout style paint; /* Isolate terminal updates */
+        }
+        
+        /* Add padding to terminal when quick keys are visible */
+        .terminal-area[data-quickkeys-visible="true"] vibe-terminal,
+        .terminal-area[data-quickkeys-visible="true"] vibe-terminal-binary {
+          padding-bottom: 120px !important;
+          box-sizing: border-box;
+        }
+        
+        .quickkeys-area {
+          grid-area: quickkeys;
+        }
+        
+        /* Overlay container - spans entire grid */
+        .overlay-container {
+          grid-area: 1 / 1 / -1 / -1;
+          pointer-events: none;
+          z-index: 20;
+          position: relative;
+        }
+        
+        .overlay-container > * {
+          pointer-events: auto;
+          touch-action: manipulation; /* Eliminates 300ms delay */
+          -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Apply touch optimizations to all interactive elements */
+        button, [role="button"], .clickable {
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+        }
       </style>
-      <div
-        class="flex flex-col bg-base font-mono relative"
-        style="height: 100vh; height: 100dvh; outline: none !important; box-shadow: none !important;"
-      >
-        <!-- Session Header -->
-        <session-header
-          .session=${this.session}
-          .showBackButton=${this.showBackButton}
-          .showSidebarToggle=${this.showSidebarToggle}
-          .sidebarCollapsed=${this.sidebarCollapsed}
-          .terminalMaxCols=${this.terminalMaxCols}
-          .terminalFontSize=${this.terminalFontSize}
-          .customWidth=${this.customWidth}
-          .showWidthSelector=${this.showWidthSelector}
-          .keyboardCaptureActive=${this.keyboardCaptureActive}
-          .isMobile=${this.isMobile}
-          .widthLabel=${this.getCurrentWidthLabel()}
-          .widthTooltip=${this.getWidthTooltip()}
-          .onBack=${() => this.handleBack()}
-          .onSidebarToggle=${() => this.handleSidebarToggle()}
-          .onCreateSession=${() => this.handleCreateSession()}
-          .onOpenFileBrowser=${() => this.handleOpenFileBrowser()}
-          .onOpenImagePicker=${() => this.handleOpenFilePicker()}
-          .onMaxWidthToggle=${() => this.handleMaxWidthToggle()}
-          .onWidthSelect=${(width: number) => this.handleWidthSelect(width)}
-          .onFontSizeChange=${(size: number) => this.handleFontSizeChange(size)}
-          .onOpenSettings=${() => this.handleOpenSettings()}
-          .macAppConnected=${this.macAppConnected}
-          .onTerminateSession=${() => this.handleTerminateSession()}
-          .onClearSession=${() => this.handleClearSession()}
-          @close-width-selector=${() => {
-            this.showWidthSelector = false;
-            this.customWidth = '';
-          }}
-          @session-rename=${(e: CustomEvent) => this.handleRename(e)}
-          @paste-image=${() => this.handlePasteImage()}
-          @select-image=${() => this.handleSelectImage()}
-          @open-camera=${() => this.handleOpenCamera()}
-          @show-image-upload-options=${() => this.handleSelectImage()}
-          @capture-toggled=${(e: CustomEvent) => {
-            this.dispatchEvent(
-              new CustomEvent('capture-toggled', {
-                detail: e.detail,
-                bubbles: true,
-                composed: true,
-              })
-            );
-          }}
-        >
-        </session-header>
-
-        <!-- Enhanced Terminal Container -->
+      <!-- Background wrapper to extend header color to status bar -->
+      <div class="bg-bg-secondary" style="padding-top: env(safe-area-inset-top);">
         <div
-          class="${this.terminalContainerHeight === '100%' ? 'flex-1' : ''} bg-bg overflow-hidden min-h-0 relative ${
-            this.session?.status === 'exited' ? 'session-exited opacity-90' : ''
+          class="session-view-grid"
+          style="outline: none !important; box-shadow: none !important; --keyboard-height: ${uiState.keyboardHeight}px; --quickkeys-height: 0px;"
+          data-keyboard-visible="${uiState.keyboardHeight > 0 || uiState.showQuickKeys ? 'true' : 'false'}"
+        >
+        <!-- Session Header Area -->
+        <div class="session-header-area">
+          <session-header
+            .session=${this.session}
+            .showBackButton=${this.showBackButton}
+            .showSidebarToggle=${this.showSidebarToggle}
+            .sidebarCollapsed=${this.sidebarCollapsed}
+            .terminalMaxCols=${uiState.terminalMaxCols}
+            .terminalFontSize=${uiState.terminalFontSize}
+            .customWidth=${uiState.customWidth}
+            .showWidthSelector=${uiState.showWidthSelector}
+            .keyboardCaptureActive=${uiState.keyboardCaptureActive}
+            .isMobile=${uiState.isMobile}
+            .widthLabel=${this.terminalSettingsManager.getCurrentWidthLabel()}
+            .widthTooltip=${this.terminalSettingsManager.getWidthTooltip()}
+            .onBack=${() => this.handleBack()}
+            .onSidebarToggle=${() => this.handleSidebarToggle()}
+            .onCreateSession=${() => this.handleCreateSession()}
+            .onOpenFileBrowser=${() => this.fileOperationsManager.openFileBrowser()}
+            .onOpenImagePicker=${() => this.fileOperationsManager.openFilePicker()}
+            .onMaxWidthToggle=${() => this.terminalSettingsManager.handleMaxWidthToggle()}
+            .onWidthSelect=${(width: number) => this.terminalSettingsManager.handleWidthSelect(width)}
+            .onFontSizeChange=${(size: number) => this.terminalSettingsManager.handleFontSizeChange(size)}
+            .onOpenSettings=${() => this.handleOpenSettings()}
+            .macAppConnected=${uiState.macAppConnected}
+            .onTerminateSession=${() => this.sessionActionsHandler.handleTerminateSession()}
+            .onClearSession=${() => this.sessionActionsHandler.handleClearSession()}
+            .onToggleViewMode=${() => this.sessionActionsHandler.handleToggleViewMode()}
+            @close-width-selector=${() => {
+              this.uiStateManager.setShowWidthSelector(false);
+              this.uiStateManager.setCustomWidth('');
+            }}
+            @session-rename=${async (e: CustomEvent) => {
+              const { sessionId, newName } = e.detail;
+              await this.sessionActionsHandler.handleRename(sessionId, newName);
+            }}
+            @paste-image=${async () => await this.fileOperationsManager.pasteImage()}
+            @select-image=${() => this.fileOperationsManager.selectImage()}
+            @open-camera=${() => this.fileOperationsManager.openCamera()}
+            @show-image-upload-options=${() => this.fileOperationsManager.selectImage()}
+            @toggle-view-mode=${() => this.sessionActionsHandler.handleToggleViewMode()}
+            @capture-toggled=${(e: CustomEvent) => {
+              this.dispatchEvent(
+                new CustomEvent('capture-toggled', {
+                  detail: e.detail,
+                  bubbles: true,
+                  composed: true,
+                })
+              );
+            }}
+            .hasGitRepo=${!!this.session?.gitRepoPath}
+            .viewMode=${uiState.viewMode}
+          >
+          </session-header>
+        </div>
+
+        <!-- Content Area (Terminal or Worktree) -->
+        <div
+          class="terminal-area bg-bg ${
+            this.session?.status === 'exited' && uiState.viewMode === 'terminal'
+              ? 'session-exited opacity-90'
+              : ''
           } ${
             // Add safe area padding for landscape mode on mobile to handle notch
-            this.isMobile && this.isLandscape ? 'safe-area-left safe-area-right' : ''
+            uiState.isMobile && uiState.isLandscape ? 'safe-area-left safe-area-right' : ''
           }"
-          id="terminal-container"
-          style="${this.terminalContainerHeight !== '100%' ? `height: ${this.terminalContainerHeight}; flex: none; max-height: ${this.terminalContainerHeight};` : ''}"
+          data-quickkeys-visible="${uiState.showQuickKeys && uiState.keyboardHeight > 0}"
         >
           ${
             this.loadingAnimationManager.isLoading()
@@ -1485,77 +1135,46 @@ export class SessionView extends LitElement {
               `
               : ''
           }
-          <!-- Enhanced Terminal Component -->
           ${
-            this.useBinaryMode
+            uiState.viewMode === 'worktree' && this.session?.gitRepoPath
               ? html`
-              <vibe-terminal-binary
-                .sessionId=${this.session?.id || ''}
-                .sessionStatus=${this.session?.status || 'running'}
-                .cols=${80}
-                .rows=${24}
-                .fontSize=${this.terminalFontSize}
-                .fitHorizontally=${false}
-                .maxCols=${this.terminalMaxCols}
-                .theme=${this.terminalTheme}
-                .initialCols=${this.session?.initialCols || 0}
-                .initialRows=${this.session?.initialRows || 0}
-                .disableClick=${this.isMobile && this.useDirectKeyboard}
-                .hideScrollButton=${this.showQuickKeys}
-                class="w-full h-full p-0 m-0 terminal-container"
-                @click=${this.handleTerminalClick}
-                @terminal-input=${this.handleTerminalInput}
-                @terminal-resize=${this.handleTerminalResize}
-                @terminal-ready=${this.handleTerminalReady}
-              ></vibe-terminal-binary>
+              <worktree-manager
+                .gitService=${this.gitService}
+                .repoPath=${this.session.gitRepoPath}
+                @back=${() => {
+                  this.uiStateManager.setViewMode('terminal');
+                }}
+              ></worktree-manager>
             `
-              : html`
-              <vibe-terminal
-                .sessionId=${this.session?.id || ''}
-                .sessionStatus=${this.session?.status || 'running'}
-                .cols=${80}
-                .rows=${24}
-                .fontSize=${this.terminalFontSize}
-                .fitHorizontally=${false}
-                .maxCols=${this.terminalMaxCols}
-                .theme=${this.terminalTheme}
-                .initialCols=${this.session?.initialCols || 0}
-                .initialRows=${this.session?.initialRows || 0}
-                .disableClick=${this.isMobile && this.useDirectKeyboard}
-                .hideScrollButton=${this.showQuickKeys}
-                class="w-full h-full p-0 m-0 terminal-container"
-                @click=${this.handleTerminalClick}
-                @terminal-input=${this.handleTerminalInput}
-              ></vibe-terminal>
+              : uiState.viewMode === 'terminal'
+                ? html`
+              <!-- Enhanced Terminal Component -->
+              <terminal-renderer
+                id="session-terminal"
+                .session=${this.session}
+                .useBinaryMode=${uiState.useBinaryMode}
+                .terminalFontSize=${uiState.terminalFontSize}
+                .terminalMaxCols=${uiState.terminalMaxCols}
+                .terminalTheme=${uiState.terminalTheme}
+                .disableClick=${uiState.isMobile && uiState.useDirectKeyboard}
+                .hideScrollButton=${uiState.showQuickKeys}
+                .onTerminalClick=${this.boundHandleTerminalClick}
+                .onTerminalInput=${this.boundHandleTerminalInput}
+                .onTerminalResize=${this.boundHandleTerminalResize}
+                .onTerminalReady=${this.boundHandleTerminalReady}
+              ></terminal-renderer>
             `
+                : ''
           }
         </div>
 
-        <!-- Floating Session Exited Banner (outside terminal container to avoid filter effects) -->
-        ${
-          this.session?.status === 'exited'
-            ? html`
-              <div
-                class="fixed inset-0 flex items-center justify-center pointer-events-none z-[25]"
-              >
-                <div
-                  class="bg-elevated border border-status-warning text-status-warning font-medium text-sm tracking-wide px-6 py-3 rounded-lg shadow-elevated animate-scale-in"
-                >
-                  <span class="flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-status-warning"></span>
-                    SESSION EXITED
-                  </span>
-                </div>
-              </div>
-            `
-            : ''
-        }
-
-        <!-- Mobile Input Controls (only show when direct keyboard is disabled) -->
-        ${
-          this.isMobile && !this.showMobileInput && !this.useDirectKeyboard
-            ? html`
-              <div class="flex-shrink-0 p-4 bg-secondary">
+        <!-- Quick Keys Area -->
+        <div class="quickkeys-area">
+          <!-- Mobile Input Controls (only show when direct keyboard is disabled) -->
+          ${
+            uiState.isMobile && !uiState.showMobileInput && !uiState.useDirectKeyboard
+              ? html`
+                <div class="p-4 bg-secondary">
                 <!-- First row: Arrow keys -->
                 <div class="flex gap-2 mb-2">
                   <button
@@ -1606,7 +1225,7 @@ export class SessionView extends LitElement {
                   </button>
                   <button
                     class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
-                    @click=${this.handleOpenFilePicker}
+                    @click=${() => this.fileOperationsManager.openFilePicker()}
                     title="Upload file"
                   >
                     📷
@@ -1620,7 +1239,7 @@ export class SessionView extends LitElement {
                   </button>
                   <button
                     class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
-                    @click=${this.handleCtrlAlphaToggle}
+                    @click=${() => this.uiStateManager.toggleCtrlAlpha()}
                   >
                     CTRL
                   </button>
@@ -1630,173 +1249,73 @@ export class SessionView extends LitElement {
                   >
                     <span class="text-xl">⏎</span>
                   </button>
-                </div>
-              </div>
-            `
-            : ''
-        }
-
-        <!-- Mobile Input Overlay -->
-        <mobile-input-overlay
-          .visible=${this.isMobile && this.showMobileInput}
-          .mobileInputText=${this.mobileInputText}
-          .keyboardHeight=${this.keyboardHeight}
-          .touchStartX=${this.touchStartX}
-          .touchStartY=${this.touchStartY}
-          .onSend=${(text: string) => this.handleMobileInputSendOnly(text)}
-          .onSendWithEnter=${(text: string) => this.handleMobileInputSend(text)}
-          .onCancel=${() => this.handleMobileInputCancel()}
-          .onTextChange=${(text: string) => {
-            this.mobileInputText = text;
-          }}
-          .handleBack=${this.handleBack.bind(this)}
-        ></mobile-input-overlay>
-
-        <!-- Ctrl+Alpha Overlay -->
-        <ctrl-alpha-overlay
-          .visible=${this.isMobile && this.showCtrlAlpha}
-          .ctrlSequence=${this.ctrlSequence}
-          .keyboardHeight=${this.keyboardHeight}
-          .onCtrlKey=${(letter: string) => this.handleCtrlKey(letter)}
-          .onSendSequence=${() => this.handleSendCtrlSequence()}
-          .onClearSequence=${() => this.handleClearCtrlSequence()}
-          .onCancel=${() => this.handleCtrlAlphaCancel()}
-        ></ctrl-alpha-overlay>
-
-        <!-- Floating Keyboard Button (for direct keyboard mode on mobile) -->
-        ${
-          this.isMobile && this.useDirectKeyboard && !this.showQuickKeys
-            ? html`
-              <div
-                class="keyboard-button"
-                @pointerdown=${(e: PointerEvent) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                @click=${(e: MouseEvent) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  this.handleKeyboardButtonClick();
-                }}
-                title="Show keyboard"
-              >
-                ⌨
-              </div>
-            `
-            : ''
-        }
-
-        <!-- Terminal Quick Keys (for direct keyboard mode) -->
-        <terminal-quick-keys
-          .visible=${this.isMobile && this.useDirectKeyboard && this.showQuickKeys}
-          .onKeyPress=${this.directKeyboardManager.handleQuickKeyPress}
-        ></terminal-quick-keys>
-
-        <!-- File Browser Modal -->
-        <file-browser
-          .visible=${this.showFileBrowser}
-          .mode=${'browse'}
-          .session=${this.session}
-          @browser-cancel=${this.handleCloseFileBrowser}
-          @insert-path=${this.handleInsertPath}
-        ></file-browser>
-
-        <!-- File Picker Modal -->
-        <file-picker
-          .visible=${this.showImagePicker}
-          @file-selected=${this.handleFileSelected}
-          @file-error=${this.handleFileError}
-          @file-cancel=${this.handleCloseFilePicker}
-        ></file-picker>
-
-        
-        <!-- Width Selector Modal (moved here for proper positioning) -->
-        <terminal-settings-modal
-          .visible=${this.showWidthSelector}
-          .terminalMaxCols=${this.terminalMaxCols}
-          .terminalFontSize=${this.terminalFontSize}
-          .terminalTheme=${this.terminalTheme}
-          .customWidth=${this.customWidth}
-          .isMobile=${this.isMobile}
-          .onWidthSelect=${(width: number) => this.handleWidthSelect(width)}
-          .onFontSizeChange=${(size: number) => this.handleFontSizeChange(size)}
-          .onThemeChange=${(theme: TerminalThemeId) => this.handleThemeChange(theme)}
-          .onClose=${() => {
-            this.showWidthSelector = false;
-            this.customWidth = '';
-          }}
-        ></terminal-settings-modal>
-
-        <!-- Drag & Drop Overlay -->
-        ${
-          this.isDragOver
-            ? html`
-              <div class="fixed inset-0 bg-bg bg-opacity-90 backdrop-blur-sm flex items-center justify-center z-50 pointer-events-none animate-fade-in">
-                <div class="bg-elevated border-2 border-dashed border-primary rounded-xl p-10 text-center max-w-md mx-4 shadow-2xl animate-scale-in">
-                  <div class="relative mb-6">
-                    <div class="w-24 h-24 mx-auto bg-gradient-to-br from-primary to-primary-light rounded-full flex items-center justify-center shadow-glow">
-                      <svg class="w-12 h-12 text-base" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
-                      </svg>
-                    </div>
-                    <div class="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-32 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"></div>
-                  </div>
-                  <h3 class="text-2xl font-bold text-primary mb-3">Drop files here</h3>
-                  <p class="text-sm text-muted mb-4">Files will be uploaded and the path sent to terminal</p>
-                  <div class="inline-flex items-center gap-2 text-xs text-dim bg-secondary px-4 py-2 rounded-lg">
-                    <span class="opacity-75">Or press</span>
-                    <kbd class="px-2 py-1 bg-tertiary border border-base rounded text-primary font-mono text-xs">⌘V</kbd>
-                    <span class="opacity-75">to paste from clipboard</span>
                   </div>
                 </div>
-              </div>
-            `
-            : ''
-        }
+              `
+              : ''
+          }
+        </div>
+
+        <!-- Overlay Container - All overlays go here for stable positioning -->
+        <div class="overlay-container">
+          <overlays-container
+            .session=${this.session}
+            .uiState=${uiState}
+            .callbacks=${{
+              // Mobile input callbacks
+              onMobileInputSendOnly: (text: string) =>
+                this.mobileInputManager.handleMobileInputSendOnly(text),
+              onMobileInputSend: (text: string) =>
+                this.mobileInputManager.handleMobileInputSend(text),
+              onMobileInputCancel: () => this.mobileInputManager.handleMobileInputCancel(),
+              onMobileInputTextChange: (text: string) =>
+                this.uiStateManager.setMobileInputText(text),
+
+              // Ctrl+Alpha callbacks
+              onCtrlKey: (letter: string) => this.handleCtrlKey(letter),
+              onSendCtrlSequence: () => this.handleSendCtrlSequence(),
+              onClearCtrlSequence: () => this.handleClearCtrlSequence(),
+              onCtrlAlphaCancel: () => this.handleCtrlAlphaCancel(),
+
+              // Quick keys
+              onQuickKeyPress: (key: string) => this.directKeyboardManager.handleQuickKeyPress(key),
+
+              // File browser/picker
+              onCloseFileBrowser: () => this.fileOperationsManager.closeFileBrowser(),
+              onInsertPath: async (e: CustomEvent) => {
+                const { path, type } = e.detail;
+                await this.fileOperationsManager.insertPath(path, type);
+              },
+              onFileSelected: async (e: CustomEvent) => {
+                await this.fileOperationsManager.handleFileSelected(e.detail.path);
+              },
+              onFileError: (e: CustomEvent) => {
+                this.fileOperationsManager.handleFileError(e.detail);
+              },
+              onCloseFilePicker: () => this.fileOperationsManager.closeFilePicker(),
+
+              // Terminal settings
+              onWidthSelect: (width: number) =>
+                this.terminalSettingsManager.handleWidthSelect(width),
+              onFontSizeChange: (size: number) =>
+                this.terminalSettingsManager.handleFontSizeChange(size),
+              onThemeChange: (theme: TerminalThemeId) =>
+                this.terminalSettingsManager.handleThemeChange(theme),
+              onCloseWidthSelector: () => {
+                this.uiStateManager.setShowWidthSelector(false);
+                this.uiStateManager.setCustomWidth('');
+              },
+
+              // Keyboard button
+              onKeyboardButtonClick: () => this.handleKeyboardButtonClick(),
+
+              // Navigation
+              handleBack: () => this.handleBack(),
+            }}
+          ></overlays-container>
+        </div>
+      </div>
       </div>
     `;
-  }
-
-  private async handleTerminateSession() {
-    if (!this.session) return;
-    await sessionActionService.terminateSession(this.session, {
-      authClient: authClient,
-      callbacks: {
-        onError: (message: string) => {
-          this.dispatchEvent(
-            new CustomEvent('error', {
-              detail: message,
-              bubbles: true,
-              composed: true,
-            })
-          );
-        },
-        onSuccess: () => {
-          // For terminate, session status will be updated via SSE
-        },
-      },
-    });
-  }
-
-  private async handleClearSession() {
-    if (!this.session) return;
-    await sessionActionService.clearSession(this.session, {
-      authClient: authClient,
-      callbacks: {
-        onError: (message: string) => {
-          this.dispatchEvent(
-            new CustomEvent('error', {
-              detail: message,
-              bubbles: true,
-              composed: true,
-            })
-          );
-        },
-        onSuccess: () => {
-          // Session cleared successfully - navigate back to list
-          this.handleBack();
-        },
-      },
-    });
   }
 }

@@ -1,5 +1,6 @@
 import { html, LitElement, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { HttpMethod } from '../../shared/types.js';
 import { authClient } from '../services/auth-client.js';
 
 interface LogEntry {
@@ -19,7 +20,6 @@ export class LogViewer extends LitElement {
 
   @state() private logs: LogEntry[] = [];
   @state() private loading = true;
-  @state() private error = '';
   @state() private filter = '';
   @state() private levelFilter: Set<string> = new Set(['error', 'warn', 'log', 'debug']);
   @state() private autoScroll = true;
@@ -88,7 +88,8 @@ export class LogViewer extends LitElement {
         });
       }
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to load logs';
+      // Error is logged but not displayed in UI
+      console.error('Failed to load logs:', err);
       this.loading = false;
     }
   }
@@ -177,7 +178,7 @@ export class LogViewer extends LitElement {
 
     try {
       const response = await fetch('/api/logs/clear', {
-        method: 'DELETE',
+        method: HttpMethod.DELETE,
         headers: { ...authClient.getAuthHeader() },
       });
       if (!response.ok) {
@@ -186,7 +187,7 @@ export class LogViewer extends LitElement {
       this.logs = [];
       this.logSize = '0 Bytes';
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to clear logs';
+      console.error('Failed to clear logs:', err);
     }
   }
 
@@ -207,7 +208,7 @@ export class LogViewer extends LitElement {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to download logs';
+      console.error('Failed to download logs:', err);
     }
   }
 

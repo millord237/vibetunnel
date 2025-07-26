@@ -7,7 +7,7 @@ export const BREAKPOINTS = {
 } as const;
 
 export const SIDEBAR = {
-  DEFAULT_WIDTH: 320,
+  DEFAULT_WIDTH: 420,
   MIN_WIDTH: 240,
   MAX_WIDTH: 600,
   MOBILE_RIGHT_MARGIN: 80,
@@ -45,11 +45,13 @@ export const Z_INDEX = {
 
   // Dropdowns and popovers (50-99)
   WIDTH_SELECTOR_DROPDOWN: 60,
+  BRANCH_SELECTOR_DROPDOWN: 65,
 
   // Modals and overlays (100-199)
   MODAL_BACKDROP: 100,
   FILE_PICKER: 110,
   SESSION_EXITED_OVERLAY: 120,
+  NOTIFICATION: 150, // Notifications appear above modals but below file browser
 
   // Special high-priority overlays (200+)
   FILE_BROWSER: 1100, // Must be higher than modal backdrop (1000)

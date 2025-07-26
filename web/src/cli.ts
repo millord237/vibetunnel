@@ -63,6 +63,10 @@ function printHelp(): void {
   console.log('Usage:');
   console.log('  vibetunnel [options]                    Start VibeTunnel server');
   console.log('  vibetunnel fwd <session-id> <command>   Forward command to session');
+  console.log('  vibetunnel status                       Show server and follow mode status');
+  console.log('  vibetunnel follow [branch]              Enable Git follow mode');
+  console.log('  vibetunnel unfollow                     Disable Git follow mode');
+  console.log('  vibetunnel git-event                    Notify server of Git event');
   console.log('  vibetunnel systemd [action]             Manage systemd service (Linux)');
   console.log('  vibetunnel version                      Show version');
   console.log('  vibetunnel help                         Show this help');
@@ -118,6 +122,114 @@ async function handleSystemdService(): Promise<void> {
 }
 
 /**
+ * Handle socket API commands
+ */
+async function handleSocketCommand(command: string): Promise<void> {
+  try {
+    const { SocketApiClient } = await import('./server/socket-api-client.js');
+    const client = new SocketApiClient();
+
+    switch (command) {
+      case 'status': {
+        const status = await client.getStatus();
+        console.log('VibeTunnel Server Status:');
+        console.log(`  Running: ${status.running ? 'Yes' : 'No'}`);
+        if (status.running) {
+          console.log(`  Port: ${status.port || 'Unknown'}`);
+          console.log(`  URL: ${status.url || 'Unknown'}`);
+
+          if (status.followMode) {
+            console.log('\nGit Follow Mode:');
+            console.log(`  Enabled: ${status.followMode.enabled ? 'Yes' : 'No'}`);
+            if (status.followMode.enabled && status.followMode.branch) {
+              console.log(`  Following branch: ${status.followMode.branch}`);
+              console.log(`  Worktree: ${status.followMode.repoPath || 'Unknown'}`);
+            }
+          } else {
+            console.log('\nGit Follow Mode: Not in a git repository');
+          }
+        }
+        break;
+      }
+
+      case 'follow': {
+        // Parse command line arguments
+        const args = process.argv.slice(3);
+        let worktreePath: string | undefined;
+        let mainRepoPath: string | undefined;
+
+        // Parse flags
+        for (let i = 0; i < args.length; i++) {
+          switch (args[i]) {
+            case '--from-worktree':
+              // Flag handled by vt script
+              break;
+            case '--worktree-path':
+              worktreePath = args[++i];
+              break;
+            case '--main-repo':
+              mainRepoPath = args[++i];
+              break;
+          }
+        }
+
+        const response = await client.setFollowMode({
+          enable: true,
+          worktreePath,
+          mainRepoPath,
+          // For backward compatibility, pass repoPath if mainRepoPath not set
+          repoPath: mainRepoPath,
+        });
+
+        if (response.success) {
+          // Success message is already printed by the vt script
+        } else {
+          console.error(`Failed to enable follow mode: ${response.error || 'Unknown error'}`);
+          process.exit(1);
+        }
+        break;
+      }
+
+      case 'unfollow': {
+        const repoPath = process.cwd();
+
+        const response = await client.setFollowMode({
+          repoPath,
+          enable: false,
+        });
+
+        if (response.success) {
+          console.log('Disabled follow mode');
+        } else {
+          console.error(`Failed to disable follow mode: ${response.error || 'Unknown error'}`);
+          process.exit(1);
+        }
+        break;
+      }
+
+      case 'git-event': {
+        const repoPath = process.cwd();
+
+        await client.sendGitEvent({
+          repoPath,
+          type: 'other', // We don't know the specific type from command line
+        });
+        break;
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === 'VibeTunnel server is not running') {
+      console.error('Error: VibeTunnel server is not running');
+      console.error('Start the server first with: vibetunnel');
+    } else {
+      logger.error('Socket command failed:', error);
+    }
+    closeLogger();
+    process.exit(1);
+  }
+}
+
+/**
  * Start the VibeTunnel server with optional startup logging
  */
 function handleStartServer(): void {
@@ -149,6 +261,13 @@ async function parseCommandAndExecute(): Promise<void> {
 
     case 'fwd':
       await handleForwardCommand();
+      break;
+
+    case 'status':
+    case 'follow':
+    case 'unfollow':
+    case 'git-event':
+      await handleSocketCommand(command);
       break;
 
     case 'systemd':

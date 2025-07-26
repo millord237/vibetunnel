@@ -7,6 +7,7 @@ import mime from 'mime-types';
 import * as path from 'path';
 import { promisify } from 'util';
 import { createLogger } from '../utils/logger.js';
+import { expandTildePath } from '../utils/path-utils.js';
 
 const logger = createLogger('filesystem');
 
@@ -121,15 +122,7 @@ export function createFilesystemRoutes(): Router {
       const gitFilter = req.query.gitFilter as string; // 'all' | 'changed' | 'none'
 
       // Handle tilde expansion for home directory
-      if (requestedPath === '~' || requestedPath.startsWith('~/')) {
-        const homeDir = process.env.HOME || process.env.USERPROFILE;
-        if (!homeDir) {
-          logger.error('unable to determine home directory');
-          return res.status(500).json({ error: 'Unable to determine home directory' });
-        }
-        requestedPath =
-          requestedPath === '~' ? homeDir : path.join(homeDir, requestedPath.slice(2));
-      }
+      requestedPath = expandTildePath(requestedPath);
 
       logger.debug(
         `browsing directory: ${requestedPath}, showHidden: ${showHidden}, gitFilter: ${gitFilter}`
@@ -625,14 +618,7 @@ export function createFilesystemRoutes(): Router {
       let partialPath = originalPath;
 
       // Handle tilde expansion for home directory
-      if (partialPath === '~' || partialPath.startsWith('~/')) {
-        const homeDir = process.env.HOME || process.env.USERPROFILE;
-        if (!homeDir) {
-          logger.error('unable to determine home directory for completions');
-          return res.status(500).json({ error: 'Unable to determine home directory' });
-        }
-        partialPath = partialPath === '~' ? homeDir : path.join(homeDir, partialPath.slice(2));
-      }
+      partialPath = expandTildePath(partialPath);
 
       // Separate directory and partial name
       let dirPath: string;
@@ -703,12 +689,57 @@ export function createFilesystemRoutes(): Router {
               }
             }
 
-            // Check if this directory is a git repository
+            // Check if this directory is a git repository and get branch + status
             let isGitRepo = false;
+            let gitBranch: string | undefined;
+            let gitStatusCount = 0;
+            let gitAddedCount = 0;
+            let gitModifiedCount = 0;
+            let gitDeletedCount = 0;
+            let isWorktree = false;
             if (isDirectory) {
               try {
-                await fs.stat(path.join(entryPath, '.git'));
+                const gitPath = path.join(entryPath, '.git');
+                const gitStat = await fs.stat(gitPath);
                 isGitRepo = true;
+
+                // Check if it's a worktree (has a .git file instead of directory)
+                if (gitStat.isFile()) {
+                  isWorktree = true;
+                }
+
+                // Get the current git branch
+                try {
+                  const { stdout: branch } = await execAsync('git branch --show-current', {
+                    cwd: entryPath,
+                  });
+                  gitBranch = branch.trim();
+                } catch {
+                  // Failed to get branch
+                }
+
+                // Get the number of changed files by type
+                try {
+                  const { stdout: statusOutput } = await execAsync('git status --porcelain', {
+                    cwd: entryPath,
+                  });
+                  const lines = statusOutput.split('\n').filter((line) => line.trim() !== '');
+
+                  for (const line of lines) {
+                    const statusCode = line.substring(0, 2);
+                    if (statusCode === '??' || statusCode === 'A ' || statusCode === 'AM') {
+                      gitAddedCount++;
+                    } else if (statusCode === ' D' || statusCode === 'D ') {
+                      gitDeletedCount++;
+                    } else if (statusCode === ' M' || statusCode === 'M ' || statusCode === 'MM') {
+                      gitModifiedCount++;
+                    }
+                  }
+
+                  gitStatusCount = gitAddedCount + gitModifiedCount + gitDeletedCount;
+                } catch {
+                  // Failed to get status
+                }
               } catch {
                 // Not a git repository
               }
@@ -721,6 +752,12 @@ export function createFilesystemRoutes(): Router {
               // Add trailing slash for directories
               suggestion: isDirectory ? `${displayPath}/` : displayPath,
               isRepository: isGitRepo,
+              gitBranch,
+              gitStatusCount,
+              gitAddedCount,
+              gitModifiedCount,
+              gitDeletedCount,
+              isWorktree,
             };
           })
       );

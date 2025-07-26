@@ -28,6 +28,11 @@ export default defineConfig(({ mode }) => {
     : './coverage';
     
   // No thresholds - we just want to report coverage without failing builds
+  
+  // Add memory reporter when MEMORY_LOG env var is set
+  const reporters = process.env.MEMORY_LOG 
+    ? ['default', './src/test/memory-reporter.ts']
+    : ['default'];
 
   return {
     test: {
@@ -35,8 +40,22 @@ export default defineConfig(({ mode }) => {
       include: testInclude,
       setupFiles: ['./src/test/setup.ts'],
       environment: isClient ? 'happy-dom' : 'node',
-      testTimeout: 60000, // 60s for e2e tests
-      hookTimeout: 30000, // 30s for setup/teardown
+      testTimeout: 10000, // 10s for tests
+      hookTimeout: 10000, // 10s for setup/teardown
+      reporters,
+      poolOptions: {
+        threads: {
+          // Use available CPU cores for parallel execution
+          maxThreads: undefined,
+          minThreads: 1,
+        },
+        forks: {
+          // Allow multiple forks for better test isolation
+          maxForks: undefined,
+          minForks: 1,
+        }
+      },
+      isolate: true, // Isolate tests in separate contexts
       coverage: {
         provider: 'v8',
         reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],

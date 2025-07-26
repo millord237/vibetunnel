@@ -45,6 +45,7 @@ describe('SessionCreateForm', () => {
     // Create mock auth client
     mockAuthClient = {
       getAuthHeader: vi.fn(() => ({ Authorization: 'Bearer test-token' })),
+      fetch: vi.fn((url, options) => global.fetch(url, options)),
     } as unknown as AuthClient;
 
     // Create component
@@ -164,11 +165,17 @@ describe('SessionCreateForm', () => {
     });
 
     it('should update command when quick start is clicked', async () => {
-      // Directly call the handler since button rendering is unreliable in tests
-      element.handleQuickStart('python3');
+      // Access the private method directly for testing
+      // @ts-expect-error - accessing private method for testing
+      element.handleQuickStartSelected(
+        new CustomEvent('quick-start-selected', {
+          detail: { command: 'python3' },
+        })
+      );
       await element.updateComplete;
 
       expect(element.command).toBe('python3');
+      expect(element.selectedQuickStart).toBe('python3');
     });
 
     it('should highlight selected quick start', async () => {
@@ -179,7 +186,12 @@ describe('SessionCreateForm', () => {
       expect(element.command).toBe('node');
 
       // When Claude is selected, title mode should be dynamic
-      element.handleQuickStart('claude');
+      // @ts-expect-error - accessing private method for testing
+      element.handleQuickStartSelected(
+        new CustomEvent('quick-start-selected', {
+          detail: { command: 'claude' },
+        })
+      );
       await element.updateComplete;
       expect(element.titleMode).toBe(TitleMode.DYNAMIC);
     });
@@ -679,6 +691,404 @@ describe('SessionCreateForm', () => {
 
       // The component should log a warning but not crash
       // No need to check fetch calls since defensive check prevents them
+
+      newElement.remove();
+    });
+  });
+
+  describe('Git repository integration', () => {
+    let fetchCalls: Array<[string, RequestInit | undefined]>;
+
+    beforeEach(async () => {
+      // Track fetch calls
+      fetchCalls = [];
+
+      // Override global fetch with a custom mock that handles Git API patterns
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn(async (url: string, options?: RequestInit) => {
+        const urlStr = url.toString();
+
+        // Track the call
+        fetchCalls.push([urlStr, options]);
+
+        // Mock Git repo info endpoint
+        if (urlStr.includes('/api/git/repo-info')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              isGitRepo: true,
+              repoPath: '/home/user/project',
+              currentBranch: 'main',
+              hasChanges: false,
+              isWorktree: urlStr.includes('project-feature'),
+            }),
+          } as Response;
+        }
+
+        // Mock worktrees endpoint
+        if (urlStr.includes('/api/worktrees')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              worktrees: [
+                { path: '/home/user/project', branch: 'main', HEAD: 'abc123', detached: false },
+                {
+                  path: '/home/user/project-feature',
+                  branch: 'feature',
+                  HEAD: 'def456',
+                  detached: false,
+                },
+              ],
+              baseBranch: 'main',
+            }),
+          } as Response;
+        }
+
+        // Mock branches endpoint
+        if (urlStr.includes('/api/repositories/branches')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [
+              { name: 'main', current: true },
+              { name: 'feature', current: false },
+            ],
+          } as Response;
+        }
+
+        // Mock follow mode endpoint
+        if (urlStr.includes('/api/git/follow')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ followMode: false, followBranch: null }),
+          } as Response;
+        }
+
+        // For all other URLs, use the original fetchMock
+        return originalFetch(url, options);
+      });
+    });
+
+    it('should check for Git repository when working directory changes', async () => {
+      // Clear existing calls
+      fetchCalls = [];
+
+      // Type in working directory
+      await typeInInput(element, 'input[placeholder="~/"]', '/home/user/project');
+
+      // Wait for debounced Git check
+      await waitForAsync(600);
+
+      // Verify Git repo check was made
+      const gitCheckCall = fetchCalls.find(
+        (call) => call[0].includes('/api/git/repo-info') && call[0].includes('project')
+      );
+      expect(gitCheckCall).toBeTruthy();
+    });
+
+    it('should show branch selector when Git repository is detected', async () => {
+      // Trigger Git check
+      element.workingDir = '/home/user/project';
+      // @ts-expect-error - accessing private method for testing
+      await element.checkGitRepository();
+      await element.updateComplete;
+      // Wait a bit for async branch loading
+      await waitForAsync(100);
+      await element.updateComplete;
+
+      // Check that the Git repo info and branches are set correctly
+      expect(element.gitRepoInfo).toBeTruthy();
+      expect(element.gitRepoInfo?.isGitRepo).toBe(true);
+      expect(element.availableBranches).toEqual(['main', 'feature']);
+
+      // Check that branch selector is rendered
+      const branchSelect = element.querySelector('[data-testid="git-base-branch-select"]');
+      expect(branchSelect).toBeTruthy();
+
+      // Verify branches are populated
+      const options = branchSelect?.querySelectorAll('option');
+      expect(options?.length).toBe(2);
+      expect(options?.[0]?.textContent?.trim()).toContain('main');
+      expect(options?.[1]?.textContent?.trim()).toContain('feature');
+    });
+
+    it('should not show branch selector for non-Git directories', async () => {
+      // Override fetch to return non-Git response
+      global.fetch = vi.fn(async (url: string) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('/api/git/repo-info')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ isGitRepo: false }),
+          } as Response;
+        }
+        return fetchMock(url);
+      });
+
+      // Trigger Git check
+      element.workingDir = '/home/user/not-git';
+      // @ts-expect-error - accessing private method for testing
+      await element.checkGitRepository();
+      await element.updateComplete;
+
+      // Check that branch selector is NOT rendered
+      const branchSelect = element.querySelector('[data-testid="git-base-branch-select"]');
+      expect(branchSelect).toBeFalsy();
+    });
+
+    it('should select current worktree branch by default', async () => {
+      // Already mocked in beforeEach - no need to re-mock
+
+      // Set working directory to feature worktree
+      element.workingDir = '/home/user/project-feature';
+      // @ts-expect-error - accessing private method for testing
+      await element.checkGitRepository();
+      await element.updateComplete;
+      // Wait for async operations
+      await waitForAsync(100);
+      await element.updateComplete;
+
+      // Verify feature branch is selected in worktree
+      expect(element.selectedWorktree).toBe('feature');
+    });
+
+    it('should select base branch when not in a worktree', async () => {
+      // Already mocked in beforeEach - no need to re-mock
+
+      // Set working directory to a subdirectory
+      element.workingDir = '/home/user/project/src';
+      // @ts-expect-error - accessing private method for testing
+      await element.checkGitRepository();
+      await element.updateComplete;
+      // Wait for async operations
+      await waitForAsync(100);
+      await element.updateComplete;
+
+      // Verify main branch is selected
+      expect(element.selectedBaseBranch).toBe('main');
+    });
+
+    it('should include Git info in session creation request', async () => {
+      fetchMock.mockResponse('/api/sessions', {
+        sessionId: 'git-session-123',
+      });
+
+      // Set up Git repository state
+      element.gitRepoInfo = {
+        isGitRepo: true,
+        repoPath: '/home/user/project',
+        hasChanges: false,
+        isWorktree: false,
+      };
+      element.selectedBaseBranch = 'feature';
+      element.command = 'vim';
+      element.workingDir = '/home/user/project';
+      await element.updateComplete;
+
+      // Create session
+      await element.handleCreate();
+      await waitForAsync();
+
+      // Check request includes Git info
+      const sessionCall = fetchMock.getCalls().find((call) => call[0] === '/api/sessions');
+      expect(sessionCall).toBeTruthy();
+
+      const requestBody = JSON.parse((sessionCall?.[1]?.body as string) || '{}');
+      expect(requestBody.gitRepoPath).toBe('/home/user/project');
+      expect(requestBody.gitBranch).toBe('feature');
+    });
+
+    it('should not include Git info for non-Git directories', async () => {
+      fetchMock.mockResponse('/api/sessions', {
+        sessionId: 'non-git-session-123',
+      });
+
+      // Clear Git state
+      element.gitRepoInfo = null;
+      element.selectedBaseBranch = '';
+      element.command = 'bash';
+      element.workingDir = '/home/user/downloads';
+      await element.updateComplete;
+
+      // Create session
+      await element.handleCreate();
+      await waitForAsync();
+
+      // Check request does NOT include Git info
+      const sessionCall = fetchMock.getCalls().find((call) => call[0] === '/api/sessions');
+      expect(sessionCall).toBeTruthy();
+
+      const requestBody = JSON.parse((sessionCall?.[1]?.body as string) || '{}');
+      expect(requestBody.gitRepoPath).toBeUndefined();
+      expect(requestBody.gitBranch).toBeUndefined();
+    });
+
+    it('should handle Git check errors gracefully', async () => {
+      // Override fetch to return error
+      global.fetch = vi.fn(async (url: string) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('/api/git/repo-info')) {
+          return {
+            ok: false,
+            status: 403,
+            json: async () => ({ error: 'Permission denied' }),
+          } as Response;
+        }
+        return fetchMock(url);
+      });
+
+      // Trigger working directory change which should check Git
+      element.workingDir = '/home/user/restricted';
+      await element.updateComplete;
+      // Wait for async Git check to complete
+      await waitForAsync(100);
+      await element.updateComplete;
+
+      // Should handle error without crashing
+      expect(element.gitRepoInfo).toBe(null);
+      expect(element.availableBranches).toEqual([]);
+      expect(element.selectedBaseBranch).toBe('');
+
+      // Branch selector element exists but should not render any content
+      const branchSelector = element.querySelector('git-branch-selector');
+      expect(branchSelector).toBeTruthy();
+      // Check that it renders nothing (no selects)
+      const selects = branchSelector?.querySelectorAll('select');
+      expect(selects?.length).toBe(0);
+    });
+
+    it('should check Git when selecting from repository dropdown', async () => {
+      // Clear calls
+      fetchCalls = [];
+
+      // Simulate repository selection by changing working directory
+      // This mimics what happens when a repository is selected from the dropdown
+      element.workingDir = '~/another-project';
+      // Trigger the input event handler which debounces Git check
+      const inputEvent = new Event('input');
+      const input = element.querySelector('[data-testid="working-dir-input"]');
+      if (input) {
+        Object.defineProperty(inputEvent, 'target', { value: input, enumerable: true });
+        (input as HTMLInputElement).value = '~/another-project';
+        input.dispatchEvent(inputEvent);
+      }
+
+      // Wait for debounced Git check (500ms)
+      await waitForAsync(600);
+
+      // Verify Git check was triggered
+      const gitCheckCall = fetchCalls.find(
+        (call) => call[0].includes('/api/git/repo-info') && call[0].includes('another-project')
+      );
+      expect(gitCheckCall).toBeTruthy();
+      expect(element.workingDir).toBe('~/another-project');
+    });
+
+    it('should check Git when selecting directory from file browser', async () => {
+      // Clear calls
+      fetchCalls = [];
+
+      // Simulate directory selection event from file browser
+      const event = new CustomEvent('directory-selected', {
+        detail: '/home/user/new-project',
+        bubbles: true,
+        composed: true,
+      });
+
+      // Show file browser first
+      element.showFileBrowser = true;
+      await element.updateComplete;
+
+      // Find the file-browser element and dispatch event from it
+      const fileBrowser = element.querySelector('file-browser');
+      if (fileBrowser) {
+        fileBrowser.dispatchEvent(event);
+      } else {
+        // Fallback: dispatch on element
+        element.dispatchEvent(event);
+      }
+
+      await element.updateComplete;
+      await waitForAsync(100);
+
+      // Verify Git check was triggered
+      const gitCheckCall = fetchCalls.find(
+        (call) => call[0].includes('/api/git/repo-info') && call[0].includes('new-project')
+      );
+      expect(gitCheckCall).toBeTruthy();
+      // formatPathForDisplay converts /home/user/path to ~/path
+      expect(element.workingDir).toBe('~/new-project');
+      // File browser should be hidden after selection
+      expect(element.showFileBrowser).toBe(false);
+    });
+
+    it('should update selected branch when changed in dropdown', async () => {
+      // Set up Git state
+      element.gitRepoInfo = { isGitRepo: true, repoPath: '/home/user/project' };
+      element.availableBranches = ['main', 'develop', 'feature'];
+      element.selectedBaseBranch = 'main';
+      await element.updateComplete;
+
+      // Find and change the select element
+      const branchSelect = element.querySelector(
+        '[data-testid="git-base-branch-select"]'
+      ) as HTMLSelectElement;
+      expect(branchSelect).toBeTruthy();
+
+      // Change selection
+      branchSelect.value = 'develop';
+      branchSelect.dispatchEvent(new Event('change'));
+
+      await element.updateComplete;
+
+      // Verify branch was updated
+      expect(element.selectedBaseBranch).toBe('develop');
+    });
+
+    it('should show loading state while checking Git', async () => {
+      // Start Git check
+      element.workingDir = '/home/user/project';
+
+      // Start the check without awaiting
+      const checkPromise = element.checkGitRepository();
+
+      // Should be in loading state
+      expect(element.isCheckingGit).toBe(true);
+
+      // Wait for completion
+      await checkPromise;
+
+      // Should no longer be loading
+      expect(element.isCheckingGit).toBe(false);
+    });
+
+    it('should check Git on modal open if working directory is set', async () => {
+      // Create element with initial working directory but not visible
+      const newElement = await fixture<SessionCreateForm>(html`
+        <session-create-form 
+          .authClient=${mockAuthClient} 
+          .visible=${false}
+          .workingDir=${'/home/user/project'}
+        ></session-create-form>
+      `);
+
+      // Clear calls
+      fetchCalls = [];
+
+      // Make visible
+      newElement.visible = true;
+      await newElement.updateComplete;
+
+      // Wait for Git check
+      await waitForAsync(100);
+
+      // Verify Git check was made
+      const gitCheckCall = fetchCalls.find((call) => call[0].includes('/api/git/repo-info'));
+      expect(gitCheckCall).toBeTruthy();
 
       newElement.remove();
     });

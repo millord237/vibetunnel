@@ -1,10 +1,33 @@
+import os.log
 import SwiftUI
+
+private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "AutocompleteView")
 
 /// View that displays autocomplete suggestions in a dropdown
 struct AutocompleteView: View {
-    let suggestions: [AutocompleteService.PathSuggestion]
+    let suggestions: [PathSuggestion]
     @Binding var selectedIndex: Int
     let onSelect: (String) -> Void
+
+    var body: some View {
+        AutocompleteViewWithKeyboard(
+            suggestions: suggestions,
+            selectedIndex: $selectedIndex,
+            keyboardNavigating: false,
+            onSelect: onSelect
+        )
+    }
+}
+
+/// View that displays autocomplete suggestions with keyboard navigation support
+struct AutocompleteViewWithKeyboard: View {
+    let suggestions: [PathSuggestion]
+    @Binding var selectedIndex: Int
+    let keyboardNavigating: Bool
+    let onSelect: (String) -> Void
+
+    @State private var lastKeyboardState = false
+    @State private var mouseHoverTriggered = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,9 +39,10 @@ struct AutocompleteView: View {
                                 suggestion: suggestion,
                                 isSelected: index == selectedIndex
                             ) { onSelect(suggestion.suggestion) }
-                                .id(index)
+                                .id(suggestion.id)
                                 .onHover { hovering in
                                     if hovering {
+                                        mouseHoverTriggered = true
                                         selectedIndex = index
                                     }
                                 }
@@ -32,11 +56,17 @@ struct AutocompleteView: View {
                 }
                 .frame(maxHeight: 200)
                 .onChange(of: selectedIndex) { _, newIndex in
-                    if newIndex >= 0 && newIndex < suggestions.count {
+                    // Only animate scroll when using keyboard navigation, not mouse hover
+                    if newIndex >= 0 && newIndex < suggestions.count && keyboardNavigating && !mouseHoverTriggered {
                         withAnimation(.easeInOut(duration: 0.1)) {
                             proxy.scrollTo(newIndex, anchor: .center)
                         }
                     }
+                    // Reset the mouse hover flag after processing
+                    mouseHoverTriggered = false
+                }
+                .onChange(of: keyboardNavigating) { _, newValue in
+                    lastKeyboardState = newValue
                 }
             }
         }
@@ -51,7 +81,7 @@ struct AutocompleteView: View {
 }
 
 private struct AutocompleteRow: View {
-    let suggestion: AutocompleteService.PathSuggestion
+    let suggestion: PathSuggestion
     let isSelected: Bool
     let onTap: () -> Void
 
@@ -64,21 +94,57 @@ private struct AutocompleteRow: View {
                     .foregroundColor(iconColor)
                     .frame(width: 16)
 
-                // Name
-                Text(suggestion.name)
-                    .font(.system(size: 12))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
+                // Name and Git info
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(suggestion.name)
+                            .font(.system(size: 12))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+
+                        // Git status badges
+                        if let gitInfo = suggestion.gitInfo {
+                            HStack(spacing: 4) {
+                                // Branch name
+                                if let branch = gitInfo.branch {
+                                    Text("[\(branch)]")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(gitInfo.isWorktree ? .purple : .secondary)
+                                }
+
+                                // Ahead/behind indicators
+                                if let ahead = gitInfo.aheadCount, ahead > 0 {
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "arrow.up")
+                                            .font(.system(size: 8))
+                                        Text("\(ahead)")
+                                            .font(.system(size: 10))
+                                    }
+                                    .foregroundColor(.green)
+                                }
+
+                                if let behind = gitInfo.behindCount, behind > 0 {
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "arrow.down")
+                                            .font(.system(size: 8))
+                                        Text("\(behind)")
+                                            .font(.system(size: 10))
+                                    }
+                                    .foregroundColor(.orange)
+                                }
+
+                                // Changes indicator
+                                if gitInfo.hasChanges {
+                                    Image(systemName: "circle.fill")
+                                        .font(.system(size: 6))
+                                        .foregroundColor(.yellow)
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Spacer()
-
-                // Path hint
-                Text(suggestion.path)
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .frame(maxWidth: 120)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -124,12 +190,16 @@ private struct AutocompleteRow: View {
 struct AutocompleteTextField: View {
     @Binding var text: String
     let placeholder: String
-    @StateObject private var autocompleteService = AutocompleteService()
+    @Environment(GitRepositoryMonitor.self) private var gitMonitor
+
+    @Environment(WorktreeService.self) private var worktreeService
+    @State private var autocompleteService: AutocompleteService?
     @State private var showSuggestions = false
     @State private var selectedIndex = -1
     @FocusState private var isFocused: Bool
     @State private var debounceTask: Task<Void, Never>?
     @State private var justSelectedCompletion = false
+    @State private var keyboardNavigating = false
 
     var body: some View {
         VStack(spacing: 4) {
@@ -149,47 +219,61 @@ struct AutocompleteTextField: View {
                             showSuggestions = false
                             selectedIndex = -1
                         }
+                    } else if focused && !text.isEmpty && !(autocompleteService?.suggestions.isEmpty ?? true) {
+                        // Show suggestions when field gains focus if we have any
+                        showSuggestions = true
                     }
                 }
 
-            if showSuggestions && !autocompleteService.suggestions.isEmpty {
-                AutocompleteView(
-                    suggestions: autocompleteService.suggestions,
-                    selectedIndex: $selectedIndex
+            if showSuggestions && isFocused && !(autocompleteService?.suggestions.isEmpty ?? true) {
+                AutocompleteViewWithKeyboard(
+                    suggestions: autocompleteService?.suggestions ?? [],
+                    selectedIndex: $selectedIndex,
+                    keyboardNavigating: keyboardNavigating
                 ) { suggestion in
                     justSelectedCompletion = true
                     text = suggestion
                     showSuggestions = false
                     selectedIndex = -1
-                    autocompleteService.clearSuggestions()
+                    autocompleteService?.clearSuggestions()
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.95)).combined(with: .offset(y: -5)),
+                    removal: .opacity.combined(with: .scale(scale: 0.95))
+                ))
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: showSuggestions)
+        .animation(.easeInOut(duration: 0.15), value: showSuggestions)
+        .onAppear {
+            // Initialize autocompleteService with GitRepositoryMonitor
+            autocompleteService = AutocompleteService(gitMonitor: gitMonitor)
+        }
     }
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
-        guard showSuggestions && !autocompleteService.suggestions.isEmpty else {
+        guard isFocused && showSuggestions && !(autocompleteService?.suggestions.isEmpty ?? true) else {
             return .ignored
         }
 
         switch keyPress.key {
         case .downArrow:
-            selectedIndex = min(selectedIndex + 1, autocompleteService.suggestions.count - 1)
+            keyboardNavigating = true
+            selectedIndex = min(selectedIndex + 1, (autocompleteService?.suggestions.count ?? 0) - 1)
             return .handled
 
         case .upArrow:
+            keyboardNavigating = true
             selectedIndex = max(selectedIndex - 1, -1)
             return .handled
 
         case .tab, .return:
-            if selectedIndex >= 0 && selectedIndex < autocompleteService.suggestions.count {
+            if selectedIndex >= 0 && selectedIndex < (autocompleteService?.suggestions.count ?? 0) {
                 justSelectedCompletion = true
-                text = autocompleteService.suggestions[selectedIndex].suggestion
+                text = autocompleteService?.suggestions[selectedIndex].suggestion ?? ""
                 showSuggestions = false
                 selectedIndex = -1
-                autocompleteService.clearSuggestions()
+                autocompleteService?.clearSuggestions()
+                keyboardNavigating = false
                 return .handled
             }
             return .ignored
@@ -198,6 +282,7 @@ struct AutocompleteTextField: View {
             if showSuggestions {
                 showSuggestions = false
                 selectedIndex = -1
+                keyboardNavigating = false
                 return .handled
             }
             return .ignored
@@ -217,34 +302,52 @@ struct AutocompleteTextField: View {
         // Cancel previous debounce
         debounceTask?.cancel()
 
-        // Reset selection when text changes
+        // Reset selection and keyboard navigation flag when text changes
         selectedIndex = -1
+        keyboardNavigating = false
 
         guard !newValue.isEmpty else {
+            // Hide suggestions when text is empty
             showSuggestions = false
-            autocompleteService.clearSuggestions()
+            autocompleteService?.clearSuggestions()
             return
+        }
+
+        // Show suggestions immediately if we already have them and field is focused, they'll update when new ones
+        // arrive
+        if isFocused && !(autocompleteService?.suggestions.isEmpty ?? true) {
+            showSuggestions = true
         }
 
         // Debounce the autocomplete request
         debounceTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms - reduced for better responsiveness
 
             if !Task.isCancelled {
-                await autocompleteService.fetchSuggestions(for: newValue)
+                await autocompleteService?.fetchSuggestions(for: newValue)
 
                 await MainActor.run {
-                    if !autocompleteService.suggestions.isEmpty {
+                    // Update suggestion visibility based on results - only show if focused
+                    if isFocused && !(autocompleteService?.suggestions.isEmpty ?? true) {
                         showSuggestions = true
-                        // Auto-select first item if it's a good match
-                        if let first = autocompleteService.suggestions.first,
+                        logger.debug("Updated with \(autocompleteService?.suggestions.count ?? 0) suggestions")
+
+                        // Try to maintain selection if possible
+                        if selectedIndex >= (autocompleteService?.suggestions.count ?? 0) {
+                            selectedIndex = -1
+                        }
+
+                        // Auto-select first item if it's a good match and nothing is selected
+                        if selectedIndex == -1,
+                           let first = autocompleteService?.suggestions.first,
                            first.name.lowercased().hasPrefix(
                                newValue.split(separator: "/").last?.lowercased() ?? ""
                            )
                         {
                             selectedIndex = 0
                         }
-                    } else {
+                    } else if showSuggestions {
+                        // Only hide if we're already showing and have no results
                         showSuggestions = false
                     }
                 }

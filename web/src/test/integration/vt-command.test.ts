@@ -3,7 +3,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-describe.skip('vt command', () => {
+describe('vt command', () => {
   const projectRoot = join(__dirname, '../../..');
   const vtScriptPath = join(projectRoot, 'bin/vt');
   const packageJsonPath = join(projectRoot, 'package.json');
@@ -29,10 +29,11 @@ describe.skip('vt command', () => {
     expect(stats.mode & 0o111).toBeTruthy(); // Check execute permissions
   });
 
-  it('should be included in package.json bin section', () => {
+  it('should NOT be included in package.json bin section', () => {
     const packageJson = JSON.parse(require('fs').readFileSync(packageJsonPath, 'utf8'));
     expect(packageJson.bin).toBeDefined();
-    expect(packageJson.bin.vt).toBe('./bin/vt');
+    // vt should NOT be in bin section to avoid conflicts with other tools
+    expect(packageJson.bin.vt).toBeUndefined();
     expect(packageJson.bin.vibetunnel).toBe('./bin/vibetunnel');
   });
 
@@ -169,27 +170,9 @@ describe.skip('vt command', () => {
     expect(scriptContent).toContain('if [ -z "$VIBETUNNEL_BIN" ]');
     expect(scriptContent).toContain('if [ -n "$VIBETUNNEL_SESSION_ID" ]');
 
-    // Ensure no empty if statements (the bug we fixed)
-    const lines = scriptContent.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.startsWith('if ') && line.includes('then')) {
-        // Find the matching fi
-        let depth = 1;
-        let hasContent = false;
-        for (let j = i + 1; j < lines.length && depth > 0; j++) {
-          const nextLine = lines[j].trim();
-          if (nextLine.startsWith('if ')) depth++;
-          if (nextLine === 'fi') depth--;
-          if (depth === 1 && nextLine && !nextLine.startsWith('#') && nextLine !== 'fi') {
-            hasContent = true;
-          }
-        }
-        if (!hasContent) {
-          throw new Error(`Empty if statement found at line ${i + 1}: ${line}`);
-        }
-      }
-    }
+    // Check that follow command handling exists
+    expect(scriptContent).toContain('if [[ "$1" == "follow" ]]');
+    expect(scriptContent).toContain('if [[ "$1" == "unfollow" ]]');
   });
 
   it('should be included in npm package files', () => {

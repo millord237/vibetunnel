@@ -24,6 +24,8 @@ struct VibeTunnelApp: App {
     @State var gitRepositoryMonitor = GitRepositoryMonitor()
     @State var repositoryDiscoveryService = RepositoryDiscoveryService()
     @State var sessionService: SessionService?
+    @State var worktreeService = WorktreeService(serverManager: ServerManager.shared)
+    @State var configManager = ConfigManager.shared
 
     init() {
         // Connect the app delegate to this app instance
@@ -52,6 +54,8 @@ struct VibeTunnelApp: App {
                 .environment(terminalLauncher)
                 .environment(gitRepositoryMonitor)
                 .environment(repositoryDiscoveryService)
+                .environment(configManager)
+                .environment(worktreeService)
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 580, height: 480)
@@ -72,10 +76,12 @@ struct VibeTunnelApp: App {
                     .environment(terminalLauncher)
                     .environment(gitRepositoryMonitor)
                     .environment(repositoryDiscoveryService)
+                    .environment(configManager)
                     .environment(sessionService ?? SessionService(
                         serverManager: serverManager,
                         sessionMonitor: sessionMonitor
                     ))
+                    .environment(worktreeService)
             } else {
                 Text("Session not found")
                     .frame(width: 400, height: 300)
@@ -96,10 +102,12 @@ struct VibeTunnelApp: App {
                 .environment(terminalLauncher)
                 .environment(gitRepositoryMonitor)
                 .environment(repositoryDiscoveryService)
+                .environment(configManager)
                 .environment(sessionService ?? SessionService(
                     serverManager: serverManager,
                     sessionMonitor: sessionMonitor
                 ))
+                .environment(worktreeService)
         }
         .commands {
             CommandGroup(after: .appInfo) {
@@ -138,11 +146,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private(set) var sparkleUpdaterManager: SparkleUpdaterManager?
     var app: VibeTunnelApp?
-    private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "AppDelegate")
+    private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "AppDelegate")
     private(set) var statusBarController: StatusBarController?
 
     /// Distributed notification name used to ask an existing instance to show the Settings window.
-    private static let showSettingsNotification = Notification.Name("sh.vibetunnel.vibetunnel.showSettings")
+    private static let showSettingsNotification = Notification.Name.showSettings
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let processInfo = ProcessInfo.processInfo
@@ -263,9 +271,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // Start Git monitoring early
         app?.gitRepositoryMonitor.startMonitoring()
 
+        // Initialize status bar controller IMMEDIATELY to show menu bar icon
+        guard let app else {
+            fatalError("VibeTunnelApp instance not connected to AppDelegate")
+        }
+
+        // Connect GitRepositoryMonitor to SessionMonitor for pre-caching
+        app.sessionMonitor.gitRepositoryMonitor = app.gitRepositoryMonitor
+
+        statusBarController = StatusBarController(
+            sessionMonitor: app.sessionMonitor,
+            serverManager: app.serverManager,
+            ngrokService: app.ngrokService,
+            tailscaleService: app.tailscaleService,
+            terminalLauncher: app.terminalLauncher,
+            gitRepositoryMonitor: app.gitRepositoryMonitor,
+            repositoryDiscovery: app.repositoryDiscoveryService,
+            configManager: app.configManager,
+            worktreeService: app.worktreeService
+        )
+
         // Initialize and start HTTP server using ServerManager
         Task {
-            guard let serverManager = app?.serverManager else { return }
+            let serverManager = app.serverManager
             logger.info("Attempting to start HTTP server using ServerManager...")
             await serverManager.start()
 
@@ -273,35 +301,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             if serverManager.isRunning {
                 logger.info("HTTP server started successfully on port \(serverManager.port)")
 
+                // Update status bar icon to reflect server running state
+                statusBarController?.updateStatusItemDisplay()
+
                 // Session monitoring starts automatically
             } else {
                 logger.error("HTTP server failed to start")
                 if let error = serverManager.lastError {
                     logger.error("Server start error: \(error.localizedDescription)")
                 }
-            }
-
-            // Initialize status bar controller after services are ready
-            if let sessionMonitor = app?.sessionMonitor,
-               let serverManager = app?.serverManager,
-               let ngrokService = app?.ngrokService,
-               let tailscaleService = app?.tailscaleService,
-               let terminalLauncher = app?.terminalLauncher,
-               let gitRepositoryMonitor = app?.gitRepositoryMonitor,
-               let repositoryDiscoveryService = app?.repositoryDiscoveryService
-            {
-                // Connect GitRepositoryMonitor to SessionMonitor for pre-caching
-                sessionMonitor.gitRepositoryMonitor = gitRepositoryMonitor
-
-                statusBarController = StatusBarController(
-                    sessionMonitor: sessionMonitor,
-                    serverManager: serverManager,
-                    ngrokService: ngrokService,
-                    tailscaleService: tailscaleService,
-                    terminalLauncher: terminalLauncher,
-                    gitRepositoryMonitor: gitRepositoryMonitor,
-                    repositoryDiscovery: repositoryDiscoveryService
-                )
             }
 
             // Set up multi-layer cleanup for cloudflared processes

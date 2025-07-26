@@ -16,7 +16,7 @@ struct SecurityPermissionsSettingsView: View {
 
     @State private var permissionUpdateTrigger = 0
 
-    private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "SecurityPermissionsSettings")
+    private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "SecurityPermissionsSettings")
 
     // MARK: - Helper Properties
 
@@ -60,13 +60,12 @@ struct SecurityPermissionsSettingsView: View {
             .navigationTitle("Security")
             .onAppear {
                 onAppearSetup()
+                // Register for continuous monitoring
+                permissionManager.registerForMonitoring()
             }
             .task {
                 // Check permissions before first render to avoid UI flashing
                 await permissionManager.checkAllPermissions()
-
-                // Register for continuous monitoring
-                permissionManager.registerForMonitoring()
             }
             .onDisappear {
                 permissionManager.unregisterFromMonitoring()

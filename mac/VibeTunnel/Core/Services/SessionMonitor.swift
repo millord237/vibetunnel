@@ -8,19 +8,33 @@ import os.log
 /// including its command, directory, process status, and activity information.
 struct ServerSessionInfo: Codable {
     let id: String
-    let command: [String] // Changed from String to [String] to match server
-    let name: String? // Added missing field
+    let name: String
+    let command: [String]
     let workingDir: String
     let status: String
     let exitCode: Int?
     let startedAt: String
+    let pid: Int?
+    let initialCols: Int?
+    let initialRows: Int?
+    let lastClearOffset: Int?
+    let version: String?
+    let gitRepoPath: String?
+    let gitBranch: String?
+    let gitAheadCount: Int?
+    let gitBehindCount: Int?
+    let gitHasChanges: Bool?
+    let gitIsWorktree: Bool?
+    let gitMainRepoPath: String?
+
+    // Additional fields from Session (not SessionInfo)
     let lastModified: String
-    let pid: Int? // Made optional since it might not exist for all sessions
-    let initialCols: Int? // Added missing field
-    let initialRows: Int? // Added missing field
+    let active: Bool?
     let activityStatus: ActivityStatus?
-    let source: String? // Added for HQ mode
-    let attachedViaVT: Bool? // Added for VT attachment tracking
+    let source: String?
+    let remoteId: String?
+    let remoteName: String?
+    let remoteUrl: String?
 
     var isRunning: Bool {
         status == "running"
@@ -60,9 +74,8 @@ final class SessionMonitor {
 
     private var lastFetch: Date?
     private let cacheInterval: TimeInterval = 2.0
-    private let serverPort: Int
-    private var localAuthToken: String?
-    private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "SessionMonitor")
+    private let serverManager = ServerManager.shared
+    private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "SessionMonitor")
 
     /// Reference to GitRepositoryMonitor for pre-caching
     weak var gitRepositoryMonitor: GitRepositoryMonitor?
@@ -71,17 +84,12 @@ final class SessionMonitor {
     private var refreshTimer: Timer?
 
     private init() {
-        let port = UserDefaults.standard.integer(forKey: "serverPort")
-        self.serverPort = port > 0 ? port : 4_020
-
         // Start periodic refresh
         startPeriodicRefresh()
     }
 
     /// Set the local auth token for server requests
-    func setLocalAuthToken(_ token: String?) {
-        self.localAuthToken = token
-    }
+    func setLocalAuthToken(_ token: String?) {}
 
     /// Number of running sessions
     var sessionCount: Int {
@@ -109,33 +117,11 @@ final class SessionMonitor {
 
     private func fetchSessions() async {
         do {
-            // Get current port (might have changed)
-            let port = UserDefaults.standard.integer(forKey: "serverPort")
-            let actualPort = port > 0 ? port : serverPort
-
-            guard let url = URL(string: "http://localhost:\(actualPort)/api/sessions") else {
-                throw URLError(.badURL)
-            }
-
-            var request = URLRequest(url: url, timeoutInterval: 3.0)
-
-            // Add Host header to ensure request is recognized as local
-            request.setValue("localhost", forHTTPHeaderField: "Host")
-
-            // Add local auth token if available
-            if let token = localAuthToken {
-                request.setValue(token, forHTTPHeaderField: "X-VibeTunnel-Local")
-            }
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200
-            else {
-                throw URLError(.badServerResponse)
-            }
-
-            let sessionsArray = try JSONDecoder().decode([ServerSessionInfo].self, from: data)
+            let sessionsArray = try await serverManager.performRequest(
+                endpoint: APIEndpoints.sessions,
+                method: "GET",
+                responseType: [ServerSessionInfo].self
+            )
 
             // Convert to dictionary
             var sessionsDict: [String: ServerSessionInfo] = [:]

@@ -6,6 +6,7 @@
  */
 
 import type { Session } from '../../../shared/types.js';
+import { HttpMethod } from '../../../shared/types.js';
 import { authClient } from '../../services/auth-client.js';
 import { websocketInputClient } from '../../services/websocket-input-client.js';
 import { isBrowserShortcut, isCopyPasteShortcut } from '../../utils/browser-shortcuts.js';
@@ -115,6 +116,10 @@ export class InputManager {
         const now = Date.now();
         const timeSinceLastEscape = now - this.lastEscapeTime;
 
+        logger.log(
+          `🔑 Escape pressed. Time since last: ${timeSinceLastEscape}ms, Threshold: ${this.DOUBLE_ESCAPE_THRESHOLD}ms`
+        );
+
         if (timeSinceLastEscape < this.DOUBLE_ESCAPE_THRESHOLD) {
           // Double escape detected - toggle keyboard capture
           logger.log('🔄 Double Escape detected in input manager - toggling keyboard capture');
@@ -125,6 +130,10 @@ export class InputManager {
             const currentCapture = this.callbacks.getKeyboardCaptureActive?.() ?? true;
             const newCapture = !currentCapture;
 
+            logger.log(
+              `📢 Dispatching capture-toggled event. Current: ${currentCapture}, New: ${newCapture}`
+            );
+
             // Dispatch custom event that will bubble up
             const event = new CustomEvent('capture-toggled', {
               detail: { active: newCapture },
@@ -134,6 +143,7 @@ export class InputManager {
 
             // Dispatch on document to ensure it reaches the app
             document.dispatchEvent(event);
+            logger.log('✅ capture-toggled event dispatched on document');
           }
 
           this.lastEscapeTime = 0; // Reset to prevent triple-tap
@@ -212,7 +222,7 @@ export class InputManager {
       // Fallback to HTTP if WebSocket failed
       logger.debug('WebSocket unavailable, falling back to HTTP');
       const response = await fetch(`/api/sessions/${this.session.id}/input`, {
-        method: 'POST',
+        method: HttpMethod.POST,
         headers: {
           'Content-Type': 'application/json',
           ...authClient.getAuthHeader(),

@@ -71,20 +71,23 @@ export class KeyboardCaptureIndicator extends LitElement {
   }
 
   private handleClick() {
-    this.active = !this.active;
+    // Don't toggle local state - let parent control it
+    const newActive = !this.active;
     this.dispatchEvent(
       new CustomEvent('capture-toggled', {
-        detail: { active: this.active },
+        detail: { active: newActive },
         bubbles: true,
         composed: true,
       })
     );
-    logger.log(`Keyboard capture ${this.active ? 'enabled' : 'disabled'}`);
+    logger.log(`Keyboard capture toggle requested: ${newActive ? 'enable' : 'disable'}`);
   }
 
   private getOSSpecificShortcuts() {
     if (this.isMacOS) {
       return [
+        { key: 'Cmd+1...9', desc: 'Switch to session 1 to 9' },
+        { key: 'Cmd+0', desc: 'Switch to session 10' },
         { key: 'Cmd+A', desc: 'Line start (not select all)' },
         { key: 'Cmd+E', desc: 'Line end' },
         { key: 'Cmd+R', desc: 'History search (not reload)' },
@@ -98,6 +101,8 @@ export class KeyboardCaptureIndicator extends LitElement {
       ];
     } else {
       return [
+        { key: 'Ctrl+1...9', desc: 'Switch to session 1 to 9' },
+        { key: 'Ctrl+0', desc: 'Switch to session 10' },
         { key: 'Ctrl+A', desc: 'Line start (not select all)' },
         { key: 'Ctrl+E', desc: 'Line end' },
         { key: 'Ctrl+R', desc: 'History search (not reload)' },

@@ -6,6 +6,7 @@
  */
 
 import type { Session } from '../../../shared/types.js';
+import { HttpMethod } from '../../../shared/types.js';
 import { authClient } from '../../services/auth-client.js';
 import { createLogger } from '../../utils/logger.js';
 import type { TerminalThemeId } from '../../utils/terminal-themes.js';
@@ -100,7 +101,24 @@ export class TerminalLifecycleManager {
       return;
     }
 
-    const terminalElement = this.domElement.querySelector('vibe-terminal') as Terminal;
+    // First try to find terminal inside terminal-renderer, then fallback to direct query
+    const terminalElement = (this.domElement.querySelector('terminal-renderer vibe-terminal') ||
+      this.domElement.querySelector('terminal-renderer vibe-terminal-binary') ||
+      this.domElement.querySelector('vibe-terminal') ||
+      this.domElement.querySelector('vibe-terminal-binary')) as Terminal;
+
+    logger.debug('Terminal search results:', {
+      hasTerminalRenderer: !!this.domElement.querySelector('terminal-renderer'),
+      hasDirectTerminal: !!this.domElement.querySelector('vibe-terminal'),
+      hasDirectBinaryTerminal: !!this.domElement.querySelector('vibe-terminal-binary'),
+      hasNestedTerminal: !!this.domElement.querySelector('terminal-renderer vibe-terminal'),
+      hasNestedBinaryTerminal: !!this.domElement.querySelector(
+        'terminal-renderer vibe-terminal-binary'
+      ),
+      foundElement: !!terminalElement,
+      sessionId: this.session?.id,
+    });
+
     if (!terminalElement || !this.session) {
       logger.warn(`Cannot initialize terminal - missing element or session`);
       return;
@@ -146,6 +164,11 @@ export class TerminalLifecycleManager {
     // Use setTimeout to ensure we're still connected after all synchronous updates
     setTimeout(() => {
       if (this.connected && this.connectionManager) {
+        logger.debug('Connecting to stream for terminal', {
+          terminalElement: !!this.terminal,
+          sessionId: this.session?.id,
+          connected: this.connected,
+        });
         this.connectionManager.connectToStream();
       } else {
         logger.warn(`Component disconnected before stream connection`);
@@ -191,7 +214,7 @@ export class TerminalLifecycleManager {
           );
 
           const response = await fetch(`/api/sessions/${this.session.id}/resize`, {
-            method: 'POST',
+            method: HttpMethod.POST,
             headers: {
               'Content-Type': 'application/json',
               ...authClient.getAuthHeader(),
@@ -231,7 +254,7 @@ export class TerminalLifecycleManager {
 
     try {
       const response = await fetch(`/api/sessions/${this.session.id}/reset-size`, {
-        method: 'POST',
+        method: HttpMethod.POST,
         headers: {
           'Content-Type': 'application/json',
           ...authClient.getAuthHeader(),

@@ -12,10 +12,10 @@
  */
 import { html, type PropertyValues } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
+import { HttpMethod } from '../../shared/types.js';
 import { authClient } from '../services/auth-client.js';
 import { consumeEvent } from '../utils/event-utils.js';
 import { createLogger } from '../utils/logger.js';
-import { detectMobile } from '../utils/mobile-utils.js';
 import { TerminalPreferencesManager } from '../utils/terminal-preferences.js';
 import type { TerminalThemeId } from '../utils/terminal-themes.js';
 import { getCurrentTheme } from '../utils/theme-utils.js';
@@ -48,9 +48,7 @@ export class VibeTerminalBinary extends VibeTerminalBuffer {
 
   private terminalResizeObserver: ResizeObserver | null = null;
   private preferencesManager = TerminalPreferencesManager.getInstance();
-  private isMobile = detectMobile();
   private isScrolledToBottom = true;
-  private lastContentHash = '';
   private hiddenInput?: HTMLInputElement;
 
   connectedCallback() {
@@ -351,7 +349,7 @@ export class VibeTerminalBinary extends VibeTerminalBuffer {
       }
 
       await fetch(`/api/sessions/${this.sessionId}/input`, {
-        method: 'POST',
+        method: HttpMethod.POST,
         headers,
         body: JSON.stringify({ text }),
       });

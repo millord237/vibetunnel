@@ -3,6 +3,19 @@
  */
 
 /**
+ * HTTP methods enum
+ */
+export enum HttpMethod {
+  GET = 'GET',
+  POST = 'POST',
+  PUT = 'PUT',
+  DELETE = 'DELETE',
+  PATCH = 'PATCH',
+  HEAD = 'HEAD',
+  OPTIONS = 'OPTIONS',
+}
+
+/**
  * Session status enum
  */
 export type SessionStatus = 'starting' | 'running' | 'exited';
@@ -28,6 +41,19 @@ export interface SessionInfo {
    */
   lastClearOffset?: number;
   version?: string; // VibeTunnel version that created this session
+  gitRepoPath?: string; // Repository root path
+  gitBranch?: string; // Current branch name
+  gitAheadCount?: number; // Commits ahead of upstream
+  gitBehindCount?: number; // Commits behind upstream
+  gitHasChanges?: boolean; // Has uncommitted changes
+  gitIsWorktree?: boolean; // Is a worktree (not main repo)
+  gitMainRepoPath?: string; // Main repository path (same as gitRepoPath if not worktree)
+  // Git status details (not persisted to disk, fetched dynamically)
+  gitModifiedCount?: number; // Number of modified files
+  gitUntrackedCount?: number; // Number of untracked files
+  gitStagedCount?: number; // Number of staged files
+  gitAddedCount?: number; // Number of added files
+  gitDeletedCount?: number; // Number of deleted files
 }
 
 /**
@@ -87,6 +113,13 @@ export interface SessionCreateOptions {
   cols?: number;
   rows?: number;
   titleMode?: TitleMode;
+  gitRepoPath?: string;
+  gitBranch?: string;
+  gitAheadCount?: number;
+  gitBehindCount?: number;
+  gitHasChanges?: boolean;
+  gitIsWorktree?: boolean;
+  gitMainRepoPath?: string;
 }
 
 /**

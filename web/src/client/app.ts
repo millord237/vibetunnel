@@ -12,6 +12,7 @@ import { keyed } from 'lit/directives/keyed.js';
 
 // Import shared types
 import type { Session } from '../shared/types.js';
+import { HttpMethod } from '../shared/types.js';
 import { isBrowserShortcut } from './utils/browser-shortcuts.js';
 // Import utilities
 import { BREAKPOINTS, SIDEBAR, TIMING, TRANSITIONS, Z_INDEX } from './utils/constants.js';
@@ -32,13 +33,16 @@ import './components/session-view.js';
 import './components/session-card.js';
 import './components/file-browser.js';
 import './components/log-viewer.js';
-import './components/unified-settings.js';
+import './components/settings.js';
 import './components/notification-status.js';
 import './components/auth-login.js';
 import './components/ssh-key-manager.js';
+import './components/git-notification-handler.js';
+import type { GitNotificationHandler } from './components/git-notification-handler.js';
 
 import { authClient } from './services/auth-client.js';
 import { bufferSubscriptionService } from './services/buffer-subscription-service.js';
+import { getControlEventService } from './services/control-event-service.js';
 import { pushNotificationService } from './services/push-notification-service.js';
 
 const logger = createLogger('app');
@@ -65,6 +69,7 @@ export class VibeTunnelApp extends LitElement {
   @state() private selectedSessionId: string | null = null;
   @state() private hideExited = this.loadHideExitedState();
   @state() private showCreateModal = false;
+  @state() private createDialogWorkingDir = '';
   @state() private showSSHKeyManager = false;
   @state() private showSettings = false;
   @state() private isAuthenticated = false;
@@ -79,6 +84,10 @@ export class VibeTunnelApp extends LitElement {
   private responsiveObserverInitialized = false;
   private initialRenderComplete = false;
   private sidebarAnimationReady = false;
+  // Session caching to reduce re-renders
+  private _cachedSelectedSession: Session | undefined;
+  private _cachedSelectedSessionId: string | null = null;
+  private _lastLoggedView: string | null = null;
 
   private hotReloadWs: WebSocket | null = null;
   private errorTimeoutId: number | null = null;
@@ -87,6 +96,7 @@ export class VibeTunnelApp extends LitElement {
   private responsiveUnsubscribe?: () => void;
   private resizeCleanupFunctions: (() => void)[] = [];
   private sessionLoadingState: 'idle' | 'loading' | 'loaded' | 'not-found' = 'idle';
+  private controlEventService?: ReturnType<typeof getControlEventService>;
 
   connectedCallback() {
     super.connectedCallback();
@@ -104,6 +114,16 @@ export class VibeTunnelApp extends LitElement {
   }
 
   firstUpdated() {
+    // Connect control event service to git notification handler
+    if (this.controlEventService) {
+      const gitNotificationHandler = this.querySelector(
+        'git-notification-handler'
+      ) as GitNotificationHandler;
+      if (gitNotificationHandler) {
+        gitNotificationHandler.setControlEventService(this.controlEventService);
+      }
+    }
+
     // Mark initial render as complete after a microtask to ensure DOM is settled
     Promise.resolve().then(() => {
       this.initialRenderComplete = true;
@@ -165,6 +185,40 @@ export class VibeTunnelApp extends LitElement {
 
   private handleKeyDown = (e: KeyboardEvent) => {
     const isMacOS = navigator.platform.toLowerCase().includes('mac');
+
+    // Handle Cmd/Ctrl+1234567890 for session switching when keyboard capture is active
+    if (this.currentView === 'session' && this.keyboardCaptureActive) {
+      const primaryModifier = isMacOS ? e.metaKey : e.ctrlKey;
+      const wrongModifier = isMacOS ? e.ctrlKey : e.metaKey;
+
+      if (primaryModifier && !wrongModifier && !e.shiftKey && !e.altKey && /^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Get the session number (1-9, 0 = 10)
+        const sessionNumber = e.key === '0' ? 10 : Number.parseInt(e.key);
+
+        // Get visible sessions in the same order as the session list
+        const activeSessions = this.sessions.filter(
+          (session) => session.status === 'running' && session.activityStatus?.isActive !== false
+        );
+
+        // Check if the requested session exists
+        if (sessionNumber > 0 && sessionNumber <= activeSessions.length) {
+          const targetSession = activeSessions[sessionNumber - 1];
+          if (targetSession) {
+            logger.log(`Switching to session ${sessionNumber}: ${targetSession.name}`);
+            this.handleNavigateToSession(
+              new CustomEvent('navigate-to-session', {
+                detail: { sessionId: targetSession.id },
+              })
+            );
+          }
+        }
+
+        return;
+      }
+    }
 
     // Check if we're capturing and what the shortcut would do
     const checkCapturedShortcut = (): {
@@ -255,7 +309,9 @@ export class VibeTunnelApp extends LitElement {
     }
 
     // In session view with capture active, check if we're capturing this shortcut
-    if (this.currentView === 'session' && this.keyboardCaptureActive) {
+    // But don't capture shortcuts if the session has exited
+    const isSessionExited = this.selectedSession?.status === 'exited';
+    if (this.currentView === 'session' && this.keyboardCaptureActive && !isSessionExited) {
       const { captured, browserAction, terminalAction } = checkCapturedShortcut();
       if (captured) {
         // Dispatch event for indicator animation
@@ -348,11 +404,23 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private async initializeApp() {
+    logger.log('🚀 initializeApp() started');
+
     // First check authentication
     await this.checkAuthenticationStatus();
 
+    logger.log('✅ checkAuthenticationStatus() completed', {
+      isAuthenticated: this.isAuthenticated,
+      sessionCount: this.sessions.length,
+      currentView: this.currentView,
+      initialLoadComplete: this.initialLoadComplete,
+    });
+
     // Then setup routing after auth is determined and sessions are loaded
+    // For session routes, this ensures sessions are already loaded before routing
     this.setupRouting();
+
+    logger.log('✅ setupRouting() completed');
   }
 
   private async checkAuthenticationStatus() {
@@ -405,9 +473,11 @@ export class VibeTunnelApp extends LitElement {
 
     // Check if there was a session ID in the URL that we should navigate to
     const url = new URL(window.location.href);
-    const sessionId = url.searchParams.get('session');
-    if (sessionId) {
-      // Always navigate to the session view if a session ID is provided
+    const pathParts = url.pathname.split('/').filter(Boolean);
+
+    // Check for /session/:id pattern
+    if (pathParts.length === 2 && pathParts[0] === 'session') {
+      const sessionId = pathParts[1];
       logger.log(`Navigating to session ${sessionId} from URL after auth`);
       this.selectedSessionId = sessionId;
       this.sessionLoadingState = 'idle'; // Reset loading state for new session
@@ -427,6 +497,10 @@ export class VibeTunnelApp extends LitElement {
       } else {
         logger.log('⏭️ Skipping push notification service initialization (no-auth mode)');
       }
+
+      // Initialize control event service for real-time notifications
+      this.controlEventService = getControlEventService(authClient);
+      this.controlEventService.connect();
 
       logger.log('✅ Services initialized successfully');
     } catch (error) {
@@ -489,15 +563,6 @@ export class VibeTunnelApp extends LitElement {
     }
   }
 
-  private clearSuccess() {
-    // Clear the timeout if active
-    if (this.successTimeoutId !== null) {
-      clearTimeout(this.successTimeoutId);
-      this.successTimeoutId = null;
-    }
-    this.successMessage = '';
-  }
-
   private async loadSessions() {
     // Only show loading state on initial load, not on refreshes
     if (!this.initialLoadComplete) {
@@ -528,7 +593,70 @@ export class VibeTunnelApp extends LitElement {
             logger.debug('No sessions have activity status');
           }
 
-          this.sessions = newSessions;
+          // Preserve Git information and reuse existing session objects when possible
+          // This prevents unnecessary re-renders by maintaining object references
+          const updatedSessions = newSessions.map((newSession) => {
+            const existingSession = this.sessions.find((s) => s.id === newSession.id);
+
+            if (existingSession) {
+              // Check if the session has actually changed
+              const hasChanges =
+                existingSession.status !== newSession.status ||
+                existingSession.name !== newSession.name ||
+                existingSession.workingDir !== newSession.workingDir ||
+                existingSession.activityStatus !== newSession.activityStatus ||
+                existingSession.exitCode !== newSession.exitCode ||
+                // Check if Git info has been added in the new data
+                (!existingSession.gitRepoPath && newSession.gitRepoPath) ||
+                // Don't check Git counts here - they are updated by git-status-badge component
+                // and we want to preserve those updates, not trigger re-renders
+                false;
+
+              if (!hasChanges) {
+                // No changes - return the existing object reference
+                return existingSession;
+              }
+
+              // Merge changes, preserving Git info if not in new data
+              if (existingSession.gitRepoPath && !newSession.gitRepoPath) {
+                logger.debug('[App] Preserving Git info for session', {
+                  sessionId: existingSession.id,
+                  gitRepoPath: existingSession.gitRepoPath,
+                  gitModifiedCount: existingSession.gitModifiedCount,
+                  gitUntrackedCount: existingSession.gitUntrackedCount,
+                });
+                // Update the existing session object in place to preserve reference
+                existingSession.status = newSession.status;
+                existingSession.name = newSession.name;
+                existingSession.workingDir = newSession.workingDir;
+                existingSession.activityStatus = newSession.activityStatus;
+                existingSession.exitCode = newSession.exitCode;
+                existingSession.lastModified = newSession.lastModified;
+                existingSession.active = newSession.active;
+                existingSession.source = newSession.source;
+                existingSession.remoteId = newSession.remoteId;
+                existingSession.remoteName = newSession.remoteName;
+                existingSession.remoteUrl = newSession.remoteUrl;
+                // Git fields are already in existingSession, so we don't need to copy them
+                return existingSession;
+              }
+            }
+
+            // If newSession has Git data, ensure we create a complete session object
+            return newSession;
+          });
+
+          // Only update sessions if there are actual changes
+          const hasSessionChanges =
+            updatedSessions.length !== this.sessions.length ||
+            updatedSessions.some((session, index) => session !== this.sessions[index]);
+
+          if (hasSessionChanges) {
+            this.sessions = updatedSessions;
+            // Clear session cache when sessions change
+            this._cachedSelectedSession = undefined;
+            this._cachedSelectedSessionId = null;
+          }
           this.clearError();
 
           // Update page title if we're in list view
@@ -711,7 +839,7 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private handleError(e: CustomEvent) {
-    this.showError(e.detail);
+    this.showError(e.detail.message || e.detail);
   }
 
   private async handleHideExitedChange(e: CustomEvent) {
@@ -797,6 +925,9 @@ export class VibeTunnelApp extends LitElement {
     // Remove any lingering modal-closing class from previous interactions
     document.body.classList.remove('modal-closing');
 
+    // Clear workingDir when opening from header
+    this.createDialogWorkingDir = '';
+
     // Immediately set the modal to visible
     this.showCreateModal = true;
     logger.log('showCreateModal set to true');
@@ -804,43 +935,13 @@ export class VibeTunnelApp extends LitElement {
     // Force a re-render immediately
     this.requestUpdate();
 
-    // Then apply view transition if supported (non-blocking) and not in test environment
-    const isTestEnvironment =
-      window.location.search.includes('test=true') ||
-      navigator.userAgent.includes('HeadlessChrome');
-
-    // Skip animation if we're in session detail view
-    const isInSessionDetailView = this.currentView === 'session';
-
-    if (
-      !isTestEnvironment &&
-      !isInSessionDetailView &&
-      'startViewTransition' in document &&
-      typeof document.startViewTransition === 'function'
-    ) {
-      // Set data attribute to indicate transition is starting
-      document.documentElement.setAttribute('data-view-transition', 'active');
-
-      try {
-        const transition = document.startViewTransition(() => {
-          // Force another re-render to ensure the modal is displayed
-          this.requestUpdate();
-        });
-
-        // Clear the attribute when transition completes
-        transition.finished.finally(() => {
-          document.documentElement.removeAttribute('data-view-transition');
-        });
-      } catch (_error) {
-        // If view transition fails, just clear the attribute
-        document.documentElement.removeAttribute('data-view-transition');
-      }
-    }
+    // Animation disabled - modal appears instantly
   }
 
   private handleCreateModalClose() {
     // Simply close the modal without animation
     this.showCreateModal = false;
+    this.createDialogWorkingDir = '';
     this.requestUpdate();
   }
 
@@ -961,7 +1062,7 @@ export class VibeTunnelApp extends LitElement {
     const killPromises = runningSessions.map(async (session) => {
       try {
         const response = await fetch(`/api/sessions/${session.id}`, {
-          method: 'DELETE',
+          method: HttpMethod.DELETE,
           headers: {
             ...authClient.getAuthHeader(),
           },
@@ -1192,55 +1293,110 @@ export class VibeTunnelApp extends LitElement {
 
   private async parseUrlAndSetState() {
     const url = new URL(window.location.href);
-    const sessionId = url.searchParams.get('session');
-    const view = url.searchParams.get('view');
+    const pathParts = url.pathname.split('/').filter(Boolean);
 
-    // Check authentication status first (unless no-auth is enabled)
-    try {
-      const configResponse = await fetch('/api/auth/config');
-      if (configResponse.ok) {
-        const authConfig = await configResponse.json();
-        if (authConfig.noAuth) {
-          // Skip auth check for no-auth mode
+    logger.log('🔍 parseUrlAndSetState() called', {
+      url: url.href,
+      pathname: url.pathname,
+      pathParts,
+      currentView: this.currentView,
+      isAuthenticated: this.isAuthenticated,
+      sessionCount: this.sessions.length,
+    });
+
+    // Check for single-segment paths first
+    if (pathParts.length === 1) {
+      // Check authentication first
+      try {
+        const configResponse = await fetch('/api/auth/config');
+        if (configResponse.ok) {
+          const authConfig = await configResponse.json();
+          if (!authConfig.noAuth && !authClient.isAuthenticated()) {
+            this.currentView = 'auth';
+            this.selectedSessionId = null;
+            return;
+          }
         } else if (!authClient.isAuthenticated()) {
           this.currentView = 'auth';
           this.selectedSessionId = null;
           return;
         }
-      } else if (!authClient.isAuthenticated()) {
-        this.currentView = 'auth';
-        this.selectedSessionId = null;
-        return;
+      } catch (_error) {
+        if (!authClient.isAuthenticated()) {
+          this.currentView = 'auth';
+          this.selectedSessionId = null;
+          return;
+        }
       }
-    } catch (_error) {
-      if (!authClient.isAuthenticated()) {
-        this.currentView = 'auth';
-        this.selectedSessionId = null;
+
+      // Route based on the path segment
+      if (pathParts[0] === 'file-browser') {
+        this.currentView = 'file-browser';
         return;
       }
     }
 
-    // Check for file-browser view
-    if (view === 'file-browser') {
-      this.selectedSessionId = sessionId;
-      this.currentView = 'file-browser';
+    // Check for /session/:id pattern
+    let sessionId: string | null = null;
+    if (pathParts.length === 2 && pathParts[0] === 'session') {
+      sessionId = pathParts[1];
+    }
+
+    // Only check authentication if we haven't initialized yet
+    // This prevents duplicate auth checks during initial load
+    if (!this.initialLoadComplete && !this.isAuthenticated) {
+      logger.log('🔐 Not authenticated, redirecting to auth view');
+      this.currentView = 'auth';
+      this.selectedSessionId = null;
       return;
     }
 
     if (sessionId) {
       // Always navigate to the session view if a session ID is provided
       // The session-view component will handle loading and error cases
-      logger.log(`Navigating to session ${sessionId} from URL`);
+      logger.log(`🎯 Navigating to session ${sessionId} from URL`);
+
+      // Load sessions if not already loaded and wait for them
+      if (this.sessions.length === 0 && this.isAuthenticated) {
+        logger.log('📋 Sessions not loaded yet, loading now...');
+        await this.loadSessions();
+        logger.log('✅ Sessions loaded', { sessionCount: this.sessions.length });
+      }
+
+      // Verify the session exists
+      const sessionExists = this.sessions.find((s) => s.id === sessionId);
+      logger.log('🔍 Looking for session', {
+        sessionId,
+        found: !!sessionExists,
+        availableSessions: this.sessions.map((s) => ({ id: s.id, status: s.status })),
+      });
+
+      if (!sessionExists) {
+        logger.warn(`❌ Session ${sessionId} not found in loaded sessions`);
+        // Show error and navigate to list
+        this.showError(`Session ${sessionId} not found`);
+        this.selectedSessionId = null;
+        this.currentView = 'list';
+        return;
+      }
+
+      // Session exists, navigate to it
+      logger.log('✅ Session found, navigating to session view', {
+        sessionId,
+        sessionStatus: sessionExists.status,
+      });
       this.selectedSessionId = sessionId;
-      this.sessionLoadingState = 'idle'; // Reset loading state for new session
+      this.sessionLoadingState = 'loaded';
       this.currentView = 'session';
 
-      // Load sessions in the background if not already loaded
-      if (this.sessions.length === 0 && this.isAuthenticated) {
-        this.loadSessions().catch((error) => {
-          logger.error('Error loading sessions:', error);
-        });
-      }
+      // Force update to ensure render happens
+      this.requestUpdate();
+
+      logger.log('📍 Navigation complete', {
+        currentView: this.currentView,
+        selectedSessionId: this.selectedSessionId,
+        sessionLoadingState: this.sessionLoadingState,
+      });
     } else {
       this.selectedSessionId = null;
       this.currentView = 'list';
@@ -1250,17 +1406,18 @@ export class VibeTunnelApp extends LitElement {
   private updateUrl(sessionId?: string) {
     const url = new URL(window.location.href);
 
-    // Clear all params first
-    url.searchParams.delete('session');
-    url.searchParams.delete('view');
+    // Clear all params
+    url.search = '';
 
     if (this.currentView === 'file-browser') {
-      url.searchParams.set('view', 'file-browser');
-      if (sessionId || this.selectedSessionId) {
-        url.searchParams.set('session', sessionId || this.selectedSessionId || '');
-      }
+      // Use path-based URL for file-browser view
+      url.pathname = '/file-browser';
     } else if (sessionId) {
-      url.searchParams.set('session', sessionId);
+      // Use path-based URL for session view
+      url.pathname = `/session/${sessionId}`;
+    } else {
+      // Reset to root for list view
+      url.pathname = '/';
     }
 
     // Update browser URL without triggering page reload
@@ -1346,16 +1503,14 @@ export class VibeTunnelApp extends LitElement {
     this.handleNavigateToFileBrowser();
   };
 
-  private handleNotificationEnabled = (e: CustomEvent) => {
-    const { success, reason } = e.detail;
-    if (success) {
-      this.showSuccess('Notifications enabled successfully');
-    } else {
-      this.showError(`Failed to enable notifications: ${reason || 'Unknown error'}`);
-    }
+  private handleOpenCreateDialog = (e: CustomEvent) => {
+    const workingDir = e.detail?.workingDir || '';
+    this.createDialogWorkingDir = workingDir;
+    this.handleCreateSession();
   };
 
   private handleCaptureToggled = (e: CustomEvent) => {
+    logger.log(`🎯 handleCaptureToggled called with:`, e.detail);
     this.keyboardCaptureActive = e.detail.active;
     logger.log(
       `Keyboard capture ${this.keyboardCaptureActive ? 'enabled' : 'disabled'} via indicator`
@@ -1367,7 +1522,22 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private get selectedSession(): Session | undefined {
-    return this.sessions.find((s) => s.id === this.selectedSessionId);
+    // Use cached value if session ID hasn't changed
+    if (this._cachedSelectedSessionId === this.selectedSessionId && this._cachedSelectedSession) {
+      // Verify the cached session still exists in the sessions array
+      // Note: We're now updating session objects in place, so the reference should remain stable
+      const stillExists = this.sessions.find((s) => s.id === this._cachedSelectedSession?.id);
+      if (stillExists) {
+        // Update cache to point to the current session object (might be the same reference)
+        this._cachedSelectedSession = stillExists;
+        return stillExists;
+      }
+    }
+
+    // Recalculate and cache
+    this._cachedSelectedSessionId = this.selectedSessionId;
+    this._cachedSelectedSession = this.sessions.find((s) => s.id === this.selectedSessionId);
+    return this._cachedSelectedSession;
   }
 
   private get sidebarClasses(): string {
@@ -1491,6 +1661,24 @@ export class VibeTunnelApp extends LitElement {
   render() {
     const showSplitView = this.showSplitView;
     const selectedSession = this.selectedSession;
+
+    // Reduced logging frequency - only log when view changes
+    const shouldLog = this.currentView !== this._lastLoggedView;
+
+    if (shouldLog) {
+      logger.log('🎨 App render()', {
+        currentView: this.currentView,
+        showSplitView,
+        selectedSessionId: this.selectedSessionId,
+        selectedSession: selectedSession
+          ? { id: selectedSession.id, status: selectedSession.status }
+          : null,
+        isAuthenticated: this.isAuthenticated,
+        sessionCount: this.sessions.length,
+        cacheHit: this._cachedSelectedSessionId === this.selectedSessionId,
+      });
+      this._lastLoggedView = this.currentView;
+    }
 
     return html`
       <!-- Error notification overlay -->
@@ -1621,6 +1809,7 @@ export class VibeTunnelApp extends LitElement {
               @kill-all-sessions=${this.handleKillAll}
               @navigate-to-session=${this.handleNavigateToSession}
               @open-file-browser=${this.handleOpenFileBrowser}
+              @open-create-dialog=${this.handleOpenCreateDialog}
             ></session-list>
           </div>
         </div>
@@ -1675,7 +1864,7 @@ export class VibeTunnelApp extends LitElement {
 
 
       <!-- Unified Settings Modal -->
-      <unified-settings
+      <vt-settings
         .visible=${this.showSettings}
         .authClient=${authClient}
         @close=${this.handleCloseSettings}
@@ -1683,7 +1872,7 @@ export class VibeTunnelApp extends LitElement {
         @notifications-disabled=${() => this.showSuccess('Notifications disabled')}
         @success=${(e: CustomEvent) => this.showSuccess(e.detail)}
         @error=${(e: CustomEvent) => this.showError(e.detail)}
-      ></unified-settings>
+      ></vt-settings>
 
       <!-- SSH Key Manager Modal -->
       <ssh-key-manager
@@ -1695,11 +1884,15 @@ export class VibeTunnelApp extends LitElement {
       <!-- Session Create Modal -->
       <session-create-form
         .visible=${this.showCreateModal}
+        .workingDir=${this.createDialogWorkingDir}
         .authClient=${authClient}
         @session-created=${this.handleSessionCreated}
         @cancel=${this.handleCreateModalClose}
         @error=${this.handleError}
       ></session-create-form>
+
+      <!-- Git Notification Handler -->
+      <git-notification-handler></git-notification-handler>
 
       <!-- Version and logs link with smart positioning -->
       ${

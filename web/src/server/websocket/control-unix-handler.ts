@@ -74,8 +74,6 @@ class TerminalHandler implements MessageHandler {
 }
 
 class SystemHandler implements MessageHandler {
-  constructor(private controlUnixHandler: ControlUnixHandler) {}
-
   async handleMessage(message: ControlMessage): Promise<ControlMessage | null> {
     logger.log(`System handler: ${message.action}, type: ${message.type}, id: ${message.id}`);
 
@@ -95,6 +93,50 @@ class SystemHandler implements MessageHandler {
   }
 }
 
+/**
+ * Handles Unix domain socket communication between the VibeTunnel web server and macOS app.
+ *
+ * This class manages a Unix socket server that provides bidirectional communication
+ * between the web server and the native macOS application. It implements a message-based
+ * protocol with length-prefixed framing for reliable message delivery and supports
+ * multiple message categories including terminal control and system events.
+ *
+ * Key features:
+ * - Unix domain socket server with automatic cleanup on restart
+ * - Length-prefixed binary protocol for message framing
+ * - Message routing based on categories (terminal, system)
+ * - Request/response pattern with timeout support
+ * - WebSocket bridge for browser clients
+ * - Automatic socket permission management (0600)
+ *
+ * @example
+ * ```typescript
+ * // Create and start the handler
+ * const handler = new ControlUnixHandler();
+ * await handler.start();
+ *
+ * // Check if Mac app is connected
+ * if (handler.isMacAppConnected()) {
+ *   // Send a control message
+ *   const response = await handler.sendControlMessage({
+ *     id: 'msg-123',
+ *     type: 'request',
+ *     category: 'terminal',
+ *     action: 'spawn',
+ *     payload: {
+ *       sessionId: 'session-456',
+ *       workingDirectory: '/Users/alice',
+ *       command: 'vim'
+ *     }
+ *   });
+ * }
+ *
+ * // Handle browser WebSocket connections
+ * ws.on('connection', (socket) => {
+ *   handler.handleBrowserConnection(socket, userId);
+ * });
+ * ```
+ */
 export class ControlUnixHandler {
   private pendingRequests = new Map<string, (response: ControlMessage) => void>();
   private macSocket: net.Socket | null = null;
@@ -104,9 +146,10 @@ export class ControlUnixHandler {
   private messageBuffer = Buffer.alloc(0);
 
   constructor() {
-    // Use a unique socket path in user's home directory to avoid /tmp issues
+    // Use control directory from environment or default
     const home = process.env.HOME || '/tmp';
-    const socketDir = path.join(home, '.vibetunnel');
+    const controlDir = process.env.VIBETUNNEL_CONTROL_DIR || path.join(home, '.vibetunnel');
+    const socketDir = controlDir;
 
     // Ensure directory exists
     try {
@@ -119,7 +162,7 @@ export class ControlUnixHandler {
 
     // Initialize handlers
     this.handlers.set('terminal', new TerminalHandler());
-    this.handlers.set('system', new SystemHandler(this));
+    this.handlers.set('system', new SystemHandler());
   }
 
   async start(): Promise<void> {
@@ -447,6 +490,11 @@ export class ControlUnixHandler {
   }
 
   async sendControlMessage(message: ControlMessage): Promise<ControlMessage | null> {
+    // If Mac is not connected, return null immediately
+    if (!this.isMacAppConnected()) {
+      return null;
+    }
+
     return new Promise((resolve) => {
       // Store the pending request
       this.pendingRequests.set(message.id, resolve);

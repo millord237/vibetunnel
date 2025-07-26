@@ -165,6 +165,13 @@ The server provides a comprehensive API for terminal session management with sup
 - `POST /api/remotes/register` - Register remote
 - `DELETE /api/remotes/:id` - Unregister remote
 
+#### Git Integration
+- `GET /api/worktrees` - List worktrees
+- `POST /api/worktrees` - Create worktree
+- `POST /api/worktrees/follow` - Enable/disable follow mode
+- `GET /api/worktrees/follow` - Get follow mode status
+- `POST /api/git/events` - Git hook notifications
+
 ### WebSocket Protocols
 
 #### Binary Buffer Protocol (`/buffers`)
@@ -339,6 +346,50 @@ pnpm run lint          # ESLint
 pnpm run format        # Prettier
 pnpm run typecheck     # TypeScript
 ```
+
+## Git Follow Mode
+
+Git follow mode creates an intelligent synchronization between a main repository and a specific worktree, enabling seamless development workflows where agents work in worktrees while developers maintain their IDE and server setups in the main repository.
+
+**Key Components**:
+- **Git Hooks** (`src/server/utils/git-hooks.ts`): Manages post-commit, post-checkout, post-merge hooks
+- **Git Event Handler** (`src/server/routes/git.ts:186-482`): Processes git events and handles synchronization
+- **Socket API** (`src/server/api-socket-server.ts:217-267`): Socket-based follow mode control
+- **CLI Integration** (`web/bin/vt`): Smart command handling with path/branch detection
+
+**Configuration**:
+- Single config option: `vibetunnel.followWorktree` stores the worktree path being followed
+- Config is stored in the main repository's `.git/config`
+- Follow mode is active when this config contains a valid worktree path
+
+**Synchronization Behavior**:
+1. **Worktree → Main** (Primary): Branch switches, commits, and checkouts sync to main repo
+2. **Main → Worktree** (Limited): Only commits sync; branch switches auto-unfollow
+3. **Auto-unfollow**: Switching branches in main repo disables follow mode
+
+**Command Usage**:
+```bash
+# From worktree - follow this worktree
+vt follow
+
+# From main repo - smart detection
+vt follow                    # Follow current branch's worktree (if exists)
+vt follow feature/new-api    # Follow worktree for this branch
+vt follow ~/project-feature  # Follow worktree by path
+```
+
+**Hook Installation**:
+- Hooks installed in BOTH main repository and worktree
+- Hooks execute `vt git event` which notifies server via socket API
+- Server processes events based on source (main vs worktree)
+- Existing hooks are preserved with `.vtbak` extension
+
+**Event Flow**:
+1. Git event occurs (checkout, commit, merge)
+2. Hook executes `vt git event`
+3. CLI sends event via socket to server
+4. Server determines sync action based on event source
+5. Appropriate git commands executed to maintain sync
 
 ## Architecture Principles
 

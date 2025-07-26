@@ -23,15 +23,35 @@ export class SidebarHeader extends HeaderBase {
         <div class="flex items-center gap-2">
           <!-- Toggle button -->
           <button
-            class="p-2 text-text-muted hover:text-text rounded-lg hover:bg-bg-tertiary transition-all duration-200 flex-shrink-0"
+            class="p-2 text-primary bg-bg-tertiary border border-border hover:bg-surface-hover hover:border-primary rounded-md transition-all duration-200 flex-shrink-0"
             @click=${() => this.dispatchEvent(new CustomEvent('toggle-sidebar'))}
             title="Collapse sidebar (⌘B)"
             aria-label="Collapse sidebar"
             aria-expanded="true"
             aria-controls="sidebar"
+            data-button-id="toggle-sidebar"
           >
             <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
               <path d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"/>
+            </svg>
+          </button>
+          
+          <!-- Go to Root button -->
+          <button
+            class="p-2 text-primary bg-bg-tertiary border border-border hover:bg-surface-hover hover:border-primary rounded-md transition-all duration-200 flex-shrink-0"
+            @click=${() => {
+              window.location.href = '/';
+            }}
+            title="Go to root"
+            data-testid="go-to-root-button-sidebar"
+            data-button-id="go-to-root"
+          >
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+              <!-- Four small rounded rectangles icon -->
+              <rect x="3" y="3" width="6" height="6" rx="1.5" ry="1.5"/>
+              <rect x="11" y="3" width="6" height="6" rx="1.5" ry="1.5"/>
+              <rect x="3" y="11" width="6" height="6" rx="1.5" ry="1.5"/>
+              <rect x="11" y="11" width="6" height="6" rx="1.5" ry="1.5"/>
             </svg>
           </button>
           
