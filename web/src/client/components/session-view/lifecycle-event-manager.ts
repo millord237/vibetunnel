@@ -391,6 +391,16 @@ export class LifecycleEventManager extends ManagerEventEmitter {
         // Store keyboard height in state
         this.callbacks.setKeyboardHeight(keyboardHeight);
 
+        // Set CSS custom property for keyboard height
+        document.documentElement.style.setProperty('--keyboard-height', `${keyboardHeight}px`);
+
+        // Add data attribute to body for CSS targeting
+        if (keyboardHeight > 50) {
+          document.body.setAttribute('data-keyboard-visible', 'true');
+        } else {
+          document.body.setAttribute('data-keyboard-visible', 'false');
+        }
+
         // Update quick keys component if it exists
         const quickKeys = this.callbacks.querySelector('terminal-quick-keys') as HTMLElement & {
           keyboardHeight: number;
@@ -400,6 +410,17 @@ export class LifecycleEventManager extends ManagerEventEmitter {
         }
 
         logger.log(`Visual Viewport keyboard height: ${keyboardHeight}px`);
+
+        // Dispatch custom events that embedded apps can listen to
+        if (keyboardHeight > 50 && previousKeyboardHeight <= 50) {
+          window.dispatchEvent(
+            new CustomEvent('vibetunnel:keyboard-shown', {
+              detail: { height: keyboardHeight },
+            })
+          );
+        } else if (keyboardHeight <= 50 && previousKeyboardHeight > 50) {
+          window.dispatchEvent(new CustomEvent('vibetunnel:keyboard-hidden'));
+        }
 
         // Detect keyboard dismissal (height drops to 0 or near 0)
         if (previousKeyboardHeight > 50 && keyboardHeight < 50) {
