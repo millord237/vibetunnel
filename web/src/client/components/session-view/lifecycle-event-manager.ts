@@ -29,6 +29,9 @@ const logger = createLogger('lifecycle-event-manager');
 // Re-export the interface for backward compatibility
 export type { LifecycleEventManagerCallbacks } from './interfaces.js';
 
+// Threshold for determining when keyboard is considered visible (in pixels)
+const KEYBOARD_VISIBLE_THRESHOLD = 50;
+
 export class LifecycleEventManager extends ManagerEventEmitter {
   private callbacks: LifecycleEventManagerCallbacks | null = null;
   private session: Session | null = null;
@@ -395,7 +398,7 @@ export class LifecycleEventManager extends ManagerEventEmitter {
         document.documentElement.style.setProperty('--keyboard-height', `${keyboardHeight}px`);
 
         // Add data attribute to body for CSS targeting
-        if (keyboardHeight > 50) {
+        if (keyboardHeight > KEYBOARD_VISIBLE_THRESHOLD) {
           document.body.setAttribute('data-keyboard-visible', 'true');
         } else {
           document.body.setAttribute('data-keyboard-visible', 'false');
@@ -412,18 +415,31 @@ export class LifecycleEventManager extends ManagerEventEmitter {
         logger.log(`Visual Viewport keyboard height: ${keyboardHeight}px`);
 
         // Dispatch custom events that embedded apps can listen to
-        if (keyboardHeight > 50 && previousKeyboardHeight <= 50) {
+        if (
+          keyboardHeight > KEYBOARD_VISIBLE_THRESHOLD &&
+          previousKeyboardHeight <= KEYBOARD_VISIBLE_THRESHOLD
+        ) {
           window.dispatchEvent(
             new CustomEvent('vibetunnel:keyboard-shown', {
               detail: { height: keyboardHeight },
             })
           );
-        } else if (keyboardHeight <= 50 && previousKeyboardHeight > 50) {
-          window.dispatchEvent(new CustomEvent('vibetunnel:keyboard-hidden'));
+        } else if (
+          keyboardHeight <= KEYBOARD_VISIBLE_THRESHOLD &&
+          previousKeyboardHeight > KEYBOARD_VISIBLE_THRESHOLD
+        ) {
+          window.dispatchEvent(
+            new CustomEvent('vibetunnel:keyboard-hidden', {
+              detail: { height: 0 },
+            })
+          );
         }
 
         // Detect keyboard dismissal (height drops to 0 or near 0)
-        if (previousKeyboardHeight > 50 && keyboardHeight < 50) {
+        if (
+          previousKeyboardHeight > KEYBOARD_VISIBLE_THRESHOLD &&
+          keyboardHeight < KEYBOARD_VISIBLE_THRESHOLD
+        ) {
           logger.log('Keyboard dismissed detected via viewport change');
 
           // Check if we're using direct keyboard mode
