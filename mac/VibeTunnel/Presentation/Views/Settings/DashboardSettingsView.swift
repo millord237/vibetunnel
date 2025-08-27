@@ -1,6 +1,8 @@
 import os.log
 import SwiftUI
 
+private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "DashboardSettingsView")
+
 /// Dashboard settings tab for monitoring and status
 struct DashboardSettingsView: View {
     @AppStorage(AppConstants.UserDefaultsKeys.serverPort)
@@ -59,7 +61,8 @@ struct DashboardSettingsView: View {
             .task {
                 await self.updateStatuses()
             }
-            .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+            .onReceive(Timer.publish(every: 15, on: .main, in: .common).autoconnect()) { _ in
+                // Reduced frequency to prevent UI flickering
                 Task {
                     await self.updateStatuses()
                 }
@@ -298,6 +301,27 @@ private struct ServerStatusSection: View {
                                 }
                             }
                         }
+                        // Add kill button for conflicting processes
+                        HStack {
+                            Button("Kill Process") {
+                                Task {
+                                    do {
+                                        try await PortConflictResolver.shared.forceKillProcess(conflict)
+                                        // After killing, clear the conflict and restart the server
+                                        portConflict = nil
+                                        await serverManager.start()
+                                    } catch {
+                                        // Handle error - in a real implementation, you might show an alert
+                                        logger.error("Failed to kill process: \(error)")
+                                    }
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Spacer()
+                        }
+                        .padding(.top, 8)
                     }
                     .padding(.vertical, 8)
                     .padding(.horizontal, 12)

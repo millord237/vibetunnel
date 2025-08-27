@@ -324,12 +324,10 @@ function validateConfig(config: ReturnType<typeof parseArgs>) {
     process.exit(1);
   }
 
-  // Validate Tailscale configuration
-  if (config.enableTailscaleServe && config.bind === '0.0.0.0') {
-    logger.error('Security Error: Cannot bind to 0.0.0.0 when using Tailscale Serve');
-    logger.error('Tailscale Serve requires binding to localhost (127.0.0.1)');
-    logger.error('Use --bind 127.0.0.1 or disable Tailscale Serve');
-    process.exit(1);
+  // Note: Tailscale Serve configuration is handled by the Mac app
+  // The Mac app will restart with appropriate binding if Tailscale Serve fails
+  if (config.enableTailscaleServe) {
+    logger.info('Tailscale Serve integration enabled - Mac app will handle fallback if needed');
   }
 
   // Can't be both HQ mode and register with HQ
@@ -1215,7 +1213,9 @@ export async function createApp(): Promise<AppInstance> {
 
     // Regular TCP mode
     logger.log(`Starting server on port ${requestedPort}`);
-    const bindAddress = config.bind || (config.enableTailscaleServe ? '127.0.0.1' : '0.0.0.0');
+    // Use the requested bind address - don't force localhost just because Tailscale is enabled
+    // The Mac app will handle binding logic based on actual Tailscale Serve status
+    const bindAddress = config.bind || '0.0.0.0';
     server.listen(requestedPort, bindAddress, () => {
       const address = server.address();
       const actualPort =

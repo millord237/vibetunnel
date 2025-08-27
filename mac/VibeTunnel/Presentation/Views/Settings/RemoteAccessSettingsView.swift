@@ -238,7 +238,6 @@ private struct TailscaleIntegrationSection: View {
     let accessMode: DashboardAccessMode
     let serverManager: ServerManager
 
-    @State private var statusCheckTimer: Timer?
     @AppStorage(AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
     private var tailscaleServeEnabled = false
     @Environment(TailscaleServeStatusService.self)
@@ -384,6 +383,14 @@ private struct TailscaleIntegrationSection: View {
                                         Text("Running")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
+                                    } else if tailscaleServeStatus.isPermanentlyDisabled {
+                                        // Fallback mode - not an error, just using direct access
+                                        Image(systemName: "network")
+                                            .foregroundColor(.blue)
+                                            .help("Using direct Tailscale access (port \(serverPort))")
+                                        Text("Fallback")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
                                     } else if let error = tailscaleServeStatus.lastError {
                                         Image(systemName: "exclamationmark.triangle.fill")
                                             .foregroundColor(.orange)
@@ -409,8 +416,11 @@ private struct TailscaleIntegrationSection: View {
                                 label: "Access VibeTunnel at:",
                                 url: TailscaleURLHelper.constructURL(
                                     hostname: hostname,
-                                    port: self.serverPort,
-                                    isTailscaleServeEnabled: self.tailscaleServeEnabled)?.absoluteString ?? "")
+                                    port: serverPort,
+                                    isTailscaleServeEnabled: tailscaleServeEnabled,
+                                    isTailscaleServeRunning: tailscaleServeStatus.isRunning
+                                )?.absoluteString ?? ""
+                            )
 
                             // Show warning if in localhost-only mode
                             if self.accessMode == .localhost, !self.tailscaleServeEnabled {
@@ -425,21 +435,41 @@ private struct TailscaleIntegrationSection: View {
                                 }
                             }
 
-                            // Show error details if any
-                            if self.tailscaleServeEnabled, let error = tailscaleServeStatus.lastError {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundColor(.orange)
-                                        .font(.system(size: 12))
-                                    Text("Error: \(error)")
+                            // Show status details
+                            if tailscaleServeEnabled {
+                                if tailscaleServeStatus.isPermanentlyDisabled {
+                                    // Show fallback mode info
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "info.circle.fill")
+                                            .foregroundColor(.blue)
+                                            .font(.system(size: 12))
+                                        Text(
+                                            "Tailscale Serve requires admin permissions. Using direct access on port \(serverPort)"
+                                        )
                                         .font(.caption)
-                                        .foregroundColor(.orange)
+                                        .foregroundColor(.secondary)
                                         .lineLimit(2)
+                                    }
+                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, 8)
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(4)
+                                } else if let error = tailscaleServeStatus.lastError {
+                                    // Show actual errors
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(.orange)
+                                            .font(.system(size: 12))
+                                        Text("Error: \(error)")
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
+                                            .lineLimit(2)
+                                    }
+                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, 8)
+                                    .background(Color.orange.opacity(0.1))
+                                    .cornerRadius(4)
                                 }
-                                .padding(.vertical, 4)
-                                .padding(.horizontal, 8)
-                                .background(Color.orange.opacity(0.1))
-                                .cornerRadius(4)
                             }
 
                             // Help text about Tailscale Serve
@@ -465,26 +495,14 @@ private struct TailscaleIntegrationSection: View {
                 .multilineTextAlignment(.center)
         }
         .task {
-            // Check status when view appears
-            self.logger.info("TailscaleIntegrationSection: Starting initial status check")
-            await self.tailscaleService.checkTailscaleStatus()
-            self.logger
+            // Check status when view appears - single check only
+            // Ongoing status updates handled by TailscaleServeStatusService
+            logger.info("TailscaleIntegrationSection: Performing initial status check")
+            await tailscaleService.checkTailscaleStatus()
+            logger
                 .info(
-                    "TailscaleIntegrationSection: Status check complete - isInstalled: \(self.tailscaleService.isInstalled), isRunning: \(self.tailscaleService.isRunning), hostname: \(self.tailscaleService.tailscaleHostname ?? "nil")")
-
-            // Set up timer for automatic updates every 5 seconds
-            self.statusCheckTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
-                Task {
-                    self.logger.debug("TailscaleIntegrationSection: Running periodic status check")
-                    await self.tailscaleService.checkTailscaleStatus()
-                }
-            }
-        }
-        .onDisappear {
-            // Clean up timer when view disappears
-            self.statusCheckTimer?.invalidate()
-            self.statusCheckTimer = nil
-            self.logger.info("TailscaleIntegrationSection: Stopped status check timer")
+                    "TailscaleIntegrationSection: Initial status check complete - isInstalled: \(tailscaleService.isInstalled), isRunning: \(tailscaleService.isRunning)"
+                )
         }
     }
 }

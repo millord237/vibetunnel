@@ -72,6 +72,9 @@ enum AppConstants {
         // Application Preferences
         static let showInDock = false
         static let updateChannel = "stable"
+
+        /// Tailscale Settings
+        static let tailscaleServeEnabled: Bool? = nil // Use existing UserDefaults value if set
     }
 
     /// Helper to get boolean value with proper default
@@ -89,6 +92,8 @@ enum AppConstants {
                 return Defaults.useDevServer
             case UserDefaultsKeys.showInDock:
                 return Defaults.showInDock
+            case UserDefaultsKeys.tailscaleServeEnabled:
+                return Defaults.tailscaleServeEnabled ?? false
             default:
                 return false
             }

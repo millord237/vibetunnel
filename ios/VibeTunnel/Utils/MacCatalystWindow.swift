@@ -102,6 +102,39 @@ struct MacCatalystWindowStyle: ViewModifier {
             .onAppear {
                 self.setupWindow()
             }
+
+            // Observe window events
+            setupWindowObservers()
+        }
+
+        /// Switch between window styles at runtime
+        func setWindowStyle(_ style: MacWindowStyle) {
+            windowStyle = style
+            applyWindowStyle(style)
+        }
+
+        private func applyWindowStyle(_ style: MacWindowStyle) {
+            guard let window,
+                  window.nsWindow != nil
+            else {
+                logger.warning("Unable to access NSWindow - Dynamic framework not available")
+                return
+            }
+
+            // Dynamic functionality disabled for now
+            logger.info("Mac Catalyst window styling disabled - Dynamic framework not available")
+        }
+
+        // Dynamic framework methods removed - not available without proper package integration
+
+        private func setupWindowObservers() {
+            // Window observation disabled - Dynamic framework not available
+            logger.info("Window observation disabled - Dynamic framework not available")
+        }
+
+        deinit {
+            // No observers to clean up since Dynamic framework is not available
+        }
     }
 
     private func setupWindow() {

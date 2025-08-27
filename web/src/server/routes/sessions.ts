@@ -70,10 +70,127 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
     logger.debug('[GET /sessions/tailscale/status] Getting Tailscale Serve status');
     try {
       const status = await tailscaleServeService.getStatus();
-      res.json(status);
+
+      // Add helpful guidance for common issues
+      if (!status.isRunning && status.isPermanentlyDisabled) {
+        const enhancedStatus = {
+          ...status,
+          lastError: 'Tailscale Serve is disabled on your tailnet',
+          recommendation:
+            'VibeTunnel tried to enable Tailscale Serve but your tailnet requires admin approval. You can still use VibeTunnel normally - it will be accessible on your tailnet without the Serve proxy.',
+          fallbackMode: "Running in standard mode - accessible via your machine's tailnet IP",
+          permanentlyDisabled: true,
+        };
+        res.json(enhancedStatus);
+      } else if (
+        !status.isRunning &&
+        status.lastError?.includes('Serve is not enabled on your tailnet')
+      ) {
+        const enhancedStatus = {
+          ...status,
+          lastError: 'Tailscale Serve feature requires tailnet permissions',
+          recommendation:
+            'Contact your Tailscale admin or visit your tailnet admin panel to enable the Serve feature',
+          fallbackMode:
+            'VibeTunnel is running in HTTP mode. You can still access it directly on your tailnet IP',
+        };
+        res.json(enhancedStatus);
+      } else {
+        res.json(status);
+      }
     } catch (error) {
       logger.error('Failed to get Tailscale Serve status:', error);
       res.status(500).json({ error: 'Failed to get Tailscale Serve status' });
+    }
+  });
+
+  // Tailscale connection test endpoint with diagnostics
+  router.get('/sessions/tailscale/test', async (_req, res) => {
+    logger.debug('[GET /sessions/tailscale/test] Testing Tailscale connection');
+    try {
+      const { spawn } = await import('child_process');
+
+      // Test 1: Check if Tailscale is installed and running
+      const tailscaleStatus = await new Promise<{ isRunning: boolean; output: string }>(
+        (resolve) => {
+          const statusProcess = spawn('tailscale', ['status'], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+
+          let stdout = '';
+          let stderr = '';
+
+          if (statusProcess.stdout) {
+            statusProcess.stdout.on('data', (data) => {
+              stdout += data.toString();
+            });
+          }
+
+          if (statusProcess.stderr) {
+            statusProcess.stderr.on('data', (data) => {
+              stderr += data.toString();
+            });
+          }
+
+          statusProcess.on('exit', (code) => {
+            const output = stdout || stderr;
+            resolve({
+              isRunning: code === 0,
+              output: output.trim(),
+            });
+          });
+
+          statusProcess.on('error', () => {
+            resolve({
+              isRunning: false,
+              output: 'Tailscale command not found',
+            });
+          });
+
+          setTimeout(() => {
+            statusProcess.kill('SIGTERM');
+            resolve({
+              isRunning: false,
+              output: 'Tailscale status check timeout',
+            });
+          }, 5000);
+        }
+      );
+
+      // Test 2: Check Tailscale Serve configuration
+      const serveStatus = await tailscaleServeService.getStatus();
+
+      // Test 3: Check actual server binding
+      const serverInfo = {
+        isListening: true, // We're responding to this request
+        port: process.env.PORT || '4020',
+        bindAddress: process.env.BIND_ADDRESS || '127.0.0.1',
+      };
+
+      res.json({
+        timestamp: new Date().toISOString(),
+        tailscale: {
+          installed: tailscaleStatus.isRunning,
+          status: tailscaleStatus.output,
+        },
+        tailscaleServe: {
+          configured: serveStatus.isRunning,
+          port: serveStatus.port,
+          error: serveStatus.lastError,
+          startTime: serveStatus.startTime,
+        },
+        server: serverInfo,
+        recommendations: generateTailscaleRecommendations(tailscaleStatus, {
+          configured: serveStatus.isRunning,
+          error: serveStatus.lastError,
+        }),
+      });
+    } catch (error) {
+      logger.error('Failed to test Tailscale connection:', error);
+      res.status(500).json({
+        error: 'Failed to perform Tailscale connection test',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   });
 
@@ -1012,6 +1129,28 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
   });
 
   return router;
+}
+
+// Generate recommendations based on Tailscale status
+function generateTailscaleRecommendations(
+  tailscaleStatus: { isRunning: boolean; output: string },
+  serveStatus: { configured: boolean; error?: string }
+): string[] {
+  const recommendations: string[] = [];
+
+  if (!tailscaleStatus.isRunning) {
+    recommendations.push('Install and start Tailscale to enable secure access');
+  } else if (!serveStatus.configured) {
+    if (serveStatus.error) {
+      recommendations.push(`Fix Tailscale Serve error: ${serveStatus.error}`);
+    } else {
+      recommendations.push('Enable Tailscale Serve integration in settings');
+    }
+  } else {
+    recommendations.push('Tailscale integration is working correctly');
+  }
+
+  return recommendations;
 }
 
 // Generate a unique session ID

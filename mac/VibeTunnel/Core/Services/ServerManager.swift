@@ -119,6 +119,7 @@ class ServerManager {
 
     private let logger = Logger(subsystem: BundleIdentifiers.main, category: "ServerManager")
     private let powerManager = PowerManagementService.shared
+    private var tailscaleMonitorTask: Task<Void, Never>?
 
     private init() {
         // Skip observer setup and monitoring during tests
@@ -160,6 +161,60 @@ class ServerManager {
 
             self.logger.info("Updated sleep prevention setting: \(preventSleep ? "enabled" : "disabled")")
         }
+    }
+
+    /// Monitor Tailscale Serve status and trigger fallback if permanently disabled
+    private func startTailscaleMonitoring() {
+        // Cancel existing task if any
+        tailscaleMonitorTask?.cancel()
+
+        // Only monitor if Tailscale Serve is enabled
+        let tailscaleEnabled = AppConstants.boolValue(for: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
+        logger
+            .debug(
+                "[TAILSCALE MONITOR] Checking if monitoring should start - tailscaleServeEnabled = \(tailscaleEnabled)"
+            )
+
+        guard tailscaleEnabled else {
+            logger.debug("[TAILSCALE MONITOR] Tailscale Serve not enabled, skipping monitoring")
+            return
+        }
+
+        tailscaleMonitorTask = Task {
+            logger.debug("[TAILSCALE MONITOR] Starting Tailscale Serve monitoring for fallback")
+
+            // Give initial startup a chance
+            logger.debug("[TAILSCALE MONITOR] Waiting 5 seconds for initial startup...")
+            try? await Task.sleep(for: .seconds(5))
+
+            var checkCount = 0
+            while !Task.isCancelled {
+                checkCount += 1
+                logger.debug("[TAILSCALE MONITOR] Check #\(checkCount) at 10-second interval")
+
+                // Check if Tailscale Serve is permanently disabled
+                let isPermanentlyDisabled = TailscaleServeStatusService.shared.isPermanentlyDisabled
+
+                if isPermanentlyDisabled {
+                    logger
+                        .info(
+                            "[TAILSCALE MONITOR] Tailscale Serve not available on tailnet - operating in fallback mode"
+                        )
+                    // Don't trigger fallback - just stop monitoring since we're in fallback mode
+                    // The UI correctly shows "Fallback" status and direct access works
+                    break
+                }
+
+                logger.debug("[TAILSCALE MONITOR] Status OK, waiting 10 seconds for next check...")
+                // Check every 10 seconds
+                try? await Task.sleep(for: .seconds(10))
+            }
+        }
+    }
+
+    private func stopTailscaleMonitoring() {
+        tailscaleMonitorTask?.cancel()
+        tailscaleMonitorTask = nil
     }
 
     /// Start the server with current configuration
@@ -264,6 +319,9 @@ class ServerManager {
 
                 // Start notification service
                 await NotificationService.shared.start()
+
+                // Start monitoring Tailscale Serve status for fallback
+                startTailscaleMonitoring()
             } else {
                 self.logger.error("Server started but not in running state")
                 self.isRunning = false
@@ -313,6 +371,9 @@ class ServerManager {
         self.bunServer = nil
 
         self.isRunning = false
+
+        // Stop Tailscale monitoring
+        stopTailscaleMonitoring()
 
         // Notification service connection is now handled explicitly via start() method
 

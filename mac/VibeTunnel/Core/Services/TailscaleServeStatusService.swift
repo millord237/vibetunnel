@@ -12,22 +12,29 @@ final class TailscaleServeStatusService {
     var lastError: String?
     var startTime: Date?
     var isLoading = false
+    var isPermanentlyDisabled = false
 
     private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "TailscaleServeStatus")
     private var updateTimer: Timer?
+    private var isCurrentlyFetching = false
 
     private init() {}
 
     /// Start polling for status updates
     func startMonitoring() {
+        logger.debug("Starting Tailscale Serve status monitoring")
+
         // Initial fetch
         Task {
             await self.fetchStatus()
         }
 
-        // Set up periodic updates
-        self.updateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+        // Set up less aggressive periodic updates - only if not currently fetching and not permanently disabled
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
+                guard let self, !self.isCurrentlyFetching, !self.isPermanentlyDisabled else {
+                    return
+                }
                 await self.fetchStatus()
             }
         }
@@ -35,15 +42,37 @@ final class TailscaleServeStatusService {
 
     /// Stop polling for status updates
     func stopMonitoring() {
-        self.updateTimer?.invalidate()
-        self.updateTimer = nil
+        logger.debug("Stopping Tailscale Serve status monitoring")
+        updateTimer?.invalidate()
+        updateTimer = nil
+        isCurrentlyFetching = false
+        isPermanentlyDisabled = false
+    }
+
+    /// Force an immediate status update (useful after server operations)
+    func refreshStatusImmediately() async {
+        logger.debug("Forcing immediate Tailscale Serve status refresh")
+        await fetchStatus()
     }
 
     /// Fetch the current Tailscale Serve status
     @MainActor
     func fetchStatus() async {
-        self.isLoading = true
-        defer { isLoading = false }
+        // Prevent concurrent fetches
+        guard !isCurrentlyFetching else {
+            logger.debug("Skipping fetch - already in progress")
+            return
+        }
+
+        isCurrentlyFetching = true
+        isLoading = true
+        defer {
+            isLoading = false
+            isCurrentlyFetching = false
+        }
+
+        logger.info("🔄 [TAILSCALE STATUS] Starting status fetch at \(Date())")
+        logger.debug("Fetching Tailscale Serve status...")
 
         // Get server port
         let port = UserDefaults.standard.string(forKey: AppConstants.UserDefaultsKeys.serverPort) ?? "4020"
@@ -96,23 +125,76 @@ final class TailscaleServeStatusService {
 
             let status = try decoder.decode(TailscaleServeStatus.self, from: data)
 
-            // Update published properties
-            self.isRunning = status.isRunning
-            self.lastError = status.lastError
-            self.startTime = status.startTime
+            logger.info("📊 [TAILSCALE STATUS] Response received:")
+            logger.info("  - isRunning: \(status.isRunning)")
+            logger.info("  - lastError: \(status.lastError ?? "none")")
+            logger.info("  - isPermanentlyDisabled: \(status.isPermanentlyDisabled ?? false)")
+            logger.info("  - Previous isPermanentlyDisabled: \(self.isPermanentlyDisabled)")
 
-            self.logger
-                .debug("Tailscale Serve status - Running: \(status.isRunning), Error: \(status.lastError ?? "none")")
-        } catch {
-            self.logger.error("Failed to fetch Tailscale Serve status: \(error.localizedDescription)")
-            // On error, assume not running
-            self.isRunning = false
-            // Keep error messages concise to prevent UI jumping
-            if error.localizedDescription.contains("couldn't be read") {
-                self.lastError = "Status check failed"
-            } else {
-                self.lastError = error.localizedDescription
+            // Check if this is a permanent failure (tailnet not configured)
+            if let error = status.lastError {
+                if error.contains("Serve is not enabled on your tailnet") ||
+                    error.contains("Tailscale Serve feature not enabled") ||
+                    error.contains("Tailscale Serve is disabled on your tailnet")
+                {
+                    isPermanentlyDisabled = true
+                    logger.info("[TAILSCALE STATUS] Tailscale Serve not enabled on tailnet - using fallback mode")
+                } else {
+                    // Clear permanent disable if we get a different error
+                    isPermanentlyDisabled = false
+                    logger.info("⚠️ [TAILSCALE STATUS] Error but not permanent: \(error)")
+                }
+            } else if status.isRunning {
+                // Clear permanent disable if it's now running
+                isPermanentlyDisabled = false
+                logger.info("✅ [TAILSCALE STATUS] Tailscale Serve is running")
             }
+
+            // Update published properties
+            let oldRunning = isRunning
+            let oldError = lastError
+            isRunning = status.isRunning
+            lastError = status.lastError
+            startTime = status.startTime
+
+            logger.info("📝 [TAILSCALE STATUS] State changed:")
+            logger.info("  - isRunning: \(oldRunning) -> \(self.isRunning)")
+            logger.info("  - lastError: \(oldError ?? "none") -> \(self.lastError ?? "none")")
+            logger.info("  - isPermanentlyDisabled: \(self.isPermanentlyDisabled)")
+
+            logger
+                .debug(
+                    "Tailscale Serve status - Running: \(status.isRunning), Error: \(status.lastError ?? "none"), Permanently disabled: \(self.isPermanentlyDisabled)"
+                )
+        } catch {
+            logger.error("Failed to fetch Tailscale Serve status: \(error.localizedDescription)")
+            logger.error("Full error details: \(String(describing: error))")
+            logger.error("Attempting to connect to: \(urlString)")
+
+            // On error, assume not running
+            isRunning = false
+            // Provide specific error messages based on the error type
+            lastError = self.parseStatusCheckError(error)
+        }
+    }
+
+    /// Parse status check errors and return user-friendly messages
+    private func parseStatusCheckError(_ error: Error) -> String {
+        let errorDescription = error.localizedDescription.lowercased()
+
+        if errorDescription.contains("couldn't connect") || errorDescription.contains("connection refused") {
+            return "VibeTunnel server not responding"
+        } else if errorDescription.contains("couldn't be read") {
+            return "Connection to server lost"
+        } else if errorDescription.contains("timed out") || errorDescription.contains("timeout") {
+            return "Server response timeout"
+        } else if errorDescription.contains("invalid") && errorDescription.contains("url") {
+            return "Invalid server configuration"
+        } else if errorDescription.contains("network") {
+            return "Network connectivity issue"
+        } else {
+            // Fall back to a generic but helpful message
+            return "Unable to check Tailscale Serve status"
         }
     }
 }
@@ -124,4 +206,5 @@ struct TailscaleServeStatus: Codable {
     let error: String?
     let lastError: String?
     let startTime: Date?
+    let isPermanentlyDisabled: Bool?
 }

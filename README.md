@@ -204,6 +204,12 @@ The server runs as a standalone Node.js executable with embedded modules, provid
 - Works behind NAT and firewalls
 - Zero configuration after initial setup
 
+**Note about "Fallback" Mode**: If you see "Tailscale Serve unavailable - using fallback mode" in the settings, this is normal and not an error. VibeTunnel supports two Tailscale access methods:
+- **Tailscale Serve**: An optional reverse proxy feature (requires tailnet admin permissions)
+- **Direct Tailscale Access** (Fallback): Standard Tailscale connectivity that works for all users
+
+Both methods provide secure access. The "fallback" simply means you're using the standard direct access method, which is perfectly fine for most users.
+
 ### Option 2: ngrok
 
 [ngrok](https://ngrok.com) creates secure tunnels to your localhost, making VibeTunnel accessible via a public URL. Perfect for quick sharing or temporary access.
