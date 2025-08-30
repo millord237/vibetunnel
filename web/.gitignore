@@ -163,3 +163,10 @@ package/
 
 # Docker test files (moved to scripts/)
 test-vibetunnel*.dockerfile
+
+# SSL Certificates and Keys (NEVER commit these!)
+*.crt
+*.key
+*.pem
+*.p12
+*.pfx
