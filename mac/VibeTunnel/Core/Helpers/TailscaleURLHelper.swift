@@ -148,8 +148,8 @@ enum TailscaleURLHelper {
         let isPublicMode = isFunnelEnabled ?? false
 
         if useServeURL && isPublicMode {
-            // Public mode - show clean hostname for HTTPS
-            return hostname
+            // Public mode - show HTTPS URL
+            return "https://\(hostname)"
         } else if useServeURL && !isPublicMode {
             // Private mode - show IP:port for HTTP
             if let tailscaleIP = getTailscaleIP() {

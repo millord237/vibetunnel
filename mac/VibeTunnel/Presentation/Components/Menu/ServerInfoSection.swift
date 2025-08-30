@@ -14,6 +14,8 @@ struct ServerInfoHeader: View {
     var ngrokService
     @Environment(TailscaleService.self)
     var tailscaleService
+    @Environment(TailscaleServeStatusService.self)
+    var tailscaleServeStatus
     @Environment(\.colorScheme)
     private var colorScheme
 
@@ -69,24 +71,52 @@ struct ServerInfoHeader: View {
                     if self.tailscaleService.isRunning, let hostname = tailscaleService.tailscaleHostname {
                         let isTailscaleServeEnabled = UserDefaults.standard
                             .bool(forKey: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
-                        let isFunnelEnabled = UserDefaults.standard
+                        let isFunnelEnabledInSettings = UserDefaults.standard
                             .bool(forKey: AppConstants.UserDefaultsKeys.tailscaleFunnelEnabled)
+
+                        // Check actual Funnel status from the service
+                        let isFunnelActuallyRunning = isFunnelEnabledInSettings &&
+                            tailscaleServeStatus.isRunning &&
+                            tailscaleServeStatus.funnelEnabled
+
+                        // Determine label based on actual state
+                        let tailscaleLabel: String = if isFunnelEnabledInSettings && !isFunnelActuallyRunning {
+                            // User wants Funnel but it's not working
+                            if tailscaleServeStatus.funnelError != nil {
+                                "Tailscale (Error):"
+                            } else if !tailscaleServeStatus.isRunning {
+                                "Tailscale (Starting...):"
+                            } else {
+                                "Tailscale (Private):" // Fallback to private if Funnel failed
+                            }
+                        } else if isFunnelActuallyRunning {
+                            "Tailscale (Public):"
+                        } else if isTailscaleServeEnabled && tailscaleServeStatus.isRunning {
+                            "Tailscale (Private):"
+                        } else if isTailscaleServeEnabled && !tailscaleServeStatus.isRunning {
+                            "Tailscale (Starting...):"
+                        } else {
+                            "Tailscale:"
+                        }
+
+                        let icon: String = isFunnelActuallyRunning ? "globe" : "shield"
+
                         ServerAddressRow(
-                            icon: "shield",
-                            label: "Tailscale:",
+                            icon: icon,
+                            label: tailscaleLabel,
                             address: TailscaleURLHelper.displayAddress(
                                 hostname: hostname,
                                 port: serverManager.port,
                                 isTailscaleServeEnabled: isTailscaleServeEnabled,
-                                isTailscaleServeRunning: isTailscaleServeEnabled,
-                                isFunnelEnabled: isFunnelEnabled
+                                isTailscaleServeRunning: tailscaleServeStatus.isRunning,
+                                isFunnelEnabled: isFunnelActuallyRunning
                             ),
                             url: TailscaleURLHelper.constructURL(
                                 hostname: hostname,
                                 port: serverManager.port,
                                 isTailscaleServeEnabled: isTailscaleServeEnabled,
-                                isTailscaleServeRunning: isTailscaleServeEnabled,
-                                isFunnelEnabled: isFunnelEnabled
+                                isTailscaleServeRunning: tailscaleServeStatus.isRunning,
+                                isFunnelEnabled: isFunnelActuallyRunning
                             )
                         )
                     }

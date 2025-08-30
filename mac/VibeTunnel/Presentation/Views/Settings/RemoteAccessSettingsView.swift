@@ -594,26 +594,56 @@ private struct TailscaleIntegrationSection: View {
                                     )
                                 )
 
-                            if let constructedURL = TailscaleURLHelper.constructURL(
-                                hostname: hostname,
-                                port: serverPort,
-                                isTailscaleServeEnabled: useHTTPS,
-                                isTailscaleServeRunning: useHTTPS,
-                                isFunnelEnabled: tailscaleFunnelEnabled
-                            ) {
-                                InlineClickableURLView(
-                                    label: "Access VibeTunnel at:",
-                                    url: constructedURL.absoluteString
-                                )
+                            // Show both URLs when Funnel is enabled
+                            if tailscaleFunnelEnabled && tailscaleServeStatus.isRunning && tailscaleServeStatus
+                                .funnelEnabled
+                            {
+                                // Public (Internet) URL via Funnel
+                                if let publicURL = URL(string: "https://\(hostname)") {
+                                    InlineClickableURLView(
+                                        label: "Public (Internet):",
+                                        url: publicURL.absoluteString
+                                    )
+                                }
+
+                                // Private (Tailnet) URL - use IP for direct access
+                                if let tailscaleIP = TailscaleURLHelper.getTailscaleIP() {
+                                    let privateURL = "http://\(tailscaleIP):\(serverPort)"
+                                    InlineClickableURLView(
+                                        label: "Private (Tailnet):",
+                                        url: privateURL
+                                    )
+                                } else {
+                                    // Fallback to hostname if IP not available
+                                    let privateURL = "http://\(hostname):\(serverPort)"
+                                    InlineClickableURLView(
+                                        label: "Private (Tailnet):",
+                                        url: privateURL
+                                    )
+                                }
                             } else {
-                                // Show placeholder when URL is nil
-                                HStack(spacing: 5) {
-                                    Text("Access VibeTunnel at:")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Text("Configuring...")
-                                        .font(.caption)
-                                        .foregroundColor(.orange)
+                                // Single URL for non-Funnel modes
+                                if let constructedURL = TailscaleURLHelper.constructURL(
+                                    hostname: hostname,
+                                    port: serverPort,
+                                    isTailscaleServeEnabled: useHTTPS,
+                                    isTailscaleServeRunning: useHTTPS,
+                                    isFunnelEnabled: false // Force private mode since Funnel not actually running
+                                ) {
+                                    InlineClickableURLView(
+                                        label: "Access VibeTunnel at:",
+                                        url: constructedURL.absoluteString
+                                    )
+                                } else {
+                                    // Show placeholder when URL is nil
+                                    HStack(spacing: 5) {
+                                        Text("Access VibeTunnel at:")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Text("Configuring...")
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
+                                    }
                                 }
                             }
 
