@@ -414,7 +414,7 @@ final class TailscaleDiscoveryService {
                         guard let baseAddress = buffer.baseAddress else { return Data() }
                         return Data(bytes: baseAddress, count: strlen(hostname))
                     }
-                    ipAddress = String(decoding: hostnameData, as: UTF8.self)
+                    ipAddress = String(data: hostnameData, encoding: .utf8) ?? ""
                     break
                 }
             }

@@ -20,9 +20,9 @@ final class TailscaleService {
     private static let apiTimeoutInterval: TimeInterval = 10.0
 
     /// Storage keys for credentials in Keychain
-    private static let clientIdKey = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
-    private static let clientSecretKey = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-    private static let accessTokenKey = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    private static let clientIdKey = UUID(uuidString: "00000000-0000-0000-0000-000000000001") ?? UUID()
+    private static let clientSecretKey = UUID(uuidString: "00000000-0000-0000-0000-000000000002") ?? UUID()
+    private static let accessTokenKey = UUID(uuidString: "00000000-0000-0000-0000-000000000003") ?? UUID()
     private static let tokenExpiryKey = "TailscaleTokenExpiry"
 
     /// OAuth token endpoint
@@ -126,7 +126,12 @@ final class TailscaleService {
 
     /// Indicates if we have valid credentials
     var isConfigured: Bool {
-        clientId != nil && !clientId!.isEmpty && clientSecret != nil && !clientSecret!.isEmpty
+        guard let id = clientId, !id.isEmpty,
+              let secret = clientSecret, !secret.isEmpty
+        else {
+            return false
+        }
+        return true
     }
 
     /// Indicates if we have a valid OAuth token (for backward compatibility)

@@ -199,7 +199,9 @@ struct TailscaleDiscoveryServiceTests {
             port: 4_020,
             deviceName: "test-mac",
             isReachable: true,
-            lastSeen: Date()
+            lastSeen: Date(),
+            httpsUrl: nil,
+            isPublic: false
         )
 
         // Act
@@ -226,7 +228,9 @@ struct TailscaleDiscoveryServiceTests {
             port: 4_020,
             deviceName: "test-mac",
             isReachable: true,
-            lastSeen: Date()
+            lastSeen: Date(),
+            httpsUrl: nil,
+            isPublic: false
         )
 
         // Act
@@ -271,7 +275,9 @@ struct TailscaleDiscoveryServiceTests {
             port: 4_020,
             deviceName: "my-test-server",
             isReachable: true,
-            lastSeen: Date()
+            lastSeen: Date(),
+            httpsUrl: nil,
+            isPublic: false
         )
         #expect(server1.displayName == "my test server")
 
@@ -282,7 +288,9 @@ struct TailscaleDiscoveryServiceTests {
             port: 4_020,
             deviceName: "server.tailnet",
             isReachable: true,
-            lastSeen: Date()
+            lastSeen: Date(),
+            httpsUrl: nil,
+            isPublic: false
         )
         #expect(server2.displayName == "server")
 
@@ -293,7 +301,9 @@ struct TailscaleDiscoveryServiceTests {
             port: 4_020,
             deviceName: "fallback-name",
             isReachable: true,
-            lastSeen: Date()
+            lastSeen: Date(),
+            httpsUrl: nil,
+            isPublic: false
         )
         #expect(server3.displayName == "fallback name")
     }

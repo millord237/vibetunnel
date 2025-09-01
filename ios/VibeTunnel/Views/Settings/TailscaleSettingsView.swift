@@ -92,9 +92,11 @@ struct TailscaleSettingsContent: View {
                                 .foregroundColor(.secondary)
                         }
 
-                        Link("Learn More", destination: URL(string: "https://tailscale.com/kb/1101/api")!)
-                            .font(.callout)
-                            .foregroundColor(.purple)
+                        if let url = URL(string: "https://tailscale.com/kb/1101/api") {
+                            Link("Learn More", destination: url)
+                                .font(.callout)
+                                .foregroundColor(.purple)
+                        }
                     }
 
                     Section {
@@ -628,10 +630,10 @@ struct TailscaleSettingsContent: View {
         Task { @MainActor in
             // Trigger a refresh to update UI
             isRefreshing = true
-            
+
             // Small delay to ensure UI updates
             try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-            
+
             isRefreshing = false
         }
 

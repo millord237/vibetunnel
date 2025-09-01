@@ -5,16 +5,20 @@ struct SettingsView: View {
     @Environment(\.dismiss)
     var dismiss
     @State private var selectedTab: SettingsTab
+    private let initialTabValue: SettingsTab
 
     init(initialTab: SettingsTab = .general) {
+        self.initialTabValue = initialTab
         _selectedTab = State(initialValue: initialTab)
     }
 
-    enum SettingsTab: String, CaseIterable {
+    enum SettingsTab: String, CaseIterable, Identifiable {
         case general = "General"
         case tailscale = "Tailscale"
         case advanced = "Advanced"
         case about = "About"
+
+        var id: String { self.rawValue }
 
         var icon: String {
             switch self {
@@ -86,6 +90,10 @@ struct SettingsView: View {
                     }
                     .foregroundColor(Theme.Colors.primaryAccent)
                 }
+            }
+            .onAppear {
+                // Ensure the requested initial tab is respected when presented
+                selectedTab = initialTabValue
             }
         }
     }

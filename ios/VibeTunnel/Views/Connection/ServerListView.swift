@@ -107,12 +107,21 @@ struct ServerListView: View {
                     tailscaleDiscovery.startDiscovery()
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TailscaleCredentialsCleared"))) { _ in
+            .onReceive(NotificationCenter.default
+                .publisher(for: Notification.Name("TailscaleCredentialsCleared"))
+            ) { _ in
                 // When Tailscale is reset, clear the discovered servers from view
                 // Force refresh the service references to get cleared state
                 Task { @MainActor in
                     tailscaleDiscovery = TailscaleDiscoveryService.shared
                     tailscaleService = TailscaleService.shared
+
+                    // Remove any saved servers that are Tailscale-based
+                    let tailscaleProfiles = viewModel.profiles
+                        .filter { $0.isTailscaleEnabled || $0.tailscaleHostname != nil }
+                    for profile in tailscaleProfiles {
+                        try? await viewModel.deleteProfile(profile)
+                    }
                 }
             }
             .sheet(item: $selectedProfile) { profile in
@@ -178,9 +187,16 @@ struct ServerListView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView(initialTab: settingsInitialTab)
-            }
+            .sheet(
+                isPresented: $showingSettings,
+                onDismiss: {
+                    // Reset to general tab after dismissal
+                    settingsInitialTab = .general
+                },
+                content: {
+                    SettingsView(initialTab: settingsInitialTab)
+                }
+            )
             .overlay(alignment: .top) {
                 if let statusMessage = viewModel.connectionStatusMessage {
                     HStack {
