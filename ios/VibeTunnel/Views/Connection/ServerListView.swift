@@ -107,6 +107,14 @@ struct ServerListView: View {
                     tailscaleDiscovery.startDiscovery()
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TailscaleCredentialsCleared"))) { _ in
+                // When Tailscale is reset, clear the discovered servers from view
+                // Force refresh the service references to get cleared state
+                Task { @MainActor in
+                    tailscaleDiscovery = TailscaleDiscoveryService.shared
+                    tailscaleService = TailscaleService.shared
+                }
+            }
             .sheet(item: $selectedProfile) { profile in
                 ServerProfileEditView(
                     profile: profile,

@@ -623,6 +623,18 @@ struct TailscaleSettingsContent: View {
         clientIdInput = ""
         clientSecretInput = ""
 
+        // Force UI refresh by triggering state changes
+        // This ensures the UI reflects the cleared state immediately
+        Task { @MainActor in
+            // Trigger a refresh to update UI
+            isRefreshing = true
+            
+            // Small delay to ensure UI updates
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            
+            isRefreshing = false
+        }
+
         logger.info("Tailscale configuration reset completed")
     }
 }

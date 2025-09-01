@@ -263,6 +263,9 @@ final class TailscaleService {
         statusError = nil
         lastStatusCheck = nil
 
+        // Post notification to update all views
+        NotificationCenter.default.post(name: Notification.Name("TailscaleCredentialsCleared"), object: nil)
+
         logger.info("Tailscale credentials and state cleared")
     }
 
