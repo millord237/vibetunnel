@@ -15,11 +15,9 @@ enum TailscaleURLHelper {
         ]
 
         var tailscalePath: String?
-        for path in possiblePaths {
-            if FileManager.default.fileExists(atPath: path) {
-                tailscalePath = path
-                break
-            }
+        for path in possiblePaths where FileManager.default.fileExists(atPath: path) {
+            tailscalePath = path
+            break
         }
 
         guard let executablePath = tailscalePath else {
@@ -50,7 +48,10 @@ enum TailscaleURLHelper {
                     // Valid IP should be like "100.68.180.82"
                     let ipComponents = output.components(separatedBy: ".")
                     if ipComponents.count == 4 &&
-                        ipComponents.allSatisfy({ Int($0) != nil && (0...255).contains(Int($0)!) })
+                        ipComponents.allSatisfy({ 
+                            guard let value = Int($0) else { return false }
+                            return (0...255).contains(value)
+                        })
                     {
                         return output
                     } else {

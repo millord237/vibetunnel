@@ -192,9 +192,22 @@ struct ServerListView: View {
                 onDismiss: {
                     // Reset to general tab after dismissal
                     settingsInitialTab = .general
+
+                    // Reload profiles immediately to show newly added servers
+                    viewModel.loadProfiles()
+
+                    // Refresh Tailscale discovery after settings close
+                    // in case user configured Tailscale
+                    Task {
+                        await tailscaleService.refreshStatus()
+                        if tailscaleService.isConfigured && tailscaleService.isRunning {
+                            tailscaleDiscovery.startDiscovery()
+                        }
+                    }
                 },
                 content: {
-                    SettingsView(initialTab: settingsInitialTab)
+                    // Bind to selected tab so the correct tab is shown reliably
+                    SettingsView(selectedTab: $settingsInitialTab)
                 }
             )
             .overlay(alignment: .top) {
@@ -221,6 +234,9 @@ struct ServerListView: View {
         .onAppear {
             viewModel.loadProfilesAndCheckHealth()
             discoveryService.startDiscovery()
+
+            // Also reload profiles in case they were added from settings
+            viewModel.loadProfiles()
         }
         .alert("Connection Failed", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("OK") {

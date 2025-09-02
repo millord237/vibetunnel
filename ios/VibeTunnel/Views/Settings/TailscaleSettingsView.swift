@@ -645,6 +645,7 @@ struct TailscaleSettingsContent: View {
 struct DiscoveredTailscaleServerRow: View {
     let server: TailscaleDiscoveryService.TailscaleServer
     @State private var isAdded = false
+    @Environment(\.dismiss) private var dismissSettings
 
     var body: some View {
         HStack {
@@ -693,38 +694,39 @@ struct DiscoveredTailscaleServerRow: View {
         // Add to known servers
         TailscaleDiscoveryService.shared.addKnownServer(hostname: server.hostname)
 
-        // Save as a server profile
-        var profiles = loadServerProfiles()
+        // Use HTTPS URL if available, otherwise construct HTTP URL
+        let url: String = if let httpsUrl = server.httpsUrl {
+            httpsUrl
+        } else {
+            "http://\(server.ip ?? server.hostname):\(server.port)"
+        }
+
+        // Save as a server profile with complete info using the ServerProfile static method
         let profile = ServerProfile(
             id: UUID(),
             name: server.displayName,
+            url: url,
             host: server.ip ?? server.hostname,
             port: server.port,
             tailscaleHostname: server.hostname,
             tailscaleIP: server.ip,
             isTailscaleEnabled: true,
-            preferTailscale: true
+            preferTailscale: true,
+            httpsAvailable: server.httpsUrl != nil,
+            isPublic: server.isPublic,
+            preferSSL: server.httpsUrl != nil
         )
-        profiles.append(profile)
-        saveServerProfiles(profiles)
+
+        // Use the proper ServerProfile.save method to ensure it's saved correctly
+        ServerProfile.save(profile)
 
         withAnimation {
             isAdded = true
         }
-    }
 
-    private func loadServerProfiles() -> [ServerProfile] {
-        guard let data = UserDefaults.standard.data(forKey: "serverProfiles"),
-              let profiles = try? JSONDecoder().decode([ServerProfile].self, from: data)
-        else {
-            return []
-        }
-        return profiles
-    }
-
-    private func saveServerProfiles(_ profiles: [ServerProfile]) {
-        if let data = try? JSONEncoder().encode(profiles) {
-            UserDefaults.standard.set(data, forKey: "serverProfiles")
+        // Dismiss the settings view after a brief delay to show the checkmark
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            dismissSettings()
         }
     }
 }
