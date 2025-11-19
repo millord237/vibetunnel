@@ -87,6 +87,11 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
 
         super.init()
 
+        // Set delegate immediately on initialization
+        // This ensures it's set before the app finishes launching, which is required for proper notification handling
+        UNUserNotificationCenter.current().delegate = self
+        self.logger.info("✅ NotificationService set as UNUserNotificationCenter delegate in init()")
+
         // Defer dependency setup to avoid circular initialization
         Task { @MainActor in
             self.serverProvider = ServerManager.shared
@@ -104,11 +109,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
     func start() async {
         self.logger.info("🚀 NotificationService.start() called")
 
-        // Set delegate here to ensure it's done at the right time
-        UNUserNotificationCenter.current().delegate = self
-        self.logger.info("✅ NotificationService set as UNUserNotificationCenter delegate in start()")
-
-        // Debug: Log current delegate to verify it's set
+        // Delegate is already set in init(), but we can log it for debugging
         let currentDelegate = UNUserNotificationCenter.current().delegate
         self.logger.info("🔍 Current UNUserNotificationCenter delegate: \(String(describing: currentDelegate))")
         // Check if notifications are enabled in config
@@ -364,7 +365,10 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
 
     /// Open System Settings to the Notifications pane
     func openNotificationSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+        // Try to open directly to the app's settings
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=sh.vibetunnel.vibetunnel") {
+            NSWorkspace.shared.open(url)
+        } else if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
             NSWorkspace.shared.open(url)
         }
     }
@@ -745,8 +749,8 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
 
         // Add auth token if available
         if let authToken = serverProvider?.localAuthToken {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-            self.logger.debug("Added auth token to request")
+            request.setValue(authToken, forHTTPHeaderField: NetworkConstants.localAuthHeader)
+            self.logger.debug("Added local auth token to request")
         }
 
         do {
