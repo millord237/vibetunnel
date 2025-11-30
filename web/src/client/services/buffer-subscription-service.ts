@@ -389,6 +389,16 @@ export class BufferSubscriptionService {
       return;
     }
 
+    // When owner disconnects (owner === null), DON'T clear the input on other devices.
+    // This prevents brief network disconnects from wiping the synced input.
+    // We only want to clear when the user explicitly clears (e.g., pressing Enter),
+    // which sends empty pendingInput but keeps the owner set.
+    if (owner === null && pendingInput === '') {
+      logger.debug(`Ignoring ownership release for ${sessionId} (preserving input)`);
+      this.sessionOwnership.set(sessionId, null);
+      return;
+    }
+
     // Update local ownership state
     this.sessionOwnership.set(sessionId, owner);
 

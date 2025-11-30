@@ -413,6 +413,16 @@ export class TerminalChatView extends LitElement {
       this.ownershipUnsubscribe();
       this.ownershipUnsubscribe = undefined;
     }
+    // Clear pending input debounce timer
+    if (this.pendingInputDebounceTimer) {
+      clearTimeout(this.pendingInputDebounceTimer);
+      this.pendingInputDebounceTimer = null;
+    }
+    // Clear remote input throttle timer
+    if (this.remoteInputThrottleTimer) {
+      clearTimeout(this.remoteInputThrottleTimer);
+      this.remoteInputThrottleTimer = null;
+    }
     // Stop sync interval
     this.stopTerminalSync();
     super.disconnectedCallback();
@@ -477,6 +487,10 @@ export class TerminalChatView extends LitElement {
     }
   }
 
+  // Throttle for receiving remote input updates
+  private remoteInputThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingRemoteInput: string | null = null;
+
   private subscribeToOwnership() {
     if (this.ownershipUnsubscribe) {
       this.ownershipUnsubscribe();
@@ -492,11 +506,42 @@ export class TerminalChatView extends LitElement {
         const isLocallyTyping = timeSinceLastInput < 300; // 300ms debounce
 
         if (!isLocallyTyping && info.pendingInput !== undefined) {
-          this.remotePendingInput = info.pendingInput;
-          logger.log(`Remote input received: "${info.pendingInput}"`);
+          // Throttle remote input updates to reduce flickering
+          this.throttledUpdateRemoteInput(info.pendingInput);
         }
       }
     );
+  }
+
+  /**
+   * Throttled update of remote input to prevent rapid DOM updates causing flicker.
+   * Batches rapid updates and only applies the latest value every 100ms.
+   */
+  private throttledUpdateRemoteInput(input: string): void {
+    // Store the latest value
+    this.pendingRemoteInput = input;
+
+    // If already waiting for throttle, just update pending value (done above)
+    if (this.remoteInputThrottleTimer) {
+      return;
+    }
+
+    // Apply immediately if this is the first update
+    if (this.remotePendingInput !== input) {
+      this.remotePendingInput = input;
+      logger.log(`Remote input received: "${input}"`);
+    }
+
+    // Start throttle timer to batch subsequent rapid updates
+    this.remoteInputThrottleTimer = setTimeout(() => {
+      // Apply any pending update that came in during throttle window
+      if (this.pendingRemoteInput !== null && this.pendingRemoteInput !== this.remotePendingInput) {
+        this.remotePendingInput = this.pendingRemoteInput;
+        logger.log(`Remote input applied (throttled): "${this.pendingRemoteInput}"`);
+      }
+      this.pendingRemoteInput = null;
+      this.remoteInputThrottleTimer = null;
+    }, 100);
   }
 
   /**
@@ -1219,6 +1264,8 @@ export class TerminalChatView extends LitElement {
   }
 
   private lastSentValue = '';
+  private pendingInputDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastBroadcastValue = '';
 
   private handleInput(e: Event) {
     const input = e.target as HTMLInputElement;
@@ -1235,14 +1282,52 @@ export class TerminalChatView extends LitElement {
     // Update pending input for InputManager (for display sync)
     this.onPendingInputChange?.(newValue);
 
-    // Broadcast pending input to other connected windows
-    if (this.sessionId) {
-      logger.log(`Sending pending input: "${newValue}" for session ${this.sessionId}`);
-      bufferSubscriptionService.sendPendingInput(this.sessionId, newValue);
-    }
+    // Broadcast pending input to other connected windows (debounced to reduce flickering)
+    this.debouncedBroadcastPendingInput(newValue);
 
     // Send delta to terminal (only the difference from what we already sent)
     this.sendDeltaToTerminal(newValue);
+  }
+
+  /**
+   * Debounced broadcast of pending input to other devices.
+   * This reduces network traffic and prevents flickering from rapid updates.
+   */
+  private debouncedBroadcastPendingInput(value: string): void {
+    if (!this.sessionId) return;
+
+    // Clear any pending debounce
+    if (this.pendingInputDebounceTimer) {
+      clearTimeout(this.pendingInputDebounceTimer);
+    }
+
+    // Debounce: wait 150ms before broadcasting
+    // This batches rapid keystrokes into fewer network messages
+    this.pendingInputDebounceTimer = setTimeout(() => {
+      // Only broadcast if value actually changed since last broadcast
+      if (value !== this.lastBroadcastValue) {
+        this.lastBroadcastValue = value;
+        logger.log(`Broadcasting pending input: "${value}" for session ${this.sessionId}`);
+        bufferSubscriptionService.sendPendingInput(this.sessionId, value);
+      }
+      this.pendingInputDebounceTimer = null;
+    }, 150);
+  }
+
+  /**
+   * Immediately broadcast pending input (used when clearing on send)
+   */
+  private immediateBroadcastPendingInput(value: string): void {
+    if (!this.sessionId) return;
+
+    // Cancel any pending debounced broadcast
+    if (this.pendingInputDebounceTimer) {
+      clearTimeout(this.pendingInputDebounceTimer);
+      this.pendingInputDebounceTimer = null;
+    }
+
+    this.lastBroadcastValue = value;
+    bufferSubscriptionService.sendPendingInput(this.sessionId, value);
   }
 
   private sendDeltaToTerminal(newValue: string) {
@@ -1310,10 +1395,8 @@ export class TerminalChatView extends LitElement {
     // Clear pending input in InputManager
     this.onPendingInputChange?.('');
 
-    // Clear pending input broadcast
-    if (this.sessionId) {
-      bufferSubscriptionService.sendPendingInput(this.sessionId, '');
-    }
+    // Clear pending input broadcast (immediate, not debounced)
+    this.immediateBroadcastPendingInput('');
 
     // Scroll to show the sent message
     this.scrollToBottom();
