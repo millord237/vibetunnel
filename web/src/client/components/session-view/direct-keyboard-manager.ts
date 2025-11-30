@@ -46,6 +46,7 @@ export interface DirectKeyboardCallbacks {
   clearMobileInputText(): void;
   toggleCtrlAlpha(): void;
   clearCtrlSequence(): void;
+  getChatMode(): boolean;
 }
 
 export class DirectKeyboardManager extends ManagerEventEmitter {
@@ -62,6 +63,9 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
 
   // IME composition state tracking for Japanese/CJK input
   private isComposing = false;
+
+  // Track last backspace time to avoid double-sends between keydown and input events
+  private lastBackspaceTime = 0;
 
   // Instance management
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Used in constructor
@@ -160,8 +164,11 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
 
           // Only prevent clicks on the terminal area itself
           // This keeps focus on the hidden input when tapping the terminal
+          // But don't steal focus if user has text selected
           if (target.closest('#terminal-container') || target.closest('vibe-terminal')) {
-            if (this.hiddenInput) {
+            const selection = document.getSelection();
+            const hasSelection = selection && selection.toString().length > 0;
+            if (this.hiddenInput && !hasSelection) {
               this.hiddenInput.focus();
             }
           }
@@ -194,7 +201,8 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
 
     // Show quick keys immediately when entering keyboard mode
     // Don't wait for keyboard to appear - this provides immediate visual feedback
-    if (this.keyboardMode && !this.showQuickKeys) {
+    // Skip if in chat mode (chat has its own input)
+    if (this.keyboardMode && !this.showQuickKeys && !this.callbacks?.getChatMode()) {
       this.showQuickKeys = true;
       if (this.callbacks) {
         this.callbacks.updateShowQuickKeys(true);
@@ -211,17 +219,11 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
       // Focus synchronously - critical for iOS Safari
       this.hiddenInput.focus();
 
-      // Set a dummy value and select it to help trigger iOS keyboard
+      // Set a space placeholder and position cursor at end
       // This helps iOS recognize that we want to show the keyboard
+      // AND allows backspace to work by always having something to delete
       this.hiddenInput.value = ' ';
-      this.hiddenInput.setSelectionRange(0, 1);
-
-      // Clear the dummy value after a short delay
-      setTimeout(() => {
-        if (this.hiddenInput) {
-          this.hiddenInput.value = '';
-        }
-      }, 50);
+      this.hiddenInput.setSelectionRange(1, 1);
 
       logger.log('Focused hidden input with dummy value trick');
     }
@@ -288,9 +290,10 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
         }
       }
 
-      // Clear the input and composition buffer
+      // Reset input to placeholder space and clear composition buffer
       if (this.hiddenInput) {
-        this.hiddenInput.value = '';
+        this.hiddenInput.value = ' ';
+        this.hiddenInput.setSelectionRange(1, 1);
       }
       this.compositionBuffer = '';
     });
@@ -298,22 +301,53 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
     // Handle input events (non-composition)
     this.hiddenInput.addEventListener('input', (e) => {
       const input = e.target as HTMLInputElement;
+      const inputEvent = e as InputEvent;
 
       // Skip processing if we're in the middle of IME composition
       if (this.isComposing) {
         return;
       }
 
-      if (input.value) {
-        // Don't send input to terminal if mobile input overlay or Ctrl overlay is visible
-        const showMobileInput = this.callbacks?.getShowMobileInput() ?? false;
-        const showCtrlAlpha = this.callbacks?.getShowCtrlAlpha() ?? false;
-        if (!showMobileInput && !showCtrlAlpha && this.inputManager) {
-          // Send each character to terminal (only for non-IME input)
-          this.inputManager.sendInputText(input.value);
+      // Don't send input to terminal if mobile input overlay or Ctrl overlay is visible
+      const showMobileInput = this.callbacks?.getShowMobileInput() ?? false;
+      const showCtrlAlpha = this.callbacks?.getShowCtrlAlpha() ?? false;
+      if (showMobileInput || showCtrlAlpha) {
+        return;
+      }
+
+      // Handle backspace/delete via inputType (critical for iOS key repeat)
+      // On iOS, holding backspace sends repeated 'input' events with inputType='deleteContentBackward'
+      // instead of repeated 'keydown' events like on desktop
+      if (inputEvent.inputType === 'deleteContentBackward' && this.inputManager) {
+        const now = Date.now();
+        // Skip if keydown just handled this (within 50ms) to avoid double-delete
+        if (now - this.lastBackspaceTime > 50) {
+          this.inputManager.sendInput('backspace');
+          this.lastBackspaceTime = now;
         }
-        // Always clear the input to prevent buffer buildup
-        input.value = '';
+        // Re-add placeholder so iOS can continue generating delete events
+        input.value = ' ';
+        input.setSelectionRange(1, 1);
+        return;
+      }
+      if (inputEvent.inputType === 'deleteContentForward' && this.inputManager) {
+        this.inputManager.sendInput('delete');
+        // Re-add placeholder so iOS can continue generating delete events
+        input.value = ' ';
+        input.setSelectionRange(0, 0);
+        return;
+      }
+
+      if (input.value && this.inputManager) {
+        // Filter out the placeholder space before sending
+        const textToSend = input.value.replace(/^ /, '');
+        if (textToSend) {
+          // Send each character to terminal (only for non-IME input)
+          this.inputManager.sendInputText(textToSend);
+        }
+        // Keep a space placeholder for iOS backspace to work
+        input.value = ' ';
+        input.setSelectionRange(1, 1);
       }
     });
 
@@ -326,16 +360,19 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
         return;
       }
 
-      // Prevent default for all keys to stop browser shortcuts
-      if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key)) {
+      // Prevent default for special keys (but NOT backspace - we need the input event to fire for iOS)
+      if (['Enter', 'Tab', 'Escape'].includes(e.key)) {
         e.preventDefault();
       }
 
       if (e.key === 'Enter' && this.inputManager) {
         this.inputManager.sendInput('enter');
       } else if (e.key === 'Backspace' && this.inputManager) {
-        // Always send backspace to terminal
+        // Send backspace immediately on keydown for responsiveness
+        // The input event handler will skip if this just fired (within 50ms)
         this.inputManager.sendInput('backspace');
+        this.lastBackspaceTime = Date.now();
+        // DON'T preventDefault - let browser also trigger input event for iOS key repeat
       } else if (e.key === 'Tab' && this.inputManager) {
         this.inputManager.sendInput(e.shiftKey ? 'shift_tab' : 'tab');
       } else if (e.key === 'Escape' && this.inputManager) {
@@ -353,8 +390,8 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
         this.hiddenInput.style.pointerEvents = 'auto';
       }
 
-      // If we're in keyboard mode, show quick keys immediately
-      if (this.keyboardMode) {
+      // If we're in keyboard mode, show quick keys immediately (skip in chat mode)
+      if (this.keyboardMode && !this.callbacks?.getChatMode()) {
         this.showQuickKeys = true;
         if (this.callbacks) {
           this.callbacks.updateShowQuickKeys(true);
@@ -365,8 +402,8 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
         if (this.hiddenInput) {
           this.hiddenInput.setSelectionRange(0, 0);
         }
-      } else {
-        // Only show quick keys if keyboard is actually visible
+      } else if (!this.callbacks?.getChatMode()) {
+        // Only show quick keys if keyboard is actually visible (skip in chat mode)
         const keyboardHeight = this.callbacks?.getKeyboardHeight() ?? 0;
         if (keyboardHeight > 50) {
           this.showQuickKeys = true;
@@ -646,6 +683,13 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
       const showMobileInput = this.callbacks?.getShowMobileInput() ?? false;
       const showCtrlAlpha = this.callbacks?.getShowCtrlAlpha() ?? false;
 
+      // Don't steal focus if user has text selected
+      const selection = document.getSelection();
+      const hasSelection = selection && selection.toString().length > 0;
+      if (hasSelection) {
+        return;
+      }
+
       // In keyboard mode, always maintain focus regardless of other conditions
       if (this.keyboardMode && this.hiddenInput && document.activeElement !== this.hiddenInput) {
         logger.log('Keyboard mode: forcing focus on hidden input');
@@ -917,6 +961,51 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
     return this.keyboardMode;
   }
 
+  /**
+   * Blur the hidden input to release keyboard focus (used when entering chat mode)
+   * This completely disables the keyboard capture to allow other inputs to receive focus
+   */
+  blurHiddenInput(): void {
+    // Exit keyboard mode completely
+    this.keyboardMode = false;
+    this.keyboardModeTimestamp = 0;
+    this.showQuickKeys = false;
+
+    // Stop focus retention interval - critical to prevent refocusing
+    if (this.focusRetentionInterval) {
+      clearInterval(this.focusRetentionInterval);
+      this.focusRetentionInterval = null;
+    }
+
+    // Stop any keyboard activation attempts
+    if (this.keyboardActivationTimeout) {
+      clearTimeout(this.keyboardActivationTimeout);
+      this.keyboardActivationTimeout = null;
+    }
+
+    // Remove capture click handler
+    if (this.captureClickHandler) {
+      document.removeEventListener('click', this.captureClickHandler, true);
+      document.removeEventListener('pointerdown', this.captureClickHandler, true);
+      this.captureClickHandler = null;
+    }
+
+    // Blur the hidden input
+    if (this.hiddenInput) {
+      this.hiddenInput.blur();
+      this.hiddenInputFocused = false;
+      this.updateHiddenInputPosition();
+    }
+
+    // Notify callbacks
+    if (this.callbacks) {
+      this.callbacks.updateShowQuickKeys(false);
+      this.callbacks.setKeyboardHeight(0);
+    }
+
+    logger.log('Hidden input blurred for chat mode');
+  }
+
   isRecentlyEnteredKeyboardMode(): boolean {
     // Check if we entered keyboard mode within the last 2 seconds
     // This helps prevent iOS keyboard animation from being interrupted
@@ -968,5 +1057,12 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
         cleanup();
       }
     });
+  }
+  toggleDirectKeyboard(): void {
+    if (this.keyboardMode) {
+      this.dismissKeyboard();
+    } else {
+      this.focusHiddenInput();
+    }
   }
 }

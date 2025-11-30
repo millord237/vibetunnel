@@ -15,6 +15,7 @@ import type { Session } from '../../../shared/types.js';
 import { formatSessionDuration } from '../../../shared/utils/time.js';
 import type { AuthClient } from '../../services/auth-client.js';
 import { formatPathForDisplay } from '../../utils/path-utils.js';
+import { sessionActionService } from '../../services/session-action-service.js';
 import '../inline-edit.js';
 
 @customElement('compact-session-card')
@@ -53,14 +54,34 @@ export class CompactSessionCard extends LitElement {
   private async handleDelete(e: Event) {
     e.stopPropagation();
 
-    const eventType = this.session.status === 'exited' ? 'session-cleanup' : 'session-delete';
-    this.dispatchEvent(
-      new CustomEvent(eventType, {
-        detail: { sessionId: this.session.id },
-        bubbles: true,
-        composed: true,
-      })
-    );
+    // Use sessionActionService to perform the actual kill/cleanup
+    await sessionActionService.deleteSession(this.session, {
+      authClient: this.authClient,
+      callbacks: {
+        onSuccess: () => {
+          // Only dispatch the event after successful server-side deletion
+          const eventType = this.session.status === 'exited' ? 'session-cleanup' : 'session-delete';
+          this.dispatchEvent(
+            new CustomEvent(eventType, {
+              detail: { sessionId: this.session.id },
+              bubbles: true,
+              composed: true,
+            })
+          );
+        },
+        onError: (error: string) => {
+          console.error('Failed to delete session:', error);
+          // Dispatch error event
+          this.dispatchEvent(
+            new CustomEvent('session-kill-error', {
+              detail: { sessionId: this.session.id, error },
+              bubbles: true,
+              composed: true,
+            })
+          );
+        }
+      }
+    });
   }
 
   private renderStatusIndicator() {
@@ -79,23 +100,20 @@ export class CompactSessionCard extends LitElement {
     return html`
       <div class="relative">
         <div
-          class="w-2.5 h-2.5 rounded-full ${
-            session.activityStatus?.specificStatus
-              ? 'bg-status-warning animate-pulse-primary' // Claude active - amber with pulse
-              : 'bg-status-success' // Generic active
-          }"
-          title="${
-            session.activityStatus?.specificStatus
-              ? `Active: ${session.activityStatus.specificStatus.app}`
-              : 'Active'
-          }"
+          class="w-2.5 h-2.5 rounded-full ${session.activityStatus?.specificStatus
+        ? 'bg-status-warning animate-pulse-primary' // Claude active - amber with pulse
+        : 'bg-status-success' // Generic active
+      }"
+          title="${session.activityStatus?.specificStatus
+        ? `Active: ${session.activityStatus.specificStatus.app}`
+        : 'Active'
+      }"
         ></div>
         <!-- Pulse ring for active sessions -->
-        ${
-          session.status === 'running' && session.activityStatus?.isActive
-            ? html`<div class="absolute inset-0 w-2.5 h-2.5 rounded-full bg-status-success opacity-30 animate-ping"></div>`
-            : ''
-        }
+        ${session.status === 'running' && session.activityStatus?.isActive
+        ? html`<div class="absolute inset-0 w-2.5 h-2.5 rounded-full bg-status-success opacity-30 animate-ping"></div>`
+        : ''
+      }
       </div>
     `;
   }
@@ -204,15 +222,14 @@ export class CompactSessionCard extends LitElement {
       <div class="${cardClasses}" style="margin-bottom: 12px;" @click=${this.handleClick}>
         <!-- Session number and status indicator -->
         <div class="flex items-center gap-2 flex-shrink-0">
-          ${
-            this.sessionNumber
-              ? html`
+          ${this.sessionNumber
+        ? html`
             <span class="text-xs font-mono ${this.selected ? 'text-accent-primary' : 'text-text-muted'} min-w-[1.5rem] text-center">
               ${this.sessionNumber}
             </span>
           `
-              : ''
-          }
+        : ''
+      }
           <div class="relative">
             ${this.renderStatusIndicator()}
           </div>
@@ -231,43 +248,40 @@ export class CompactSessionCard extends LitElement {
           <!-- Row 2: Path, branch, and git changes -->
           <div class="text-xs ${pathColorClass} truncate flex items-center gap-1 mt-1">
             <span class="truncate">${formatPathForDisplay(session.workingDir)}</span>
-            ${
-              session.gitBranch
-                ? html`
+            ${session.gitBranch
+        ? html`
                   <span class="text-text-muted/50">·</span>
                   <span class="text-status-success font-mono">[${session.gitBranch}]</span>
                   ${session.gitIsWorktree ? html`<span class="text-purple-400 ml-0.5">⎇</span>` : ''}
                   <!-- Git changes indicator after branch -->
                   ${this.renderGitChanges()}
                 `
-                : ''
-            }
+        : ''
+      }
           </div>
           
           <!-- Row 3: Activity status (only shown if there's activity) -->
-          ${
-            this.sessionType === 'active' && session.activityStatus?.specificStatus
-              ? html`
+          ${this.sessionType === 'active' && session.activityStatus?.specificStatus
+        ? html`
                 <div class="text-xs text-status-warning truncate mt-1">
                   <span class="flex-shrink-0">${session.activityStatus.specificStatus.status}</span>
                 </div>
               `
-              : ''
-          }
+        : ''
+      }
         </div>
         
         <!-- Right side: duration and close button -->
         <div class="relative flex items-center flex-shrink-0 gap-1">
-          ${
-            isTouchDevice
-              ? html`
+          ${isTouchDevice
+        ? html`
                 <!-- Touch devices: Close button left of time -->
                 ${this.renderDeleteButton()}
                 <div class="text-xs text-text-${isExited ? 'dim' : 'muted'} font-mono">
                   ${session.startedAt ? formatSessionDuration(session.startedAt, session.status === 'exited' ? session.lastModified : undefined) : ''}
                 </div>
               `
-              : html`
+        : html`
                 <!-- Desktop: Time that hides on hover -->
                 <div class="text-xs text-text-${isExited ? 'dim' : 'muted'} font-mono transition-opacity group-hover:opacity-0">
                   ${session.startedAt ? formatSessionDuration(session.startedAt, session.status === 'exited' ? session.lastModified : undefined) : ''}
@@ -278,7 +292,7 @@ export class CompactSessionCard extends LitElement {
                   ${this.renderDeleteButton()}
                 </div>
               `
-          }
+      }
         </div>
       </div>
     `;

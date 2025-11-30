@@ -878,6 +878,12 @@ body {
   overscroll-behavior-y: contain;
 }
 
+/* Set body background to match quick keys when keyboard is visible */
+body[data-keyboard-visible="true"] {
+  background-color: rgb(var(--color-bg-secondary));
+}
+
+
 /* iOS Safari specific fixes for split view */
 @supports (-webkit-touch-callout: none) {
   /* Target iOS Safari only */
@@ -932,6 +938,12 @@ body {
 #terminal-container {
   touch-action: pan-y;
   overscroll-behavior: none;
+}
+
+/* Disable scroll while selecting text on mobile */
+.terminal-scroll-container.selecting-text {
+  touch-action: none;
+  overflow: hidden;
 }
 
 /* Session cards - prevent pull-to-refresh */

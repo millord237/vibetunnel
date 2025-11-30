@@ -27,11 +27,16 @@ export class ConnectionManager {
   private terminal: Terminal | null = null;
   private session: Session | null = null;
   private isConnected = false;
+  private onTerminalOutput: ((data: string) => void) | null = null;
 
   constructor(
     private onSessionExit: (sessionId: string) => void,
     private onSessionUpdate: (session: Session) => void
   ) {}
+
+  setOnTerminalOutput(callback: ((data: string) => void) | null): void {
+    this.onTerminalOutput = callback;
+  }
 
   setTerminal(terminal: Terminal | null): void {
     this.terminal = terminal;
@@ -72,7 +77,9 @@ export class ConnectionManager {
     }
 
     // Use CastConverter to connect terminal to stream with reconnection tracking
-    const connection = CastConverter.connectToStream(this.terminal, streamUrl);
+    const connection = CastConverter.connectToStream(this.terminal, streamUrl, {
+      onOutput: this.onTerminalOutput ?? undefined,
+    });
 
     // Listen for session-exit events from the terminal
     const handleSessionExit = (event: Event) => {

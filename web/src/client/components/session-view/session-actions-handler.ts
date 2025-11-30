@@ -97,7 +97,10 @@ export class SessionActionsHandler {
           }
         },
         onSuccess: () => {
-          // For terminate, session status will be updated via SSE
+          // Session terminated successfully - navigate back to list
+          if (this.callbacks) {
+            this.callbacks.handleBack();
+          }
         },
       },
     });

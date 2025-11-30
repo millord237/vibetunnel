@@ -78,6 +78,17 @@ export class VibeTerminalBinary extends VibeTerminalBuffer {
     window.removeEventListener('terminal-font-size-changed', this.handleFontSizeChange);
     window.removeEventListener('terminal-theme-changed', this.handleThemeChange);
 
+    // Clean up selection tracking interval
+    if (this.selectionCheckInterval) {
+      clearInterval(this.selectionCheckInterval);
+      this.selectionCheckInterval = undefined;
+    }
+    // Restore scroll container styles
+    if (this.scrollContainer) {
+      this.scrollContainer.style.removeProperty('touch-action');
+      this.scrollContainer.style.removeProperty('overflow');
+    }
+
     // Clean up hidden input
     if (this.hiddenInput) {
       this.hiddenInput.removeEventListener('input', this.handleInput);
@@ -107,6 +118,9 @@ export class VibeTerminalBinary extends VibeTerminalBuffer {
 
     // Set up scroll tracking
     this.setupScrollTracking();
+
+    // Set up selection tracking (prevents scroll while selecting text on mobile)
+    this.setupSelectionTracking();
 
     // Dispatch terminal-ready event
     this.dispatchEvent(new CustomEvent('terminal-ready'));
@@ -215,6 +229,38 @@ export class VibeTerminalBinary extends VibeTerminalBuffer {
     });
   }
 
+  private selectionCheckInterval?: number;
+
+  private setupSelectionTracking() {
+    if (!this.scrollContainer) return;
+
+    // Check if there's an active selection in the terminal
+    const hasTerminalSelection = (): boolean => {
+      const selection = document.getSelection();
+      if (!selection || selection.toString().length > 0) {
+        if (selection?.anchorNode && this.scrollContainer?.contains(selection.anchorNode)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // Use CSS touch-action to prevent scroll during selection
+    // This is more reliable than JavaScript preventDefault on iOS
+    // Poll for selection state and toggle touch-action accordingly
+    this.selectionCheckInterval = window.setInterval(() => {
+      if (hasTerminalSelection()) {
+        // Disable touch scrolling when there's a selection
+        this.scrollContainer?.style.setProperty('touch-action', 'none');
+        this.scrollContainer?.style.setProperty('overflow', 'hidden');
+      } else {
+        // Re-enable touch scrolling when no selection
+        this.scrollContainer?.style.removeProperty('touch-action');
+        this.scrollContainer?.style.removeProperty('overflow');
+      }
+    }, 100);
+  }
+
   private updateTerminalSize() {
     if (!this.terminalContainer) return;
 
@@ -280,10 +326,15 @@ export class VibeTerminalBinary extends VibeTerminalBuffer {
     this.hiddenInput.addEventListener('input', this.handleInput);
     this.hiddenInput.addEventListener('keydown', this.handleKeydown);
 
-    // Focus on click
+    // Focus on click (but not if user is selecting text)
     this.terminalContainer?.addEventListener('click', () => {
       if (!this.disableClick) {
-        this.focus();
+        // Don't steal focus if user has text selected - this would clear their selection
+        const selection = document.getSelection();
+        const hasSelection = selection && selection.toString().length > 0;
+        if (!hasSelection) {
+          this.focus();
+        }
       }
     });
   }

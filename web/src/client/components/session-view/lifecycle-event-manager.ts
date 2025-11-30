@@ -105,6 +105,16 @@ export class LifecycleEventManager extends ManagerEventEmitter {
    * Determine if touch keyboard should be enabled based on capabilities and preferences
    */
   private shouldEnableTouchKeyboard(): boolean {
+    // FIRST: Check if this is an iPad - always enable for iPads
+    const userAgent = navigator.userAgent;
+    const isIPadUserAgent = /iPad/.test(userAgent) ||
+      (/Macintosh/.test(userAgent) && navigator.maxTouchPoints > 1);
+
+    if (isIPadUserAgent) {
+      logger.log('iPad detected via user agent - enabling touch keyboard');
+      return true;
+    }
+
     // Get user preference from localStorage
     const preference = localStorage.getItem('touchKeyboardPreference') || 'auto';
 
@@ -131,7 +141,19 @@ export class LifecycleEventManager extends ManagerEventEmitter {
     const isSmallScreen = screenSize < 1024;
 
     // Enable for touch-first OR hybrid with small screen
-    return isTouchFirst || (isHybrid && isSmallScreen);
+    const result = isTouchFirst || (isHybrid && isSmallScreen);
+
+    logger.log('shouldEnableTouchKeyboard:', {
+      result,
+      isTouchFirst,
+      isHybrid,
+      isSmallScreen,
+      isIPadUserAgent,
+      userAgent,
+      capabilities
+    });
+
+    return result;
   }
 
   handlePreferencesChanged = (e: Event): void => {
@@ -329,7 +351,12 @@ export class LifecycleEventManager extends ManagerEventEmitter {
     // Store click handler reference for proper cleanup
     this.clickHandler = () => {
       if (!this.callbacks?.getDisableFocusManagement()) {
-        this.callbacks?.focus();
+        // Don't steal focus if user has text selected - this would clear their selection
+        const selection = document.getSelection();
+        const hasSelection = selection && selection.toString().length > 0;
+        if (!hasSelection) {
+          this.callbacks?.focus();
+        }
       }
     };
     this.callbacks.addEventListener('click', this.clickHandler);

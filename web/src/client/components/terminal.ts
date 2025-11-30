@@ -85,6 +85,10 @@ export class Terminal extends LitElement {
   private isMobile = false;
   private mobileInitialResizeTimeout: NodeJS.Timeout | null = null;
 
+  // Selection protection - prevent renders during active text selection
+  private isUserSelecting = false;
+  private selectionCooldownUntil = 0;
+
   // Operation queue for batching buffer modifications
   private operationQueue: (() => void | Promise<void>)[] = [];
 
@@ -473,6 +477,7 @@ export class Terminal extends LitElement {
       await this.setupTerminal();
       this.setupResize();
       this.setupScrolling();
+      this.setupSelectionProtection();
 
       // Ensure terminal starts at the top
       this.viewportY = 0;
@@ -527,6 +532,10 @@ export class Terminal extends LitElement {
 
       // Set terminal size - don't call .open() to keep it headless
       this.terminal.resize(this.cols, this.rows);
+
+      // Add initial blank lines to create top padding (helps with iPad header overlap)
+      const initialPaddingLines = 10;
+      this.terminal.write('\n'.repeat(initialPaddingLines));
 
       // Force initial render of the buffer
       this.requestRenderBuffer();
@@ -850,10 +859,22 @@ export class Terminal extends LitElement {
     );
 
     // Touch scrolling with momentum
+    // Key insight: We need to distinguish between scroll gestures and text selection
+    // - Scroll: Quick movement in one direction
+    // - Selection: Long press or slow/precise movement
     let isScrolling = false;
+    let hasCaptured = false;
     let lastY = 0;
     let lastX = 0;
+    let startY = 0;
+    let startX = 0;
+    let startTime = 0;
+    let currentPointerId: number | null = null;
     let touchHistory: Array<{ y: number; x: number; time: number }> = [];
+
+    // Thresholds for distinguishing scroll from selection
+    const SCROLL_THRESHOLD = 15; // Pixels of movement before we consider it a scroll
+    const LONG_PRESS_THRESHOLD = 300; // ms - if user holds longer, they might be selecting
 
     const handlePointerDown = (e: PointerEvent) => {
       // Only handle touch pointers, not mouse
@@ -866,24 +887,30 @@ export class Terminal extends LitElement {
       }
 
       isScrolling = false;
+      hasCaptured = false;
       lastY = e.clientY;
       lastX = e.clientX;
+      startY = e.clientY;
+      startX = e.clientX;
+      startTime = performance.now();
+      currentPointerId = e.pointerId;
 
       // Initialize touch tracking
-      touchHistory = [{ y: e.clientY, x: e.clientX, time: performance.now() }];
+      touchHistory = [{ y: e.clientY, x: e.clientX, time: startTime }];
 
-      // Capture the pointer so we continue to receive events even if DOM rebuilds
-      this.container?.setPointerCapture(e.pointerId);
+      // DON'T capture immediately - wait to see if this is a scroll or selection
+      // This allows native text selection to work on iOS/iPad
     };
 
     const handlePointerMove = (e: PointerEvent) => {
-      // Only handle touch pointers that we have captured
-      if (e.pointerType !== 'touch' || !this.container?.hasPointerCapture(e.pointerId)) return;
+      // Only handle our tracked pointer
+      if (e.pointerType !== 'touch' || e.pointerId !== currentPointerId) return;
 
       const currentY = e.clientY;
       const currentX = e.clientX;
-      const deltaY = lastY - currentY; // Positive = scroll down, negative = scroll up
-      const deltaX = lastX - currentX; // Positive = scroll right, negative = scroll left
+      const totalDeltaY = Math.abs(currentY - startY);
+      const totalDeltaX = Math.abs(currentX - startX);
+      const timeSinceStart = performance.now() - startTime;
 
       // Track touch history for velocity calculation (keep last 5 points)
       const now = performance.now();
@@ -892,12 +919,39 @@ export class Terminal extends LitElement {
         touchHistory.shift();
       }
 
-      // Start scrolling if we've moved more than a few pixels
-      if (!isScrolling && (Math.abs(deltaY) > 5 || Math.abs(deltaX) > 5)) {
-        isScrolling = true;
+      // Determine if this is a scroll gesture:
+      // - Must have moved more than threshold
+      // - Should be quick movement (not slow selection drag)
+      // - Vertical movement should dominate (scrolling is usually vertical)
+      const isQuickMovement = timeSinceStart < LONG_PRESS_THRESHOLD;
+      const isVerticalDominant = totalDeltaY > totalDeltaX * 0.5;
+      const hasMovedEnough = totalDeltaY > SCROLL_THRESHOLD || totalDeltaX > SCROLL_THRESHOLD;
+
+      // Only start scrolling if:
+      // 1. We haven't already decided it's a scroll
+      // 2. Movement is above threshold
+      // 3. It's a quick, vertical-dominant movement (not a slow selection drag)
+      if (!isScrolling && hasMovedEnough) {
+        // Check if this looks like a scroll (quick and vertical) or a selection (slow/horizontal)
+        if (isQuickMovement && isVerticalDominant) {
+          isScrolling = true;
+
+          // NOW capture the pointer since we've determined this is a scroll
+          if (!hasCaptured && this.container) {
+            this.container.setPointerCapture(e.pointerId);
+            hasCaptured = true;
+          }
+        } else {
+          // Looks like a selection gesture - don't interfere
+          // Let native text selection handle it
+          return;
+        }
       }
 
       if (!isScrolling) return;
+
+      const deltaY = lastY - currentY; // Positive = scroll down, negative = scroll up
+      const deltaX = lastX - currentX; // Positive = scroll right, negative = scroll left
 
       // Vertical scrolling (our custom pixel-based)
       if (Math.abs(deltaY) > 0) {
@@ -906,15 +960,15 @@ export class Terminal extends LitElement {
       }
 
       // Horizontal scrolling (native browser scrollLeft) - only if not in horizontal fit mode
-      if (Math.abs(deltaX) > 0 && !this.fitHorizontally) {
+      if (Math.abs(deltaX) > 0 && !this.fitHorizontally && this.container) {
         this.container.scrollLeft += deltaX;
         lastX = currentX;
       }
     };
 
     const handlePointerUp = (e: PointerEvent) => {
-      // Only handle touch pointers
-      if (e.pointerType !== 'touch') return;
+      // Only handle our tracked pointer
+      if (e.pointerType !== 'touch' || e.pointerId !== currentPointerId) return;
 
       // Calculate momentum if we were scrolling
       if (isScrolling && touchHistory.length >= 2) {
@@ -937,16 +991,30 @@ export class Terminal extends LitElement {
         }
       }
 
-      // Release pointer capture
-      this.container?.releasePointerCapture(e.pointerId);
+      // Release pointer capture if we captured it
+      if (hasCaptured && this.container) {
+        this.container.releasePointerCapture(e.pointerId);
+      }
+
+      // Reset state
+      currentPointerId = null;
+      hasCaptured = false;
+      isScrolling = false;
     };
 
     const handlePointerCancel = (e: PointerEvent) => {
-      // Only handle touch pointers
-      if (e.pointerType !== 'touch') return;
+      // Only handle our tracked pointer
+      if (e.pointerType !== 'touch' || e.pointerId !== currentPointerId) return;
 
-      // Release pointer capture
-      this.container?.releasePointerCapture(e.pointerId);
+      // Release pointer capture if we captured it
+      if (hasCaptured && this.container) {
+        this.container.releasePointerCapture(e.pointerId);
+      }
+
+      // Reset state
+      currentPointerId = null;
+      hasCaptured = false;
+      isScrolling = false;
     };
 
     // Attach pointer events to the container (touch only)
@@ -954,6 +1022,40 @@ export class Terminal extends LitElement {
     this.container.addEventListener('pointermove', handlePointerMove);
     this.container.addEventListener('pointerup', handlePointerUp);
     this.container.addEventListener('pointercancel', handlePointerCancel);
+  }
+
+  /**
+   * Setup protection for text selection on desktop
+   * Prevents renders from clearing the user's selection
+   */
+  private setupSelectionProtection() {
+    if (!this.container) return;
+
+    // Track when user starts selecting with mouse (desktop)
+    this.container.addEventListener('mousedown', (e: MouseEvent) => {
+      // Only track left mouse button (primary button for selection)
+      if (e.button !== 0) return;
+      this.isUserSelecting = true;
+    });
+
+    // Track when user finishes selecting
+    this.container.addEventListener('mouseup', () => {
+      if (this.isUserSelecting) {
+        // Add a cooldown period after mouseup to allow selection to "settle"
+        const SELECTION_COOLDOWN_MS = 200;
+        this.selectionCooldownUntil = Date.now() + SELECTION_COOLDOWN_MS;
+        this.isUserSelecting = false;
+      }
+    });
+
+    // Also listen on document for mouseup in case user releases outside container
+    document.addEventListener('mouseup', () => {
+      if (this.isUserSelecting) {
+        const SELECTION_COOLDOWN_MS = 200;
+        this.selectionCooldownUntil = Date.now() + SELECTION_COOLDOWN_MS;
+        this.isUserSelecting = false;
+      }
+    });
   }
 
   private scrollViewportPixels(deltaPixels: number) {
@@ -1059,6 +1161,43 @@ export class Terminal extends LitElement {
         hasContainer: !!this.container,
       });
       return;
+    }
+
+    // Check if user is actively selecting text (mouse is down)
+    if (this.isUserSelecting) {
+      return;
+    }
+
+    // Check if we're in the selection cooldown period (just finished selecting)
+    if (Date.now() < this.selectionCooldownUntil) {
+      const remainingCooldown = this.selectionCooldownUntil - Date.now();
+      setTimeout(() => {
+        this.requestRenderBuffer();
+      }, remainingCooldown + 10);
+      return;
+    }
+
+    // Check if user has an active text selection within the terminal
+    const selection = document.getSelection();
+    if (selection && selection.toString().length > 0) {
+      const anchorNode = selection.anchorNode;
+      const focusNode = selection.focusNode;
+      const isSelectionInTerminal =
+        (anchorNode && this.container.contains(anchorNode)) ||
+        (focusNode && this.container.contains(focusNode));
+
+      if (isSelectionInTerminal) {
+        // Schedule a re-render for when selection is cleared
+        const handleSelectionChange = () => {
+          const newSelection = document.getSelection();
+          if (!newSelection || newSelection.toString().length === 0) {
+            document.removeEventListener('selectionchange', handleSelectionChange);
+            this.requestRenderBuffer();
+          }
+        };
+        document.addEventListener('selectionchange', handleSelectionChange);
+        return;
+      }
     }
 
     logger.debug('renderBuffer executing');
@@ -1652,6 +1791,13 @@ export class Terminal extends LitElement {
       return;
     }
 
+    // Don't steal focus if user has text selected - this would clear their selection
+    const selection = document.getSelection();
+    const hasSelection = selection && selection.toString().length > 0;
+    if (hasSelection) {
+      return;
+    }
+
     // Focus the terminal container so it can receive paste events
     if (this.container) {
       this.container.focus();
@@ -1682,7 +1828,12 @@ export class Terminal extends LitElement {
         .terminal-container {
           font-size: ${this.fontSize}px;
           line-height: ${this.fontSize * 1.2}px;
-          touch-action: none !important;
+          /* Use manipulation to remove 300ms tap delay while allowing selection */
+          /* We handle scroll ourselves but need to allow native text selection */
+          touch-action: manipulation;
+          /* Enable text selection on touch devices */
+          -webkit-user-select: text;
+          user-select: text;
         }
 
         .terminal-line {
@@ -1742,6 +1893,164 @@ export class Terminal extends LitElement {
         }
       </div>
     `;
+  }
+
+  /**
+   * Get the current input line (text the user has typed on the current line)
+   * This is useful for syncing with chat view when the page is reloaded
+   * Returns empty string if nothing can be determined
+   */
+  getCurrentInputLine(): string {
+    if (!this.terminal) {
+      return '';
+    }
+
+    try {
+      const buffer = this.terminal.buffer.active;
+      const _cursorX = buffer.cursorX;
+      const cursorY = buffer.cursorY;
+      const baseY = buffer.baseY;
+
+      // Try to find the last line with content (cursor might be on empty line after reload)
+      // Start from current cursor line and go backwards
+      for (let offset = 0; offset <= 5; offset++) {
+        const lineIndex = cursorY + baseY - offset;
+        if (lineIndex < 0) break;
+
+        const line = buffer.getLine(lineIndex);
+        if (!line) continue;
+
+        // Build line text, but STOP when we hit dim/gray text (ghost text)
+        // Ghost text is rendered with dim attribute or specific gray colors
+        let lineText = '';
+        let foundPrompt = false;
+        let _promptEndIndex = 0;
+
+        let charsAfterPrompt = 0;
+        let hitGhostText = false;
+
+        for (let i = 0; i < line.length; i++) {
+          const cell = line.getCell(i);
+          if (!cell) continue;
+
+          const char = cell.getChars();
+          if (!char) continue;
+
+          // Check if this is dim/ghost text
+          // Ghost text indicators:
+          // - isDim() returns true for dim/faint text (returns bitmask, non-zero = dim)
+          // - Gray foreground colors (8, 59, 102, 145, 188, 231, 240-255 are common grays)
+          // - Italic text (some TUIs use italic for ghost text)
+          const isDim = cell.isDim();
+          const isItalic = cell.isItalic();
+          const fgColor = cell.getFgColor();
+          // Expanded gray color detection - includes more gray shades
+          const isGrayColor =
+            fgColor === 8 ||
+            fgColor === 59 ||
+            fgColor === 102 ||
+            fgColor === 145 ||
+            fgColor === 188 ||
+            fgColor === 231 ||
+            (fgColor >= 232 && fgColor <= 255); // 232-255 are grayscale in 256-color palette
+
+          // If we've passed the prompt and hit dim/gray/italic text, stop BEFORE adding - it's ghost text
+          if (foundPrompt && (isDim || isGrayColor || isItalic)) {
+            hitGhostText = true;
+            break;
+          }
+
+          // Detect prompt end BEFORE adding to track position
+          if (
+            char === '>' ||
+            char === '$' ||
+            char === '#' ||
+            char === '%' ||
+            char === '➜' ||
+            char === '❯'
+          ) {
+            foundPrompt = true;
+            _promptEndIndex = i;
+          }
+
+          lineText += char;
+
+          // Count non-whitespace chars after prompt
+          if (foundPrompt && char.trim()) {
+            charsAfterPrompt++;
+          }
+        }
+
+        // If we hit ghost text and only captured 1-2 chars after the prompt,
+        // those chars are likely the start of the ghost text (some TUIs don't dim the first char)
+        if (hitGhostText && charsAfterPrompt <= 2) {
+          continue; // Try next line
+        }
+
+        // Clean up trailing whitespace
+        lineText = lineText.replace(/[\s\u00A0\u2000-\u200B\u202F\u205F\u3000]+$/g, '');
+
+        if (!lineText.trim()) continue;
+
+        // Try to extract just the user input (after common prompt patterns)
+        const promptMatch = lineText.match(/[>$#%➜❯]\s*([^>$#%➜❯│┃|]*)/);
+        if (promptMatch?.[1]) {
+          const input = promptMatch[1]
+            .replace(/[│┃┆┇┊┋|]/g, '')
+            .replace(/[\s\u00A0\u2000-\u200B\u202F\u205F\u3000]+$/g, '')
+            .trim();
+
+          // Filter out known placeholder patterns (for TUIs that don't use dim text)
+          // Gemini: "Type your message or @path/to/file"
+          // Claude: "Try 'write a test for...'"
+          if (input && this.isPlaceholderText(input)) {
+            continue; // Try next line
+          }
+
+          if (input) return input;
+        }
+      }
+
+      return '';
+    } catch (error) {
+      logger.warn('Failed to get current input line:', error);
+      return '';
+    }
+  }
+
+  /**
+   * Check if text matches known placeholder patterns from CLI tools
+   * These are ghost text hints that shouldn't be captured as user input
+   */
+  private isPlaceholderText(text: string): boolean {
+    const lowerText = text.toLowerCase();
+
+    // Gemini CLI placeholders
+    if (
+      lowerText.startsWith('type your message') ||
+      lowerText.startsWith('type a message') ||
+      lowerText.includes('@path/to/file') ||
+      lowerText.includes('@path to file')
+    ) {
+      return true;
+    }
+
+    // Claude Code placeholders
+    if (lowerText.startsWith('try "') || lowerText.startsWith("try '")) {
+      return true;
+    }
+
+    // Generic placeholder patterns
+    if (
+      lowerText.startsWith('enter your') ||
+      lowerText.startsWith('enter a ') ||
+      lowerText.startsWith('press enter') ||
+      lowerText.startsWith('type here')
+    ) {
+      return true;
+    }
+
+    return false;
   }
 
   /**

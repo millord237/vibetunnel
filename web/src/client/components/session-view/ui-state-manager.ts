@@ -59,6 +59,9 @@ export interface UIState {
   // View mode
   viewMode: 'terminal' | 'worktree';
 
+  // Chat mode - display terminal as chat bubbles
+  chatMode: boolean;
+
   // Keyboard capture
   keyboardCaptureActive: boolean;
 }
@@ -112,6 +115,9 @@ export class UIStateManager {
 
     // View mode
     viewMode: 'terminal',
+
+    // Chat mode
+    chatMode: false,
 
     // Keyboard capture
     keyboardCaptureActive: true,
@@ -329,5 +335,25 @@ export class UIStateManager {
       logger.error('Failed to load app preferences', error);
       this.state.useDirectKeyboard = true; // Default to true on error
     }
+  }
+
+  // Chat mode
+  setChatMode(enabled: boolean): void {
+    this.state.chatMode = enabled;
+    // Hide quick keys when entering chat mode (chat has its own input)
+    if (enabled) {
+      this.state.showQuickKeys = false;
+    }
+    this.callbacks?.requestUpdate();
+  }
+
+  toggleChatMode(): void {
+    const enteringChatMode = !this.state.chatMode;
+    this.state.chatMode = enteringChatMode;
+    // Hide quick keys when entering chat mode (chat has its own input)
+    if (enteringChatMode) {
+      this.state.showQuickKeys = false;
+    }
+    this.callbacks?.requestUpdate();
   }
 }

@@ -292,6 +292,7 @@ export async function dumpToTerminal(
  *
  * @param terminal - DOM terminal instance with write() and setTerminalSize() methods
  * @param streamUrl - URL endpoint for the SSE stream (e.g., /api/sessions/123/stream)
+ * @param options - Optional callbacks for terminal events
  * @returns Connection object with EventSource and cleanup methods
  */
 export function connectToStream(
@@ -300,7 +301,10 @@ export function connectToStream(
     setTerminalSize?: (cols: number, rows: number) => void;
     dispatchEvent?: (event: CustomEvent) => void;
   },
-  streamUrl: string
+  streamUrl: string,
+  options?: {
+    onOutput?: (data: string) => void; // Callback for terminal output (for chat view sync)
+  }
 ): {
   eventSource: EventSource;
   disconnect: () => void;
@@ -322,6 +326,11 @@ export function connectToStream(
 
   const addToOutputBuffer = (data: string) => {
     outputBuffer += data;
+
+    // Call output callback if provided (for chat view sync)
+    if (options?.onOutput) {
+      options.onOutput(data);
+    }
 
     // Schedule flush if not already scheduled
     if (batchTimeout === null) {

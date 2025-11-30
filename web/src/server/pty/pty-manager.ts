@@ -392,7 +392,7 @@ export class PtyManager extends EventEmitter {
 
           logger.debug(
             `Updated lastClearOffset for session ${sessionId} to exact position ${position} ` +
-              `after detecting pruning sequence '${sequence.split('\x1b').join('\\x1b')}'`
+            `after detecting pruning sequence '${sequence.split('\x1b').join('\\x1b')}'`
           );
         }
       });
@@ -494,11 +494,11 @@ export class PtyManager extends EventEmitter {
         const errorDetails =
           spawnError instanceof Error
             ? {
-                ...spawnError,
-                message: spawnError.message,
-                stack: spawnError.stack,
-                code: (spawnError as NodeJS.ErrnoException).code,
-              }
+              ...spawnError,
+              message: spawnError.message,
+              stack: spawnError.stack,
+              code: (spawnError as NodeJS.ErrnoException).code,
+            }
             : spawnError;
         logger.error(`Failed to spawn PTY for command '${command.join(' ')}':`, errorDetails);
         throw new PtyError(errorMessage, 'SPAWN_FAILED');
@@ -689,8 +689,8 @@ export class PtyManager extends EventEmitter {
 
             logger.debug(
               `Activity state changed for session ${session.id}: ` +
-                `active=${activityState.isActive}, ` +
-                `status=${activityState.specificStatus?.status || 'none'}`
+              `active=${activityState.isActive}, ` +
+              `status=${activityState.specificStatus?.status || 'none'}`
             );
 
             // Send notification when activity becomes inactive (Claude's turn)
@@ -1589,6 +1589,24 @@ export class PtyManager extends EventEmitter {
 
       // If we have an in-memory session with active PTY, kill it directly
       if (memorySession?.ptyProcess) {
+        // Create a promise that resolves when the session exit event is emitted
+        // This ensures we wait for the onExit handler to complete (which updates status files)
+        const exitPromise = new Promise<void>((resolve) => {
+          const handler = (id: string) => {
+            if (id === sessionId) {
+              this.removeListener('sessionExited', handler);
+              resolve();
+            }
+          };
+          this.on('sessionExited', handler);
+
+          // Set a safety timeout (4s) - slightly longer than the kill escalation timeout (3s)
+          setTimeout(() => {
+            this.removeListener('sessionExited', handler);
+            resolve();
+          }, 4000);
+        });
+
         // If signal is already SIGKILL, send it immediately and wait briefly
         if (signal === 'SIGKILL' || signal === 9) {
           memorySession.ptyProcess.kill('SIGKILL');
@@ -1596,14 +1614,14 @@ export class PtyManager extends EventEmitter {
           // Note: We no longer kill the process group to avoid affecting other sessions
           // that might share the same process group (e.g., multiple fwd.ts instances)
 
-          this.sessions.delete(sessionId);
-          // Wait a bit for SIGKILL to take effect
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          // Wait for exit event or timeout
+          await exitPromise;
           return;
         }
 
         // Start with SIGTERM and escalate if needed
-        await this.killSessionWithEscalation(sessionId, memorySession);
+        // We run this in parallel with the exit promise wait
+        await Promise.all([this.killSessionWithEscalation(sessionId, memorySession), exitPromise]);
       } else {
         // For external sessions, try control pipe first, then fall back to PID
         const killMessage: KillControlMessage = {
@@ -1635,37 +1653,52 @@ export class PtyManager extends EventEmitter {
             // that might share the same process group (e.g., multiple fwd.ts instances)
 
             await new Promise((resolve) => setTimeout(resolve, 100));
-            return;
-          }
+          } else {
+            // Send SIGTERM first
+            process.kill(diskSession.pid, 'SIGTERM');
 
-          // Send SIGTERM first
-          process.kill(diskSession.pid, 'SIGTERM');
+            // Note: We no longer kill the process group to avoid affecting other sessions
+            // that might share the same process group (e.g., multiple fwd.ts instances)
 
-          // Note: We no longer kill the process group to avoid affecting other sessions
-          // that might share the same process group (e.g., multiple fwd.ts instances)
+            // Wait up to 3 seconds for graceful termination
+            const maxWaitTime = 3000;
+            const checkInterval = 500;
+            const maxChecks = maxWaitTime / checkInterval;
+            let terminated = false;
 
-          // Wait up to 3 seconds for graceful termination
-          const maxWaitTime = 3000;
-          const checkInterval = 500;
-          const maxChecks = maxWaitTime / checkInterval;
+            for (let i = 0; i < maxChecks; i++) {
+              await new Promise((resolve) => setTimeout(resolve, checkInterval));
 
-          for (let i = 0; i < maxChecks; i++) {
-            await new Promise((resolve) => setTimeout(resolve, checkInterval));
+              if (!ProcessUtils.isProcessRunning(diskSession.pid)) {
+                logger.debug(chalk.green(`External session ${sessionId} terminated gracefully`));
+                terminated = true;
+                break;
+              }
+            }
 
-            if (!ProcessUtils.isProcessRunning(diskSession.pid)) {
-              logger.debug(chalk.green(`External session ${sessionId} terminated gracefully`));
-              return;
+            // Process didn't terminate gracefully, force kill
+            if (!terminated) {
+              logger.debug(chalk.yellow(`External session ${sessionId} requires SIGKILL`));
+              process.kill(diskSession.pid, 'SIGKILL');
+
+              // Note: We no longer kill the process group to avoid affecting other sessions
+              // that might share the same process group (e.g., multiple fwd.ts instances)
+
+              await new Promise((resolve) => setTimeout(resolve, 100));
             }
           }
+        }
 
-          // Process didn't terminate gracefully, force kill
-          logger.debug(chalk.yellow(`External session ${sessionId} requires SIGKILL`));
-          process.kill(diskSession.pid, 'SIGKILL');
-
-          // Note: We no longer kill the process group to avoid affecting other sessions
-          // that might share the same process group (e.g., multiple fwd.ts instances)
-
-          await new Promise((resolve) => setTimeout(resolve, 100));
+        // Explicitly update status for external sessions since we don't have an onExit handler
+        // Verify process is actually gone before marking as exited
+        if (diskSession.pid && !ProcessUtils.isProcessRunning(diskSession.pid)) {
+          this.sessionManager.updateSessionStatus(sessionId, 'exited', undefined, 0);
+          this.emit(
+            'sessionExited',
+            sessionId,
+            diskSession.name || diskSession.command.join(' '),
+            0
+          );
         }
       }
     } catch (error) {

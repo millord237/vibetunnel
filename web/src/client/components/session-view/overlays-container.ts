@@ -132,9 +132,9 @@ export class OverlaysContainer extends LitElement {
         `;
       })()}
       
-      <!-- Floating Keyboard Button (for direct keyboard mode on mobile) -->
+      <!-- Floating Keyboard Button (for direct keyboard mode on mobile, hidden in chat mode) -->
       ${
-        this.uiState.isMobile && this.uiState.useDirectKeyboard && !this.uiState.showQuickKeys
+        this.uiState.isMobile && this.uiState.useDirectKeyboard && !this.uiState.showQuickKeys && !this.uiState.chatMode
           ? html`
             <div
               class="keyboard-button"
@@ -150,10 +150,10 @@ export class OverlaysContainer extends LitElement {
           `
           : ''
       }
-      
-      <!-- Terminal Quick Keys (for direct keyboard mode) -->
+
+      <!-- Terminal Quick Keys (for direct keyboard mode, hidden in chat mode) -->
       <terminal-quick-keys
-        .visible=${this.uiState.isMobile && this.uiState.useDirectKeyboard && this.uiState.showQuickKeys}
+        .visible=${this.uiState.isMobile && this.uiState.useDirectKeyboard && this.uiState.showQuickKeys && !this.uiState.chatMode}
         .onKeyPress=${this.callbacks.onQuickKeyPress}
       ></terminal-quick-keys>
       

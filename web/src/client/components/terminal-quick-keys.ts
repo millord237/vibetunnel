@@ -280,8 +280,8 @@ export class TerminalQuickKeys extends LitElement {
           background-color: rgb(var(--color-bg-secondary) / 0.98);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
-          width: 100vw;
-          max-width: 100vw;
+          width: 100%;
+          max-width: 100%;
           /* No safe areas needed when above keyboard */
           padding-left: 0;
           padding-right: 0;
