@@ -13,6 +13,7 @@ import type { SessionInput, SpecialKey } from '../../shared/types.js';
 import type { PtyManager } from '../pty/index.js';
 import type { ActivityMonitor } from '../services/activity-monitor.js';
 import type { AuthService } from '../services/auth-service.js';
+import type { InputOwnershipService } from '../services/input-ownership.js';
 import type { RemoteRegistry } from '../services/remote-registry.js';
 import type { TerminalManager } from '../services/terminal-manager.js';
 import { createLogger } from '../utils/logger.js';
@@ -26,6 +27,7 @@ interface WebSocketInputHandlerOptions {
   remoteRegistry: RemoteRegistry | null;
   authService: AuthService;
   isHQMode: boolean;
+  inputOwnershipService: InputOwnershipService;
 }
 
 /**
@@ -77,7 +79,9 @@ export class WebSocketInputHandler {
   private remoteRegistry: RemoteRegistry | null;
   private authService: AuthService;
   private isHQMode: boolean;
+  private inputOwnershipService: InputOwnershipService;
   private remoteConnections: Map<string, WebSocket> = new Map();
+  private clientCounter = 0;
 
   constructor(options: WebSocketInputHandlerOptions) {
     this.ptyManager = options.ptyManager;
@@ -86,6 +90,7 @@ export class WebSocketInputHandler {
     this.remoteRegistry = options.remoteRegistry;
     this.authService = options.authService;
     this.isHQMode = options.isHQMode;
+    this.inputOwnershipService = options.inputOwnershipService;
   }
 
   private async connectToRemote(
@@ -121,7 +126,11 @@ export class WebSocketInputHandler {
   }
 
   async handleConnection(ws: WSWebSocket, sessionId: string, userId: string): Promise<void> {
-    logger.log(`WebSocket input connection established for session ${sessionId}, user ${userId}`);
+    // Generate unique client ID for this connection
+    const clientId = `${userId}-${Date.now()}-${++this.clientCounter}`;
+    logger.log(
+      `WebSocket input connection established for session ${sessionId}, user ${userId}, client ${clientId}`
+    );
 
     // Check if this is a remote session in HQ mode
     let remoteWs: WebSocket | null = null;
@@ -184,6 +193,9 @@ export class WebSocketInputHandler {
           return; // Ignore empty messages
         }
 
+        // Claim ownership for this client (last writer wins)
+        this.inputOwnershipService.claimOwnership(sessionId, clientId);
+
         // Parse input with special key marker detection
         // Special keys are wrapped in null bytes: "\x00enter\x00"
         // Regular text (including literal "enter") is sent as-is
@@ -224,7 +236,10 @@ export class WebSocketInputHandler {
     });
 
     ws.on('close', () => {
-      logger.log(`WebSocket input connection closed for session ${sessionId}`);
+      logger.log(`WebSocket input connection closed for session ${sessionId}, client ${clientId}`);
+
+      // Release ownership for this client
+      this.inputOwnershipService.releaseOwnership(sessionId, clientId);
 
       // Clean up remote connection if exists
       if (remoteWs) {

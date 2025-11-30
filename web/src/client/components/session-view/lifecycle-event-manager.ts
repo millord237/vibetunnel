@@ -107,8 +107,8 @@ export class LifecycleEventManager extends ManagerEventEmitter {
   private shouldEnableTouchKeyboard(): boolean {
     // FIRST: Check if this is an iPad - always enable for iPads
     const userAgent = navigator.userAgent;
-    const isIPadUserAgent = /iPad/.test(userAgent) ||
-      (/Macintosh/.test(userAgent) && navigator.maxTouchPoints > 1);
+    const isIPadUserAgent =
+      /iPad/.test(userAgent) || (/Macintosh/.test(userAgent) && navigator.maxTouchPoints > 1);
 
     if (isIPadUserAgent) {
       logger.log('iPad detected via user agent - enabling touch keyboard');
@@ -150,7 +150,7 @@ export class LifecycleEventManager extends ManagerEventEmitter {
       isSmallScreen,
       isIPadUserAgent,
       userAgent,
-      capabilities
+      capabilities,
     });
 
     return result;

@@ -39,6 +39,7 @@ import { BufferAggregator } from './services/buffer-aggregator.js';
 import { ConfigService } from './services/config-service.js';
 import { ControlDirWatcher } from './services/control-dir-watcher.js';
 import { HQClient } from './services/hq-client.js';
+import { InputOwnershipService } from './services/input-ownership.js';
 import { mdnsService } from './services/mdns-service.js';
 import { PushNotificationService } from './services/push-notification-service.js';
 import { RemoteRegistry } from './services/remote-registry.js';
@@ -659,11 +660,16 @@ export async function createApp(): Promise<AppInstance> {
   const authService = new AuthService();
   logger.debug('Initialized authentication service');
 
+  // Initialize input ownership service
+  const inputOwnershipService = new InputOwnershipService();
+  logger.debug('Initialized input ownership service');
+
   // Initialize buffer aggregator
   bufferAggregator = new BufferAggregator({
     terminalManager,
     remoteRegistry,
     isHQMode: config.isHQMode,
+    inputOwnershipService,
   });
   logger.debug('Initialized buffer aggregator');
 
@@ -675,6 +681,7 @@ export async function createApp(): Promise<AppInstance> {
     remoteRegistry,
     authService,
     isHQMode: config.isHQMode,
+    inputOwnershipService,
   });
   logger.debug('Initialized WebSocket input handler');
 

@@ -1,5 +1,6 @@
-import { html, css, LitElement } from 'lit';
-import { customElement, property, state, query } from 'lit/decorators.js';
+import { css, html, LitElement } from 'lit';
+import { customElement, property, query, state } from 'lit/decorators.js';
+import { bufferSubscriptionService } from '../services/buffer-subscription-service.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('terminal-chat-view');
@@ -368,11 +369,14 @@ export class TerminalChatView extends LitElement {
   @property() getTerminalInputLine?: () => string;
   @property({ type: Boolean }) active = false;
   @property({ type: String }) pendingInput = '';
+  @property({ type: String }) sessionId = '';
   private outputUnsubscribe?: () => void;
+  private ownershipUnsubscribe?: () => void;
+  private syncInterval?: ReturnType<typeof setInterval>;
+  private lastInputTime = 0;
+  @state() private remotePendingInput = '';
 
   @state() private messages: ChatMessage[] = [];
-  @state() private currentOutput = '';
-  @state() private lastPrompt = '';
 
   @query('#chat-input-field')
   private inputElement!: HTMLInputElement;
@@ -380,8 +384,9 @@ export class TerminalChatView extends LitElement {
   @query('.chat-messages-container')
   private messagesContainer!: HTMLElement;
 
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Used in addMessage()
   private messageIdCounter = 0;
-  private outputBuffer = '';
+
   connectedCallback() {
     super.connectedCallback();
     // Subscribe to terminal output when connected
@@ -389,6 +394,11 @@ export class TerminalChatView extends LitElement {
       this.outputUnsubscribe = this.subscribeToOutput((data: string) => {
         this.processTerminalOutput(data);
       });
+    }
+
+    // Subscribe to ownership changes if we have a sessionId
+    if (this.sessionId) {
+      this.subscribeToOwnership();
     }
   }
 
@@ -398,11 +408,96 @@ export class TerminalChatView extends LitElement {
       this.outputUnsubscribe();
       this.outputUnsubscribe = undefined;
     }
+    // Unsubscribe from ownership changes
+    if (this.ownershipUnsubscribe) {
+      this.ownershipUnsubscribe();
+      this.ownershipUnsubscribe = undefined;
+    }
+    // Stop sync interval
+    this.stopTerminalSync();
     super.disconnectedCallback();
   }
 
-  private lastCommandTime = 0;
-  private scrollContainer?: HTMLElement;
+  /**
+   * Start periodic sync from terminal to keep lastSentValue in sync
+   * This prevents drift between chat input and terminal state
+   */
+  private startTerminalSync(): void {
+    if (this.syncInterval) return; // Already running
+
+    const SYNC_INTERVAL_MS = 300;
+    const SYNC_DELAY_AFTER_INPUT_MS = 500; // Wait after user stops typing
+
+    this.syncInterval = setInterval(() => {
+      // Only sync if user hasn't typed recently
+      const timeSinceLastInput = Date.now() - this.lastInputTime;
+      if (timeSinceLastInput < SYNC_DELAY_AFTER_INPUT_MS) {
+        return;
+      }
+
+      this.syncLastSentValueFromTerminal();
+    }, SYNC_INTERVAL_MS);
+
+    logger.debug('Terminal sync started');
+  }
+
+  private stopTerminalSync(): void {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = undefined;
+      logger.debug('Terminal sync stopped');
+    }
+  }
+
+  /**
+   * Sync lastSentValue with what's actually in the terminal
+   * This corrects any drift between our tracking and terminal state
+   */
+  private syncLastSentValueFromTerminal(): void {
+    if (!this.getTerminalInputLine) return;
+
+    const terminalInput = this.getTerminalInputLine();
+    if (terminalInput === null || terminalInput === undefined) return;
+
+    // Clean up terminal input (remove TUI artifacts)
+    // biome-ignore lint/complexity/useRegexLiterals: Avoiding control character lint errors
+    const controlCharPattern = new RegExp('[\\x00-\\x1F\\x7F]', 'g');
+    const cleanedInput = terminalInput
+      .replace(controlCharPattern, '')
+      .replace(/[│┃┆┇┊┋|]/g, ' ')
+      .replace(/[─━┄┅┈┉═]/g, '')
+      .replace(/[╭╮╰╯┌┐└┘]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Update lastSentValue if different - this fixes drift
+    if (this.lastSentValue !== cleanedInput) {
+      logger.debug(`Syncing lastSentValue: "${this.lastSentValue}" -> "${cleanedInput}"`);
+      this.lastSentValue = cleanedInput;
+    }
+  }
+
+  private subscribeToOwnership() {
+    if (this.ownershipUnsubscribe) {
+      this.ownershipUnsubscribe();
+    }
+
+    if (!this.sessionId) return;
+
+    this.ownershipUnsubscribe = bufferSubscriptionService.subscribeToOwnership(
+      this.sessionId,
+      (info) => {
+        // Only sync if we haven't typed recently (filter out echo of our own input)
+        const timeSinceLastInput = Date.now() - this.lastInputTime;
+        const isLocallyTyping = timeSinceLastInput < 300; // 300ms debounce
+
+        if (!isLocallyTyping && info.pendingInput !== undefined) {
+          this.remotePendingInput = info.pendingInput;
+          logger.log(`Remote input received: "${info.pendingInput}"`);
+        }
+      }
+    );
+  }
 
   /**
    * Sync input from terminal with retry - gives time for buffer to fully load
@@ -414,12 +509,14 @@ export class TerminalChatView extends LitElement {
 
     if (terminalInput) {
       // Aggressively clean up TUI artifacts and special characters
+      // biome-ignore lint/complexity/useRegexLiterals: Avoiding control character lint errors
+      const ctrlPattern = new RegExp('[\\x00-\\x1F\\x7F]', 'g');
       terminalInput = terminalInput
-        .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
-        .replace(/[│┃┆┇┊┋|]/g, ' ')      // Replace box-drawing pipes with space
-        .replace(/[─━┄┅┈┉═]/g, '')       // Remove horizontal lines
-        .replace(/[╭╮╰╯┌┐└┘]/g, '')      // Remove corners
-        .replace(/\s+/g, ' ')             // Collapse multiple spaces to one
+        .replace(ctrlPattern, '') // Remove control characters
+        .replace(/[│┃┆┇┊┋|]/g, ' ') // Replace box-drawing pipes with space
+        .replace(/[─━┄┅┈┉═]/g, '') // Remove horizontal lines
+        .replace(/[╭╮╰╯┌┐└┘]/g, '') // Remove corners
+        .replace(/\s+/g, ' ') // Collapse multiple spaces to one
         .trim();
 
       if (terminalInput) {
@@ -443,30 +540,68 @@ export class TerminalChatView extends LitElement {
       this.scrollToBottom();
     }
     // Subscribe to output if subscribeToOutput prop was set after connection
-    if (changedProperties.has('subscribeToOutput') && this.subscribeToOutput && !this.outputUnsubscribe) {
+    if (
+      changedProperties.has('subscribeToOutput') &&
+      this.subscribeToOutput &&
+      !this.outputUnsubscribe
+    ) {
       this.outputUnsubscribe = this.subscribeToOutput((data: string) => {
         this.processTerminalOutput(data);
       });
     }
-    // Sync input when becoming active - ALWAYS read from terminal buffer
-    // pendingInput only tracks new input, but terminal buffer has the complete line
+    // Re-subscribe to ownership if sessionId changed
+    if (changedProperties.has('sessionId') && this.sessionId) {
+      this.subscribeToOwnership();
+    }
+
+    // Sync remote pending input to the input field (simple sync without blocking)
+    if (changedProperties.has('remotePendingInput') && this.inputElement) {
+      // Only sync if current value is different (avoid cursor jumps)
+      if (this.inputElement.value !== this.remotePendingInput) {
+        this.inputElement.value = this.remotePendingInput;
+        // Also update lastSentValue so delta calculation stays in sync
+        this.lastSentValue = this.remotePendingInput;
+        logger.debug(`Remote input synced to field: "${this.remotePendingInput}"`);
+      }
+    }
+
+    // Sync input when becoming active
     if (changedProperties.has('active')) {
       if (this.active) {
         // Reset waiting state when entering chat mode
         this.waitingForResponse = false;
 
-        // Clear any stale input
-        if (this.inputElement) {
-          this.inputElement.value = '';
+        // Priority: remotePendingInput > terminal buffer > pendingInput
+        if (this.remotePendingInput) {
+          // Use remote pending input if available (synced from another device)
+          if (this.inputElement) {
+            this.inputElement.value = this.remotePendingInput;
+          }
+          this.lastSentValue = this.remotePendingInput;
+          logger.log(`Chat activated with remote input: "${this.remotePendingInput}"`);
+        } else if (this.getTerminalInputLine) {
+          // Read from terminal buffer - it has the "truth" of what's on screen
+          this.lastSentValue = '';
+          if (this.inputElement) {
+            this.inputElement.value = '';
+          }
+          this.syncFromTerminalWithRetry();
+          this.syncLastSentValueFromTerminal();
+        } else if (this.pendingInput && this.inputElement) {
+          // Fallback to pendingInput
+          this.inputElement.value = this.pendingInput;
+          this.lastSentValue = this.pendingInput;
+        } else {
+          // No input to sync, start fresh
+          this.lastSentValue = '';
+          if (this.inputElement) {
+            this.inputElement.value = '';
+          }
         }
 
-        if (this.getTerminalInputLine) {
-          // Read from terminal buffer - it has the "truth" of what's on screen
-          this.syncFromTerminalWithRetry();
-        } else if (this.pendingInput && this.inputElement) {
-          // Fallback to pendingInput if we can't read from terminal
-          this.inputElement.value = this.pendingInput;
-        }
+        // Start periodic sync to keep lastSentValue in sync with terminal
+        this.startTerminalSync();
+
         // Focus the input field when chat becomes active - with delay to ensure DOM is ready
         setTimeout(() => {
           if (this.inputElement) {
@@ -477,9 +612,12 @@ export class TerminalChatView extends LitElement {
       } else {
         // Reset waiting state when leaving chat mode
         this.waitingForResponse = false;
+        this.lastSentValue = '';
         if (this.inputElement) {
           this.inputElement.value = '';
         }
+        // Stop sync when leaving chat mode
+        this.stopTerminalSync();
       }
     }
     // NOTE: We intentionally do NOT sync pendingInput back to the input element here.
@@ -487,7 +625,6 @@ export class TerminalChatView extends LitElement {
     // Syncing from pendingInput (which comes from terminal) would overwrite
     // accented characters that the terminal might not render correctly.
   }
-
 
   private processTerminalOutput(data: string) {
     // Only process output if we're waiting for a response to a command
@@ -505,7 +642,10 @@ export class TerminalChatView extends LitElement {
     const lines = cleanData.split(/\r?\n/);
 
     // Get the last command sent to filter out its echo
-    const lastCommandMsg = this.messages.slice().reverse().find(m => m.type === 'command');
+    const lastCommandMsg = this.messages
+      .slice()
+      .reverse()
+      .find((m) => m.type === 'command');
     const lastCommand = lastCommandMsg ? lastCommandMsg.content : '';
 
     // Get current input value to filter out live echo
@@ -518,13 +658,14 @@ export class TerminalChatView extends LitElement {
       if (!trimmedLine) continue;
 
       // Filter echo of executed command
-      if (lastCommand && (trimmedLine === lastCommand || trimmedLine.endsWith(lastCommand))) continue;
+      if (lastCommand && (trimmedLine === lastCommand || trimmedLine.endsWith(lastCommand)))
+        continue;
 
       // Filter live echo of current typing
       // We strip common prompt chars and box borders to check if the content matches what we are typing
       const cleanContent = trimmedLine
         .replace(/^[\s│]*[>·$#]\s?/, '') // Remove leading prompt/box
-        .replace(/[│\s]*$/, '');          // Remove trailing box/space
+        .replace(/[│\s]*$/, ''); // Remove trailing box/space
 
       if (currentInput && cleanContent && currentInput.startsWith(cleanContent)) {
         continue;
@@ -554,30 +695,35 @@ export class TerminalChatView extends LitElement {
     if (trimmed.length <= 2 && !trimmed.match(/^[a-zA-Z0-9]$/)) return true;
 
     // Thinking/processing indicators (Gemini, Claude CLI)
-    if (line.includes('Thinking') ||
+    if (
+      line.includes('Thinking') ||
       line.includes('Thought for') ||
       line.includes('ctrl+o to show') ||
       line.match(/^∴/) || // Gemini thinking symbol
       line.match(/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/) || // Braille spinners
       line.includes('Processing') ||
-      line.includes('Generating')) {
+      line.includes('Generating')
+    ) {
       return true;
     }
 
     // Permission dialogs - keep interactive options visible but filter noise
-    if (line.includes('current working directory') ||
+    if (
+      line.includes('current working directory') ||
       line.includes('Shell ') || // Shell command headers
       line.includes('(Cre') || // Truncated "(Create..." etc
       line.includes('(Deleti') || // Truncated "(Deleting..." etc
       line.match(/^[?!]\s+Shell/) || // Permission prompt headers
       line.includes('← │') || // TUI box edges
       line.includes('│ ?') ||
-      line.includes('Waiting for user')) {
+      line.includes('Waiting for user')
+    ) {
       return true;
     }
 
     // Specific Gemini/Claude TUI elements
-    if (line.includes('Gemini CLI update available') ||
+    if (
+      line.includes('Gemini CLI update available') ||
       line.includes('Installed via Homebrew') ||
       line.includes('Using:') || // Gemini "Using: - X GEMINI.md files"
       trimmed === 'Usi' || // Partial "Using:" (streaming)
@@ -589,7 +735,7 @@ export class TerminalChatView extends LitElement {
       line.includes('no sandbox') || // Status bar - filter any line with this
       line.includes('Converting coffee into code') ||
       line.includes('Considering the Greeting') ||
-      line.includes('I\'m Feeling Lucky') ||
+      line.includes("I'm Feeling Lucky") ||
       line.includes('esc to cancel') ||
       line.includes('esc to interrupt') ||
       line.includes('bypass permissions on') ||
@@ -598,7 +744,8 @@ export class TerminalChatView extends LitElement {
       line.includes('Simmering') ||
       line.includes('enable IDE integration') ||
       line.includes('Queued (press') ||
-      line.includes('Tip: Open the Command Palette')) {
+      line.includes('Tip: Open the Command Palette')
+    ) {
       return true;
     }
 
@@ -677,11 +824,19 @@ export class TerminalChatView extends LitElement {
 
   private stripAnsiCodes(str: string): string {
     // Remove ANSI escape codes but preserve the text
+    // biome-ignore lint/complexity/useRegexLiterals: Avoiding control character lint errors
+    const colorCodes = new RegExp('\\x1b\\[[0-9;]*m', 'g');
+    // biome-ignore lint/complexity/useRegexLiterals: Avoiding control character lint errors
+    const escapeSeq = new RegExp('\\x1b\\[.*?[@-~]', 'g');
+    // biome-ignore lint/complexity/useRegexLiterals: Avoiding control character lint errors
+    const oscSeq = new RegExp('\\x1b\\].*?\\x07', 'g');
+    // biome-ignore lint/complexity/useRegexLiterals: Avoiding control character lint errors
+    const otherSeq = new RegExp('\\x1b.*?[\\x40-\\x5a\\x5c\\x5f]', 'g');
     return str
-      .replace(/\x1b\[[0-9;]*m/g, '') // Color codes
-      .replace(/\x1b\[.*?[@-~]/g, '') // Other escape sequences
-      .replace(/\x1b\].*?\x07/g, '') // OSC sequences
-      .replace(/\x1b.*?[\x40-\x5a\x5c\x5f]/g, ''); // Other sequences
+      .replace(colorCodes, '')
+      .replace(escapeSeq, '')
+      .replace(oscSeq, '')
+      .replace(otherSeq, '');
   }
 
   private addMessage(type: ChatMessage['type'], content: string) {
@@ -714,7 +869,7 @@ export class TerminalChatView extends LitElement {
       'traceback',
     ];
     const lowerStr = str.toLowerCase();
-    return errorKeywords.some(keyword => lowerStr.includes(keyword));
+    return errorKeywords.some((keyword) => lowerStr.includes(keyword));
   }
 
   private scrollToBottom() {
@@ -729,7 +884,7 @@ export class TerminalChatView extends LitElement {
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false
+      hour12: false,
     });
   }
 
@@ -740,10 +895,12 @@ export class TerminalChatView extends LitElement {
     //   3. No, suggest changes (esc)
     const geminiPattern = /[●\s]*(\d+)\.\s+(.+?)(?:\s*\.{3}|\s*\(esc\))?$/gm;
     const geminiMatches: string[] = [];
-    let match;
 
-    while ((match = geminiPattern.exec(content)) !== null) {
-      const option = match[2].trim().replace(/\s*\.{3}$/, '').replace(/\s*\(esc\)$/, '');
+    for (const match of content.matchAll(geminiPattern)) {
+      const option = match[2]
+        .trim()
+        .replace(/\s*\.{3}$/, '')
+        .replace(/\s*\(esc\)$/, '');
       geminiMatches.push(option);
     }
 
@@ -757,7 +914,7 @@ export class TerminalChatView extends LitElement {
     const numberedPattern = /^\s*(\d+)\)\s+(.+)$/gm;
     const matches: string[] = [];
 
-    while ((match = numberedPattern.exec(content)) !== null) {
+    for (const match of content.matchAll(numberedPattern)) {
       matches.push(match[2].trim());
     }
 
@@ -771,7 +928,7 @@ export class TerminalChatView extends LitElement {
     const letteredPattern = /^\s*([a-z])\)\s+(.+)$/gm;
     const letterMatches: string[] = [];
 
-    while ((match = letteredPattern.exec(content)) !== null) {
+    for (const match of content.matchAll(letteredPattern)) {
       letterMatches.push(match[2].trim());
     }
 
@@ -785,7 +942,7 @@ export class TerminalChatView extends LitElement {
     const bracketPattern = /^\s*\[(\d+)\]\s+(.+)$/gm;
     const bracketMatches: string[] = [];
 
-    while ((match = bracketPattern.exec(content)) !== null) {
+    for (const match of content.matchAll(bracketPattern)) {
       bracketMatches.push(match[2].trim());
     }
 
@@ -842,10 +999,12 @@ export class TerminalChatView extends LitElement {
       const trimmed = line.trim();
 
       // Skip shell box frames
-      if (trimmed.match(/^[╭╮╰╯│─┌┐└┘├┤┬┴┼]+$/) ||
-          trimmed.match(/^[─━═]+$/) ||
-          trimmed.startsWith('│') ||
-          trimmed.endsWith('│')) {
+      if (
+        trimmed.match(/^[╭╮╰╯│─┌┐└┘├┤┬┴┼]+$/) ||
+        trimmed.match(/^[─━═]+$/) ||
+        trimmed.startsWith('│') ||
+        trimmed.endsWith('│')
+      ) {
         continue;
       }
 
@@ -855,8 +1014,7 @@ export class TerminalChatView extends LitElement {
       }
 
       // Skip lines that look like shell commands
-      if (trimmed.match(/^Shell\s+/) ||
-          trimmed.match(/^(mkdir|rm|mv|cp|cd|ls|cat|echo)\s/)) {
+      if (trimmed.match(/^Shell\s+/) || trimmed.match(/^(mkdir|rm|mv|cp|cd|ls|cat|echo)\s/)) {
         continue;
       }
 
@@ -864,9 +1022,12 @@ export class TerminalChatView extends LitElement {
       if (!trimmed) continue;
 
       // Skip option lines (they'll be rendered as buttons)
-      if (trimmed.match(/^[●○•]\s*\d+\./) || // Gemini option format
-          trimmed.match(/^\d+[.)]\s/) ||      // Numbered options
-          trimmed.match(/^[a-z][.)]\s/i)) {   // Lettered options
+      if (
+        trimmed.match(/^[●○•]\s*\d+\./) || // Gemini option format
+        trimmed.match(/^\d+[.)]\s/) || // Numbered options
+        trimmed.match(/^[a-z][.)]\s/i)
+      ) {
+        // Lettered options
         continue;
       }
 
@@ -924,32 +1085,42 @@ export class TerminalChatView extends LitElement {
           <span class="message-sender">
             ${isCommand ? 'You' : 'System'}
           </span>
-          ${path ? html`
+          ${
+            path
+              ? html`
             <span class="message-separator">•</span>
             <span class="message-path">${path}</span>
-          ` : ''}
+          `
+              : ''
+          }
           <span class="message-separator">•</span>
           <span class="message-time">${this.formatTime(msg.timestamp)}</span>
         </div>
         <div class="message-bubble ${msg.type}">
           <pre class="message-content">${messageContent}</pre>
-          ${options ? html`
+          ${
+            options
+              ? html`
             <div class="interactive-options">
-              ${options.map((option, index) => html`
+              ${options.map(
+                (option, index) => html`
                 <button
                   class="option-button"
                   @click=${() => this.handleOptionClick(option, index)}
                   @touchend=${(e: TouchEvent) => {
-        e.preventDefault();
-        this.handleOptionClick(option, index);
-      }}
+                    e.preventDefault();
+                    this.handleOptionClick(option, index);
+                  }}
                 >
                   <span class="option-number">${index + 1}</span>
                   <span class="option-text">${option}</span>
                 </button>
-              `)}
+              `
+              )}
             </div>
-          ` : ''}
+          `
+              : ''
+          }
         </div>
       </div>
     `;
@@ -975,8 +1146,9 @@ export class TerminalChatView extends LitElement {
     return html`
       <div class="chat-view-container" @click=${this.handleContainerClick}>
         <div class="chat-messages-container">
-          ${this.messages.length === 0
-        ? html`
+          ${
+            this.messages.length === 0
+              ? html`
                 <div class="empty-state">
                   <div class="empty-state-icon">💬</div>
                   <div class="empty-state-title">Chat Mode Active</div>
@@ -986,7 +1158,8 @@ export class TerminalChatView extends LitElement {
                   </div>
                 </div>
               `
-        : this.messages.map(msg => this.renderMessage(msg))}
+              : this.messages.map((msg) => this.renderMessage(msg))
+          }
         </div>
         
         <!-- Chat input area (WhatsApp style) -->
@@ -1045,12 +1218,14 @@ export class TerminalChatView extends LitElement {
     this.inputElement.blur();
   }
 
-  private inputDebounceTimer?: ReturnType<typeof setTimeout>;
   private lastSentValue = '';
 
   private handleInput(e: Event) {
     const input = e.target as HTMLInputElement;
     if (!this.onSend) return;
+
+    // Track when user last typed - used to pause sync during active typing
+    this.lastInputTime = Date.now();
 
     // Stop waiting for response when user starts typing a new command
     this.waitingForResponse = false;
@@ -1060,19 +1235,53 @@ export class TerminalChatView extends LitElement {
     // Update pending input for InputManager (for display sync)
     this.onPendingInputChange?.(newValue);
 
-    // Debounce the actual send to terminal to avoid overwhelming it
-    if (this.inputDebounceTimer) {
-      clearTimeout(this.inputDebounceTimer);
+    // Broadcast pending input to other connected windows
+    if (this.sessionId) {
+      logger.log(`Sending pending input: "${newValue}" for session ${this.sessionId}`);
+      bufferSubscriptionService.sendPendingInput(this.sessionId, newValue);
     }
 
-    this.inputDebounceTimer = setTimeout(() => {
-      // Only send if value changed since last send
-      if (newValue !== this.lastSentValue) {
-        // Clear line (Ctrl+U) and resend everything
-        this.onSend?.('\x15' + newValue);
-        this.lastSentValue = newValue;
-      }
-    }, 100);
+    // Send delta to terminal (only the difference from what we already sent)
+    this.sendDeltaToTerminal(newValue);
+  }
+
+  private sendDeltaToTerminal(newValue: string) {
+    if (!this.onSend) return;
+
+    const oldValue = this.lastSentValue;
+
+    // Find common prefix length
+    let commonLen = 0;
+    while (
+      commonLen < oldValue.length &&
+      commonLen < newValue.length &&
+      oldValue[commonLen] === newValue[commonLen]
+    ) {
+      commonLen++;
+    }
+
+    // Calculate how many characters to delete (backspaces needed)
+    const charsToDelete = oldValue.length - commonLen;
+
+    // Characters to add after the common prefix
+    const charsToAdd = newValue.slice(commonLen);
+
+    // Build the sequence: backspaces + new characters
+    let sequence = '';
+
+    // Send backspaces for deleted characters
+    for (let i = 0; i < charsToDelete; i++) {
+      sequence += '\x7f'; // DEL character (backspace)
+    }
+
+    // Send new characters
+    sequence += charsToAdd;
+
+    if (sequence) {
+      this.onSend(sequence);
+    }
+
+    this.lastSentValue = newValue;
   }
 
   private handleSend() {
@@ -1083,19 +1292,12 @@ export class TerminalChatView extends LitElement {
     const command = input.value.trim();
     if (!command) return;
 
-    // Cancel any pending debounced input
-    if (this.inputDebounceTimer) {
-      clearTimeout(this.inputDebounceTimer);
-      this.inputDebounceTimer = undefined;
-    }
-
     // Add command to chat
     this.addMessage('command', command);
 
-    // Send the complete command + Enter to terminal
-    // Clear line first (Ctrl+U) to ensure clean state, then send command + Enter
+    // Send Enter to execute the command (characters were already sent via delta)
     if (this.onSend) {
-      this.onSend('\x15' + command + '\r');
+      this.onSend('\r');
     }
 
     // Start waiting for response
@@ -1107,6 +1309,11 @@ export class TerminalChatView extends LitElement {
 
     // Clear pending input in InputManager
     this.onPendingInputChange?.('');
+
+    // Clear pending input broadcast
+    if (this.sessionId) {
+      bufferSubscriptionService.sendPendingInput(this.sessionId, '');
+    }
 
     // Scroll to show the sent message
     this.scrollToBottom();

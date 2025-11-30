@@ -392,7 +392,7 @@ export class PtyManager extends EventEmitter {
 
           logger.debug(
             `Updated lastClearOffset for session ${sessionId} to exact position ${position} ` +
-            `after detecting pruning sequence '${sequence.split('\x1b').join('\\x1b')}'`
+              `after detecting pruning sequence '${sequence.split('\x1b').join('\\x1b')}'`
           );
         }
       });
@@ -494,11 +494,11 @@ export class PtyManager extends EventEmitter {
         const errorDetails =
           spawnError instanceof Error
             ? {
-              ...spawnError,
-              message: spawnError.message,
-              stack: spawnError.stack,
-              code: (spawnError as NodeJS.ErrnoException).code,
-            }
+                ...spawnError,
+                message: spawnError.message,
+                stack: spawnError.stack,
+                code: (spawnError as NodeJS.ErrnoException).code,
+              }
             : spawnError;
         logger.error(`Failed to spawn PTY for command '${command.join(' ')}':`, errorDetails);
         throw new PtyError(errorMessage, 'SPAWN_FAILED');
@@ -689,8 +689,8 @@ export class PtyManager extends EventEmitter {
 
             logger.debug(
               `Activity state changed for session ${session.id}: ` +
-              `active=${activityState.isActive}, ` +
-              `status=${activityState.specificStatus?.status || 'none'}`
+                `active=${activityState.isActive}, ` +
+                `status=${activityState.specificStatus?.status || 'none'}`
             );
 
             // Send notification when activity becomes inactive (Claude's turn)

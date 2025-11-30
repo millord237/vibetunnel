@@ -172,8 +172,9 @@ export class SessionHeader extends LitElement {
       >
         <div class="flex items-center gap-3 min-w-0 flex-1 overflow-hidden flex-shrink">
           <!-- Sidebar Toggle (when sidebar is collapsed) - visible on all screen sizes -->
-          ${this.showSidebarToggle && this.sidebarCollapsed
-        ? html`
+          ${
+            this.showSidebarToggle && this.sidebarCollapsed
+              ? html`
                 <button
                   class="bg-bg-tertiary border border-border rounded-md p-2 text-primary transition-all duration-200 hover:bg-surface-hover hover:border-primary flex-shrink-0"
                   @click=${() => this.onSidebarToggle?.()}
@@ -192,8 +193,8 @@ export class SessionHeader extends LitElement {
                 <button
                   class="hidden sm:flex bg-bg-tertiary border border-border text-primary rounded-md p-2 transition-all duration-200 hover:bg-surface-hover hover:border-primary flex-shrink-0"
                   @click=${() => {
-            window.location.href = '/';
-          }}
+                    window.location.href = '/';
+                  }}
                   title="Go to root"
                   data-testid="go-to-root-button"
                 >
@@ -218,19 +219,21 @@ export class SessionHeader extends LitElement {
                   </svg>
                 </button>
               `
-        : ''
-      }
+              : ''
+          }
           
           <!-- Status dot - visible on mobile, after sidebar toggle -->
           <div class="sm:hidden relative flex-shrink-0">
             <div class="w-2.5 h-2.5 rounded-full ${this.getStatusDotColor()}"></div>
-            ${this.getStatusText() === 'running'
-        ? html`<div class="absolute inset-0 w-2.5 h-2.5 rounded-full bg-status-success animate-ping opacity-50"></div>`
-        : ''
-      }
+            ${
+              this.getStatusText() === 'running'
+                ? html`<div class="absolute inset-0 w-2.5 h-2.5 rounded-full bg-status-success animate-ping opacity-50"></div>`
+                : ''
+            }
           </div>
-          ${this.showBackButton
-        ? html`
+          ${
+            this.showBackButton
+              ? html`
                 <button
                   class="bg-bg-tertiary border border-border rounded-md px-3 py-1.5 font-mono text-xs text-primary transition-all duration-200 hover:bg-surface-hover hover:border-primary flex-shrink-0"
                   @click=${() => this.onBack?.()}
@@ -238,32 +241,35 @@ export class SessionHeader extends LitElement {
                   Back
                 </button>
               `
-        : ''
-      }
+              : ''
+          }
           <div class="text-primary min-w-0 flex-1 overflow-hidden">
             <div class="text-bright font-medium text-xs sm:text-sm min-w-0 overflow-hidden">
               <div class="flex items-center gap-1 min-w-0 overflow-hidden" @mouseenter=${this.handleMouseEnter} @mouseleave=${this.handleMouseLeave}>
                 <inline-edit
                   class="min-w-0 overflow-hidden block max-w-xs sm:max-w-md"
-                  .value=${this.session.name ||
-      (Array.isArray(this.session.command)
-        ? this.session.command.join(' ')
-        : this.session.command)
-      }
-                  .placeholder=${Array.isArray(this.session.command)
-        ? this.session.command.join(' ')
-        : this.session.command
-      }
+                  .value=${
+                    this.session.name ||
+                    (Array.isArray(this.session.command)
+                      ? this.session.command.join(' ')
+                      : this.session.command)
+                  }
+                  .placeholder=${
+                    Array.isArray(this.session.command)
+                      ? this.session.command.join(' ')
+                      : this.session.command
+                  }
                   .onSave=${(newName: string) => this.handleRename(newName)}
                 ></inline-edit>
-                ${isAIAssistantSession(this.session)
-        ? html`
+                ${
+                  isAIAssistantSession(this.session)
+                    ? html`
                       <button
                         class="bg-transparent border-0 p-0 cursor-pointer transition-opacity duration-200 text-primary magic-button flex-shrink-0 ${this.isHovered ? 'opacity-50 hover:opacity-100' : 'opacity-0'} ml-1"
                         @click=${(e: Event) => {
-            e.stopPropagation();
-            this.handleMagicButton();
-          }}
+                          e.stopPropagation();
+                          this.handleMagicButton();
+                        }}
                         title="Send prompt to update terminal title"
                       >
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -293,8 +299,8 @@ export class SessionHeader extends LitElement {
                         }
                       </style>
                     `
-        : ''
-      }
+                    : ''
+                }
               </div>
             </div>
             <div class="text-xs opacity-75 mt-0.5 flex items-center gap-2 min-w-0">
@@ -303,16 +309,17 @@ export class SessionHeader extends LitElement {
                 .path=${this.session.workingDir} 
                 .iconSize=${12}
               ></clickable-path>
-              ${this.session.gitRepoPath
-        ? html`
+              ${
+                this.session.gitRepoPath
+                  ? html`
                     <git-status-badge
                       class="flex-shrink-0"
                       .session=${this.session}
                       .detailed=${false}
                     ></git-status-badge>
                   `
-        : ''
-      }
+                  : ''
+              }
             </div>
           </div>
         </div>
@@ -322,19 +329,20 @@ export class SessionHeader extends LitElement {
             .active=${this.keyboardCaptureActive}
             .isMobile=${this.isMobile}
             @capture-toggled=${(e: CustomEvent) => {
-        this.dispatchEvent(
-          new CustomEvent('capture-toggled', {
-            detail: e.detail,
-            bubbles: true,
-            composed: true,
-          })
-        );
-      }}
+              this.dispatchEvent(
+                new CustomEvent('capture-toggled', {
+                  detail: e.detail,
+                  bubbles: true,
+                  composed: true,
+                })
+              );
+            }}
           ></keyboard-capture-indicator>
           
           <!-- Responsive button container -->
-          ${this.useCompactMenu || this.isMobile
-        ? html`
+          ${
+            this.useCompactMenu || this.isMobile
+              ? html`
               <!-- Compact menu for tight spaces or mobile -->
               <div class="flex items-center gap-2 flex-shrink-0">
                 <!-- Chat mode toggle button (always visible outside menu) -->
@@ -367,17 +375,18 @@ export class SessionHeader extends LitElement {
                   .chatMode=${this.chatMode}
                   .onToggleChatMode=${this.onToggleChatMode}
                   @theme-changed=${(e: CustomEvent) => {
-            this.currentTheme = e.detail.theme;
-          }}
+                    this.currentTheme = e.detail.theme;
+                  }}
                 ></compact-menu>
               </div>
             `
-        : html`
+              : html`
               <!-- Individual buttons for larger screens -->
               <div class="flex items-center gap-2">
                 <!-- Git worktree toggle button (visible when session has Git repo) -->
-                ${this.hasGitRepo
-            ? html`
+                ${
+                  this.hasGitRepo
+                    ? html`
                       <button
                         class="bg-bg-tertiary border border-border rounded-md p-2 text-primary transition-all duration-200 hover:bg-surface-hover hover:border-primary flex-shrink-0"
                         @click=${() => this.onToggleViewMode?.()}
@@ -389,8 +398,8 @@ export class SessionHeader extends LitElement {
                         </svg>
                   </button>
                     `
-            : ''
-          }
+                    : ''
+                }
 
                 <!-- Chat mode toggle button -->
                 <button
@@ -424,8 +433,8 @@ export class SessionHeader extends LitElement {
                 <theme-toggle-icon
                   .theme=${this.currentTheme}
                   @theme-changed=${(e: CustomEvent) => {
-            this.currentTheme = e.detail.theme;
-          }}
+                    this.currentTheme = e.detail.theme;
+                  }}
                 ></theme-toggle-icon>
                 
                 <!-- Settings button -->
@@ -444,7 +453,7 @@ export class SessionHeader extends LitElement {
                 </button>
               </div>
             `
-      }
+          }
         </div>
       </div>
     `;

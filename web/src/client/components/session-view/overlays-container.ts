@@ -134,7 +134,10 @@ export class OverlaysContainer extends LitElement {
       
       <!-- Floating Keyboard Button (for direct keyboard mode on mobile, hidden in chat mode) -->
       ${
-        this.uiState.isMobile && this.uiState.useDirectKeyboard && !this.uiState.showQuickKeys && !this.uiState.chatMode
+        this.uiState.isMobile &&
+        this.uiState.useDirectKeyboard &&
+        !this.uiState.showQuickKeys &&
+        !this.uiState.chatMode
           ? html`
             <div
               class="keyboard-button"

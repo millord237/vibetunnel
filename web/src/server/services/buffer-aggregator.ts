@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { WebSocket } from 'ws';
 import { createLogger } from '../utils/logger.js';
+import type { InputOwnershipService } from './input-ownership.js';
 import type { RemoteRegistry } from './remote-registry.js';
 import type { TerminalManager } from './terminal-manager.js';
 
@@ -10,6 +11,7 @@ interface BufferAggregatorConfig {
   terminalManager: TerminalManager;
   remoteRegistry: RemoteRegistry | null;
   isHQMode: boolean;
+  inputOwnershipService: InputOwnershipService;
 }
 
 interface RemoteWebSocketConnection {
@@ -75,10 +77,51 @@ export class BufferAggregator {
   private config: BufferAggregatorConfig;
   private remoteConnections: Map<string, RemoteWebSocketConnection> = new Map();
   private clientSubscriptions: Map<WebSocket, Map<string, () => void>> = new Map();
+  private clientIds: Map<WebSocket, string> = new Map();
+  private ownershipUnsubscribe?: () => void;
 
   constructor(config: BufferAggregatorConfig) {
     this.config = config;
     logger.log(`BufferAggregator initialized (HQ mode: ${config.isHQMode})`);
+
+    // Subscribe to ownership changes and notify clients
+    this.ownershipUnsubscribe = config.inputOwnershipService.onOwnershipChange(
+      (sessionId, newOwner, previousOwner, pendingInput) => {
+        this.notifyOwnershipChange(sessionId, newOwner, previousOwner, pendingInput);
+      }
+    );
+  }
+
+  /**
+   * Notify all clients subscribed to a session about ownership change
+   * Include the ownerClientId so clients can filter out their own messages
+   */
+  private notifyOwnershipChange(
+    sessionId: string,
+    newOwner: string | null,
+    previousOwner: string | null,
+    pendingInput: string
+  ): void {
+    const message = JSON.stringify({
+      type: 'ownership_change',
+      sessionId,
+      owner: newOwner,
+      previousOwner,
+      pendingInput,
+    });
+
+    for (const [clientWs, subscriptions] of this.clientSubscriptions) {
+      if (subscriptions.has(sessionId) && clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(message);
+      }
+    }
+  }
+
+  /**
+   * Get client ID for a WebSocket connection
+   */
+  private getClientId(ws: WebSocket): string {
+    return this.clientIds.get(ws) || 'unknown';
   }
 
   /**
@@ -86,15 +129,18 @@ export class BufferAggregator {
    */
   async handleClientConnection(ws: WebSocket): Promise<void> {
     logger.log(chalk.blue('New client connected'));
-    const clientId = `client-${Date.now()}`;
+    const clientId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     logger.debug(`Assigned client ID: ${clientId}`);
+
+    // Store client ID for this connection
+    this.clientIds.set(ws, clientId);
 
     // Initialize subscription map for this client
     this.clientSubscriptions.set(ws, new Map());
 
-    // Send welcome message
-    ws.send(JSON.stringify({ type: 'connected', version: '1.0' }));
-    logger.debug('Sent welcome message to client');
+    // Send welcome message with client's assigned ID
+    ws.send(JSON.stringify({ type: 'connected', version: '1.0', clientId }));
+    logger.debug(`Sent welcome message to client ${clientId}`);
 
     // Handle messages from client
     ws.on('message', async (message: Buffer) => {
@@ -127,10 +173,21 @@ export class BufferAggregator {
    */
   private async handleClientMessage(
     clientWs: WebSocket,
-    data: { type: string; sessionId?: string }
+    data: { type: string; sessionId?: string; pendingInput?: string }
   ): Promise<void> {
     const subscriptions = this.clientSubscriptions.get(clientWs);
     if (!subscriptions) return;
+
+    if (data.type === 'pending_input' && data.sessionId && data.pendingInput !== undefined) {
+      // Client is sending pending input - update ownership service which will broadcast
+      const clientId = this.getClientId(clientWs);
+      this.config.inputOwnershipService.updatePendingInput(
+        data.sessionId,
+        clientId,
+        data.pendingInput
+      );
+      return;
+    }
 
     if (data.type === 'subscribe' && data.sessionId) {
       const sessionId = data.sessionId;
@@ -444,6 +501,7 @@ export class BufferAggregator {
    * Handle client disconnection
    */
   private handleClientDisconnect(ws: WebSocket): void {
+    const clientId = this.getClientId(ws);
     const subscriptions = this.clientSubscriptions.get(ws);
     if (subscriptions) {
       const subscriptionCount = subscriptions.size;
@@ -456,6 +514,11 @@ export class BufferAggregator {
       logger.debug(`Cleaned up ${subscriptionCount} subscriptions`);
     }
     this.clientSubscriptions.delete(ws);
+    this.clientIds.delete(ws);
+
+    // Release any ownership this client had
+    this.config.inputOwnershipService.releaseAllForClient(clientId);
+
     logger.log(chalk.yellow('Client disconnected'));
   }
 
@@ -493,6 +556,12 @@ export class BufferAggregator {
    */
   destroy(): void {
     logger.log(chalk.yellow('Shutting down BufferAggregator'));
+
+    // Unsubscribe from ownership changes
+    if (this.ownershipUnsubscribe) {
+      this.ownershipUnsubscribe();
+      this.ownershipUnsubscribe = undefined;
+    }
 
     // Close all client connections
     const clientCount = this.clientSubscriptions.size;

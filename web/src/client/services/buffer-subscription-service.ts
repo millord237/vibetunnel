@@ -92,6 +92,21 @@ interface BufferSnapshot {
  */
 type BufferUpdateHandler = (snapshot: BufferSnapshot) => void;
 
+/**
+ * Ownership change information
+ */
+interface OwnershipInfo {
+  sessionId: string;
+  owner: string | null;
+  previousOwner: string | null;
+  pendingInput: string;
+}
+
+/**
+ * Callback function for ownership changes
+ */
+type OwnershipChangeHandler = (info: OwnershipInfo) => void;
+
 // Magic byte for binary messages - identifies buffer update packets
 const BUFFER_MAGIC_BYTE = 0xbf;
 
@@ -112,6 +127,8 @@ const BUFFER_MAGIC_BYTE = 0xbf;
 export class BufferSubscriptionService {
   private ws: WebSocket | null = null;
   private subscriptions = new Map<string, Set<BufferUpdateHandler>>();
+  private ownershipHandlers = new Map<string, Set<OwnershipChangeHandler>>();
+  private sessionOwnership = new Map<string, string | null>();
   private reconnectAttempts = 0;
   private reconnectTimer: number | null = null;
   private pingInterval: number | null = null;
@@ -120,6 +137,7 @@ export class BufferSubscriptionService {
 
   private initialized = false;
   private noAuthMode: boolean | null = null;
+  private myClientId: string | null = null;
 
   // biome-ignore lint/complexity/noUselessConstructor: This constructor documents the intentional design decision to not auto-connect
   constructor() {
@@ -298,7 +316,7 @@ export class BufferSubscriptionService {
     }
   }
 
-  private sendMessage(message: { type: string; sessionId?: string }) {
+  private sendMessage(message: { type: string; sessionId?: string; pendingInput?: string }) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       // Queue message for when we reconnect
       if (message.type === 'subscribe' || message.type === 'unsubscribe') {
@@ -325,8 +343,9 @@ export class BufferSubscriptionService {
 
       switch (message.type) {
         case 'connected':
-          // Server confirmed connection, version info available in message.version
-          logger.log(`connected to server, version: ${message.version}`);
+          // Server confirmed connection, store our clientId for filtering
+          this.myClientId = message.clientId || null;
+          logger.log(`connected to server, version: ${message.version}, clientId: ${this.myClientId}`);
           break;
 
         case 'subscribed':
@@ -342,11 +361,52 @@ export class BufferSubscriptionService {
           logger.error(`server error: ${message.message}`);
           break;
 
+        case 'ownership_change':
+          // Another client took or released ownership of a session
+          this.handleOwnershipChange(message);
+          break;
+
         default:
           logger.warn(`unknown message type: ${message.type}`);
       }
     } catch (error) {
       logger.error('failed to parse JSON message', error);
+    }
+  }
+
+  private handleOwnershipChange(message: {
+    sessionId: string;
+    owner: string | null;
+    previousOwner: string | null;
+    pendingInput?: string;
+  }) {
+    const { sessionId, owner, previousOwner, pendingInput = '' } = message;
+
+    // Skip our own ownership changes - we don't need to sync with ourselves
+    // This prevents flickering when typing (receiving echo of our own input)
+    if (owner && this.myClientId && owner === this.myClientId) {
+      logger.debug(`Skipping own ownership change for ${sessionId}`);
+      return;
+    }
+
+    // Update local ownership state
+    this.sessionOwnership.set(sessionId, owner);
+
+    logger.debug(
+      `Ownership change for ${sessionId}: ${previousOwner || 'none'} -> ${owner || 'none'}, input: "${pendingInput}"`
+    );
+
+    // Notify all handlers for this session
+    const handlers = this.ownershipHandlers.get(sessionId);
+    if (handlers) {
+      const info: OwnershipInfo = { sessionId, owner, previousOwner, pendingInput };
+      handlers.forEach((handler) => {
+        try {
+          handler(info);
+        } catch (error) {
+          logger.error('error in ownership handler', error);
+        }
+      });
     }
   }
 
@@ -497,6 +557,89 @@ export class BufferSubscriptionService {
   }
 
   /**
+   * Subscribe to ownership changes for a session
+   *
+   * NOTE: This also ensures the client has a buffer subscription on the server,
+   * because ownership_change broadcasts are only sent to clients with active
+   * buffer subscriptions for that sessionId.
+   *
+   * @param sessionId - Session to watch for ownership changes
+   * @param handler - Callback when ownership changes
+   * @returns Unsubscribe function
+   */
+  subscribeToOwnership(sessionId: string, handler: OwnershipChangeHandler): () => void {
+    // Ensure service is initialized
+    if (!this.initialized) {
+      this.initialize();
+    }
+
+    // IMPORTANT: We must also subscribe to buffers on the server so we receive ownership_change broadcasts.
+    // The server only sends ownership_change to clients that have subscriptions.has(sessionId).
+    // Track whether we created the subscription (for cleanup)
+    const createdSubscription = !this.subscriptions.has(sessionId);
+    if (createdSubscription) {
+      // Subscribe to buffers with empty handlers - this ensures we're registered on the server
+      this.subscriptions.set(sessionId, new Set());
+      this.sendMessage({ type: 'subscribe', sessionId });
+      logger.log(`Subscribed to session ${sessionId} buffers for ownership tracking`);
+    }
+
+    if (!this.ownershipHandlers.has(sessionId)) {
+      this.ownershipHandlers.set(sessionId, new Set());
+    }
+
+    const handlers = this.ownershipHandlers.get(sessionId);
+    if (handlers) {
+      handlers.add(handler);
+    }
+
+    return () => {
+      const handlers = this.ownershipHandlers.get(sessionId);
+      if (handlers) {
+        handlers.delete(handler);
+        if (handlers.size === 0) {
+          this.ownershipHandlers.delete(sessionId);
+          // If we created the buffer subscription and there are no buffer handlers,
+          // clean it up
+          const bufferHandlers = this.subscriptions.get(sessionId);
+          if (createdSubscription && bufferHandlers && bufferHandlers.size === 0) {
+            this.subscriptions.delete(sessionId);
+            this.sendMessage({ type: 'unsubscribe', sessionId });
+            logger.log(`Unsubscribed from session ${sessionId} buffers (ownership tracking ended)`);
+          }
+        }
+      }
+    };
+  }
+
+  /**
+   * Get current owner of a session
+   *
+   * @param sessionId - Session to check
+   * @returns Current owner client ID or null if no owner
+   */
+  getSessionOwner(sessionId: string): string | null {
+    return this.sessionOwnership.get(sessionId) ?? null;
+  }
+
+  /**
+   * Send pending input update to the server
+   *
+   * This broadcasts the current input text to all other connected clients
+   * viewing the same session, enabling real-time input streaming.
+   *
+   * @param sessionId - Session the input is for
+   * @param pendingInput - Current text in the input field
+   */
+  sendPendingInput(sessionId: string, pendingInput: string): void {
+    const wsState = this.ws ? this.ws.readyState : 'no ws';
+    logger.log(
+      `sendPendingInput: "${pendingInput}" for ${sessionId}, ws state: ${wsState === WebSocket.OPEN ? 'OPEN' : wsState}`
+    );
+    this.sendMessage({ type: 'pending_input', sessionId, pendingInput });
+  }
+
+  /**
    * Clean up and close connection
    *
    * Gracefully shuts down the WebSocket connection and cleans up all resources.
@@ -533,6 +676,8 @@ export class BufferSubscriptionService {
     }
 
     this.subscriptions.clear();
+    this.ownershipHandlers.clear();
+    this.sessionOwnership.clear();
     this.messageQueue = [];
   }
 }

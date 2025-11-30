@@ -296,8 +296,9 @@ export class CompactMenu extends LitElement {
         </button>
         
         <!-- Git Worktree Toggle (only for git repos) -->
-        ${this.hasGitRepo
-        ? html`
+        ${
+          this.hasGitRepo
+            ? html`
               <button
                 class="w-full text-left px-4 py-3 text-sm font-mono text-primary hover:bg-surface-hover hover:text-primary flex items-center gap-3 ${this.focusedIndex === menuItemIndex++ ? 'bg-surface-hover text-primary' : ''}"
                 @click=${() => this.handleAction(this.onToggleViewMode)}
@@ -310,8 +311,8 @@ export class CompactMenu extends LitElement {
                 ${this.viewMode === 'terminal' ? 'Show Worktrees' : 'Show Terminal'}
               </button>
             `
-        : nothing
-      }
+            : nothing
+        }
         
         <!-- Chat Mode Toggle -->
         <button
@@ -350,13 +351,15 @@ export class CompactMenu extends LitElement {
           Settings
         </button>
         
-        ${this.session
-        ? html`
+        ${
+          this.session
+            ? html`
           <div class="border-t border-border my-1"></div>
           
           <!-- Session Actions -->
-          ${this.session.status === 'running'
-            ? html`
+          ${
+            this.session.status === 'running'
+              ? html`
             <button
               class="w-full text-left px-4 py-3 text-sm font-mono text-status-error hover:bg-surface-hover flex items-center gap-3 ${this.focusedIndex === menuItemIndex++ ? 'bg-surface-hover' : ''}"
               @click=${() => this.handleAction(this.onTerminateSession)}
@@ -369,7 +372,7 @@ export class CompactMenu extends LitElement {
               Terminate Session
             </button>
           `
-            : html`
+              : html`
             <button
               class="w-full text-left px-4 py-3 text-sm font-mono text-text-muted hover:bg-surface-hover hover:text-primary flex items-center gap-3 ${this.focusedIndex === menuItemIndex++ ? 'bg-surface-hover text-primary' : ''}"
               @click=${() => this.handleAction(this.onClearSession)}
@@ -385,8 +388,8 @@ export class CompactMenu extends LitElement {
           `
           }
         `
-        : nothing
-      }
+            : nothing
+        }
       </div>
     `;
   }
