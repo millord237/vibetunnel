@@ -342,10 +342,7 @@ export class TerminalQuickKeys extends LitElement {
         
         /* Quick keys container - fixed above keyboard */
         .terminal-quick-keys-container {
-          position: fixed;
-          bottom: 0;
-          left: 0;
-          right: 0;
+          /* position, bottom, left, right are set inline with !important */
           z-index: ${Z_INDEX.TERMINAL_QUICK_KEYS};
           background-color: rgb(var(--color-bg-secondary) / 0.98);
           backdrop-filter: blur(20px);
@@ -362,6 +359,7 @@ export class TerminalQuickKeys extends LitElement {
           -webkit-overflow-scrolling: auto;
           /* Allow touch events to pass through for scrolling terminal content */
           pointer-events: none;
+          /* NO transform, will-change, or contain properties that break position:fixed */
         }
         
         /* The actual bar with buttons */
@@ -526,6 +524,7 @@ export class TerminalQuickKeys extends LitElement {
     return html`
       <div
         class="terminal-quick-keys-container"
+        style="position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important;"
       >
         <div class="quick-keys-bar">
           <!-- Row 1 -->
