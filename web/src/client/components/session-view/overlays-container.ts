@@ -71,9 +71,8 @@ export class OverlaysContainer extends LitElement {
 
     return html`
       <!-- Floating Session Exited Banner -->
-      ${
-        this.session?.status === 'exited'
-          ? html`
+      ${this.session?.status === 'exited'
+        ? html`
             <div
               class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
               style="z-index: ${Z_INDEX.SESSION_EXITED_OVERLAY}; pointer-events: none !important;"
@@ -89,7 +88,7 @@ export class OverlaysContainer extends LitElement {
               </div>
             </div>
           `
-          : ''
+        : ''
       }
       
       <!-- Mobile Input Overlay -->
@@ -133,32 +132,25 @@ export class OverlaysContainer extends LitElement {
       })()}
       
       <!-- Floating Keyboard Button (for direct keyboard mode on mobile, hidden in chat mode) -->
-      ${
-        this.uiState.isMobile &&
-        this.uiState.useDirectKeyboard &&
-        !this.uiState.showQuickKeys &&
-        !this.uiState.chatMode
-          ? html`
+      <!-- Always visible when in direct keyboard mode to allow dismissing the keyboard -->
+      ${this.uiState.isMobile && this.uiState.useDirectKeyboard && !this.uiState.chatMode
+        ? html`
             <div
-              class="keyboard-button"
+              class="keyboard-button ${this.uiState.showQuickKeys ? 'quick-keys-visible' : ''}"
               @pointerdown=${(e: PointerEvent) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.callbacks?.onKeyboardButtonClick();
-              }}
-              title="Show keyboard"
+            e.preventDefault();
+            e.stopPropagation();
+            this.callbacks?.onKeyboardButtonClick();
+          }}
+              title="${this.uiState.showQuickKeys ? 'Hide keyboard' : 'Show keyboard'}"
             >
               ⌨
             </div>
           `
-          : ''
+        : ''
       }
 
-      <!-- Terminal Quick Keys (for direct keyboard mode, hidden in chat mode) -->
-      <terminal-quick-keys
-        .visible=${this.uiState.isMobile && this.uiState.useDirectKeyboard && this.uiState.showQuickKeys && !this.uiState.chatMode}
-        .onKeyPress=${this.callbacks.onQuickKeyPress}
-      ></terminal-quick-keys>
+      <!-- Terminal Quick Keys moved to main session view grid -->
       
       <!-- File Browser Modal -->
       <file-browser
@@ -192,9 +184,8 @@ export class OverlaysContainer extends LitElement {
       ></terminal-settings-modal>
       
       <!-- Drag & Drop Overlay -->
-      ${
-        this.uiState.isDragOver
-          ? html`
+      ${this.uiState.isDragOver
+        ? html`
             <div class="fixed inset-0 bg-bg/90 backdrop-blur-sm flex items-center justify-center z-50 pointer-events-none animate-fade-in">
               <div class="bg-elevated border-2 border-dashed border-primary rounded-xl p-10 text-center max-w-md mx-4 shadow-2xl animate-scale-in">
                 <div class="relative mb-6">
@@ -215,7 +206,7 @@ export class OverlaysContainer extends LitElement {
               </div>
             </div>
           `
-          : ''
+        : ''
       }
     `;
   }

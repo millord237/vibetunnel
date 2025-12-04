@@ -58,6 +58,37 @@ export class LifecycleEventManager extends ManagerEventEmitter {
   constructor() {
     super();
     logger.log('LifecycleEventManager initialized');
+    // Initialize visualViewport height tracking for iOS Safari
+    this.setupVisualViewportTracking();
+  }
+
+  /**
+   * Setup visualViewport tracking to fix iOS Safari issues with fixed elements and keyboard
+   * Based on: https://stackoverflow.com/questions/56351216/ios-safari-unwanted-scroll-when-keyboard-is-opened
+   */
+  private setupVisualViewportTracking(): void {
+    const setAppHeight = () => {
+      const height = window.visualViewport
+        ? `${window.visualViewport.height}px`
+        : `${window.innerHeight}px`;
+
+      document.documentElement.style.setProperty('--app-height', height);
+      logger.debug(`App height updated to: ${height}`);
+    };
+
+    // Set initial height
+    setAppHeight();
+
+    // Listen to visualViewport changes (iOS Safari)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', setAppHeight);
+      window.visualViewport.addEventListener('scroll', setAppHeight);
+      logger.log('VisualViewport tracking enabled for iOS Safari');
+    } else {
+      // Fallback for non-supporting browsers
+      window.addEventListener('resize', setAppHeight);
+      logger.log('Using fallback window resize for viewport tracking');
+    }
   }
 
   setSessionViewElement(element: HTMLElement): void {
@@ -428,10 +459,13 @@ export class LifecycleEventManager extends ManagerEventEmitter {
         // Set CSS custom property for keyboard height
         document.documentElement.style.setProperty('--keyboard-height', `${keyboardHeight}px`);
 
-        // Add data attribute to body for CSS targeting
+        // Add data attribute to html and body for CSS targeting
+        // Height is handled by visualViewport tracking in setupVisualViewportTracking()
         if (keyboardHeight > KEYBOARD_VISIBLE_THRESHOLD) {
+          document.documentElement.setAttribute('data-keyboard-visible', 'true');
           document.body.setAttribute('data-keyboard-visible', 'true');
         } else {
+          document.documentElement.setAttribute('data-keyboard-visible', 'false');
           document.body.setAttribute('data-keyboard-visible', 'false');
         }
 
@@ -509,8 +543,10 @@ export class LifecycleEventManager extends ManagerEventEmitter {
         previousKeyboardHeight = keyboardHeight;
       };
 
+      // Only listen to resize, NOT scroll
+      // Scroll events cause false positives for keyboard dismissal detection
+      // (iOS Safari changes viewport height when scrolling with UI hide/show)
       window.visualViewport.addEventListener('resize', this.visualViewportHandler);
-      window.visualViewport.addEventListener('scroll', this.visualViewportHandler);
     }
   }
 

@@ -345,7 +345,9 @@ export class BufferSubscriptionService {
         case 'connected':
           // Server confirmed connection, store our clientId for filtering
           this.myClientId = message.clientId || null;
-          logger.log(`connected to server, version: ${message.version}, clientId: ${this.myClientId}`);
+          logger.log(
+            `connected to server, version: ${message.version}, clientId: ${this.myClientId}`
+          );
           break;
 
         case 'subscribed':

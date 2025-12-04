@@ -13,7 +13,7 @@ export function detectMobile(): boolean {
   return (
     /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
     (!!navigator.maxTouchPoints && navigator.maxTouchPoints > 1) ||
-    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+    window.matchMedia?.('(pointer: coarse)').matches
   );
 }
 

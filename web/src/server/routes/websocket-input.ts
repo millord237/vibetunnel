@@ -81,6 +81,7 @@ export class WebSocketInputHandler {
   private isHQMode: boolean;
   private inputOwnershipService: InputOwnershipService;
   private remoteConnections: Map<string, WebSocket> = new Map();
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Used in handleConnection to generate unique client IDs
   private clientCounter = 0;
 
   constructor(options: WebSocketInputHandlerOptions) {

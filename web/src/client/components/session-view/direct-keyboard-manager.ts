@@ -162,16 +162,10 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
             return;
           }
 
-          // Only prevent clicks on the terminal area itself
-          // This keeps focus on the hidden input when tapping the terminal
-          // But don't steal focus if user has text selected
-          if (target.closest('#terminal-container') || target.closest('vibe-terminal')) {
-            const selection = document.getSelection();
-            const hasSelection = selection && selection.toString().length > 0;
-            if (this.hiddenInput && !hasSelection) {
-              this.hiddenInput.focus();
-            }
-          }
+          // DON'T refocus on terminal clicks when quick keys are already visible
+          // This prevents iOS from reopening the keyboard on every terminal tap
+          // The keyboard should only open via the keyboard toggle button
+          // (Users can still interact with the terminal via quick keys)
         }
       };
       // Use capture phase to intercept clicks before they reach other elements
@@ -291,10 +285,13 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
       }
 
       // Reset input to placeholder space and clear composition buffer
-      if (this.hiddenInput) {
-        this.hiddenInput.value = ' ';
-        this.hiddenInput.setSelectionRange(1, 1);
-      }
+      // Use requestAnimationFrame for iOS Safari compatibility
+      requestAnimationFrame(() => {
+        if (this.hiddenInput && document.activeElement === this.hiddenInput) {
+          this.hiddenInput.value = ' ';
+          this.hiddenInput.setSelectionRange(1, 1);
+        }
+      });
       this.compositionBuffer = '';
     });
 
@@ -326,15 +323,25 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
           this.lastBackspaceTime = now;
         }
         // Re-add placeholder so iOS can continue generating delete events
-        input.value = ' ';
-        input.setSelectionRange(1, 1);
+        // Use requestAnimationFrame for iOS Safari compatibility
+        requestAnimationFrame(() => {
+          if (this.hiddenInput && document.activeElement === this.hiddenInput) {
+            this.hiddenInput.value = ' ';
+            this.hiddenInput.setSelectionRange(1, 1);
+          }
+        });
         return;
       }
       if (inputEvent.inputType === 'deleteContentForward' && this.inputManager) {
         this.inputManager.sendInput('delete');
         // Re-add placeholder so iOS can continue generating delete events
-        input.value = ' ';
-        input.setSelectionRange(0, 0);
+        // Use requestAnimationFrame for iOS Safari compatibility
+        requestAnimationFrame(() => {
+          if (this.hiddenInput && document.activeElement === this.hiddenInput) {
+            this.hiddenInput.value = ' ';
+            this.hiddenInput.setSelectionRange(0, 0);
+          }
+        });
         return;
       }
 
@@ -344,10 +351,21 @@ export class DirectKeyboardManager extends ManagerEventEmitter {
         if (textToSend) {
           // Send each character to terminal (only for non-IME input)
           this.inputManager.sendInputText(textToSend);
+
+          // Use requestAnimationFrame for iOS Safari compatibility
+          // This prevents race conditions when typing quickly
+          requestAnimationFrame(() => {
+            if (this.hiddenInput && document.activeElement === this.hiddenInput) {
+              // Keep a space placeholder for iOS backspace to work
+              this.hiddenInput.value = ' ';
+              this.hiddenInput.setSelectionRange(1, 1);
+            }
+          });
+        } else {
+          // No text to send, but still reset to maintain placeholder
+          input.value = ' ';
+          input.setSelectionRange(1, 1);
         }
-        // Keep a space placeholder for iOS backspace to work
-        input.value = ' ';
-        input.setSelectionRange(1, 1);
       }
     });
 
