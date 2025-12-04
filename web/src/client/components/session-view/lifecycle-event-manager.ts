@@ -65,28 +65,40 @@ export class LifecycleEventManager extends ManagerEventEmitter {
   /**
    * Setup visualViewport tracking to fix iOS Safari issues with fixed elements and keyboard
    * Based on: https://stackoverflow.com/questions/56351216/ios-safari-unwanted-scroll-when-keyboard-is-opened
+   * And: https://mathix.dev/blog/fix-html-elements-on-top-of-the-ios-keyboard-using-html-css-js
    */
   private setupVisualViewportTracking(): void {
-    const setAppHeight = () => {
-      const height = window.visualViewport
-        ? `${window.visualViewport.height}px`
-        : `${window.innerHeight}px`;
+    const updateViewport = () => {
+      const vv = window.visualViewport;
+      const ih = window.innerHeight;
 
+      // Update app height
+      const height = vv ? `${vv.height}px` : `${ih}px`;
       document.documentElement.style.setProperty('--app-height', height);
-      logger.debug(`App height updated to: ${height}`);
+
+      // Calculate keyboard offset for fixed elements
+      // When keyboard is open: innerHeight - visualViewport.height - offsetTop gives keyboard height
+      const keyboardOffset = vv
+        ? Math.max(0, ih - vv.height - vv.offsetTop)
+        : 0;
+
+      // Update CSS custom property for quick keys positioning
+      document.documentElement.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
+
+      logger.debug(`Viewport updated - height: ${height}, keyboard offset: ${keyboardOffset}px`);
     };
 
-    // Set initial height
-    setAppHeight();
+    // Set initial values
+    updateViewport();
 
     // Listen to visualViewport changes (iOS Safari)
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', setAppHeight);
-      window.visualViewport.addEventListener('scroll', setAppHeight);
+      window.visualViewport.addEventListener('resize', updateViewport);
+      window.visualViewport.addEventListener('scroll', updateViewport);
       logger.log('VisualViewport tracking enabled for iOS Safari');
     } else {
       // Fallback for non-supporting browsers
-      window.addEventListener('resize', setAppHeight);
+      window.addEventListener('resize', updateViewport);
       logger.log('Using fallback window resize for viewport tracking');
     }
   }

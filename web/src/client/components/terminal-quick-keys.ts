@@ -524,7 +524,7 @@ export class TerminalQuickKeys extends LitElement {
     return html`
       <div
         class="terminal-quick-keys-container"
-        style="position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important;"
+        style="position: fixed !important; bottom: var(--keyboard-offset, 0px) !important; left: 0 !important; right: 0 !important;"
       >
         <div class="quick-keys-bar">
           <!-- Row 1 -->
