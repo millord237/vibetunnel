@@ -1315,6 +1315,7 @@ export class SessionView extends LitElement {
       <!-- Quick Keys - Outside grid for proper position:fixed behavior -->
       <!-- Terminal Quick Keys (for direct keyboard mode, hidden in chat mode) -->
       <terminal-quick-keys
+        style="position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; z-index: ${Z_INDEX.TERMINAL_QUICK_KEYS} !important;"
         .visible=${uiState.isMobile && uiState.useDirectKeyboard && uiState.showQuickKeys && !uiState.chatMode}
         .onKeyPress=${(key: string) => this.directKeyboardManager.handleQuickKeyPress(key)}
       ></terminal-quick-keys>
