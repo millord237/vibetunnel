@@ -22,6 +22,7 @@ import './worktree-manager.js';
 import './terminal-chat-view.js';
 import { authClient } from '../services/auth-client.js';
 import { GitService } from '../services/git-service.js';
+import { Z_INDEX } from '../utils/constants.js';
 import { createLogger } from '../utils/logger.js';
 import { TERMINAL_IDS } from '../utils/terminal-constants.js';
 import type { TerminalThemeId } from '../utils/terminal-themes.js';
@@ -160,16 +161,16 @@ export class SessionView extends LitElement {
       getTerminalLifecycleManager: () =>
         this.terminalLifecycleManager
           ? {
-            resetTerminalSize: () => this.terminalLifecycleManager.resetTerminalSize(),
-            cleanup: () => this.terminalLifecycleManager.cleanup(),
-          }
+              resetTerminalSize: () => this.terminalLifecycleManager.resetTerminalSize(),
+              cleanup: () => this.terminalLifecycleManager.cleanup(),
+            }
           : null,
       getConnectionManager: () =>
         this.connectionManager
           ? {
-            setConnected: (connected: boolean) => this.connectionManager.setConnected(connected),
-            cleanupStreamConnection: () => this.connectionManager.cleanupStreamConnection(),
-          }
+              setConnected: (connected: boolean) => this.connectionManager.setConnected(connected),
+              cleanupStreamConnection: () => this.connectionManager.cleanupStreamConnection(),
+            }
           : null,
       setConnected: (connected: boolean) => {
         this.uiStateManager.setConnected(connected);
@@ -1075,31 +1076,21 @@ export class SessionView extends LitElement {
           position: relative;
           overflow: hidden;
           min-height: 0; /* Critical for grid */
-          contain: layout style paint; /* Isolate terminal updates */
+          /* Removed contain to prevent breaking position:fixed children */
         }
-        
-        /* Make terminal content 50px larger to prevent clipping */
-        .terminal-area vibe-terminal,
-        .terminal-area vibe-terminal-binary {
-          height: calc(100% + 50px) !important;
-          margin-bottom: -50px !important;
-        }
-        
-        /* No transform needed - padding is sufficient */
+
+        /* Add padding-bottom when quick keys are visible to prevent input field from being hidden */
         .terminal-area[data-quickkeys-visible="true"] {
-          /* transform: translateY(-110px); */
+          padding-bottom: 110px;
         }
-        
-        /* No manual height adjustment needed - grid handles it */
-        .terminal-area[data-quickkeys-visible="true"] terminal-renderer vibe-terminal,
-        .terminal-area[data-quickkeys-visible="true"] terminal-renderer vibe-terminal-binary {
-          /* height: 100% is sufficient */
+
+        /* Adjust terminal size when quick keys visible to account for padding */
+        .terminal-area[data-quickkeys-visible="true"] vibe-terminal,
+        .terminal-area[data-quickkeys-visible="true"] vibe-terminal-binary {
+          height: calc(100% + 110px) !important;
+          margin-bottom: -110px !important;
         }
-        
-        .quickkeys-area {
-          grid-area: quickkeys;
-        }
-        
+
         /* Overlay container - spans entire grid */
         .overlay-container {
           grid-area: 1 / 1 / -1 / -1;
@@ -1158,27 +1149,27 @@ export class SessionView extends LitElement {
             .chatMode=${uiState.chatMode}
             .onToggleChatMode=${() => this.handleToggleChatMode()}
             @close-width-selector=${() => {
-        this.uiStateManager.setShowWidthSelector(false);
-        this.uiStateManager.setCustomWidth('');
-      }}
+              this.uiStateManager.setShowWidthSelector(false);
+              this.uiStateManager.setCustomWidth('');
+            }}
             @session-rename=${async (e: CustomEvent) => {
-        const { sessionId, newName } = e.detail;
-        await this.sessionActionsHandler.handleRename(sessionId, newName);
-      }}
+              const { sessionId, newName } = e.detail;
+              await this.sessionActionsHandler.handleRename(sessionId, newName);
+            }}
             @paste-image=${async () => await this.fileOperationsManager.pasteImage()}
             @select-image=${() => this.fileOperationsManager.selectImage()}
             @open-camera=${() => this.fileOperationsManager.openCamera()}
             @show-image-upload-options=${() => this.fileOperationsManager.selectImage()}
             @toggle-view-mode=${() => this.sessionActionsHandler.handleToggleViewMode()}
             @capture-toggled=${(e: CustomEvent) => {
-        this.dispatchEvent(
-          new CustomEvent('capture-toggled', {
-            detail: e.detail,
-            bubbles: true,
-            composed: true,
-          })
-        );
-      }}
+              this.dispatchEvent(
+                new CustomEvent('capture-toggled', {
+                  detail: e.detail,
+                  bubbles: true,
+                  composed: true,
+                })
+              );
+            }}
             .hasGitRepo=${!!this.session?.gitRepoPath}
             .viewMode=${uiState.viewMode}
           >
@@ -1187,17 +1178,19 @@ export class SessionView extends LitElement {
 
         <!-- Content Area (Terminal or Worktree) -->
         <div
-          class="terminal-area bg-bg ${this.session?.status === 'exited' && uiState.viewMode === 'terminal'
-        ? 'session-exited opacity-90'
-        : ''
-      } ${
-      // Add safe area padding for landscape mode on mobile to handle notch
-      uiState.isMobile && uiState.isLandscape ? 'safe-area-left safe-area-right' : ''
-      }"
+          class="terminal-area bg-bg ${
+            this.session?.status === 'exited' && uiState.viewMode === 'terminal'
+              ? 'session-exited opacity-90'
+              : ''
+          } ${
+            // Add safe area padding for landscape mode on mobile to handle notch
+            uiState.isMobile && uiState.isLandscape ? 'safe-area-left safe-area-right' : ''
+          }"
           data-quickkeys-visible="${uiState.showQuickKeys}"
         >
-          ${this.loadingAnimationManager.isLoading()
-        ? html`
+          ${
+            this.loadingAnimationManager.isLoading()
+              ? html`
                 <!-- Enhanced Loading overlay -->
                 <div
                   class="absolute inset-0 bg-bg/90 backdrop-filter backdrop-blur-sm flex items-center justify-center z-10 animate-fade-in"
@@ -1208,20 +1201,21 @@ export class SessionView extends LitElement {
                   </div>
                 </div>
               `
-        : ''
-      }
-          ${uiState.viewMode === 'worktree' && this.session?.gitRepoPath
-        ? html`
+              : ''
+          }
+          ${
+            uiState.viewMode === 'worktree' && this.session?.gitRepoPath
+              ? html`
               <worktree-manager
                 .gitService=${this.gitService}
                 .repoPath=${this.session.gitRepoPath}
                 @back=${() => {
-            this.uiStateManager.setViewMode('terminal');
-          }}
+                  this.uiStateManager.setViewMode('terminal');
+                }}
               ></worktree-manager>
             `
-        : uiState.viewMode === 'terminal'
-          ? html`
+              : uiState.viewMode === 'terminal'
+                ? html`
               <!-- Enhanced Terminal Component -->
               <div style="position: relative; height: 100%;">
                 <!-- Terminal (hidden when chat mode is active) -->
@@ -1254,100 +1248,8 @@ export class SessionView extends LitElement {
                 ></terminal-chat-view>
               </div>
             `
-          : ''
-      }
-        </div>
-
-        <div class="quickkeys-area">
-          <!-- Terminal Quick Keys (for direct keyboard mode, hidden in chat mode) -->
-          <terminal-quick-keys
-            .visible=${uiState.isMobile && uiState.useDirectKeyboard && uiState.showQuickKeys && !uiState.chatMode}
-            .onKeyPress=${(key: string) => this.directKeyboardManager.handleQuickKeyPress(key)}
-          ></terminal-quick-keys>
-
-          <!-- Mobile Input Controls (only show when direct keyboard is disabled) -->
-          ${uiState.isMobile && !uiState.showMobileInput && !uiState.useDirectKeyboard
-        ? html`
-                <div class="p-4 bg-bg-secondary">
-                <!-- First row: Arrow keys -->
-                <div class="flex gap-2 mb-2">
-                  <button
-                    class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
-                    @click=${() => this.handleSpecialKey('arrow_up')}
-                  >
-                    <span class="text-xl">↑</span>
-                  </button>
-                  <button
-                    class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
-                    @click=${() => this.handleSpecialKey('arrow_down')}
-                  >
-                    <span class="text-xl">↓</span>
-                  </button>
-                  <button
-                    class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
-                    @click=${() => this.handleSpecialKey('arrow_left')}
-                  >
-                    <span class="text-xl">←</span>
-                  </button>
-                  <button
-                    class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
-                    @click=${() => this.handleSpecialKey('arrow_right')}
-                  >
-                    <span class="text-xl">→</span>
-                  </button>
-                </div>
-
-                <!-- Second row: Special keys -->
-                <div class="flex gap-2">
-                  <button
-                    class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
-                    @click=${() => this.handleSpecialKey('escape')}
-                  >
-                    ESC
-                  </button>
-                  <button
-                    class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
-                    @click=${() => this.handleSpecialKey('\t')}
-                  >
-                    <span class="text-xl">⇥</span>
-                  </button>
-                  <button
-                    class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
-                    @click=${this.handleMobileInputToggle}
-                  >
-                    ABC123
-                  </button>
-                  <button
-                    class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
-                    @click=${() => this.fileOperationsManager.openFilePicker()}
-                    title="Upload file"
-                  >
-                    📷
-                  </button>
-                  <button
-                    class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
-                    @click=${this.toggleDirectKeyboard}
-                    title="Switch to direct keyboard mode"
-                  >
-                    ⌨️
-                  </button>
-                  <button
-                    class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
-                    @click=${() => this.uiStateManager.toggleCtrlAlpha()}
-                  >
-                    CTRL
-                  </button>
-                  <button
-                    class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
-                    @click=${() => this.handleSpecialKey('enter')}
-                  >
-                    <span class="text-xl">⏎</span>
-                  </button>
-                  </div>
-                </div>
-              `
-        : ''
-      }
+                : ''
+          }
         </div>
 
         <!-- Overlay Container - All overlays go here for stable positioning -->
@@ -1356,59 +1258,151 @@ export class SessionView extends LitElement {
             .session=${this.session}
             .uiState=${uiState}
             .callbacks=${{
-        // Mobile input callbacks
-        onMobileInputSendOnly: (text: string) =>
-          this.mobileInputManager.handleMobileInputSendOnly(text),
-        onMobileInputSend: (text: string) =>
-          this.mobileInputManager.handleMobileInputSend(text),
-        onMobileInputCancel: () => this.mobileInputManager.handleMobileInputCancel(),
-        onMobileInputTextChange: (text: string) =>
-          this.uiStateManager.setMobileInputText(text),
+              // Mobile input callbacks
+              onMobileInputSendOnly: (text: string) =>
+                this.mobileInputManager.handleMobileInputSendOnly(text),
+              onMobileInputSend: (text: string) =>
+                this.mobileInputManager.handleMobileInputSend(text),
+              onMobileInputCancel: () => this.mobileInputManager.handleMobileInputCancel(),
+              onMobileInputTextChange: (text: string) =>
+                this.uiStateManager.setMobileInputText(text),
 
-        // Ctrl+Alpha callbacks
-        onCtrlKey: (letter: string) => this.handleCtrlKey(letter),
-        onSendCtrlSequence: () => this.handleSendCtrlSequence(),
-        onClearCtrlSequence: () => this.handleClearCtrlSequence(),
-        onCtrlAlphaCancel: () => this.handleCtrlAlphaCancel(),
+              // Ctrl+Alpha callbacks
+              onCtrlKey: (letter: string) => this.handleCtrlKey(letter),
+              onSendCtrlSequence: () => this.handleSendCtrlSequence(),
+              onClearCtrlSequence: () => this.handleClearCtrlSequence(),
+              onCtrlAlphaCancel: () => this.handleCtrlAlphaCancel(),
 
-        // Quick keys
-        onQuickKeyPress: (key: string) => this.directKeyboardManager.handleQuickKeyPress(key),
+              // Quick keys
+              onQuickKeyPress: (key: string) => this.directKeyboardManager.handleQuickKeyPress(key),
 
-        // File browser/picker
-        onCloseFileBrowser: () => this.fileOperationsManager.closeFileBrowser(),
-        onInsertPath: async (e: CustomEvent) => {
-          const { path, type } = e.detail;
-          await this.fileOperationsManager.insertPath(path, type);
-        },
-        onFileSelected: async (e: CustomEvent) => {
-          await this.fileOperationsManager.handleFileSelected(e.detail.path);
-        },
-        onFileError: (e: CustomEvent) => {
-          this.fileOperationsManager.handleFileError(e.detail);
-        },
-        onCloseFilePicker: () => this.fileOperationsManager.closeFilePicker(),
+              // File browser/picker
+              onCloseFileBrowser: () => this.fileOperationsManager.closeFileBrowser(),
+              onInsertPath: async (e: CustomEvent) => {
+                const { path, type } = e.detail;
+                await this.fileOperationsManager.insertPath(path, type);
+              },
+              onFileSelected: async (e: CustomEvent) => {
+                await this.fileOperationsManager.handleFileSelected(e.detail.path);
+              },
+              onFileError: (e: CustomEvent) => {
+                this.fileOperationsManager.handleFileError(e.detail);
+              },
+              onCloseFilePicker: () => this.fileOperationsManager.closeFilePicker(),
 
-        // Terminal settings
-        onWidthSelect: (width: number) =>
-          this.terminalSettingsManager.handleWidthSelect(width),
-        onFontSizeChange: (size: number) =>
-          this.terminalSettingsManager.handleFontSizeChange(size),
-        onThemeChange: (theme: TerminalThemeId) =>
-          this.terminalSettingsManager.handleThemeChange(theme),
-        onCloseWidthSelector: () => {
-          this.uiStateManager.setShowWidthSelector(false);
-          this.uiStateManager.setCustomWidth('');
-        },
+              // Terminal settings
+              onWidthSelect: (width: number) =>
+                this.terminalSettingsManager.handleWidthSelect(width),
+              onFontSizeChange: (size: number) =>
+                this.terminalSettingsManager.handleFontSizeChange(size),
+              onThemeChange: (theme: TerminalThemeId) =>
+                this.terminalSettingsManager.handleThemeChange(theme),
+              onCloseWidthSelector: () => {
+                this.uiStateManager.setShowWidthSelector(false);
+                this.uiStateManager.setCustomWidth('');
+              },
 
-        // Keyboard button
-        onKeyboardButtonClick: () => this.handleKeyboardButtonClick(),
+              // Keyboard button
+              onKeyboardButtonClick: () => this.handleKeyboardButtonClick(),
 
-        // Navigation
-        handleBack: () => this.handleBack(),
-      }}
+              // Navigation
+              handleBack: () => this.handleBack(),
+            }}
           ></overlays-container>
         </div>
       </div>
+
+      <!-- Quick Keys - Outside grid for proper position:fixed behavior -->
+      <!-- Terminal Quick Keys (for direct keyboard mode, hidden in chat mode) -->
+      <terminal-quick-keys
+        .visible=${uiState.isMobile && uiState.useDirectKeyboard && uiState.showQuickKeys && !uiState.chatMode}
+        .onKeyPress=${(key: string) => this.directKeyboardManager.handleQuickKeyPress(key)}
+      ></terminal-quick-keys>
+
+      <!-- Mobile Input Controls (only show when direct keyboard is disabled) -->
+      ${
+        uiState.isMobile && !uiState.showMobileInput && !uiState.useDirectKeyboard
+          ? html`
+            <div class="p-4 bg-bg-secondary" style="position: fixed; bottom: 0; left: 0; right: 0; z-index: ${Z_INDEX.TERMINAL_QUICK_KEYS};">
+            <!-- First row: Arrow keys -->
+            <div class="flex gap-2 mb-2">
+              <button
+                class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
+                @click=${() => this.handleSpecialKey('arrow_up')}
+              >
+                <span class="text-xl">↑</span>
+              </button>
+              <button
+                class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
+                @click=${() => this.handleSpecialKey('arrow_down')}
+              >
+                <span class="text-xl">↓</span>
+              </button>
+              <button
+                class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
+                @click=${() => this.handleSpecialKey('arrow_left')}
+              >
+                <span class="text-xl">←</span>
+              </button>
+              <button
+                class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
+                @click=${() => this.handleSpecialKey('arrow_right')}
+              >
+                <span class="text-xl">→</span>
+              </button>
+            </div>
+
+            <!-- Second row: Special keys -->
+            <div class="flex gap-2">
+              <button
+                class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
+                @click=${() => this.handleSpecialKey('escape')}
+              >
+                ESC
+              </button>
+              <button
+                class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
+                @click=${() => this.handleSpecialKey('\t')}
+              >
+                <span class="text-xl">⇥</span>
+              </button>
+              <button
+                class="flex-1 font-mono px-3 py-2 text-sm transition-all cursor-pointer quick-start-btn"
+                @click=${this.handleMobileInputToggle}
+              >
+                ABC123
+              </button>
+              <button
+                class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
+                @click=${() => this.fileOperationsManager.openFilePicker()}
+                title="Upload file"
+              >
+                📷
+              </button>
+              <button
+                class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
+                @click=${this.toggleDirectKeyboard}
+                title="Switch to direct keyboard mode"
+              >
+                ⌨️
+              </button>
+              <button
+                class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
+                @click=${() => this.uiStateManager.toggleCtrlAlpha()}
+              >
+                CTRL
+              </button>
+              <button
+                class="font-mono text-sm transition-all cursor-pointer w-16 quick-start-btn"
+                @click=${() => this.handleSpecialKey('enter')}
+              >
+                <span class="text-xl">⏎</span>
+              </button>
+              </div>
+            </div>
+          `
+          : ''
+      }
       </div>
     `;
   }

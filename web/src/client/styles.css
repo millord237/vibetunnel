@@ -217,7 +217,7 @@
     height: 100%;
     height: var(--app-height, 100%);
     overflow: hidden;
-    position: fixed; /* Force fixed to prevent scroll */
+    /* Removed position:fixed as it can interfere with position:fixed children */
     width: 100%;
   }
   
@@ -876,24 +876,24 @@ body {
   overflow: hidden;
   width: 100%;
   height: 100%;
+  /* NO position:fixed here - it breaks position:fixed children */
   margin: 0;
   padding: 0;
 }
 
 /* Grid layout touch optimization for session view */
 .session-view-grid {
-  contain: layout style;
-  will-change: contents;
+  /* Removed contain and will-change to allow position:fixed children to work correctly */
 }
 
 .terminal-area {
-  contain: strict;
+  /* Removed contain:strict as it breaks position:fixed for quick keys */
   isolation: isolate;
   touch-action: pan-y;
 }
 
 .overlay-container {
-  contain: layout style;
+  /* Removed contain to allow position:fixed children */
   isolation: isolate;
 }
 
