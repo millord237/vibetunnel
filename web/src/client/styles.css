@@ -890,6 +890,9 @@ body {
   /* Removed contain:strict as it breaks position:fixed for quick keys */
   isolation: isolate;
   touch-action: pan-y;
+  /* Ensure terminal area can be scrolled independently */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .overlay-container {
@@ -2020,11 +2023,13 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
   }
 }
 
-/* Ensure proper scrolling in split view */
+/* Ensure proper scrolling in split view - only scroll when needed */
 .split-view-sidebar {
   height: 100vh;
-  overflow-y: auto;
+  overflow-y: auto; /* Only scrolls when content overflows viewport */
   overflow-x: hidden;
+  overscroll-behavior: none; /* Prevent iOS rubber-band scroll */
+  -webkit-overflow-scrolling: touch; /* Smooth momentum scrolling on iOS */
 }
 
 /* Responsive breakpoints for split view */

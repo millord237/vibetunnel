@@ -78,9 +78,7 @@ export class LifecycleEventManager extends ManagerEventEmitter {
 
       // Calculate keyboard offset for fixed elements
       // When keyboard is open: innerHeight - visualViewport.height - offsetTop gives keyboard height
-      const keyboardOffset = vv
-        ? Math.max(0, ih - vv.height - vv.offsetTop)
-        : 0;
+      const keyboardOffset = vv ? Math.max(0, ih - vv.height - vv.offsetTop) : 0;
 
       // Update CSS custom property for quick keys positioning
       document.documentElement.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
