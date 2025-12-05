@@ -2025,11 +2025,34 @@ body.initial-session-load .session-flex-responsive > session-card:nth-child(n + 
 
 /* Ensure proper scrolling in split view - only scroll when needed */
 .split-view-sidebar {
-  height: 100vh;
-  overflow-y: auto; /* Only scrolls when content overflows viewport */
-  overflow-x: hidden;
+  height: var(--app-height, 100dvh);
+  max-height: var(--app-height, 100dvh);
+  min-height: 0;
+  overflow: hidden; /* Strictly prevent container scroll - same as session-view-grid */
   overscroll-behavior: none; /* Prevent iOS rubber-band scroll */
-  -webkit-overflow-scrolling: touch; /* Smooth momentum scrolling on iOS */
+  touch-action: none; /* Disable browser handling of gestures on sidebar container */
+  -webkit-overflow-scrolling: auto;
+}
+
+.split-view-root {
+  height: var(--app-height, 100dvh);
+  max-height: var(--app-height, 100dvh);
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none; /* Only children opt-in to pan */
+  -webkit-overflow-scrolling: auto;
+}
+
+.split-view-sidebar .sidebar-scroll-area {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain; /* Confine scroll bounce to the list */
+  touch-action: pan-y; /* Allow vertical scrolling only */
+  contain: layout style paint;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Responsive breakpoints for split view */
