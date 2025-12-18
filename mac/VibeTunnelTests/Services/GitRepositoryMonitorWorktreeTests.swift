@@ -95,7 +95,7 @@ struct GitRepositoryMonitorWorktreeTests {
             isWorktree: false)
 
         // Test that the repository is correctly identified as non-worktree
-        let repository = await monitor.findRepository(for: "/Users/test/regular-repo/src/file.swift")
+        _ = await self.monitor.findRepository(for: "/Users/test/regular-repo/src/file.swift")
 
         // Note: In a real test, we would need to mock the server response
         // For now, we're testing the data structure
@@ -311,9 +311,6 @@ struct GitRepositoryMonitorStaticTests {
         // - Worktree: .git is a file
 
         // Test the expected behavior
-        let regularRepoPath = "/tmp/test-regular-repo"
-        let worktreePath = "/tmp/test-worktree"
-
         // The actual file system check would happen in the static method
         // Here we test the logic expectations
         #expect(true) // Placeholder for actual file system test

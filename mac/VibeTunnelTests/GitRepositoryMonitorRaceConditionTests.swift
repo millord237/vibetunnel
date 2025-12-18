@@ -36,6 +36,7 @@ struct GitRepositoryMonitorRaceConditionTests {
                 break
             }
         }
+        #expect(inProgressSet != nil)
 
         // Simulate multiple concurrent requests for the same repository
         let concurrentTasks = (0..<10).map { _ in

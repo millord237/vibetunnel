@@ -70,7 +70,7 @@ struct ServerEventTests {
         #expect(decoded.duration == nil)
         #expect(decoded.processInfo == nil)
         #expect(decoded.message == nil)
-        #expect(decoded.timestamp != nil)
+        #expect(decoded.timestamp == event.timestamp)
     }
 
     // MARK: - Event Type Logic Tests
