@@ -83,7 +83,7 @@ describe('BufferSubscriptionService', () => {
     }) as unknown as typeof fetch;
 
     // Replace global WebSocket with our mock
-    global.WebSocket = vi.fn().mockImplementation((url: string) => {
+    global.WebSocket = vi.fn().mockImplementation(function WebSocket(url: string) {
       mockWebSocket = new MockWebSocket(url);
 
       // Capture sent messages
@@ -158,7 +158,7 @@ describe('BufferSubscriptionService', () => {
       service.dispose();
 
       // Make WebSocket constructor throw
-      global.WebSocket = vi.fn().mockImplementation(() => {
+      global.WebSocket = vi.fn().mockImplementation(function WebSocket() {
         throw new Error('Connection failed');
       }) as unknown as typeof WebSocket;
 

@@ -1,4 +1,6 @@
 import { test as base } from '@playwright/test';
+import { SessionCleanupHelper } from '../helpers/session-cleanup.helper';
+import { TestSessionTracker } from '../helpers/test-session-tracker';
 import { SessionListPage } from '../pages/session-list.page';
 import { SessionViewPage } from '../pages/session-view.page';
 import { testConfig } from '../test-config';
@@ -18,6 +20,11 @@ export const test = base.extend<TestFixtures>({
     const navigationTimeout = testConfig.navigationTimeout;
     page.setDefaultTimeout(defaultTimeout);
     page.setDefaultNavigationTimeout(navigationTimeout);
+
+    // Clipboard access for paste tests
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+      origin: testConfig.baseURL,
+    });
 
     // Block unnecessary resources for faster loading
     await context.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,ttf,ico}', (route) => route.abort());
@@ -135,6 +142,11 @@ export const test = base.extend<TestFixtures>({
     await use(page);
 
     // Cleanup after test
+    try {
+      await new SessionCleanupHelper(page).cleanupTestSessions();
+      TestSessionTracker.getInstance().clear();
+    } catch {}
+
     await page
       .evaluate(() => {
         localStorage.clear();

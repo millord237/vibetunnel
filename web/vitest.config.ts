@@ -61,7 +61,7 @@ export default defineConfig(({ mode }) => {
           // Allow multiple forks for better test isolation
           maxForks: undefined,
           minForks: 1,
-        }
+        },
       },
       isolate: true, // Isolate tests in separate contexts
       coverage: {

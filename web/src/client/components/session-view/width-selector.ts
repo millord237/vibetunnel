@@ -205,7 +205,7 @@ export class TerminalSettingsModal extends LitElement {
                   } else {
                     this.showCustomInput = false;
                     this.customWidth = '';
-                    this.onWidthSelect?.(Number.parseInt(value));
+                    this.onWidthSelect?.(Number.parseInt(value, 10));
                   }
                 }}
               >
@@ -244,16 +244,16 @@ export class TerminalSettingsModal extends LitElement {
                     class="px-4 py-3 rounded-md text-sm font-medium transition-all duration-200
                       ${
                         !this.customWidth ||
-                        Number.parseInt(this.customWidth) < 20 ||
-                        Number.parseInt(this.customWidth) > 500
+                        Number.parseInt(this.customWidth, 10) < 20 ||
+                        Number.parseInt(this.customWidth, 10) > 500
                           ? 'bg-bg-secondary border border-border text-text-muted cursor-not-allowed'
                           : 'bg-primary text-text-bright hover:bg-primary-hover active:scale-95'
                       }"
                     @click=${this.handleCustomWidthSubmit}
                     ?disabled=${
                       !this.customWidth ||
-                      Number.parseInt(this.customWidth) < 20 ||
-                      Number.parseInt(this.customWidth) > 500
+                      Number.parseInt(this.customWidth, 10) < 20 ||
+                      Number.parseInt(this.customWidth, 10) > 500
                     }
                   >
                     Set

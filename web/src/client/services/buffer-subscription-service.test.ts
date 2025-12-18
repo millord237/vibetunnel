@@ -76,7 +76,7 @@ describe('BufferSubscriptionService', () => {
     mockWebSocketInstance = new MockWebSocket('ws://localhost/buffers');
 
     // Mock WebSocket constructor to always return the same instance
-    mockWebSocketConstructor = vi.fn().mockImplementation(() => {
+    mockWebSocketConstructor = vi.fn().mockImplementation(function WebSocket() {
       // Set up the mock instance each time it's created
       mockWebSocketInstance.binaryType = 'arraybuffer';
       return mockWebSocketInstance;
@@ -336,7 +336,9 @@ describe('BufferSubscriptionService', () => {
 
       // Create new mock instance for reconnection
       const newMockInstance = new MockWebSocket('ws://localhost/buffers');
-      mockWebSocketConstructor.mockReturnValue(newMockInstance);
+      mockWebSocketConstructor.mockImplementation(function WebSocket() {
+        return newMockInstance;
+      });
 
       // Advance time to trigger reconnect
       vi.advanceTimersByTime(1000);

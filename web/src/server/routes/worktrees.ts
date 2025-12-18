@@ -185,7 +185,7 @@ async function getBranchStats(
       ['rev-list', '--count', `${baseBranch}...${branch}`],
       { cwd: repoPath }
     );
-    stats.commitsAhead = Number.parseInt(commitCount.trim()) || 0;
+    stats.commitsAhead = Number.parseInt(commitCount.trim(), 10) || 0;
   } catch (error) {
     logger.debug(`Could not get commit count for ${branch}: ${error}`);
   }
@@ -202,9 +202,9 @@ async function getBranchStats(
       /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/
     );
     if (match) {
-      stats.filesChanged = Number.parseInt(match[1]) || 0;
-      stats.insertions = Number.parseInt(match[2]) || 0;
-      stats.deletions = Number.parseInt(match[3]) || 0;
+      stats.filesChanged = Number.parseInt(match[1], 10) || 0;
+      stats.insertions = Number.parseInt(match[2] ?? '0', 10) || 0;
+      stats.deletions = Number.parseInt(match[3] ?? '0', 10) || 0;
     }
   } catch (error) {
     logger.debug(`Could not get diff stats for ${branch}: ${error}`);

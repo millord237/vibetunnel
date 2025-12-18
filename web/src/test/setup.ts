@@ -1,6 +1,14 @@
 // Global test setup for Vitest
 import { webcrypto } from 'crypto';
 import { vi } from 'vitest';
+import { MockFitAddon, MockTerminal } from './utils/terminal-mocks';
+
+// Mock ghostty-web (WASM/canvas) for unit tests
+vi.mock('ghostty-web', () => ({
+  Ghostty: { load: vi.fn(async () => ({})) },
+  Terminal: MockTerminal,
+  FitAddon: MockFitAddon,
+}));
 
 // Disable SEA loader for tests
 process.env.VIBETUNNEL_SEA = '';

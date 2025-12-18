@@ -185,8 +185,11 @@ export class MessageParser {
   /**
    * Add data to the parser
    */
-  addData(chunk: Buffer): void {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
+  addData(chunk: Buffer | Uint8Array | string): void {
+    const bufferChunk = Buffer.isBuffer(chunk)
+      ? chunk
+      : Buffer.from(typeof chunk === 'string' ? chunk : chunk);
+    this.buffer = Buffer.concat([this.buffer, bufferChunk]);
   }
 
   /**

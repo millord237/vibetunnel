@@ -163,6 +163,7 @@ export class SessionListPage extends BasePage {
         // Check that input exists, is visible, and is not disabled
         return input && !input.disabled && input.offsetParent !== null;
       },
+      undefined,
       { timeout: TIMEOUTS.UI_UPDATE }
     );
 
@@ -304,6 +305,7 @@ export class SessionListPage extends BasePage {
         // Name is optional, so we don't check for it
         return submitButton && !submitButton.hasAttribute('disabled');
       },
+      undefined,
       { timeout: 2000 }
     );
 
@@ -417,6 +419,7 @@ export class SessionListPage extends BasePage {
               !form || !form.hasAttribute('visible') || form.getAttribute('visible') === 'false'
             );
           },
+          undefined,
           { timeout: 10000 }
         )
         .catch(async (error) => {
@@ -488,6 +491,7 @@ export class SessionListPage extends BasePage {
           // Session view is ready
           return true;
         },
+        undefined,
         { timeout: process.env.CI ? 20000 : 15000, polling: 100 }
       );
 
@@ -545,6 +549,7 @@ export class SessionListPage extends BasePage {
         const noSessionsMsg = document.querySelector('.text-dark-text-muted');
         return cards.length > 0 || noSessionsMsg?.textContent?.includes('No terminal sessions');
       },
+      undefined,
       { timeout: process.env.CI ? 15000 : 10000 }
     );
 
@@ -695,6 +700,7 @@ export class SessionListPage extends BasePage {
                 getComputedStyle(modal).display === 'none'
               );
             },
+            undefined,
             { timeout: TIMEOUTS.UI_ANIMATION }
           );
 

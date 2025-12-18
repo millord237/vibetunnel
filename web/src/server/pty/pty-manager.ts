@@ -1485,14 +1485,9 @@ export class PtyManager extends EventEmitter {
     const memorySession = this.sessions.get(sessionId);
 
     try {
-      // For in-memory sessions, we can't reset to terminal size since we don't know it
-      if (memorySession?.ptyProcess) {
-        throw new PtyError(
-          `Cannot reset size for in-memory session ${sessionId}`,
-          'INVALID_OPERATION',
-          sessionId
-        );
-      }
+      // For in-memory sessions there is nothing to reset (we already control the PTY size).
+      // Some clients call this endpoint unconditionally; treat it as a no-op to avoid noisy 500s.
+      if (memorySession?.ptyProcess) return;
 
       // For external sessions, send reset-size command via control pipe
       const resetSizeMessage: ResetSizeControlMessage = {
@@ -2040,7 +2035,9 @@ export class PtyManager extends EventEmitter {
     if (!sessionListeners) {
       return;
     }
-    listeners.forEach((listener) => sessionListeners.add(listener));
+    listeners.forEach((listener) => {
+      sessionListeners.add(listener);
+    });
     this.emit(event, sessionId, ...args);
   }
 

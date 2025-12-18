@@ -7,6 +7,8 @@ export class MockTerminal {
   element: HTMLDivElement;
   cols: number = 80;
   rows: number = 24;
+  options: Record<string, unknown> = { fontSize: 14, theme: {} };
+  renderer: unknown = null;
   buffer = {
     active: {
       cursorY: 0,
@@ -56,6 +58,11 @@ export class MockTerminal {
     return { dispose: vi.fn() };
   });
 
+  onScroll = vi.fn((callback: (viewportY: number) => void) => {
+    this._onScrollCallback = callback;
+    return { dispose: vi.fn() };
+  });
+
   onTitleChange = vi.fn((callback: (title: string) => void) => {
     this._onTitleChangeCallback = callback;
     return { dispose: vi.fn() };
@@ -68,10 +75,18 @@ export class MockTerminal {
 
   private _onDataCallback?: (data: string) => void;
   private _onResizeCallback?: (size: { cols: number; rows: number }) => void;
+  private _onScrollCallback?: (viewportY: number) => void;
 
   constructor() {
-    this.element = document.createElement('div');
+    this.element =
+      typeof document !== 'undefined'
+        ? document.createElement('div')
+        : ({} as unknown as HTMLDivElement);
   }
+
+  loadAddon = vi.fn((_addon: unknown) => {
+    // no-op for tests
+  });
 
   open = vi.fn((element: HTMLElement) => {
     element.appendChild(this.element);
@@ -111,6 +126,16 @@ export class MockTerminal {
   scrollToBottom = vi.fn();
 
   scrollToTop = vi.fn();
+
+  scrollToLine = vi.fn((line: number) => {
+    const max = Math.max(0, this.buffer.active.length - this.rows);
+    const clamped = Math.max(0, Math.min(max, line));
+    // ghostty viewportY is "from bottom"
+    this.buffer.active.viewportY = max - clamped;
+    if (this._onScrollCallback) this._onScrollCallback(this.buffer.active.viewportY);
+  });
+
+  getViewportY = vi.fn(() => this.buffer.active.viewportY);
 
   select = vi.fn();
 

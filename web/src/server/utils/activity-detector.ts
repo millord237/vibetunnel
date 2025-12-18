@@ -204,7 +204,7 @@ function parseClaudeStatus(data: string): ActivityStatus | null {
     raw: {
       indicator,
       action,
-      duration: Number.parseInt(duration),
+      duration: Number.parseInt(duration, 10),
       progress: hasTokenInfo ? `${direction}${tokens} tokens` : undefined,
     },
   };

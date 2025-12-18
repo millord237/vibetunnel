@@ -198,7 +198,7 @@ export class VibeTunnelApp extends LitElement {
         e.stopPropagation();
 
         // Get the session number (1-9, 0 = 10)
-        const sessionNumber = e.key === '0' ? 10 : Number.parseInt(e.key);
+        const sessionNumber = e.key === '0' ? 10 : Number.parseInt(e.key, 10);
 
         // Get visible sessions in the same order as the session list
         const activeSessions = this.sessions.filter(
@@ -1284,7 +1284,9 @@ export class VibeTunnelApp extends LitElement {
   }
 
   private cleanupResizeListeners(): void {
-    this.resizeCleanupFunctions.forEach((cleanup) => cleanup());
+    this.resizeCleanupFunctions.forEach((cleanup) => {
+      cleanup();
+    });
     this.resizeCleanupFunctions = [];
 
     // Reset any global styles that might have been applied

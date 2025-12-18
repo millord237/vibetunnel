@@ -107,6 +107,9 @@ describe('VibeTerminalBinary', () => {
     // Wait for firstUpdated to complete which sets up input handling
     await new Promise((resolve) => setTimeout(resolve, 10));
 
+    // Ignore any fetch calls made during initialization
+    vi.mocked(window.fetch).mockClear();
+
     // Get hidden input and simulate typing
     // Note: createRenderRoot returns 'this', so no shadowRoot - search directly
     const container = element.querySelector('#terminal-container');
@@ -115,14 +118,16 @@ describe('VibeTerminalBinary', () => {
     hiddenInput.value = 'test input';
     hiddenInput.dispatchEvent(new Event('input'));
 
-    expect(window.fetch).toHaveBeenCalledTimes(1);
-    expect(window.fetch).toHaveBeenCalledWith('/api/sessions/test-session-id/input', {
-      method: HttpMethod.POST,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer test-token',
-      },
-      body: JSON.stringify({ text: 'test input' }),
+    await vi.waitFor(() => {
+      expect(window.fetch).toHaveBeenCalledTimes(1);
+      expect(window.fetch).toHaveBeenCalledWith('/api/sessions/test-session-id/input', {
+        method: HttpMethod.POST,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer test-token',
+        },
+        body: JSON.stringify({ text: 'test input' }),
+      });
     });
   });
 

@@ -25,7 +25,6 @@ export function createEventsRouter(sessionMonitor?: SessionMonitor): Router {
 
     // Event ID counter
     let eventId = 0;
-    // biome-ignore lint/style/useConst: keepAlive is assigned after declaration
     let keepAlive: NodeJS.Timeout;
 
     // Forward-declare event handlers for cleanup

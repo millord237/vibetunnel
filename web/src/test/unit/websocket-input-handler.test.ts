@@ -33,7 +33,9 @@ const mockWebSocket = () => {
     // Helper to emit events
     emit: (event: string, ...args: unknown[]) => {
       if (listeners[event]) {
-        listeners[event].forEach((listener) => listener(...args));
+        listeners[event].forEach((listener) => {
+          listener(...args);
+        });
       }
     },
   };
@@ -54,13 +56,15 @@ const mockRemoteWebSocket = () => {
     // Helper to emit events
     emit: (event: string, ...args: unknown[]) => {
       if (listeners[event]) {
-        listeners[event].forEach((listener) => listener(...args));
+        listeners[event].forEach((listener) => {
+          listener(...args);
+        });
       }
     },
   };
 
   // Mock global WebSocket constructor for remote connections
-  global.WebSocket = vi.fn(() => {
+  global.WebSocket = vi.fn(function WebSocket() {
     // Immediately emit 'open' event to simulate successful connection
     setTimeout(() => {
       remoteWs.emit('open');
@@ -376,7 +380,7 @@ describe('WebSocketInputHandler', () => {
       vi.mocked(mockRemoteRegistry.getRemoteBySessionId).mockReturnValue(mockRemote);
 
       // Override the global WebSocket mock to emit error instead of open
-      global.WebSocket = vi.fn(() => {
+      global.WebSocket = vi.fn(function WebSocket() {
         setTimeout(() => {
           mockRemoteWs.emit('error', new Error('Connection failed'));
         }, 0);

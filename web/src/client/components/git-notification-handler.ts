@@ -53,7 +53,9 @@ export class GitNotificationHandler extends LitElement {
     }
 
     // Clear all timers
-    this.autoHideTimers.forEach((timer) => clearTimeout(timer));
+    this.autoHideTimers.forEach((timer) => {
+      clearTimeout(timer);
+    });
     this.autoHideTimers.clear();
   }
 
