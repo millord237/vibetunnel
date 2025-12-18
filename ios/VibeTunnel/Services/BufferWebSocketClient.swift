@@ -88,21 +88,21 @@ class BufferWebSocketClient: NSObject {
     }
 
     func connect() {
-        guard !isConnecting else {
-            logger.warning("Already connecting, ignoring connect() call")
+        guard !self.isConnecting else {
+            self.logger.warning("Already connecting, ignoring connect() call")
             return
         }
-        guard !isConnected else {
-            logger.warning("Already connected, ignoring connect() call")
+        guard !self.isConnected else {
+            self.logger.warning("Already connected, ignoring connect() call")
             return
         }
         guard let baseURL else {
-            connectionError = WebSocketError.invalidURL
+            self.connectionError = WebSocketError.invalidURL
             return
         }
 
-        isConnecting = true
-        connectionError = nil
+        self.isConnecting = true
+        self.connectionError = nil
 
         // Convert HTTP URL to WebSocket URL
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
@@ -115,19 +115,19 @@ class BufferWebSocketClient: NSObject {
         }
 
         guard let wsURL = components?.url else {
-            connectionError = WebSocketError.invalidURL
-            isConnecting = false
+            self.connectionError = WebSocketError.invalidURL
+            self.isConnecting = false
             return
         }
 
-        logger.info("Connecting to \(wsURL)")
+        self.logger.info("Connecting to \(wsURL)")
 
         // Disconnect existing WebSocket if any
-        webSocket?.disconnect(with: .goingAway, reason: nil)
+        self.webSocket?.disconnect(with: .goingAway, reason: nil)
 
         // Create new WebSocket
-        webSocket = webSocketFactory.createWebSocket()
-        webSocket?.delegate = self
+        self.webSocket = self.webSocketFactory.createWebSocket()
+        self.webSocket?.delegate = self
 
         // Build headers
         var headers: [String: String] = [:]
@@ -140,23 +140,23 @@ class BufferWebSocketClient: NSObject {
         // Connect
         Task {
             do {
-                try await webSocket?.connect(to: wsURL, with: headers)
+                try await self.webSocket?.connect(to: wsURL, with: headers)
             } catch {
-                logger.error("Connection failed: \(error)")
-                connectionError = error
-                isConnecting = false
-                scheduleReconnect()
+                self.logger.error("Connection failed: \(error)")
+                self.connectionError = error
+                self.isConnecting = false
+                self.scheduleReconnect()
             }
         }
     }
 
     private func handleMessage(_ message: WebSocketMessage) {
         switch message {
-        case .data(let data):
-            handleBinaryMessage(data)
+        case let .data(data):
+            self.handleBinaryMessage(data)
 
-        case .string(let text):
-            handleTextMessage(text)
+        case let .string(text):
+            self.handleTextMessage(text)
         }
     }
 
@@ -172,25 +172,25 @@ class BufferWebSocketClient: NSObject {
             case "ping":
                 // Respond with pong
                 Task {
-                    try? await sendMessage(["type": "pong"])
+                    try? await self.sendMessage(["type": "pong"])
                 }
 
             case "error":
                 if let message = json["message"] as? String {
-                    logger.warning("Server error: \(message)")
+                    self.logger.warning("Server error: \(message)")
                 }
 
             default:
-                logger.debug("Unknown message type: \(type)")
+                self.logger.debug("Unknown message type: \(type)")
             }
         }
     }
 
     private func handleBinaryMessage(_ data: Data) {
-        logger.verbose("Received binary message: \(data.count) bytes")
+        self.logger.verbose("Received binary message: \(data.count) bytes")
 
         guard data.count > 5 else {
-            logger.debug("Binary message too short")
+            self.logger.debug("Binary message too short")
             return
         }
 
@@ -201,7 +201,7 @@ class BufferWebSocketClient: NSObject {
         offset += 1
 
         guard magic == Self.bufferMagicByte else {
-            logger.warning("Invalid magic byte: \(String(format: "0x%02X", magic))")
+            self.logger.warning("Invalid magic byte: \(String(format: "0x%02X", magic))")
             return
         }
 
@@ -213,29 +213,29 @@ class BufferWebSocketClient: NSObject {
 
         // Read session ID
         guard data.count >= offset + Int(sessionIdLength) else {
-            logger.debug("Not enough data for session ID")
+            self.logger.debug("Not enough data for session ID")
             return
         }
         let sessionIdData = data.subdata(in: offset..<(offset + Int(sessionIdLength)))
         guard let sessionId = String(data: sessionIdData, encoding: .utf8) else {
-            logger.warning("Failed to decode session ID")
+            self.logger.warning("Failed to decode session ID")
             return
         }
-        logger.verbose("Session ID: \(sessionId)")
+        self.logger.verbose("Session ID: \(sessionId)")
         offset += Int(sessionIdLength)
 
         // Remaining data is the message payload
         let messageData = data.subdata(in: offset..<data.count)
-        logger.verbose("Message payload: \(messageData.count) bytes")
+        self.logger.verbose("Message payload: \(messageData.count) bytes")
 
         // Decode terminal event
         if let event = decodeTerminalEvent(from: messageData),
            let handler = subscriptions[sessionId]
         {
-            logger.verbose("Dispatching event to handler")
+            self.logger.verbose("Dispatching event to handler")
             handler(event)
         } else {
-            logger.debug("No handler for session ID: \(sessionId)")
+            self.logger.debug("No handler for session ID: \(sessionId)")
         }
     }
 
@@ -243,11 +243,11 @@ class BufferWebSocketClient: NSObject {
         // This is binary buffer data, not JSON
         // Decode the binary terminal buffer
         guard let bufferSnapshot = decodeBinaryBuffer(data) else {
-            logger.debug("Failed to decode binary buffer")
+            self.logger.debug("Failed to decode binary buffer")
             return nil
         }
 
-        logger.verbose("Decoded buffer: \(bufferSnapshot.cols)x\(bufferSnapshot.rows)")
+        self.logger.verbose("Decoded buffer: \(bufferSnapshot.cols)x\(bufferSnapshot.rows)")
 
         // Return buffer update event
         return .bufferUpdate(snapshot: bufferSnapshot)
@@ -258,7 +258,7 @@ class BufferWebSocketClient: NSObject {
 
         // Read header
         guard data.count >= 32 else {
-            logger.debug("Buffer too small for header: \(data.count) bytes (need 32)")
+            self.logger.debug("Buffer too small for header: \(data.count) bytes (need 32)")
             return nil
         }
 
@@ -269,7 +269,7 @@ class BufferWebSocketClient: NSObject {
         offset += 2
 
         guard magic == 0x5654 else {
-            logger.warning("Invalid magic bytes: \(String(format: "0x%04X", magic)), expected 0x5654")
+            self.logger.warning("Invalid magic bytes: \(String(format: "0x%04X", magic)), expected 0x5654")
             return nil
         }
 
@@ -278,7 +278,7 @@ class BufferWebSocketClient: NSObject {
         offset += 1
 
         guard version == 0x01 else {
-            logger.warning("Unsupported version: 0x\(String(format: "%02X", version)), expected 0x01")
+            self.logger.warning("Unsupported version: 0x\(String(format: "%02X", version)), expected 0x01")
             return nil
         }
 
@@ -297,7 +297,7 @@ class BufferWebSocketClient: NSObject {
 
         // Dimensions and cursor - validate before reading
         guard offset + 20 <= data.count else {
-            logger.debug("Insufficient data for header fields")
+            self.logger.debug("Insufficient data for header fields")
             return nil
         }
 
@@ -312,8 +312,8 @@ class BufferWebSocketClient: NSObject {
         offset += 4
 
         // Validate dimensions
-        guard cols > 0 && cols <= 1_000 && rows > 0 && rows <= 1_000 else {
-            logger.warning("Invalid dimensions: \(cols)x\(rows)")
+        guard cols > 0 && cols <= 1000 && rows > 0 && rows <= 1000 else {
+            self.logger.warning("Invalid dimensions: \(cols)x\(rows)")
             return nil
         }
 
@@ -337,18 +337,17 @@ class BufferWebSocketClient: NSObject {
 
         // Validate cursor position
         if cursorX < 0 || cursorX > Int32(cols) || cursorY < 0 || cursorY > Int32(rows) {
-            logger.debug(
-                "Warning: cursor position out of bounds: (\(cursorX),\(cursorY)) for \(cols)x\(rows)"
-            )
+            self.logger.debug(
+                "Warning: cursor position out of bounds: (\(cursorX),\(cursorY)) for \(cols)x\(rows)")
         }
 
         // Decode cells
         var cells: [[BufferCell]] = []
         var totalRows = 0
 
-        while offset < data.count && totalRows < Int(rows) {
+        while offset < data.count, totalRows < Int(rows) {
             guard offset < data.count else {
-                logger.debug("Unexpected end of data at offset \(offset)")
+                self.logger.debug("Unexpected end of data at offset \(offset)")
                 break
             }
 
@@ -358,7 +357,7 @@ class BufferWebSocketClient: NSObject {
             if marker == 0xFE {
                 // Empty row(s)
                 guard offset < data.count else {
-                    logger.debug("Missing count byte for empty rows")
+                    self.logger.debug("Missing count byte for empty rows")
                     break
                 }
 
@@ -375,7 +374,7 @@ class BufferWebSocketClient: NSObject {
             } else if marker == 0xFD {
                 // Row with content
                 guard offset + 2 <= data.count else {
-                    logger.debug("Insufficient data for cell count")
+                    self.logger.debug("Insufficient data for cell count")
                     break
                 }
 
@@ -386,7 +385,7 @@ class BufferWebSocketClient: NSObject {
 
                 // Validate cell count
                 guard cellCount <= cols * 2 else { // Allow for wide chars
-                    logger.debug("Invalid cell count: \(cellCount) for \(cols) columns")
+                    self.logger.debug("Invalid cell count: \(cellCount) for \(cols) columns")
                     break
                 }
 
@@ -401,19 +400,18 @@ class BufferWebSocketClient: NSObject {
 
                         // Stop if we exceed column count
                         if colIndex > Int(cols) {
-                            logger.verbose("Warning: row \(totalRows) exceeds column count at cell \(i)")
+                            self.logger.verbose("Warning: row \(totalRows) exceeds column count at cell \(i)")
                             break
                         }
                     } else {
-                        logger.debug("Failed to decode cell \(i) in row \(totalRows) at offset \(offset)")
+                        self.logger.debug("Failed to decode cell \(i) in row \(totalRows) at offset \(offset)")
                         // Log the type byte for debugging
                         if offset < data.count {
                             let typeByte = data[offset]
-                            logger.verbose("Type byte: 0x\(String(format: "%02X", typeByte))")
-                            logger
+                            self.logger.verbose("Type byte: 0x\(String(format: "%02X", typeByte))")
+                            self.logger
                                 .verbose(
-                                    "Bits: hasExt=\((typeByte & 0x80) != 0), isUni=\((typeByte & 0x40) != 0), hasFg=\((typeByte & 0x20) != 0), hasBg=\((typeByte & 0x10) != 0), charType=\(typeByte & 0x03)"
-                                )
+                                    "Bits: hasExt=\((typeByte & 0x80) != 0), isUni=\((typeByte & 0x40) != 0), hasFg=\((typeByte & 0x20) != 0), hasBg=\((typeByte & 0x10) != 0), charType=\(typeByte & 0x03)")
                         }
                         break
                     }
@@ -422,9 +420,8 @@ class BufferWebSocketClient: NSObject {
                 cells.append(rowCells)
                 totalRows += 1
             } else {
-                logger.debug(
-                    "Unknown row marker: 0x\(String(format: "%02X", marker)) at offset \(offset - 1)"
-                )
+                self.logger.debug(
+                    "Unknown row marker: 0x\(String(format: "%02X", marker)) at offset \(offset - 1)")
                 // Log surrounding bytes for debugging
                 let context = 10
                 let start = max(0, offset - 1 - context)
@@ -437,7 +434,7 @@ class BufferWebSocketClient: NSObject {
                         contextBytes += "\(String(format: "%02X", data[i])) "
                     }
                 }
-                logger.verbose("Context bytes: \(contextBytes)")
+                self.logger.verbose("Context bytes: \(contextBytes)")
                 // Skip this byte and try to continue parsing
                 break
             }
@@ -448,7 +445,7 @@ class BufferWebSocketClient: NSObject {
             cells.append([BufferCell(char: " ", width: 1, fg: nil, bg: nil, attributes: nil)])
         }
 
-        logger.verbose("Successfully decoded buffer: \(cols)x\(rows), \(cells.count) rows")
+        self.logger.verbose("Successfully decoded buffer: \(cols)x\(rows), \(cells.count) rows")
 
         return BufferSnapshot(
             cols: Int(cols),
@@ -456,13 +453,12 @@ class BufferWebSocketClient: NSObject {
             viewportY: Int(viewportY),
             cursorX: Int(cursorX),
             cursorY: Int(cursorY),
-            cells: cells
-        )
+            cells: cells)
     }
 
     private func decodeCell(_ data: Data, offset: Int) -> (BufferCell, Int)? {
         guard offset < data.count else {
-            logger.debug("Cell decode failed: offset \(offset) beyond data size \(data.count)")
+            self.logger.debug("Cell decode failed: offset \(offset) beyond data size \(data.count)")
             return nil
         }
 
@@ -486,7 +482,7 @@ class BufferWebSocketClient: NSObject {
 
         // Read character
         var char: String
-        var width: Int = 1
+        var width = 1
 
         if charType == 0x00 {
             // Simple space
@@ -495,14 +491,14 @@ class BufferWebSocketClient: NSObject {
             // Unicode character
             // Read character length first
             guard currentOffset < data.count else {
-                logger.debug("Unicode char decode failed: missing length byte")
+                self.logger.debug("Unicode char decode failed: missing length byte")
                 return nil
             }
             let charLen = Int(data[currentOffset])
             currentOffset += 1
 
             guard currentOffset + charLen <= data.count else {
-                logger.debug("Unicode char decode failed: insufficient data for char length \(charLen)")
+                self.logger.debug("Unicode char decode failed: insufficient data for char length \(charLen)")
                 return nil
             }
 
@@ -511,11 +507,11 @@ class BufferWebSocketClient: NSObject {
             currentOffset += charLen
 
             // Calculate display width for Unicode characters
-            width = calculateDisplayWidth(for: char)
+            width = self.calculateDisplayWidth(for: char)
         } else {
             // ASCII character
             guard currentOffset < data.count else {
-                logger.debug("ASCII char decode failed: missing char byte")
+                self.logger.debug("ASCII char decode failed: missing char byte")
                 return nil
             }
             let charCode = data[currentOffset]
@@ -537,7 +533,7 @@ class BufferWebSocketClient: NSObject {
         if hasExtended {
             // Read attributes byte
             guard currentOffset < data.count else {
-                logger.debug("Extended data decode failed: missing attributes byte")
+                self.logger.debug("Extended data decode failed: missing attributes byte")
                 return nil
             }
             attributes = Int(data[currentOffset])
@@ -548,7 +544,7 @@ class BufferWebSocketClient: NSObject {
                 if isRgbFg {
                     // RGB color (3 bytes)
                     guard currentOffset + 3 <= data.count else {
-                        logger.debug("RGB foreground decode failed: insufficient data")
+                        self.logger.debug("RGB foreground decode failed: insufficient data")
                         return nil
                     }
                     let red = Int(data[currentOffset])
@@ -559,7 +555,7 @@ class BufferWebSocketClient: NSObject {
                 } else {
                     // Palette color (1 byte)
                     guard currentOffset < data.count else {
-                        logger.debug("Palette foreground decode failed: missing color byte")
+                        self.logger.debug("Palette foreground decode failed: missing color byte")
                         return nil
                     }
                     fg = Int(data[currentOffset])
@@ -572,7 +568,7 @@ class BufferWebSocketClient: NSObject {
                 if isRgbBg {
                     // RGB color (3 bytes)
                     guard currentOffset + 3 <= data.count else {
-                        logger.debug("RGB background decode failed: insufficient data")
+                        self.logger.debug("RGB background decode failed: insufficient data")
                         return nil
                     }
                     let red = Int(data[currentOffset])
@@ -583,7 +579,7 @@ class BufferWebSocketClient: NSObject {
                 } else {
                     // Palette color (1 byte)
                     guard currentOffset < data.count else {
-                        logger.debug("Palette background decode failed: missing color byte")
+                        self.logger.debug("Palette background decode failed: missing color byte")
                         return nil
                     }
                     bg = Int(data[currentOffset])
@@ -649,7 +645,7 @@ class BufferWebSocketClient: NSObject {
     }
 
     private func subscribe(to sessionId: String) async throws {
-        try await sendMessage(["type": "subscribe", "sessionId": sessionId])
+        try await self.sendMessage(["type": "subscribe", "sessionId": sessionId])
     }
 
     func unsubscribe(from sessionId: String) {
@@ -687,9 +683,9 @@ class BufferWebSocketClient: NSObject {
     }
 
     private func startPingTask() {
-        stopPingTask()
+        self.stopPingTask()
 
-        pingTask = Task { [weak self] in
+        self.pingTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
                 if !Task.isCancelled {
@@ -700,26 +696,26 @@ class BufferWebSocketClient: NSObject {
     }
 
     private func stopPingTask() {
-        pingTask?.cancel()
-        pingTask = nil
+        self.pingTask?.cancel()
+        self.pingTask = nil
     }
 
     private func handleDisconnection() {
-        isConnected = false
-        webSocket = nil
-        stopPingTask()
-        scheduleReconnect()
+        self.isConnected = false
+        self.webSocket = nil
+        self.stopPingTask()
+        self.scheduleReconnect()
     }
 
     private func scheduleReconnect() {
-        guard reconnectTask == nil else { return }
+        guard self.reconnectTask == nil else { return }
 
         let delay = min(pow(2.0, Double(reconnectAttempts)), 30.0)
-        reconnectAttempts += 1
+        self.reconnectAttempts += 1
 
-        logger.info("Reconnecting in \(delay)s (attempt \(reconnectAttempts))")
+        self.logger.info("Reconnecting in \(delay)s (attempt \(self.reconnectAttempts))")
 
-        reconnectTask = Task { @MainActor [weak self] in
+        self.reconnectTask = Task { @MainActor [weak self] in
             let nanoseconds = UInt64(delay * 1_000_000_000)
             try? await Task.sleep(nanoseconds: nanoseconds)
 
@@ -731,15 +727,15 @@ class BufferWebSocketClient: NSObject {
     }
 
     func disconnect() {
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        stopPingTask()
+        self.reconnectTask?.cancel()
+        self.reconnectTask = nil
+        self.stopPingTask()
 
-        webSocket?.disconnect(with: .goingAway, reason: nil)
-        webSocket = nil
+        self.webSocket?.disconnect(with: .goingAway, reason: nil)
+        self.webSocket = nil
 
-        subscriptions.removeAll()
-        isConnected = false
+        self.subscriptions.removeAll()
+        self.isConnected = false
     }
 
     deinit {
@@ -752,11 +748,11 @@ class BufferWebSocketClient: NSObject {
 
 extension BufferWebSocketClient: WebSocketDelegate {
     func webSocketDidConnect(_ webSocket: WebSocketProtocol) {
-        logger.info("Connected")
-        isConnected = true
-        isConnecting = false
-        reconnectAttempts = 0
-        startPingTask()
+        self.logger.info("Connected")
+        self.isConnected = true
+        self.isConnecting = false
+        self.reconnectAttempts = 0
+        self.startPingTask()
 
         // Re-subscribe to all sessions that have handlers
         Task { @MainActor [weak self] in
@@ -770,21 +766,21 @@ extension BufferWebSocketClient: WebSocketDelegate {
     }
 
     func webSocket(_ webSocket: WebSocketProtocol, didReceiveMessage message: WebSocketMessage) {
-        handleMessage(message)
+        self.handleMessage(message)
     }
 
     func webSocket(_ webSocket: WebSocketProtocol, didFailWithError error: Error) {
-        logger.error("Error: \(error)")
-        connectionError = error
-        handleDisconnection()
+        self.logger.error("Error: \(error)")
+        self.connectionError = error
+        self.handleDisconnection()
     }
 
     func webSocketDidDisconnect(
         _ webSocket: WebSocketProtocol,
         closeCode: URLSessionWebSocketTask.CloseCode,
-        reason: Data?
-    ) {
-        logger.info("Disconnected with code: \(closeCode)")
-        handleDisconnection()
+        reason: Data?)
+    {
+        self.logger.info("Disconnected with code: \(closeCode)")
+        self.handleDisconnection()
     }
 }

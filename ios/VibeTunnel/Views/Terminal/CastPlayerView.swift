@@ -24,12 +24,12 @@ struct CastPlayerView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    if viewModel.isLoading {
-                        loadingView
+                    if self.viewModel.isLoading {
+                        self.loadingView
                     } else if let error = viewModel.errorMessage {
-                        errorView(error)
-                    } else if viewModel.player != nil {
-                        playerContent
+                        self.errorView(error)
+                    } else if self.viewModel.player != nil {
+                        self.playerContent
                     }
                 }
             }
@@ -38,7 +38,7 @@ struct CastPlayerView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Close") {
-                        dismiss()
+                        self.dismiss()
                     }
                     .foregroundColor(Theme.Colors.primaryAccent)
                 }
@@ -46,7 +46,7 @@ struct CastPlayerView: View {
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .onAppear {
-            viewModel.loadCastFile(from: castFileURL)
+            self.viewModel.loadCastFile(from: self.castFileURL)
         }
     }
 
@@ -85,26 +85,26 @@ struct CastPlayerView: View {
     private var playerContent: some View {
         VStack(spacing: 0) {
             // Terminal display
-            CastTerminalView(fontSize: $fontSize, viewModel: viewModel)
+            CastTerminalView(fontSize: self.$fontSize, viewModel: self.viewModel)
                 .background(Theme.Colors.terminalBackground)
 
             // Playback controls
             VStack(spacing: Theme.Spacing.medium) {
                 // Progress bar
                 VStack(spacing: Theme.Spacing.extraSmall) {
-                    Slider(value: $currentTime, in: 0...viewModel.duration) { editing in
-                        if !editing && isPlaying {
+                    Slider(value: self.$currentTime, in: 0...self.viewModel.duration) { editing in
+                        if !editing, self.isPlaying {
                             // Resume playback from new position
-                            viewModel.seekTo(time: currentTime)
+                            self.viewModel.seekTo(time: self.currentTime)
                         }
                     }
                     .accentColor(Theme.Colors.primaryAccent)
 
                     HStack {
-                        Text(formatTime(currentTime))
+                        Text(self.formatTime(self.currentTime))
                             .font(Theme.Typography.terminalSystem(size: 10))
                         Spacer()
-                        Text(formatTime(viewModel.duration))
+                        Text(self.formatTime(self.viewModel.duration))
                             .font(Theme.Typography.terminalSystem(size: 10))
                     }
                     .foregroundColor(Theme.Colors.terminalForeground.opacity(0.7))
@@ -114,31 +114,30 @@ struct CastPlayerView: View {
                 HStack(spacing: Theme.Spacing.extraLarge) {
                     // Speed control
                     Menu {
-                        Button("0.5x") { playbackSpeed = 0.5 }
-                        Button("1x") { playbackSpeed = 1.0 }
-                        Button("2x") { playbackSpeed = 2.0 }
-                        Button("4x") { playbackSpeed = 4.0 }
+                        Button("0.5x") { self.playbackSpeed = 0.5 }
+                        Button("1x") { self.playbackSpeed = 1.0 }
+                        Button("2x") { self.playbackSpeed = 2.0 }
+                        Button("4x") { self.playbackSpeed = 4.0 }
                     } label: {
-                        Text("\(playbackSpeed, specifier: "%.1f")x")
+                        Text("\(self.playbackSpeed, specifier: "%.1f")x")
                             .font(Theme.Typography.terminalSystem(size: 14))
                             .foregroundColor(Theme.Colors.primaryAccent)
                             .padding(.horizontal, Theme.Spacing.small)
                             .padding(.vertical, Theme.Spacing.extraSmall)
                             .background(
                                 RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                    .stroke(Theme.Colors.primaryAccent, lineWidth: 1)
-                            )
+                                    .stroke(Theme.Colors.primaryAccent, lineWidth: 1))
                     }
 
                     // Play/Pause
-                    Button(action: togglePlayback) {
-                        Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    Button(action: self.togglePlayback) {
+                        Image(systemName: self.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                             .font(.system(size: 44))
                             .foregroundColor(Theme.Colors.primaryAccent)
                     }
 
                     // Restart
-                    Button(action: restart) {
+                    Button(action: self.restart) {
                         Image(systemName: "arrow.counterclockwise")
                             .font(.system(size: 20))
                             .foregroundColor(Theme.Colors.primaryAccent)
@@ -148,27 +147,27 @@ struct CastPlayerView: View {
             .padding()
             .background(Theme.Colors.cardBackground)
         }
-        .onChange(of: viewModel.currentTime) { _, newTime in
-            if !viewModel.isSeeking {
-                currentTime = newTime
+        .onChange(of: self.viewModel.currentTime) { _, newTime in
+            if !self.viewModel.isSeeking {
+                self.currentTime = newTime
             }
         }
     }
 
     private func togglePlayback() {
-        if isPlaying {
-            viewModel.pause()
+        if self.isPlaying {
+            self.viewModel.pause()
         } else {
-            viewModel.play(speed: playbackSpeed)
+            self.viewModel.play(speed: self.playbackSpeed)
         }
-        isPlaying.toggle()
+        self.isPlaying.toggle()
     }
 
     private func restart() {
-        viewModel.restart()
-        currentTime = 0
-        if isPlaying {
-            viewModel.play(speed: playbackSpeed)
+        self.viewModel.restart()
+        self.currentTime = 0
+        if self.isPlaying {
+            self.viewModel.play(speed: self.playbackSpeed)
         }
     }
 
@@ -201,7 +200,7 @@ struct CastTerminalView: UIViewRepresentable {
         // SwiftTerm doesn't have built-in link detection API
         // URL detection would need to be implemented manually
 
-        updateFont(terminal, size: fontSize)
+        self.updateFont(terminal, size: self.fontSize)
 
         // Set initial size from cast file if available
         if let header = viewModel.header {
@@ -215,11 +214,11 @@ struct CastTerminalView: UIViewRepresentable {
     }
 
     func updateUIView(_ terminal: SwiftTerm.TerminalView, context: Context) {
-        updateFont(terminal, size: fontSize)
+        self.updateFont(terminal, size: self.fontSize)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel)
+        Coordinator(viewModel: self.viewModel)
     }
 
     private func updateFont(_ terminal: SwiftTerm.TerminalView, size: CGFloat) {
@@ -273,8 +272,8 @@ class CastPlayerViewModel {
     var isSeeking = false
 
     var player: CastPlayer?
-    var header: CastFile? { player?.header }
-    var duration: TimeInterval { player?.duration ?? 0 }
+    var header: CastFile? { self.player?.header }
+    var duration: TimeInterval { self.player?.duration ?? 0 }
 
     var onTerminalOutput: ((String) -> Void)?
     var onTerminalClear: (() -> Void)?
@@ -287,27 +286,27 @@ class CastPlayerViewModel {
                 let data = try Data(contentsOf: url)
 
                 guard let player = CastPlayer(data: data) else {
-                    errorMessage = "Invalid cast file format"
-                    isLoading = false
+                    self.errorMessage = "Invalid cast file format"
+                    self.isLoading = false
                     return
                 }
 
                 self.player = player
-                isLoading = false
+                self.isLoading = false
             } catch {
-                errorMessage = error.localizedDescription
-                isLoading = false
+                self.errorMessage = error.localizedDescription
+                self.isLoading = false
             }
         }
     }
 
     func play(speed: Double = 1.0) {
-        playbackTask?.cancel()
+        self.playbackTask?.cancel()
 
-        playbackTask = Task {
+        self.playbackTask = Task {
             guard let player else { return }
 
-            player.play(from: currentTime, speed: speed) { [weak self] event in
+            player.play(from: self.currentTime, speed: speed) { [weak self] event in
                 Task { @MainActor in
                     guard let self else { return }
 
@@ -330,15 +329,15 @@ class CastPlayerViewModel {
     }
 
     func pause() {
-        playbackTask?.cancel()
+        self.playbackTask?.cancel()
     }
 
     func seekTo(time: TimeInterval) {
-        isSeeking = true
-        currentTime = time
+        self.isSeeking = true
+        self.currentTime = time
 
         // Clear terminal and replay up to the seek point
-        onTerminalClear?()
+        self.onTerminalClear?()
 
         guard let player else { return }
 
@@ -349,13 +348,13 @@ class CastPlayerViewModel {
             }
         }
 
-        isSeeking = false
+        self.isSeeking = false
     }
 
     func restart() {
-        playbackTask?.cancel()
-        currentTime = 0
-        onTerminalClear?()
+        self.playbackTask?.cancel()
+        self.currentTime = 0
+        self.onTerminalClear?()
     }
 }
 
@@ -376,8 +375,8 @@ extension CastPlayer {
         from startTime: TimeInterval = 0,
         speed: Double = 1.0,
         onEvent: @escaping @Sendable (CastEvent) -> Void,
-        completion: @escaping @Sendable () -> Void
-    ) {
+        completion: @escaping @Sendable () -> Void)
+    {
         let eventsToPlay = events.filter { $0.time > startTime }
         Task { @Sendable in
             var lastEventTime = startTime

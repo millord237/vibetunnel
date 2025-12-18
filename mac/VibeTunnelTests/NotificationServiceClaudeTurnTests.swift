@@ -3,13 +3,14 @@ import Testing
 import UserNotifications
 @testable import VibeTunnel
 
-@Suite("NotificationService - Claude Turn")
+@Suite("NotificationService - Claude Turn", .serialized)
 struct NotificationServiceClaudeTurnTests {
     @MainActor
     init() {
         // Reset to default state before any test runs
         ConfigManager.shared.notificationClaudeTurn = false
     }
+
     @Test("Should have claude turn preference disabled by default")
     @MainActor
     func claudeTurnDefaultPreference() async throws {

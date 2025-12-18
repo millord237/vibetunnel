@@ -40,83 +40,80 @@ struct TerminalView: View {
 
     var body: some View {
         NavigationStack {
-            mainContent
-                .navigationTitle(session.displayName)
+            self.mainContent
+                .navigationTitle(self.session.displayName)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(.visible, for: .bottomBar)
                 .toolbarBackground(.automatic, for: .bottomBar)
                 .toolbar {
-                    navigationToolbarItems
-                    bottomToolbarItems
-                    recordingIndicator
+                    self.navigationToolbarItems
+                    self.bottomToolbarItems
+                    self.recordingIndicator
                 }
         }
         .focusable()
         .onAppear {
-            viewModel.connect()
-            isInputFocused = true
+            self.viewModel.connect()
+            self.isInputFocused = true
         }
         .onDisappear {
-            viewModel.disconnect()
+            self.viewModel.disconnect()
         }
-        .sheet(isPresented: $showingFontSizeSheet) {
-            FontSizeSheet(fontSize: $fontSize)
+        .sheet(isPresented: self.$showingFontSizeSheet) {
+            FontSizeSheet(fontSize: self.$fontSize)
         }
-        .sheet(isPresented: $showingRecordingSheet) {
-            RecordingExportSheet(recorder: viewModel.castRecorder, sessionName: session.displayName)
+        .sheet(isPresented: self.$showingRecordingSheet) {
+            RecordingExportSheet(recorder: self.viewModel.castRecorder, sessionName: self.session.displayName)
         }
-        .sheet(isPresented: $showingTerminalWidthSheet) {
+        .sheet(isPresented: self.$showingTerminalWidthSheet) {
             TerminalWidthSheet(
-                selectedWidth: $selectedTerminalWidth,
-                isResizeBlockedByServer: viewModel.isResizeBlockedByServer
-            )
-            .onAppear {
-                selectedTerminalWidth = viewModel.terminalCols
-            }
+                selectedWidth: self.$selectedTerminalWidth,
+                isResizeBlockedByServer: self.viewModel.isResizeBlockedByServer)
+                .onAppear {
+                    self.selectedTerminalWidth = self.viewModel.terminalCols
+                }
         }
-        .sheet(isPresented: $showingTerminalThemeSheet) {
-            TerminalThemeSheet(selectedTheme: $selectedTheme)
+        .sheet(isPresented: self.$showingTerminalThemeSheet) {
+            TerminalThemeSheet(selectedTheme: self.$selectedTheme)
         }
-        .sheet(isPresented: $showingFileBrowser) {
+        .sheet(isPresented: self.$showingFileBrowser) {
             FileBrowserView(
-                initialPath: session.workingDir,
+                initialPath: self.session.workingDir,
                 mode: .insertPath,
                 onSelect: { _ in
-                    showingFileBrowser = false
+                    self.showingFileBrowser = false
                 },
                 onInsertPath: { [weak viewModel] path, _ in
                     // Insert the path into the terminal
                     viewModel?.sendInput(path)
-                    showingFileBrowser = false
-                }
-            )
+                    self.showingFileBrowser = false
+                })
         }
-        .sheet(isPresented: $showingFullscreenInput) {
-            FullscreenTextInput(isPresented: $showingFullscreenInput) { [weak viewModel] text in
+        .sheet(isPresented: self.$showingFullscreenInput) {
+            FullscreenTextInput(isPresented: self.$showingFullscreenInput) { [weak viewModel] text in
                 viewModel?.sendInput(text)
             }
         }
-        .sheet(isPresented: $showingCtrlKeyGrid) {
-            CtrlKeyGrid(isPresented: $showingCtrlKeyGrid) { [weak viewModel] controlChar in
+        .sheet(isPresented: self.$showingCtrlKeyGrid) {
+            CtrlKeyGrid(isPresented: self.$showingCtrlKeyGrid) { [weak viewModel] controlChar in
                 viewModel?.sendInput(controlChar)
             }
         }
         .gesture(
             DragGesture()
                 .onEnded { value in
-                    if value.startLocation.x < 20 && value.translation.width > 50 {
-                        dismiss()
+                    if value.startLocation.x < 20, value.translation.width > 50 {
+                        self.dismiss()
                         HapticFeedback.impact(.light)
                     }
-                }
-        )
+                })
         .task {
             for await notification in NotificationCenter.default
                 .notifications(named: UIResponder.keyboardWillShowNotification)
             {
                 if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
                     withAnimation(Theme.Animation.standard) {
-                        keyboardHeight = keyboardFrame.height
+                        self.keyboardHeight = keyboardFrame.height
                     }
                 }
             }
@@ -124,34 +121,34 @@ struct TerminalView: View {
         .task {
             for await _ in NotificationCenter.default.notifications(named: UIResponder.keyboardWillHideNotification) {
                 withAnimation(Theme.Animation.standard) {
-                    keyboardHeight = 0
+                    self.keyboardHeight = 0
                 }
             }
         }
-        .onChange(of: selectedTerminalWidth) { _, newValue in
+        .onChange(of: self.selectedTerminalWidth) { _, newValue in
             if let width = newValue, width != viewModel.terminalCols {
-                let aspectRatio = Double(viewModel.terminalRows) / Double(viewModel.terminalCols)
+                let aspectRatio = Double(viewModel.terminalRows) / Double(self.viewModel.terminalCols)
                 let newHeight = Int(Double(width) * aspectRatio)
-                viewModel.resize(cols: width, rows: newHeight)
+                self.viewModel.resize(cols: width, rows: newHeight)
             }
         }
-        .onChange(of: currentTerminalWidth) { _, newWidth in
+        .onChange(of: self.currentTerminalWidth) { _, newWidth in
             let targetWidth = newWidth.value == 0 ? nil : newWidth.value
-            if targetWidth != selectedTerminalWidth {
-                selectedTerminalWidth = targetWidth
-                viewModel.setMaxWidth(targetWidth ?? 0)
+            if targetWidth != self.selectedTerminalWidth {
+                self.selectedTerminalWidth = targetWidth
+                self.viewModel.setMaxWidth(targetWidth ?? 0)
                 TerminalWidthManager.shared.defaultWidth = newWidth.value
             }
         }
-        .onChange(of: viewModel.isAtBottom) { _, newValue in
+        .onChange(of: self.viewModel.isAtBottom) { _, newValue in
             withAnimation(Theme.Animation.smooth) {
-                showScrollToBottom = !newValue
+                self.showScrollToBottom = !newValue
             }
         }
         // iPad keyboard shortcuts
         .onKeyPress(keys: ["o"]) { press in
-            if press.modifiers.contains(.command) && session.isRunning {
-                showingFileBrowser = true
+            if press.modifiers.contains(.command), self.session.isRunning {
+                self.showingFileBrowser = true
                 return .handled
             }
             return .ignored
@@ -160,7 +157,7 @@ struct TerminalView: View {
             if press.modifiers.contains(.command) {
                 // Increase font size
                 withAnimation(Theme.Animation.quick) {
-                    fontSize = min(fontSize + 2, 30)
+                    self.fontSize = min(self.fontSize + 2, 30)
                 }
                 return .handled
             }
@@ -170,7 +167,7 @@ struct TerminalView: View {
             if press.modifiers.contains(.command) {
                 // Decrease font size
                 withAnimation(Theme.Animation.quick) {
-                    fontSize = max(fontSize - 2, 8)
+                    self.fontSize = max(self.fontSize - 2, 8)
                 }
                 return .handled
             }
@@ -182,8 +179,8 @@ struct TerminalView: View {
                 let themes = TerminalTheme.allThemes
                 if let currentIndex = themes.firstIndex(where: { $0.id == selectedTheme.id }) {
                     let nextIndex = (currentIndex + 1) % themes.count
-                    selectedTheme = themes[nextIndex]
-                    TerminalTheme.selected = selectedTheme
+                    self.selectedTheme = themes[nextIndex]
+                    TerminalTheme.selected = self.selectedTheme
                 }
                 return .handled
             }
@@ -192,13 +189,13 @@ struct TerminalView: View {
         .onKeyPress(keys: ["k"]) { press in
             if press.modifiers.contains(.command) {
                 // Clear terminal
-                viewModel.sendSpecialKey(.ctrlL)
+                self.viewModel.sendSpecialKey(.ctrlL)
                 return .handled
             }
             return .ignored
         }
         .onKeyPress(keys: ["c"]) { press in
-            if press.modifiers.contains(.command) && !press.modifiers.contains(.shift) {
+            if press.modifiers.contains(.command), !press.modifiers.contains(.shift) {
                 // Copy to clipboard
                 if let content = viewModel.getBufferContent() {
                     UIPasteboard.general.string = content
@@ -211,10 +208,10 @@ struct TerminalView: View {
         .onKeyPress(keys: ["r"]) { press in
             if press.modifiers.contains(.command) {
                 // Start/stop recording
-                if viewModel.castRecorder.isRecording {
-                    viewModel.stopRecording()
+                if self.viewModel.castRecorder.isRecording {
+                    self.viewModel.stopRecording()
                 } else {
-                    viewModel.startRecording()
+                    self.viewModel.startRecording()
                 }
                 return .handled
             }
@@ -223,7 +220,7 @@ struct TerminalView: View {
         .onKeyPress(keys: ["w"]) { press in
             if press.modifiers.contains(.command) {
                 // Change terminal width
-                showingTerminalWidthSheet = true
+                self.showingTerminalWidthSheet = true
                 return .handled
             }
             return .ignored
@@ -231,28 +228,28 @@ struct TerminalView: View {
         .onKeyPress(keys: ["d"]) { press in
             if press.modifiers.contains(.command) {
                 // Toggle debug menu
-                showingDebugMenu.toggle()
+                self.showingDebugMenu.toggle()
                 return .handled
             }
             return .ignored
         }
         .onKeyPress(keys: [.escape]) { _ in
             // Send escape key to terminal
-            viewModel.sendSpecialKey(.escape)
+            self.viewModel.sendSpecialKey(.escape)
             return .handled
         }
         .onKeyPress(keys: [.tab]) { _ in
             // Send tab key to terminal
-            viewModel.sendSpecialKey(.tab)
+            self.viewModel.sendSpecialKey(.tab)
             return .handled
         }
-        .sheet(isPresented: $showingExportSheet) {
+        .sheet(isPresented: self.$showingExportSheet) {
             if let url = exportedFileURL {
                 ShareSheet(items: [url])
                     .onDisappear {
                         // Clean up temporary file
                         try? FileManager.default.removeItem(at: url)
-                        exportedFileURL = nil
+                        self.exportedFileURL = nil
                     }
             }
         }
@@ -268,8 +265,8 @@ struct TerminalView: View {
 
         do {
             try bufferContent.write(to: tempURL, atomically: true, encoding: .utf8)
-            exportedFileURL = tempURL
-            showingExportSheet = true
+            self.exportedFileURL = tempURL
+            self.showingExportSheet = true
         } catch {
             logger.error("Failed to export terminal buffer: \(error)")
         }
@@ -279,16 +276,16 @@ struct TerminalView: View {
 
     private var mainContent: some View {
         ZStack {
-            selectedTheme.background
+            self.selectedTheme.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                if viewModel.isConnecting {
-                    loadingView
+                if self.viewModel.isConnecting {
+                    self.loadingView
                 } else if let error = viewModel.errorMessage {
-                    errorView(error)
+                    self.errorView(error)
                 } else {
-                    terminalContent
+                    self.terminalContent
                 }
             }
         }
@@ -298,32 +295,32 @@ struct TerminalView: View {
         Group {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button("Close") {
-                    dismiss()
+                    self.dismiss()
                 }
                 .foregroundColor(Theme.Colors.primaryAccent)
             }
 
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                QuickFontSizeButtons(fontSize: $fontSize)
+                QuickFontSizeButtons(fontSize: self.$fontSize)
                     .fixedSize()
-                fileBrowserButton
-                widthSelectorButton
-                menuButton
+                self.fileBrowserButton
+                self.widthSelectorButton
+                self.menuButton
             }
         }
     }
 
     private var bottomToolbarItems: some ToolbarContent {
         ToolbarItemGroup(placement: .bottomBar) {
-            terminalSizeIndicator
+            self.terminalSizeIndicator
             Spacer()
         }
     }
 
     private var recordingIndicator: some ToolbarContent {
         ToolbarItem(placement: .navigationBarTrailing) {
-            if viewModel.castRecorder.isRecording {
-                recordingView
+            if self.viewModel.castRecorder.isRecording {
+                self.recordingView
             }
         }
     }
@@ -333,7 +330,7 @@ struct TerminalView: View {
     private var fileBrowserButton: some View {
         Button(action: {
             HapticFeedback.impact(.light)
-            showingFileBrowser = true
+            self.showingFileBrowser = true
         }, label: {
             Image(systemName: "folder")
                 .font(.system(size: 16))
@@ -342,11 +339,11 @@ struct TerminalView: View {
     }
 
     private var widthSelectorButton: some View {
-        Button(action: { showingWidthSelector = true }, label: {
+        Button(action: { self.showingWidthSelector = true }, label: {
             HStack(spacing: 2) {
                 Image(systemName: "arrow.left.and.right")
                     .font(.system(size: 12))
-                Text(currentTerminalWidth.label)
+                Text(self.currentTerminalWidth.label)
                     .font(Theme.Typography.terminalSystem(size: 14))
                     .fontWeight(.medium)
             }
@@ -356,21 +353,19 @@ struct TerminalView: View {
             .cornerRadius(6)
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(Theme.Colors.primaryAccent.opacity(0.3), lineWidth: 1)
-            )
+                    .stroke(Theme.Colors.primaryAccent.opacity(0.3), lineWidth: 1))
         })
         .foregroundColor(Theme.Colors.primaryAccent)
-        .popover(isPresented: $showingWidthSelector, arrowEdge: .top) {
+        .popover(isPresented: self.$showingWidthSelector, arrowEdge: .top) {
             WidthSelectorPopover(
-                currentWidth: $currentTerminalWidth,
-                isPresented: $showingWidthSelector
-            )
+                currentWidth: self.$currentTerminalWidth,
+                isPresented: self.$showingWidthSelector)
         }
     }
 
     private var menuButton: some View {
         Menu {
-            terminalMenuItems
+            self.terminalMenuItems
         } label: {
             Image(systemName: "ellipsis.circle")
                 .foregroundColor(Theme.Colors.primaryAccent)
@@ -378,15 +373,15 @@ struct TerminalView: View {
     }
 
     @ViewBuilder private var terminalMenuItems: some View {
-        Button(action: { viewModel.clearTerminal() }, label: {
+        Button(action: { self.viewModel.clearTerminal() }, label: {
             Label("Clear", systemImage: "clear")
         })
 
-        Button(action: { showingFullscreenInput = true }, label: {
+        Button(action: { self.showingFullscreenInput = true }, label: {
             Label("Compose Command", systemImage: "text.viewfinder")
         })
 
-        Button(action: { showingCtrlKeyGrid = true }, label: {
+        Button(action: { self.showingCtrlKeyGrid = true }, label: {
             Label("Ctrl Shortcuts", systemImage: "command.square")
         })
 
@@ -394,102 +389,102 @@ struct TerminalView: View {
 
         Menu {
             Button(action: {
-                fontSize = max(8, fontSize - 1)
+                self.fontSize = max(8, self.fontSize - 1)
                 HapticFeedback.impact(.light)
             }, label: {
                 Label("Decrease", systemImage: "minus")
             })
-            .disabled(fontSize <= 8)
+            .disabled(self.fontSize <= 8)
 
             Button(action: {
-                fontSize = min(32, fontSize + 1)
+                self.fontSize = min(32, self.fontSize + 1)
                 HapticFeedback.impact(.light)
             }, label: {
                 Label("Increase", systemImage: "plus")
             })
-            .disabled(fontSize >= 32)
+            .disabled(self.fontSize >= 32)
 
             Button(action: {
-                fontSize = 14
+                self.fontSize = 14
                 HapticFeedback.impact(.light)
             }, label: {
                 Label("Reset to Default", systemImage: "arrow.counterclockwise")
             })
-            .disabled(fontSize == 14)
+            .disabled(self.fontSize == 14)
 
             Divider()
 
-            Button(action: { showingFontSizeSheet = true }, label: {
+            Button(action: { self.showingFontSizeSheet = true }, label: {
                 Label("More Options...", systemImage: "slider.horizontal.3")
             })
         } label: {
-            Label("Font Size (\(Int(fontSize))pt)", systemImage: "textformat.size")
+            Label("Font Size (\(Int(self.fontSize))pt)", systemImage: "textformat.size")
         }
 
-        Button(action: { showingTerminalWidthSheet = true }, label: {
+        Button(action: { self.showingTerminalWidthSheet = true }, label: {
             Label("Terminal Width", systemImage: "arrow.left.and.right")
         })
 
-        Button(action: { viewModel.toggleFitToWidth() }, label: {
+        Button(action: { self.viewModel.toggleFitToWidth() }, label: {
             Label(
-                viewModel.fitToWidth ? "Fixed Width" : "Fit to Width",
-                systemImage: viewModel.fitToWidth ? "arrow.left.and.right.square" : "arrow.left.and.right.square.fill"
-            )
+                self.viewModel.fitToWidth ? "Fixed Width" : "Fit to Width",
+                systemImage: self.viewModel
+                    .fitToWidth ? "arrow.left.and.right.square" : "arrow.left.and.right.square.fill")
         })
 
-        Button(action: { showingTerminalThemeSheet = true }, label: {
+        Button(action: { self.showingTerminalThemeSheet = true }, label: {
             Label("Theme", systemImage: "paintbrush")
         })
 
-        Button(action: { viewModel.copyBuffer() }, label: {
+        Button(action: { self.viewModel.copyBuffer() }, label: {
             Label("Copy All", systemImage: "square.on.square")
         })
 
-        Button(action: { exportTerminalBuffer() }, label: {
+        Button(action: { self.exportTerminalBuffer() }, label: {
             Label("Export as Text", systemImage: "square.and.arrow.up")
         })
 
         Divider()
 
-        recordingMenuItems
+        self.recordingMenuItems
 
         Divider()
 
-        debugMenuItems
+        self.debugMenuItems
     }
 
     @ViewBuilder private var recordingMenuItems: some View {
-        if viewModel.castRecorder.isRecording {
+        if self.viewModel.castRecorder.isRecording {
             Button(action: {
-                viewModel.stopRecording()
-                showingRecordingSheet = true
+                self.viewModel.stopRecording()
+                self.showingRecordingSheet = true
             }, label: {
                 Label("Stop Recording", systemImage: "stop.circle.fill")
                     .foregroundColor(.red)
             })
         } else {
-            Button(action: { viewModel.startRecording() }, label: {
+            Button(action: { self.viewModel.startRecording() }, label: {
                 Label("Start Recording", systemImage: "record.circle")
             })
         }
 
-        Button(action: { showingRecordingSheet = true }, label: {
+        Button(action: { self.showingRecordingSheet = true }, label: {
             Label("Export Recording", systemImage: "square.and.arrow.up")
         })
-        .disabled(viewModel.castRecorder.events.isEmpty)
+        .disabled(self.viewModel.castRecorder.events.isEmpty)
     }
 
     @ViewBuilder private var debugMenuItems: some View {
         Menu {
             ForEach(TerminalRenderer.allCases, id: \.self) { renderer in
                 Button(action: {
-                    selectedRenderer = renderer
+                    self.selectedRenderer = renderer
                     TerminalRenderer.selected = renderer
-                    viewModel.terminalViewId = UUID() // Force recreate terminal view
+                    self.viewModel.terminalViewId = UUID() // Force recreate terminal view
                 }, label: {
                     HStack {
                         Text(renderer.displayName)
-                        if renderer == selectedRenderer {
+                        if renderer == self.selectedRenderer {
                             Image(systemName: "checkmark")
                         }
                     }
@@ -501,8 +496,8 @@ struct TerminalView: View {
     }
 
     @ViewBuilder private var terminalSizeIndicator: some View {
-        if viewModel.terminalCols > 0 && viewModel.terminalRows > 0 {
-            Text("\(viewModel.terminalCols)×\(viewModel.terminalRows)")
+        if self.viewModel.terminalCols > 0, self.viewModel.terminalRows > 0 {
+            Text("\(self.viewModel.terminalCols)×\(self.viewModel.terminalRows)")
                 .font(Theme.Typography.terminalSystem(size: 11))
                 .foregroundColor(Theme.Colors.terminalForeground.opacity(0.5))
         }
@@ -517,18 +512,16 @@ struct TerminalView: View {
                     Circle()
                         .fill(Theme.Colors.errorAccent.opacity(0.3))
                         .frame(width: 16, height: 16)
-                        .scaleEffect(viewModel.recordingPulse ? 1.5 : 1.0)
+                        .scaleEffect(self.viewModel.recordingPulse ? 1.5 : 1.0)
                         .animation(
                             .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
-                            value: viewModel.recordingPulse
-                        )
-                )
+                            value: self.viewModel.recordingPulse))
             Text("REC")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(Theme.Colors.errorAccent)
         }
         .onAppear {
-            viewModel.recordingPulse = true
+            self.viewModel.recordingPulse = true
         }
     }
 
@@ -562,7 +555,7 @@ struct TerminalView: View {
                 .padding(.horizontal)
 
             Button("Retry") {
-                viewModel.connect()
+                self.viewModel.connect()
             }
             .terminalButton()
         }
@@ -573,64 +566,60 @@ struct TerminalView: View {
         VStack(spacing: 0) {
             // Terminal view based on selected renderer
             Group {
-                switch selectedRenderer {
+                switch self.selectedRenderer {
                 case .swiftTerm:
                     TerminalHostingView(
-                        session: session,
-                        fontSize: $fontSize,
-                        theme: selectedTheme,
+                        session: self.session,
+                        fontSize: self.$fontSize,
+                        theme: self.selectedTheme,
                         onInput: { text in
-                            viewModel.sendInput(text)
+                            self.viewModel.sendInput(text)
                         },
                         onResize: { cols, rows in
-                            viewModel.resize(cols: cols, rows: rows)
+                            self.viewModel.resize(cols: cols, rows: rows)
                         },
-                        viewModel: viewModel
-                    )
+                        viewModel: self.viewModel)
                 case .xterm:
                     XtermWebView(
-                        session: session,
-                        fontSize: $fontSize,
-                        theme: selectedTheme,
+                        session: self.session,
+                        fontSize: self.$fontSize,
+                        theme: self.selectedTheme,
                         onInput: { text in
-                            viewModel.sendInput(text)
+                            self.viewModel.sendInput(text)
                         },
                         onResize: { cols, rows in
-                            viewModel.resize(cols: cols, rows: rows)
+                            self.viewModel.resize(cols: cols, rows: rows)
                         },
-                        viewModel: viewModel
-                    )
+                        viewModel: self.viewModel)
                 }
             }
-            .id(viewModel.terminalViewId)
-            .background(selectedTheme.background)
-            .focused($isInputFocused)
+            .id(self.viewModel.terminalViewId)
+            .background(self.selectedTheme.background)
+            .focused(self.$isInputFocused)
             .overlay(
                 ScrollToBottomButton(
-                    isVisible: showScrollToBottom
-                ) {
-                    viewModel.scrollToBottom()
-                    showScrollToBottom = false
+                    isVisible: self.showScrollToBottom)
+                {
+                    self.viewModel.scrollToBottom()
+                    self.showScrollToBottom = false
                 }
                 .padding(.bottom, Theme.Spacing.large)
                 .padding(.leading, Theme.Spacing.large),
-                alignment: .bottomLeading
-            )
+                alignment: .bottomLeading)
 
             // Keyboard toolbar
-            if keyboardHeight > 0 {
+            if self.keyboardHeight > 0 {
                 TerminalToolbar(
                     onSpecialKey: { key in
-                        viewModel.sendInput(key.rawValue)
+                        self.viewModel.sendInput(key.rawValue)
                     },
                     onDismissKeyboard: {
-                        isInputFocused = false
+                        self.isInputFocused = false
                     },
                     onRawInput: { input in
-                        viewModel.sendInput(input)
-                    }
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        self.viewModel.sendInput(input)
+                    })
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
@@ -668,7 +657,7 @@ class TerminalViewModel {
         self.session = session
         self.castRecorder = CastRecorder(sessionId: session.id, width: 80, height: 24)
         self.bufferWebSocketClient = BufferWebSocketClient.shared
-        setupTerminal()
+        self.setupTerminal()
     }
 
     private func setupTerminal() {
@@ -676,30 +665,30 @@ class TerminalViewModel {
     }
 
     func startRecording() {
-        castRecorder.startRecording()
+        self.castRecorder.startRecording()
     }
 
     func stopRecording() {
-        castRecorder.stopRecording()
+        self.castRecorder.stopRecording()
     }
 
     func connect() {
-        isConnecting = true
-        errorMessage = nil
+        self.isConnecting = true
+        self.errorMessage = nil
 
         // Subscribe to terminal events first (stores the handler)
-        bufferWebSocketClient.subscribe(to: session.id) { [weak self] event in
+        self.bufferWebSocketClient.subscribe(to: self.session.id) { [weak self] event in
             Task { @MainActor in
                 self?.handleWebSocketEvent(event)
             }
         }
 
         // Connect to WebSocket - it will automatically subscribe to stored sessions
-        bufferWebSocketClient.connect()
+        self.bufferWebSocketClient.connect()
 
         // Monitor connection status
-        connectionStatusTask?.cancel()
-        connectionStatusTask = Task { [weak self] in
+        self.connectionStatusTask?.cancel()
+        self.connectionStatusTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 let connected = self.bufferWebSocketClient.isConnected
@@ -717,8 +706,8 @@ class TerminalViewModel {
         }
 
         // Monitor connection errors
-        connectionErrorTask?.cancel()
-        connectionErrorTask = Task { [weak self] in
+        self.connectionErrorTask?.cancel()
+        self.connectionErrorTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 if let error = self.bufferWebSocketClient.connectionError {
@@ -733,25 +722,25 @@ class TerminalViewModel {
     }
 
     func disconnect() {
-        connectionStatusTask?.cancel()
-        connectionErrorTask?.cancel()
-        resizeDebounceTask?.cancel()
-        bufferWebSocketClient.unsubscribe(from: session.id)
+        self.connectionStatusTask?.cancel()
+        self.connectionErrorTask?.cancel()
+        self.resizeDebounceTask?.cancel()
+        self.bufferWebSocketClient.unsubscribe(from: self.session.id)
         // Note: Don't disconnect the shared client as other views might be using it
-        isConnected = false
+        self.isConnected = false
     }
 
     @MainActor
     private func handleWebSocketEvent(_ event: TerminalWebSocketEvent) {
         switch event {
-        case .header(let width, let height):
+        case let .header(width, height):
             // Initial terminal setup
             logger.info("Terminal initialized: \(width)x\(height)")
-            terminalCols = width
-            terminalRows = height
+            self.terminalCols = width
+            self.terminalRows = height
         // The terminal will be resized when created
 
-        case .output(_, let data):
+        case let .output(_, data):
             // Feed output data directly to the terminal
             if let coordinator = terminalCoordinator as? TerminalHostingView.Coordinator {
                 coordinator.feedData(data)
@@ -767,9 +756,9 @@ class TerminalViewModel {
                 }
             }
             // Record output if recording
-            castRecorder.recordOutput(data)
+            self.castRecorder.recordOutput(data)
 
-        case .resize(_, let dimensions):
+        case let .resize(_, dimensions):
             // Parse dimensions like "120x30"
             let parts = dimensions.split(separator: "x")
             if parts.count == 2,
@@ -777,27 +766,27 @@ class TerminalViewModel {
                let rows = Int(parts[1])
             {
                 // Update terminal dimensions
-                terminalCols = cols
-                terminalRows = rows
+                self.terminalCols = cols
+                self.terminalRows = rows
                 logger.info("Terminal resize: \(cols)x\(rows)")
                 // Record resize event
-                castRecorder.recordResize(cols: cols, rows: rows)
+                self.castRecorder.recordResize(cols: cols, rows: rows)
             }
 
-        case .exit(let code):
+        case let .exit(code):
             // Session has exited
-            isConnected = false
+            self.isConnected = false
             if code != 0 {
-                errorMessage = "Session exited with code \(code)"
+                self.errorMessage = "Session exited with code \(code)"
             }
             // Stop recording if active
-            if castRecorder.isRecording {
-                stopRecording()
+            if self.castRecorder.isRecording {
+                self.stopRecording()
             }
 
             // Session has exited - no need to load additional content
 
-        case .bufferUpdate(let snapshot):
+        case let .bufferUpdate(snapshot):
             // Update terminal buffer directly
             if let coordinator = terminalCoordinator as? TerminalHostingView.Coordinator {
                 coordinator.updateBuffer(from: TerminalHostingView.BufferSnapshot(
@@ -813,11 +802,9 @@ class TerminalViewModel {
                                 width: cell.width,
                                 fg: cell.fg,
                                 bg: cell.bg,
-                                attributes: cell.attributes
-                            )
+                                attributes: cell.attributes)
                         }
-                    }
-                ))
+                    }))
             } else {
                 // Fallback: buffer updates not available yet
                 logger.warning("Direct buffer update not available")
@@ -825,18 +812,18 @@ class TerminalViewModel {
 
         case .bell:
             // Terminal bell - play sound and/or haptic feedback
-            handleTerminalBell()
+            self.handleTerminalBell()
 
-        case .alert(let title, let message):
+        case let .alert(title, message):
             // Terminal alert - show notification
-            handleTerminalAlert(title: title, message: message)
+            self.handleTerminalAlert(title: title, message: message)
         }
     }
 
     func sendInput(_ text: String) {
         Task {
             do {
-                try await SessionService().sendInput(to: session.id, text: text)
+                try await SessionService().sendInput(to: self.session.id, text: text)
             } catch {
                 logger.error("Failed to send input: \(error)")
             }
@@ -844,33 +831,33 @@ class TerminalViewModel {
     }
 
     func sendSpecialKey(_ key: TerminalInput.SpecialKey) {
-        sendInput(key.rawValue)
+        self.sendInput(key.rawValue)
     }
 
     func resize(cols: Int, rows: Int) {
         // Guard against invalid dimensions
-        guard cols > 0 && rows > 0 && cols <= 1_000 && rows <= 1_000 else {
+        guard cols > 0 && rows > 0 && cols <= 1000 && rows <= 1000 else {
             logger.warning("Ignoring invalid resize: \(cols)x\(rows)")
             return
         }
 
         // Guard against blocked resize
-        guard !isResizeBlockedByServer else {
+        guard !self.isResizeBlockedByServer else {
             logger.warning("Resize blocked by server, ignoring resize: \(cols)x\(rows)")
             return
         }
 
         // Handle initial resize with proper synchronization
-        if !hasPerformedInitialResize && !isPerformingInitialResize {
-            isPerformingInitialResize = true
+        if !self.hasPerformedInitialResize && !self.isPerformingInitialResize {
+            self.isPerformingInitialResize = true
 
             // Always update UI dimensions immediately for consistency
-            terminalCols = cols
-            terminalRows = rows
+            self.terminalCols = cols
+            self.terminalRows = rows
 
             // Perform initial resize after a short delay to let layout settle
-            resizeDebounceTask?.cancel()
-            resizeDebounceTask = Task { [weak self] in
+            self.resizeDebounceTask?.cancel()
+            self.resizeDebounceTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds for initial
                 guard !Task.isCancelled else {
                     await MainActor.run {
@@ -884,26 +871,28 @@ class TerminalViewModel {
         }
 
         // For subsequent resizes, compare against current UI dimensions (not server dimensions)
-        guard cols != terminalCols || rows != terminalRows else {
+        guard cols != self.terminalCols || rows != self.terminalRows else {
             return
         }
 
         // Only allow significant changes for subsequent resizes
-        let colDiff = abs(cols - terminalCols)
-        let rowDiff = abs(rows - terminalRows)
+        let colDiff = abs(cols - self.terminalCols)
+        let rowDiff = abs(rows - self.terminalRows)
 
         // Only resize if there's a significant change (more than 5 cols/rows difference)
         guard colDiff > 5 || rowDiff > 5 else {
-            logger.debug("Ignoring minor resize change: \(cols)x\(rows) (current: \(terminalCols)x\(terminalRows))")
+            logger
+                .debug(
+                    "Ignoring minor resize change: \(cols)x\(rows) (current: \(self.terminalCols)x\(self.terminalRows))")
             return
         }
 
         // Update UI dimensions immediately
-        terminalCols = cols
-        terminalRows = rows
+        self.terminalCols = cols
+        self.terminalRows = rows
 
-        resizeDebounceTask?.cancel()
-        resizeDebounceTask = Task { [weak self] in
+        self.resizeDebounceTask?.cancel()
+        self.resizeDebounceTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second for subsequent
             guard !Task.isCancelled else { return }
             await self?.performResize(cols: cols, rows: rows)
@@ -914,27 +903,27 @@ class TerminalViewModel {
         logger.info("Performing initial terminal resize: \(cols)x\(rows)")
 
         do {
-            try await SessionService().resizeTerminal(sessionId: session.id, cols: cols, rows: rows)
+            try await SessionService().resizeTerminal(sessionId: self.session.id, cols: cols, rows: rows)
             // If resize succeeded, mark initial resize as complete and clear any server blocks
             await MainActor.run {
-                hasPerformedInitialResize = true
-                isPerformingInitialResize = false
-                isResizeBlockedByServer = false
+                self.hasPerformedInitialResize = true
+                self.isPerformingInitialResize = false
+                self.isResizeBlockedByServer = false
             }
         } catch {
             logger.error("Failed initial terminal resize: \(error)")
             // Check if the error is specifically about resize being disabled
             if case APIError.resizeDisabledByServer = error {
                 await MainActor.run {
-                    hasPerformedInitialResize = true // Mark as done even if blocked to prevent retries
-                    isPerformingInitialResize = false
-                    isResizeBlockedByServer = true
+                    self.hasPerformedInitialResize = true // Mark as done even if blocked to prevent retries
+                    self.isPerformingInitialResize = false
+                    self.isResizeBlockedByServer = true
                 }
             } else {
                 // For other errors, allow retry by clearing the in-progress flag but leaving hasPerformedInitialResize
                 // false
                 await MainActor.run {
-                    isPerformingInitialResize = false
+                    self.isPerformingInitialResize = false
                 }
             }
         }
@@ -944,17 +933,17 @@ class TerminalViewModel {
         logger.info("Resizing terminal: \(cols)x\(rows)")
 
         do {
-            try await SessionService().resizeTerminal(sessionId: session.id, cols: cols, rows: rows)
+            try await SessionService().resizeTerminal(sessionId: self.session.id, cols: cols, rows: rows)
             // If resize succeeded, ensure the flag is cleared
             await MainActor.run {
-                isResizeBlockedByServer = false
+                self.isResizeBlockedByServer = false
             }
         } catch {
             logger.error("Failed to resize terminal: \(error)")
             // Check if the error is specifically about resize being disabled
             if case APIError.resizeDisabledByServer = error {
                 await MainActor.run {
-                    isResizeBlockedByServer = true
+                    self.isResizeBlockedByServer = true
                 }
             }
             // Note: UI dimensions remain as set, representing the actual terminal view size
@@ -963,7 +952,7 @@ class TerminalViewModel {
 
     func clearTerminal() {
         // Reset the terminal by recreating it
-        terminalViewId = UUID()
+        self.terminalViewId = UUID()
         HapticFeedback.impact(.medium)
     }
 
@@ -1004,8 +993,8 @@ class TerminalViewModel {
 
     func scrollToBottom() {
         // Signal the terminal to scroll to bottom
-        isAutoScrollEnabled = true
-        isAtBottom = true
+        self.isAutoScrollEnabled = true
+        self.isAtBottom = true
         // The actual scrolling is handled by the terminal coordinator
         if let coordinator = terminalCoordinator as? TerminalHostingView.Coordinator {
             coordinator.scrollToBottom()
@@ -1018,10 +1007,10 @@ class TerminalViewModel {
     }
 
     func toggleFitToWidth() {
-        fitToWidth.toggle()
+        self.fitToWidth.toggle()
         HapticFeedback.impact(.light)
 
-        if fitToWidth {
+        if self.fitToWidth {
             // Calculate optimal width to fit the screen
             let screenWidth = UIScreen.main.bounds.width
             let padding: CGFloat = 32 // Account for UI padding
@@ -1029,7 +1018,7 @@ class TerminalViewModel {
             let optimalCols = Int((screenWidth - padding) / charWidth)
 
             // Resize to fit
-            resize(cols: optimalCols, rows: terminalRows)
+            self.resize(cols: optimalCols, rows: self.terminalRows)
         }
     }
 
@@ -1040,9 +1029,9 @@ class TerminalViewModel {
 
         if let width = targetWidth, width != terminalCols {
             // Maintain aspect ratio when changing width
-            let aspectRatio = Double(terminalRows) / Double(terminalCols)
+            let aspectRatio = Double(terminalRows) / Double(self.terminalCols)
             let newHeight = Int(Double(width) * aspectRatio)
-            resize(cols: width, rows: newHeight)
+            self.resize(cols: width, rows: newHeight)
         }
 
         // Update the terminal coordinator if using constrained width

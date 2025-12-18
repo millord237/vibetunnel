@@ -19,7 +19,7 @@ final class ConfigManager {
     var repositoryBasePath: String = FilePathConstants.defaultRepositoryBasePath
 
     // Server settings
-    var serverPort: Int = 4_020
+    var serverPort: Int = 4020
     var dashboardAccessMode: DashboardAccessMode = .network
     var cleanupOnStartup: Bool = true
     var authenticationMode: AuthenticationMode = .osAuth
@@ -130,28 +130,28 @@ final class ConfigManager {
         QuickStartCommand(name: nil, command: "opencode"),
         QuickStartCommand(name: nil, command: "crush"),
         QuickStartCommand(name: nil, command: "zsh"),
-        QuickStartCommand(name: nil, command: "node")
+        QuickStartCommand(name: nil, command: "node"),
     ]
 
     private init() {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser
         self.configDir = homeDir.appendingPathComponent(".vibetunnel")
-        self.configPath = configDir.appendingPathComponent("config.json")
+        self.configPath = self.configDir.appendingPathComponent("config.json")
 
         // Load initial configuration
-        loadConfiguration()
+        self.loadConfiguration()
 
         // Start monitoring for changes
-        startFileMonitoring()
+        self.startFileMonitoring()
     }
 
     // MARK: - Configuration Loading
 
     private func loadConfiguration() {
         // Ensure directory exists
-        try? FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: self.configDir, withIntermediateDirectories: true)
 
-        if FileManager.default.fileExists(atPath: configPath.path) {
+        if FileManager.default.fileExists(atPath: self.configPath.path) {
             do {
                 let data = try Data(contentsOf: configPath)
                 let config = try JSONDecoder().decode(VibeTunnelConfig.self, from: data)
@@ -215,19 +215,19 @@ final class ConfigManager {
                     self.sessionTitleMode = TitleMode(rawValue: session.titleMode) ?? .dynamic
                 }
 
-                logger.info("Loaded configuration from disk")
+                self.logger.info("Loaded configuration from disk")
             } catch {
-                logger.error("Failed to load config: \(error.localizedDescription)")
-                useDefaults()
+                self.logger.error("Failed to load config: \(error.localizedDescription)")
+                self.useDefaults()
             }
         } else {
-            logger.info("No config file found, creating with defaults")
-            useDefaults()
+            self.logger.info("No config file found, creating with defaults")
+            self.useDefaults()
         }
     }
 
     private func useDefaults() {
-        self.quickStartCommands = defaultCommands
+        self.quickStartCommands = self.defaultCommands
         self.repositoryBasePath = FilePathConstants.defaultRepositoryBasePath
 
         // Set notification defaults to match TypeScript defaults
@@ -243,7 +243,7 @@ final class ConfigManager {
         self.notificationVibrationEnabled = true
         self.showInNotificationCenter = true
 
-        saveConfiguration()
+        self.saveConfiguration()
     }
 
     // MARK: - Configuration Saving
@@ -252,59 +252,52 @@ final class ConfigManager {
         var config = VibeTunnelConfig(
             version: 2,
             quickStartCommands: quickStartCommands,
-            repositoryBasePath: repositoryBasePath
-        )
+            repositoryBasePath: repositoryBasePath)
 
         // Server configuration
         config.server = ServerConfig(
-            port: serverPort,
-            dashboardAccessMode: dashboardAccessMode.rawValue,
-            cleanupOnStartup: cleanupOnStartup,
-            authenticationMode: authenticationMode.rawValue
-        )
+            port: self.serverPort,
+            dashboardAccessMode: self.dashboardAccessMode.rawValue,
+            cleanupOnStartup: self.cleanupOnStartup,
+            authenticationMode: self.authenticationMode.rawValue)
 
         // Development configuration
         config.development = DevelopmentConfig(
-            debugMode: debugMode,
-            useDevServer: useDevServer,
-            devServerPath: devServerPath,
-            logLevel: logLevel
-        )
+            debugMode: self.debugMode,
+            useDevServer: self.useDevServer,
+            devServerPath: self.devServerPath,
+            logLevel: self.logLevel)
 
         // Preferences
         config.preferences = PreferencesConfig(
-            preferredGitApp: preferredGitApp,
-            preferredTerminal: preferredTerminal,
-            updateChannel: updateChannel.rawValue,
-            showInDock: showInDock,
-            preventSleepWhenRunning: preventSleepWhenRunning,
+            preferredGitApp: self.preferredGitApp,
+            preferredTerminal: self.preferredTerminal,
+            updateChannel: self.updateChannel.rawValue,
+            showInDock: self.showInDock,
+            preventSleepWhenRunning: self.preventSleepWhenRunning,
             notifications: NotificationConfig(
-                enabled: notificationsEnabled,
-                sessionStart: notificationSessionStart,
-                sessionExit: notificationSessionExit,
-                commandCompletion: notificationCommandCompletion,
-                commandError: notificationCommandError,
-                bell: notificationBell,
-                claudeTurn: notificationClaudeTurn,
-                soundEnabled: notificationSoundEnabled,
-                vibrationEnabled: notificationVibrationEnabled,
-                showInNotificationCenter: showInNotificationCenter
-            )
-        )
+                enabled: self.notificationsEnabled,
+                sessionStart: self.notificationSessionStart,
+                sessionExit: self.notificationSessionExit,
+                commandCompletion: self.notificationCommandCompletion,
+                commandError: self.notificationCommandError,
+                bell: self.notificationBell,
+                claudeTurn: self.notificationClaudeTurn,
+                soundEnabled: self.notificationSoundEnabled,
+                vibrationEnabled: self.notificationVibrationEnabled,
+                showInNotificationCenter: self.showInNotificationCenter))
 
         // Remote access
         config.remoteAccess = RemoteAccessConfig(
-            ngrokEnabled: ngrokEnabled,
-            ngrokTokenPresent: ngrokTokenPresent
-        )
+            ngrokEnabled: self.ngrokEnabled,
+            ngrokTokenPresent: self.ngrokTokenPresent)
 
         // Session defaults
         config.sessionDefaults = SessionDefaultsConfig(
-            command: sessionCommand,
-            workingDirectory: sessionWorkingDirectory,
-            spawnWindow: sessionSpawnWindow,
-            titleMode: sessionTitleMode.rawValue
-        )
+            command: self.sessionCommand,
+            workingDirectory: self.sessionWorkingDirectory,
+            spawnWindow: self.sessionSpawnWindow,
+            titleMode: self.sessionTitleMode.rawValue)
 
         do {
             let encoder = JSONEncoder()
@@ -312,13 +305,13 @@ final class ConfigManager {
             let data = try encoder.encode(config)
 
             // Ensure directory exists
-            try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: self.configDir, withIntermediateDirectories: true)
 
             // Write atomically to prevent corruption
-            try data.write(to: configPath, options: .atomic)
-            logger.info("Saved configuration to disk")
+            try data.write(to: self.configPath, options: .atomic)
+            self.logger.info("Saved configuration to disk")
         } catch {
-            logger.error("Failed to save config: \(error.localizedDescription)")
+            self.logger.error("Failed to save config: \(error.localizedDescription)")
         }
     }
 
@@ -326,12 +319,12 @@ final class ConfigManager {
 
     private func startFileMonitoring() {
         // Stop any existing monitor
-        stopFileMonitoring()
+        self.stopFileMonitoring()
 
         // Create file descriptor
         let fileDescriptor = open(configPath.path, O_EVTONLY)
         guard fileDescriptor != -1 else {
-            logger.warning("Could not open config file for monitoring")
+            self.logger.warning("Could not open config file for monitoring")
             return
         }
 
@@ -339,8 +332,7 @@ final class ConfigManager {
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fileDescriptor,
             eventMask: [.write, .delete, .rename],
-            queue: .main
-        )
+            queue: .main)
 
         source.setEventHandler { [weak self] in
             guard let self else { return }
@@ -367,76 +359,76 @@ final class ConfigManager {
         source.resume()
         self.fileMonitor = source
 
-        logger.info("Started monitoring configuration file")
+        self.logger.info("Started monitoring configuration file")
     }
 
     private func stopFileMonitoring() {
-        fileMonitor?.cancel()
-        fileMonitor = nil
+        self.fileMonitor?.cancel()
+        self.fileMonitor = nil
     }
 
     // MARK: - Public API
 
     /// Update quick start commands
     func updateQuickStartCommands(_ commands: [QuickStartCommand]) {
-        guard commands != quickStartCommands else { return }
+        guard commands != self.quickStartCommands else { return }
 
         self.quickStartCommands = commands
-        saveConfiguration()
-        logger.info("Updated quick start commands: \(commands.count) items")
+        self.saveConfiguration()
+        self.logger.info("Updated quick start commands: \(commands.count) items")
     }
 
     /// Reset to default commands
     func resetToDefaults() {
-        updateQuickStartCommands(defaultCommands)
-        logger.info("Reset quick start commands to defaults")
+        self.updateQuickStartCommands(self.defaultCommands)
+        self.logger.info("Reset quick start commands to defaults")
     }
 
     /// Add a new command
     func addCommand(name: String?, command: String) {
-        var commands = quickStartCommands
+        var commands = self.quickStartCommands
         commands.append(QuickStartCommand(name: name, command: command))
-        updateQuickStartCommands(commands)
+        self.updateQuickStartCommands(commands)
     }
 
     /// Update an existing command
     func updateCommand(id: String, name: String?, command: String) {
-        var commands = quickStartCommands
+        var commands = self.quickStartCommands
         if let index = commands.firstIndex(where: { $0.id == id }) {
             commands[index].name = name
             commands[index].command = command
-            updateQuickStartCommands(commands)
+            self.updateQuickStartCommands(commands)
         }
     }
 
     /// Delete a command
     func deleteCommand(id: String) {
-        var commands = quickStartCommands
+        var commands = self.quickStartCommands
         commands.removeAll { $0.id == id }
-        updateQuickStartCommands(commands)
+        self.updateQuickStartCommands(commands)
     }
 
     /// Delete all commands (clear the list)
     func deleteAllCommands() {
-        updateQuickStartCommands([])
-        logger.info("Deleted all quick start commands")
+        self.updateQuickStartCommands([])
+        self.logger.info("Deleted all quick start commands")
     }
 
     /// Move commands for drag and drop reordering
     func moveCommands(from source: IndexSet, to destination: Int) {
-        var commands = quickStartCommands
+        var commands = self.quickStartCommands
         commands.move(fromOffsets: source, toOffset: destination)
-        updateQuickStartCommands(commands)
-        logger.info("Reordered quick start commands")
+        self.updateQuickStartCommands(commands)
+        self.logger.info("Reordered quick start commands")
     }
 
     /// Update repository base path
     func updateRepositoryBasePath(_ path: String) {
-        guard path != repositoryBasePath else { return }
+        guard path != self.repositoryBasePath else { return }
 
         self.repositoryBasePath = path
-        saveConfiguration()
-        logger.info("Updated repository base path to: \(path)")
+        self.saveConfiguration()
+        self.logger.info("Updated repository base path to: \(path)")
     }
 
     /// Update notification preferences
@@ -449,8 +441,8 @@ final class ConfigManager {
         bell: Bool? = nil,
         claudeTurn: Bool? = nil,
         soundEnabled: Bool? = nil,
-        vibrationEnabled: Bool? = nil
-    ) {
+        vibrationEnabled: Bool? = nil)
+    {
         // Update only the provided values
         if let enabled { self.notificationsEnabled = enabled }
         if let sessionStart { self.notificationSessionStart = sessionStart }
@@ -462,13 +454,13 @@ final class ConfigManager {
         if let soundEnabled { self.notificationSoundEnabled = soundEnabled }
         if let vibrationEnabled { self.notificationVibrationEnabled = vibrationEnabled }
 
-        saveConfiguration()
-        logger.info("Updated notification preferences")
+        self.saveConfiguration()
+        self.logger.info("Updated notification preferences")
     }
 
     /// Get the configuration file path for debugging
     var configurationPath: String {
-        configPath.path
+        self.configPath.path
     }
 
     deinit {

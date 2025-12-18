@@ -91,7 +91,7 @@ struct LoggerTests {
         // Note: This test might not work as expected because the static var
         // is already initialized by the time tests run
         #else
-            // In release builds, default should be .warning
+        // In release builds, default should be .warning
         #endif
 
         // Just verify we can read the global level

@@ -36,13 +36,13 @@ enum ServerEventType: String, Codable, CaseIterable {
     case commandError = "command-error"
 
     /// Indicates a terminal bell character was received.
-    case bell = "bell"
+    case bell
 
     /// Indicates Claude (AI assistant) has finished responding and it's the user's turn.
     case claudeTurn = "claude-turn"
 
     /// Indicates the SSE connection has been established.
-    case connected = "connected"
+    case connected
 
     /// Returns a human-readable description of the event type.
     ///
@@ -180,8 +180,8 @@ struct ServerEvent: Codable, Identifiable, Equatable {
         duration: Int? = nil,
         processInfo: String? = nil,
         message: String? = nil,
-        timestamp: Date = Date()
-    ) {
+        timestamp: Date = Date())
+    {
         self.type = type
         self.sessionId = sessionId
         self.sessionName = sessionName
@@ -209,8 +209,7 @@ struct ServerEvent: Codable, Identifiable, Equatable {
             type: .sessionStart,
             sessionId: sessionId,
             sessionName: sessionName,
-            command: command
-        )
+            command: command)
     }
 
     /// Creates a session exit event.
@@ -227,8 +226,7 @@ struct ServerEvent: Codable, Identifiable, Equatable {
             type: .sessionExit,
             sessionId: sessionId,
             sessionName: sessionName,
-            exitCode: exitCode
-        )
+            exitCode: exitCode)
     }
 
     /// Creates a command finished event.
@@ -245,8 +243,7 @@ struct ServerEvent: Codable, Identifiable, Equatable {
         sessionId: String,
         command: String,
         duration: Int,
-        exitCode: Int? = nil
-    )
+        exitCode: Int? = nil)
         -> Self
     {
         Self(
@@ -254,8 +251,7 @@ struct ServerEvent: Codable, Identifiable, Equatable {
             sessionId: sessionId,
             command: command,
             exitCode: exitCode,
-            duration: duration
-        )
+            duration: duration)
     }
 
     /// Creates a command error event.
@@ -274,8 +270,7 @@ struct ServerEvent: Codable, Identifiable, Equatable {
             sessionId: sessionId,
             command: command,
             exitCode: exitCode,
-            duration: duration
-        )
+            duration: duration)
     }
 
     /// Creates a Claude turn event.
@@ -292,8 +287,7 @@ struct ServerEvent: Codable, Identifiable, Equatable {
             type: .claudeTurn,
             sessionId: sessionId,
             sessionName: sessionName,
-            message: "Claude has finished responding"
-        )
+            message: "Claude has finished responding")
     }
 
     /// Creates a bell event.
@@ -306,8 +300,7 @@ struct ServerEvent: Codable, Identifiable, Equatable {
         Self(
             type: .bell,
             sessionId: sessionId,
-            message: "Terminal bell"
-        )
+            message: "Terminal bell")
     }
 
     // MARK: - Computed Properties
@@ -320,14 +313,14 @@ struct ServerEvent: Codable, Identifiable, Equatable {
     /// 3. Session ID (if available)
     /// 4. "Unknown Session" as fallback
     var displayName: String {
-        sessionName ?? command ?? sessionId ?? "Unknown Session"
+        self.sessionName ?? self.command ?? self.sessionId ?? "Unknown Session"
     }
 
     /// Determines whether this event should trigger a user notification.
     ///
     /// This delegates to the event type's ``ServerEventType/shouldNotify`` property.
     var shouldNotify: Bool {
-        type.shouldNotify
+        self.type.shouldNotify
     }
 
     /// Returns a human-readable formatted duration string.
@@ -342,18 +335,18 @@ struct ServerEvent: Codable, Identifiable, Equatable {
     var formattedDuration: String? {
         guard let duration else { return nil }
 
-        if duration < 1_000 {
+        if duration < 1000 {
             return "\(duration)ms"
-        } else if duration < 60_000 {
-            return String(format: "%.1fs", Double(duration) / 1_000.0)
+        } else if duration < 60000 {
+            return String(format: "%.1fs", Double(duration) / 1000.0)
         } else if duration < 3_600_000 {
-            let minutes = duration / 60_000
-            let seconds = (duration % 60_000) / 1_000
+            let minutes = duration / 60000
+            let seconds = (duration % 60000) / 1000
             return "\(minutes)m \(seconds)s"
         } else {
             let hours = duration / 3_600_000
-            let minutes = (duration % 3_600_000) / 60_000
-            let seconds = (duration % 60_000) / 1_000
+            let minutes = (duration % 3_600_000) / 60000
+            let seconds = (duration % 60000) / 1000
             return "\(hours)h \(minutes)m \(seconds)s"
         }
     }
@@ -365,7 +358,7 @@ struct ServerEvent: Codable, Identifiable, Equatable {
     var formattedTimestamp: String {
         let formatter = DateFormatter()
         formatter.timeStyle = .medium
-        return formatter.string(from: timestamp)
+        return formatter.string(from: self.timestamp)
     }
 
     // MARK: - Codable

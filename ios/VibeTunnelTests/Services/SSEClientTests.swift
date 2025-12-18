@@ -11,14 +11,14 @@ class MockSSEClientDelegate: SSEClientDelegate {
 
     nonisolated func sseClient(_ client: SSEClient, didReceiveEvent event: SSEClient.SSEEvent) {
         Task { @MainActor in
-            lastClient = client
-            receivedEvents.append(event)
+            self.lastClient = client
+            self.receivedEvents.append(event)
         }
     }
 
     func reset() {
-        receivedEvents.removeAll()
-        lastClient = nil
+        self.receivedEvents.removeAll()
+        self.lastClient = nil
     }
 }
 
@@ -53,8 +53,7 @@ struct SSEClientTests {
         let url = URL(string: "http://localhost:8888/api/sessions/test/stream")!
         let authService = AuthenticationService(
             apiClient: APIClient.shared,
-            serverConfig: TestFixtures.validServerConfig
-        )
+            serverConfig: TestFixtures.validServerConfig)
         let client = SSEClient(url: url, authenticationService: authService)
 
         #expect(client.delegate == nil)

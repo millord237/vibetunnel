@@ -38,7 +38,7 @@ final class SSEClient: NSObject, @unchecked Sendable {
     @MainActor
     func start() {
         // Append token to URL for SSE authentication
-        var requestURL = url
+        var requestURL = self.url
         if let token = authenticationService?.getTokenForQuery() {
             var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             var queryItems = components?.queryItems ?? []
@@ -53,13 +53,13 @@ final class SSEClient: NSObject, @unchecked Sendable {
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
 
-        task = session?.dataTask(with: request)
-        task?.resume()
+        self.task = self.session?.dataTask(with: request)
+        self.task?.resume()
     }
 
     func stop() {
-        task?.cancel()
-        task = nil
+        self.task?.cancel()
+        self.task = nil
     }
 
     private func processBuffer() {
@@ -70,23 +70,23 @@ final class SSEClient: NSObject, @unchecked Sendable {
         let events = string.components(separatedBy: "\n\n")
 
         // Keep the last incomplete event in buffer
-        if !string.hasSuffix("\n\n") && events.count > 1 {
+        if !string.hasSuffix("\n\n"), events.count > 1 {
             if let lastEvent = events.last, let lastEventData = lastEvent.data(using: .utf8) {
-                buffer = lastEventData
+                self.buffer = lastEventData
             }
         } else {
-            buffer = Data()
+            self.buffer = Data()
         }
 
         // Process complete events
         for (index, eventString) in events.enumerated() {
             // Skip the last event if buffer wasn't cleared (it's incomplete)
-            if index == events.count - 1 && !buffer.isEmpty {
+            if index == events.count - 1, !self.buffer.isEmpty {
                 continue
             }
 
             if !eventString.isEmpty {
-                processEvent(eventString)
+                self.processEvent(eventString)
             }
         }
     }
@@ -112,7 +112,7 @@ final class SSEClient: NSObject, @unchecked Sendable {
 
         // Process based on event type
         if eventType == "message" || eventType == nil, let data = eventData {
-            parseTerminalData(data)
+            self.parseTerminalData(data)
         }
     }
 
@@ -128,17 +128,16 @@ final class SSEClient: NSObject, @unchecked Sendable {
                        let exitCode = array[1] as? Int,
                        let sessionId = array[2] as? String
                     {
-                        delegate?.sseClient(self, didReceiveEvent: .exit(exitCode: exitCode, sessionId: sessionId))
+                        self.delegate?.sseClient(self, didReceiveEvent: .exit(exitCode: exitCode, sessionId: sessionId))
                     }
                     // Regular terminal output
                     else if let timestamp = array[0] as? Double,
                             let type = array[1] as? String,
                             let outputData = array[2] as? String
                     {
-                        delegate?.sseClient(
+                        self.delegate?.sseClient(
                             self,
-                            didReceiveEvent: .terminalOutput(timestamp: timestamp, type: type, data: outputData)
-                        )
+                            didReceiveEvent: .terminalOutput(timestamp: timestamp, type: type, data: outputData))
                     }
                 }
             }
@@ -159,8 +158,8 @@ extension SSEClient: URLSessionDataDelegate {
         _ session: URLSession,
         dataTask: URLSessionDataTask,
         didReceive response: URLResponse,
-        completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void
-    ) {
+        completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void)
+    {
         guard let httpResponse = response as? HTTPURLResponse else {
             completionHandler(.cancel)
             return
@@ -169,24 +168,24 @@ extension SSEClient: URLSessionDataDelegate {
         if httpResponse.statusCode == 200 {
             completionHandler(.allow)
         } else {
-            delegate?.sseClient(self, didReceiveEvent: .error("HTTP \(httpResponse.statusCode)"))
+            self.delegate?.sseClient(self, didReceiveEvent: .error("HTTP \(httpResponse.statusCode)"))
             completionHandler(.cancel)
         }
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        buffer.append(data)
-        processBuffer()
+        self.buffer.append(data)
+        self.processBuffer()
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error {
             // Check if this is a URLError directly
             if let urlError = error as? URLError, urlError.code != .cancelled {
-                delegate?.sseClient(self, didReceiveEvent: .error(error.localizedDescription))
+                self.delegate?.sseClient(self, didReceiveEvent: .error(error.localizedDescription))
             } else if (error as? URLError) == nil {
                 // Not a URLError, so it's some other error we should report
-                delegate?.sseClient(self, didReceiveEvent: .error(error.localizedDescription))
+                self.delegate?.sseClient(self, didReceiveEvent: .error(error.localizedDescription))
             }
         }
     }

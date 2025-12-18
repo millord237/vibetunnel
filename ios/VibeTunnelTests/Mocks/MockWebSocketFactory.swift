@@ -13,33 +13,33 @@ class MockBufferWebSocketClient: BufferWebSocketClient {
     private var eventHandlers: [String: (TerminalWebSocketEvent) -> Void] = [:]
 
     override func connect() {
-        connectCalled = true
+        self.connectCalled = true
         // Set the parent class isConnected property through public interface
         super.connect()
     }
 
     override func disconnect() {
-        disconnectCalled = true
-        eventHandlers.removeAll()
+        self.disconnectCalled = true
+        self.eventHandlers.removeAll()
         super.disconnect()
     }
 
     override func subscribe(to sessionId: String, handler: @escaping (TerminalWebSocketEvent) -> Void) {
-        subscribeCalled = true
-        lastSubscribedSessionId = sessionId
-        eventHandlers[sessionId] = handler
+        self.subscribeCalled = true
+        self.lastSubscribedSessionId = sessionId
+        self.eventHandlers[sessionId] = handler
         super.subscribe(to: sessionId, handler: handler)
     }
 
     override func unsubscribe(from sessionId: String) {
-        unsubscribeCalled = true
-        eventHandlers.removeValue(forKey: sessionId)
+        self.unsubscribeCalled = true
+        self.eventHandlers.removeValue(forKey: sessionId)
         super.unsubscribe(from: sessionId)
     }
 
     /// Simulate receiving an event
     func simulateEvent(_ event: TerminalWebSocketEvent) {
-        for handler in eventHandlers.values {
+        for handler in self.eventHandlers.values {
             handler(event)
         }
     }
@@ -54,13 +54,13 @@ class MockSSEClient {
     var isConnected = false
 
     func connect(headers: [String: String]? = nil) async {
-        connectCalled = true
-        lastConnectHeaders = headers
-        isConnected = true
+        self.connectCalled = true
+        self.lastConnectHeaders = headers
+        self.isConnected = true
     }
 
     func disconnect() {
-        disconnectCalled = true
-        isConnected = false
+        self.disconnectCalled = true
+        self.isConnected = false
     }
 }

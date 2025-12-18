@@ -7,22 +7,19 @@ enum TestFixtures {
 
     static let validServerConfig = ServerConfig(
         host: "localhost",
-        port: 8_888,
-        name: nil
-    )
+        port: 8888,
+        name: nil)
 
     static let sslServerConfig = ServerConfig(
         host: "example.com",
         port: 443,
-        name: "Test Server"
-    )
+        name: "Test Server")
 
     static func testServerConfig(
         host: String = "localhost",
-        port: Int = 8_888,
+        port: Int = 8888,
         name: String? = nil,
-        password: String? = nil
-    )
+        password: String? = nil)
         -> ServerConfig
     {
         ServerConfig(host: host, port: port, name: name)
@@ -45,15 +42,14 @@ enum TestFixtures {
         exitCode: nil,
         startedAt: "2024-01-01T10:00:00Z",
         lastModified: "2024-01-01T10:05:00Z",
-        pid: 12_345,
+        pid: 12345,
         width: 80,
         height: 24,
         waiting: false,
         source: nil,
         remoteId: nil,
         remoteName: nil,
-        remoteUrl: nil
-    )
+        remoteUrl: nil)
 
     static let exitedSession = Session(
         id: "exited-session-456",
@@ -71,15 +67,13 @@ enum TestFixtures {
         source: nil,
         remoteId: nil,
         remoteName: nil,
-        remoteUrl: nil
-    )
+        remoteUrl: nil)
 
     static func testSession(
         id: String = UUID().uuidString,
         name: String = "Test Session",
         workingDir: String = "/tmp/test",
-        isRunning: Bool = true
-    )
+        isRunning: Bool = true)
         -> Session
     {
         Session(
@@ -91,15 +85,14 @@ enum TestFixtures {
             exitCode: isRunning ? nil : 0,
             startedAt: ISO8601DateFormatter().string(from: Date()),
             lastModified: ISO8601DateFormatter().string(from: Date()),
-            pid: isRunning ? 12_345 : nil,
+            pid: isRunning ? 12345 : nil,
             width: 80,
             height: 24,
             waiting: false,
             source: nil,
             remoteId: nil,
             remoteName: nil,
-            remoteUrl: nil
-        )
+            remoteUrl: nil)
     }
 
     // MARK: - JSON Fixtures

@@ -9,8 +9,7 @@ struct GitRepositoryMonitorRaceConditionTests {
     @Test(
         "Concurrent GitHub URL fetches don't cause duplicate Git operations",
         .tags(.attachmentTests),
-        .enabled(if: TestConditions.isInGitRepository())
-    )
+        .enabled(if: TestConditions.isInGitRepository()))
     func concurrentGitHubURLFetches() async throws {
         let monitor = GitRepositoryMonitor()
         let testRepoPath = "/test/repo/path"
@@ -22,8 +21,7 @@ struct GitRepositoryMonitorRaceConditionTests {
             addedCount: 0,
             deletedCount: 0,
             untrackedCount: 0,
-            currentBranch: "main"
-        )
+            currentBranch: "main")
 
         // Use reflection to access private properties for testing
         let mirror = Mirror(reflecting: monitor)

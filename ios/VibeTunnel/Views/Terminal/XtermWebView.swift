@@ -23,7 +23,7 @@ struct XtermWebView: UIViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isOpaque = false
-        webView.backgroundColor = UIColor(theme.background)
+        webView.backgroundColor = UIColor(self.theme.background)
         webView.scrollView.isScrollEnabled = false
 
         context.coordinator.webView = webView
@@ -34,10 +34,10 @@ struct XtermWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         // Update font size
-        context.coordinator.updateFontSize(fontSize)
+        context.coordinator.updateFontSize(self.fontSize)
 
         // Update theme
-        context.coordinator.updateTheme(theme)
+        context.coordinator.updateTheme(self.theme)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -240,12 +240,12 @@ struct XtermWebView: UIViewRepresentable {
 
         func userContentController(
             _ userContentController: WKUserContentController,
-            didReceive message: WKScriptMessage
-        ) {
+            didReceive message: WKScriptMessage)
+        {
             switch message.name {
             case "terminalInput":
                 if let data = message.body as? String {
-                    parent.onInput(data)
+                    self.parent.onInput(data)
                 }
 
             case "terminalResize":
@@ -253,15 +253,15 @@ struct XtermWebView: UIViewRepresentable {
                    let cols = dict["cols"] as? Int,
                    let rows = dict["rows"] as? Int
                 {
-                    parent.onResize(cols, rows)
+                    self.parent.onResize(cols, rows)
                 }
 
             case "terminalReady":
-                setupDataStreaming()
+                self.setupDataStreaming()
 
             case "terminalLog":
                 if let log = message.body as? String {
-                    logger.debug(log)
+                    self.logger.debug(log)
                 }
 
             default:
@@ -270,35 +270,35 @@ struct XtermWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
-            logger.info("Page loaded")
+            self.logger.info("Page loaded")
         }
 
         private func setupDataStreaming() {
             // Subscribe to WebSocket buffer updates
-            if bufferWebSocketClient == nil {
-                bufferWebSocketClient = parent.viewModel.bufferWebSocketClient
+            if self.bufferWebSocketClient == nil {
+                self.bufferWebSocketClient = self.parent.viewModel.bufferWebSocketClient
             }
 
-            bufferWebSocketClient?.subscribe(to: parent.session.id) { [weak self] event in
+            self.bufferWebSocketClient?.subscribe(to: self.parent.session.id) { [weak self] event in
                 self?.handleWebSocketEvent(event)
             }
 
             // Also set up SSE as fallback
             if let streamURL = APIClient.shared.streamURL(for: parent.session.id) {
-                sseClient = SSEClient(url: streamURL)
-                sseClient?.delegate = self
-                sseClient?.start()
+                self.sseClient = SSEClient(url: streamURL)
+                self.sseClient?.delegate = self
+                self.sseClient?.start()
             }
         }
 
         private func handleWebSocketEvent(_ event: TerminalWebSocketEvent) {
             switch event {
-            case .bufferUpdate(let snapshot):
+            case let .bufferUpdate(snapshot):
                 // Convert buffer snapshot to terminal output
-                renderBufferSnapshot(snapshot)
+                self.renderBufferSnapshot(snapshot)
 
-            case .output(_, let data):
-                writeToTerminal(data)
+            case let .output(_, data):
+                self.writeToTerminal(data)
 
             case .resize:
                 // Handle resize if needed
@@ -323,7 +323,7 @@ struct XtermWebView: UIViewRepresentable {
                 }
                 output += "\r\n"
             }
-            writeToTerminal(output)
+            self.writeToTerminal(output)
         }
 
         private func writeToTerminal(_ data: String) {
@@ -333,7 +333,7 @@ struct XtermWebView: UIViewRepresentable {
                 .replacingOccurrences(of: "\n", with: "\\n")
                 .replacingOccurrences(of: "\r", with: "\\r")
 
-            webView?.evaluateJavaScript("window.xtermAPI.writeToTerminal('\(escaped)')") { _, error in
+            self.webView?.evaluateJavaScript("window.xtermAPI.writeToTerminal('\(escaped)')") { _, error in
                 if let error {
                     self.logger.error("Error writing to terminal: \(error)")
                 }
@@ -341,7 +341,7 @@ struct XtermWebView: UIViewRepresentable {
         }
 
         func updateFontSize(_ size: CGFloat) {
-            webView?.evaluateJavaScript("window.xtermAPI.updateFontSize(\(size))")
+            self.webView?.evaluateJavaScript("window.xtermAPI.updateFontSize(\(size))")
         }
 
         func updateTheme(_ theme: TerminalTheme) {
@@ -354,15 +354,15 @@ struct XtermWebView: UIViewRepresentable {
                 selection: 'rgba(255, 255, 255, 0.3)'
             }
             """
-            webView?.evaluateJavaScript("window.xtermAPI.updateTheme(\(themeJS))")
+            self.webView?.evaluateJavaScript("window.xtermAPI.updateTheme(\(themeJS))")
         }
 
         func scrollToBottom() {
-            webView?.evaluateJavaScript("window.xtermAPI.scrollToBottom()")
+            self.webView?.evaluateJavaScript("window.xtermAPI.scrollToBottom()")
         }
 
         func clear() {
-            webView?.evaluateJavaScript("window.xtermAPI.clear()")
+            self.webView?.evaluateJavaScript("window.xtermAPI.clear()")
         }
     }
 }
@@ -374,13 +374,13 @@ extension XtermWebView.Coordinator: SSEClientDelegate {
     nonisolated func sseClient(_ client: SSEClient, didReceiveEvent event: SSEClient.SSEEvent) {
         Task { @MainActor in
             switch event {
-            case .terminalOutput(_, let type, let data):
+            case let .terminalOutput(_, type, data):
                 if type == "o" { // output
                     writeToTerminal(data)
                 }
-            case .exit(let exitCode, _):
+            case let .exit(exitCode, _):
                 writeToTerminal("\r\n[Process exited with code \(exitCode)]\r\n")
-            case .error(let error):
+            case let .error(error):
                 logger.error("SSE error: \(error)")
             }
         }
@@ -402,7 +402,6 @@ extension Color {
             format: "#%02X%02X%02X",
             Int(red * 255),
             Int(green * 255),
-            Int(blue * 255)
-        )
+            Int(blue * 255))
     }
 }

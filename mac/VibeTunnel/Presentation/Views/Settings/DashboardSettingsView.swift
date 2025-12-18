@@ -24,47 +24,44 @@ struct DashboardSettingsView: View {
     @State private var serverStatus: ServerStatus = .stopped
     @State private var activeSessions: [DashboardSessionInfo] = []
     @State private var ngrokStatus: NgrokTunnelStatus?
-    @State private var tailscaleStatus: (isInstalled: Bool, isRunning: Bool, hostname: String?)?
+    @State private var tailscaleStatus: RemoteServicesStatusManager.TailscaleStatus?
 
     private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "DashboardSettings")
 
     private var accessMode: DashboardAccessMode {
-        DashboardAccessMode(rawValue: accessModeString) ?? .localhost
+        DashboardAccessMode(rawValue: self.accessModeString) ?? .localhost
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 ServerStatusSection(
-                    serverStatus: serverStatus,
-                    serverPort: $serverPort,
-                    accessModeString: $accessModeString,
-                    serverManager: serverManager
-                )
+                    serverStatus: self.serverStatus,
+                    serverPort: self.$serverPort,
+                    accessModeString: self.$accessModeString,
+                    serverManager: self.serverManager)
 
                 RemoteAccessStatusSection(
-                    ngrokStatus: ngrokStatus,
-                    tailscaleStatus: tailscaleStatus,
-                    cloudflareService: cloudflareService,
-                    serverPort: serverPort,
-                    accessMode: accessMode
-                )
+                    ngrokStatus: self.ngrokStatus,
+                    tailscaleStatus: self.tailscaleStatus,
+                    cloudflareService: self.cloudflareService,
+                    serverPort: self.serverPort,
+                    accessMode: self.accessMode)
 
                 ActiveSessionsSection(
-                    activeSessions: activeSessions,
-                    sessionService: sessionService
-                )
+                    activeSessions: self.activeSessions,
+                    sessionService: self.sessionService)
             }
             .formStyle(.grouped)
             .frame(minWidth: 500, idealWidth: 600)
             .scrollContentBackground(.hidden)
             .navigationTitle("Dashboard")
             .task {
-                await updateStatuses()
+                await self.updateStatuses()
             }
             .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
                 Task {
-                    await updateStatuses()
+                    await self.updateStatuses()
                 }
             }
         }
@@ -74,10 +71,10 @@ struct DashboardSettingsView: View {
 
     private func updateStatuses() async {
         // Update server status
-        serverStatus = serverManager.isRunning ? .running : .stopped
+        self.serverStatus = self.serverManager.isRunning ? .running : .stopped
 
         // Update active sessions - filter out zombie and exited sessions
-        activeSessions = sessionMonitor.sessions.values
+        self.activeSessions = self.sessionMonitor.sessions.values
             .compactMap { session in
                 // Only include sessions that are actually running
                 guard session.status == "running" else { return nil }
@@ -89,24 +86,22 @@ struct DashboardSettingsView: View {
                     id: session.id,
                     title: session.name.isEmpty ? "Untitled" : session.name,
                     createdAt: createdAt,
-                    isActive: session.isRunning
-                )
+                    isActive: session.isRunning)
             }
             .sorted { $0.createdAt > $1.createdAt }
 
         // Update ngrok status
-        ngrokStatus = await ngrokService.getStatus()
+        self.ngrokStatus = await self.ngrokService.getStatus()
 
         // Update Tailscale status
-        await tailscaleService.checkTailscaleStatus()
-        tailscaleStatus = (
-            isInstalled: tailscaleService.isInstalled,
-            isRunning: tailscaleService.isRunning,
-            hostname: tailscaleService.tailscaleHostname
-        )
+        await self.tailscaleService.checkTailscaleStatus()
+        self.tailscaleStatus = RemoteServicesStatusManager.TailscaleStatus(
+            isInstalled: self.tailscaleService.isInstalled,
+            isRunning: self.tailscaleService.isRunning,
+            hostname: self.tailscaleService.tailscaleHostname)
 
         // Update Cloudflare status
-        await cloudflareService.checkCloudflaredStatus()
+        await self.cloudflareService.checkCloudflaredStatus()
     }
 }
 
@@ -136,20 +131,22 @@ private struct ServerStatusSection: View {
     @Binding var accessModeString: String
     let serverManager: ServerManager
 
+    private let logger = Logger(subsystem: BundleIdentifiers.loggerSubsystem, category: "ServerStatusSection")
+
     @State private var portConflict: PortConflict?
     @State private var isCheckingPort = false
     @State private var localIPAddress: String?
 
     private var isServerRunning: Bool {
-        serverStatus == .running
+        self.serverStatus == .running
     }
 
     private var serverPortInt: Int {
-        Int(serverPort) ?? 4_020
+        Int(self.serverPort) ?? 4020
     }
 
     private var accessMode: DashboardAccessMode {
-        DashboardAccessMode(rawValue: accessModeString) ?? .localhost
+        DashboardAccessMode(rawValue: self.accessModeString) ?? .localhost
     }
 
     var body: some View {
@@ -158,7 +155,7 @@ private struct ServerStatusSection: View {
                 // Server Information
                 VStack(alignment: .leading, spacing: 8) {
                     LabeledContent("Status") {
-                        switch serverStatus {
+                        switch self.serverStatus {
                         case .running:
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
@@ -174,7 +171,7 @@ private struct ServerStatusSection: View {
                                     .scaleEffect(0.7)
                                 Text("Starting...")
                             }
-                        case .error(let message):
+                        case let .error(message):
                             HStack {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundStyle(.orange)
@@ -186,33 +183,31 @@ private struct ServerStatusSection: View {
 
                     // Access Mode
                     AccessModeView(
-                        accessMode: accessMode,
-                        accessModeString: $accessModeString,
-                        serverPort: serverPort,
-                        localIPAddress: localIPAddress,
-                        restartServerWithNewBindAddress: restartServerWithNewBindAddress
-                    )
+                        accessMode: self.accessMode,
+                        accessModeString: self.$accessModeString,
+                        serverPort: self.serverPort,
+                        localIPAddress: self.localIPAddress,
+                        restartServerWithNewBindAddress: self.restartServerWithNewBindAddress)
 
                     // Editable Port
                     PortConfigurationView(
-                        serverPort: $serverPort,
-                        restartServerWithNewPort: restartServerWithNewPort,
-                        serverManager: serverManager
-                    )
+                        serverPort: self.$serverPort,
+                        restartServerWithNewPort: self.restartServerWithNewPort,
+                        serverManager: self.serverManager)
 
                     LabeledContent("Bind Address") {
-                        Text(serverManager.bindAddress)
+                        Text(self.serverManager.bindAddress)
                             .font(.system(.body, design: .monospaced))
                     }
 
                     LabeledContent("Base URL") {
-                        let baseAddress = serverManager.bindAddress == "0.0.0.0" ? "127.0.0.1" : serverManager
+                        let baseAddress = self.serverManager.bindAddress == "0.0.0.0" ? "127.0.0.1" : self.serverManager
                             .bindAddress
                         if let serverURL = URL(string: "http://\(baseAddress):\(serverPort)") {
-                            Link("http://\(baseAddress):\(serverPort)", destination: serverURL)
+                            Link("http://\(baseAddress):\(self.serverPort)", destination: serverURL)
                                 .font(.system(.body, design: .monospaced))
                         } else {
-                            Text("http://\(baseAddress):\(serverPort)")
+                            Text("http://\(baseAddress):\(self.serverPort)")
                                 .font(.system(.body, design: .monospaced))
                         }
                     }
@@ -232,18 +227,18 @@ private struct ServerStatusSection: View {
                     HStack {
                         Spacer()
 
-                        if serverStatus == .stopped {
+                        if self.serverStatus == .stopped {
                             Button("Start") {
                                 Task {
-                                    await serverManager.start()
+                                    await self.serverManager.start()
                                 }
                             }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
-                        } else if serverStatus == .running {
+                        } else if self.serverStatus == .running {
                             Button("Restart") {
                                 Task {
-                                    await serverManager.manualRestart()
+                                    await self.serverManager.manualRestart()
                                 }
                             }
                             .buttonStyle(.borderedProminent)
@@ -276,8 +271,7 @@ private struct ServerStatusSection: View {
                                         Task {
                                             await ServerConfigurationHelpers.restartServerWithNewPort(
                                                 port,
-                                                serverManager: serverManager
-                                            )
+                                                serverManager: self.serverManager)
                                         }
                                     }
                                     .buttonStyle(.link)
@@ -293,11 +287,11 @@ private struct ServerStatusSection: View {
                                     do {
                                         try await PortConflictResolver.shared.forceKillProcess(conflict)
                                         // After killing, clear the conflict and restart the server
-                                        portConflict = nil
-                                        await serverManager.start()
+                                        self.portConflict = nil
+                                        await self.serverManager.start()
                                     } catch {
                                         // Handle error - in a real implementation, you might show an alert
-                                        print("Failed to kill process: \(error)")
+                                        self.logger.error("Failed to kill process: \(String(describing: error))")
                                     }
                                 }
                             }
@@ -317,21 +311,21 @@ private struct ServerStatusSection: View {
             }
             .padding(.vertical, 4)
             .task {
-                await checkPortAvailability()
-                await updateLocalIPAddress()
+                await self.checkPortAvailability()
+                await self.updateLocalIPAddress()
             }
-            .task(id: serverPort) {
-                await checkPortAvailability()
+            .task(id: self.serverPort) {
+                await self.checkPortAvailability()
             }
-            .task(id: accessModeString) {
-                await updateLocalIPAddress()
+            .task(id: self.accessModeString) {
+                await self.updateLocalIPAddress()
             }
         } header: {
             Text("Server Configuration")
                 .font(.headline)
         } footer: {
             // Dashboard URL display
-            if accessMode == .localhost {
+            if self.accessMode == .localhost {
                 HStack(spacing: 5) {
                     Text("Dashboard available at")
                         .font(.caption)
@@ -345,7 +339,7 @@ private struct ServerStatusSection: View {
                 }
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
-            } else if accessMode == .network {
+            } else if self.accessMode == .network {
                 if let ip = localIPAddress {
                     HStack(spacing: 5) {
                         Text("Dashboard available at")
@@ -373,32 +367,31 @@ private struct ServerStatusSection: View {
 
     private func restartServerWithNewPort(_ port: Int) {
         Task {
-            await ServerConfigurationHelpers.restartServerWithNewPort(port, serverManager: serverManager)
+            await ServerConfigurationHelpers.restartServerWithNewPort(port, serverManager: self.serverManager)
         }
     }
 
     private func restartServerWithNewBindAddress() {
         Task {
             await ServerConfigurationHelpers.restartServerWithNewBindAddress(
-                accessMode: accessMode,
-                serverManager: serverManager
-            )
+                accessMode: self.accessMode,
+                serverManager: self.serverManager)
         }
     }
 
     private func updateLocalIPAddress() async {
-        localIPAddress = await ServerConfigurationHelpers.updateLocalIPAddress(accessMode: accessMode)
+        self.localIPAddress = await ServerConfigurationHelpers.updateLocalIPAddress(accessMode: self.accessMode)
     }
 
     private func checkPortAvailability() async {
-        isCheckingPort = true
+        self.isCheckingPort = true
         defer { isCheckingPort = false }
 
-        let port = serverPortInt
+        let port = self.serverPortInt
 
         // Only check if it's not the port we're already successfully using
-        if serverManager.isRunning && Int(serverManager.port) == port {
-            portConflict = nil
+        if self.serverManager.isRunning, Int(self.serverManager.port) == port {
+            self.portConflict = nil
             return
         }
 
@@ -406,13 +399,13 @@ private struct ServerStatusSection: View {
             // Only show warning for non-VibeTunnel processes
             // VibeTunnel instances will be auto-killed by ServerManager
             if case .reportExternalApp = conflict.suggestedAction {
-                portConflict = conflict
+                self.portConflict = conflict
             } else {
                 // It's our own process, will be handled automatically
-                portConflict = nil
+                self.portConflict = nil
             }
         } else {
-            portConflict = nil
+            self.portConflict = nil
         }
     }
 }
@@ -425,7 +418,7 @@ private struct ActiveSessionsSection: View {
 
     var body: some View {
         Section {
-            if activeSessions.isEmpty {
+            if self.activeSessions.isEmpty {
                 Text("No active sessions")
                     .font(.callout)
                     .foregroundColor(.secondary)
@@ -433,7 +426,7 @@ private struct ActiveSessionsSection: View {
                     .padding(.vertical, 8)
             } else {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(activeSessions.prefix(5)) { session in
+                    ForEach(self.activeSessions.prefix(5)) { session in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(session.title)
@@ -458,8 +451,8 @@ private struct ActiveSessionsSection: View {
                         }
                     }
 
-                    if activeSessions.count > 5 {
-                        Text("And \(activeSessions.count - 5) more...")
+                    if self.activeSessions.count > 5 {
+                        Text("And \(self.activeSessions.count - 5) more...")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -470,7 +463,7 @@ private struct ActiveSessionsSection: View {
                 Text("Active Sessions")
                     .font(.headline)
                 Spacer()
-                Text("\(activeSessions.count)")
+                Text("\(self.activeSessions.count)")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 8)
@@ -486,7 +479,7 @@ private struct ActiveSessionsSection: View {
 
 private struct RemoteAccessStatusSection: View {
     let ngrokStatus: NgrokTunnelStatus?
-    let tailscaleStatus: (isInstalled: Bool, isRunning: Bool, hostname: String?)?
+    let tailscaleStatus: RemoteServicesStatusManager.TailscaleStatus?
     let cloudflareService: CloudflareService
     let serverPort: String
     let accessMode: DashboardAccessMode
@@ -505,8 +498,7 @@ private struct RemoteAccessStatusSection: View {
                                 .font(.callout)
                             InlineClickableURLView(
                                 label: "",
-                                url: "http://\(hostname):\(serverPort)"
-                            )
+                                url: "http://\(hostname):\(self.serverPort)")
                         }
                     } else if status.isRunning {
                         HStack {
@@ -559,8 +551,7 @@ private struct RemoteAccessStatusSection: View {
                             .font(.callout)
                         InlineClickableURLView(
                             label: "",
-                            url: status.publicUrl
-                        )
+                            url: status.publicUrl)
                     }
                 } else {
                     HStack {
@@ -575,7 +566,7 @@ private struct RemoteAccessStatusSection: View {
                 }
 
                 // Cloudflare status
-                if cloudflareService.isRunning, let url = cloudflareService.publicUrl {
+                if self.cloudflareService.isRunning, let url = cloudflareService.publicUrl {
                     HStack {
                         Image(systemName: "circle.fill")
                             .foregroundColor(.green)
@@ -584,8 +575,7 @@ private struct RemoteAccessStatusSection: View {
                             .font(.callout)
                         InlineClickableURLView(
                             label: "",
-                            url: url
-                        )
+                            url: url)
                     }
                 } else {
                     HStack {

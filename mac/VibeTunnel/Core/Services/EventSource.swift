@@ -60,8 +60,8 @@ final class EventSource: NSObject {
     // MARK: - Connection Management
 
     func connect() {
-        guard !isConnected else {
-            logger.warning("Already connected, ignoring connect request")
+        guard !self.isConnected else {
+            self.logger.warning("Already connected, ignoring connect request")
             return
         }
 
@@ -70,7 +70,7 @@ final class EventSource: NSObject {
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
 
         // Add custom headers
-        for (key, value) in headers {
+        for (key, value) in self.headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
 
@@ -79,28 +79,28 @@ final class EventSource: NSObject {
             request.setValue(lastEventId, forHTTPHeaderField: "Last-Event-ID")
         }
 
-        logger.info("🔌 Connecting to EventSource: \(self.url)")
-        logger.debug("Headers: \(request.allHTTPHeaderFields ?? [:])")
+        self.logger.info("🔌 Connecting to EventSource: \(self.url)")
+        self.logger.debug("Headers: \(request.allHTTPHeaderFields ?? [:])")
 
-        dataTask = urlSession?.dataTask(with: request)
-        dataTask?.resume()
+        self.dataTask = self.urlSession?.dataTask(with: request)
+        self.dataTask?.resume()
 
-        logger.info("📡 EventSource dataTask started")
+        self.logger.info("📡 EventSource dataTask started")
     }
 
     func disconnect() {
-        isConnected = false
-        dataTask?.cancel()
-        dataTask = nil
-        buffer = ""
-        logger.debug("Disconnected from EventSource")
+        self.isConnected = false
+        self.dataTask?.cancel()
+        self.dataTask = nil
+        self.buffer = ""
+        self.logger.debug("Disconnected from EventSource")
     }
 
     // MARK: - Event Parsing
 
     private func processBuffer() {
-        logger.debug("🔄 Processing buffer with \(self.buffer.count) characters")
-        let lines = buffer.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        self.logger.debug("🔄 Processing buffer with \(self.buffer.count) characters")
+        let lines = self.buffer.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         var eventData: [String] = []
         var eventType: String?
         var eventId: String?
@@ -108,9 +108,9 @@ final class EventSource: NSObject {
 
         for (index, line) in lines.enumerated() {
             // Check if this is the last line and it's not empty (incomplete line)
-            if index == lines.count - 1 && !line.isEmpty && !buffer.hasSuffix("\n") {
+            if index == lines.count - 1, !line.isEmpty, !self.buffer.hasSuffix("\n") {
                 // Keep the incomplete line in the buffer
-                buffer = line
+                self.buffer = line
                 break
             }
 
@@ -122,21 +122,20 @@ final class EventSource: NSObject {
                         id: eventId,
                         event: eventType,
                         data: data,
-                        retry: eventRetry
-                    )
+                        retry: eventRetry)
 
                     // Update last event ID
                     if let id = eventId {
-                        lastEventId = id
+                        self.lastEventId = id
                     }
 
                     // Update reconnect time
                     if let retry = eventRetry {
-                        reconnectTime = TimeInterval(retry) / 1_000.0
+                        self.reconnectTime = TimeInterval(retry) / 1000.0
                     }
 
                     // Dispatch event
-                    logger
+                    self.logger
                         .debug("🎯 Dispatching event - type: \(event.event ?? "default"), data: \(event.data ?? "none")")
                     DispatchQueue.main.async {
                         self.onMessage?(event)
@@ -182,8 +181,8 @@ final class EventSource: NSObject {
         }
 
         // Clear buffer if we processed all complete lines
-        if lines.last?.isEmpty ?? true || buffer.hasSuffix("\n") {
-            buffer = ""
+        if lines.last?.isEmpty ?? true || self.buffer.hasSuffix("\n") {
+            self.buffer = ""
         }
     }
 }
@@ -195,27 +194,27 @@ extension EventSource: URLSessionDataDelegate {
         _ session: URLSession,
         dataTask: URLSessionDataTask,
         didReceive response: URLResponse,
-        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
-    ) {
-        logger.info("📥 URLSession didReceive response")
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void)
+    {
+        self.logger.info("📥 URLSession didReceive response")
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            logger.error("Response is not HTTPURLResponse")
+            self.logger.error("Response is not HTTPURLResponse")
             completionHandler(.cancel)
             return
         }
 
-        logger.info("Response status: \(httpResponse.statusCode), headers: \(httpResponse.allHeaderFields)")
+        self.logger.info("Response status: \(httpResponse.statusCode), headers: \(httpResponse.allHeaderFields)")
 
         if httpResponse.statusCode == 200 {
-            isConnected = true
-            logger.info("✅ EventSource connected successfully")
+            self.isConnected = true
+            self.logger.info("✅ EventSource connected successfully")
             DispatchQueue.main.async {
                 self.onOpen?()
             }
             completionHandler(.allow)
         } else {
-            logger.error("EventSource connection failed with status: \(httpResponse.statusCode)")
+            self.logger.error("EventSource connection failed with status: \(httpResponse.statusCode)")
             completionHandler(.cancel)
             DispatchQueue.main.async {
                 self.onError?(nil)
@@ -224,32 +223,32 @@ extension EventSource: URLSessionDataDelegate {
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        logger.debug("📨 EventSource received \(data.count) bytes of data")
+        self.logger.debug("📨 EventSource received \(data.count) bytes of data")
 
         // Check if data might be compressed
         if data.count > 2 {
             let header = [UInt8](data.prefix(2))
-            if header[0] == 0x1F && header[1] == 0x8B {
-                logger.error("❌ Received gzip compressed data! SSE should not be compressed.")
+            if header[0] == 0x1F, header[1] == 0x8B {
+                self.logger.error("❌ Received gzip compressed data! SSE should not be compressed.")
                 return
             }
         }
 
         guard let text = String(data: data, encoding: .utf8) else {
-            logger.error("Failed to decode data as UTF-8. First 20 bytes: \(data.prefix(20).hexString)")
+            self.logger.error("Failed to decode data as UTF-8. First 20 bytes: \(data.prefix(20).hexString)")
             return
         }
 
-        logger.debug("📨 EventSource received text: \(text)")
-        buffer += text
-        processBuffer()
+        self.logger.debug("📨 EventSource received text: \(text)")
+        self.buffer += text
+        self.processBuffer()
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        isConnected = false
+        self.isConnected = false
 
         if let error {
-            logger.error("EventSource error: \(error)")
+            self.logger.error("EventSource error: \(error)")
         }
 
         DispatchQueue.main.async {
@@ -264,8 +263,8 @@ extension EventSource: URLSessionDelegate {
     func urlSession(
         _ session: URLSession,
         didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void)
+    {
         // Accept the server's certificate for localhost connections
         if challenge.protectionSpace.host == "localhost",
            let serverTrust = challenge.protectionSpace.serverTrust

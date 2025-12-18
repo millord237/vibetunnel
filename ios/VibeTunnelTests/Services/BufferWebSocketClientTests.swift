@@ -13,15 +13,14 @@ final class BufferWebSocketClientTests {
 
     /// Initialize test environment
     init() {
-        mockFactory = MockWebSocketFactory()
-        client = BufferWebSocketClient(webSocketFactory: mockFactory)
+        self.mockFactory = MockWebSocketFactory()
+        self.client = BufferWebSocketClient(webSocketFactory: self.mockFactory)
 
         // Setup test server configuration
         TestFixtures.saveServerConfig(.init(
             host: "localhost",
-            port: 8_888,
-            name: nil
-        ))
+            port: 8888,
+            name: nil))
     }
 
     deinit {
@@ -32,25 +31,25 @@ final class BufferWebSocketClientTests {
     @Test("Connects successfully with valid configuration", .timeLimit(.minutes(1)))
     func successfulConnection() async throws {
         // Act
-        client.connect()
+        self.client.connect()
 
         // Give it a moment to process
         try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         // Assert
-        #expect(mockFactory.createdWebSockets.count == 1)
+        #expect(self.mockFactory.createdWebSockets.count == 1)
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
         #expect(mockWebSocket.isConnected)
         #expect(mockWebSocket.lastConnectURL?.absoluteString.contains("/buffers") ?? false)
-        #expect(client.isConnected)
-        #expect(client.connectionError == nil)
+        #expect(self.client.isConnected)
+        #expect(self.client.connectionError == nil)
     }
 
     @Test("Handles connection failure gracefully")
     func connectionFailure() async throws {
         // Act
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 50_000_000) // 50ms
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
@@ -59,14 +58,14 @@ final class BufferWebSocketClientTests {
         try await Task.sleep(nanoseconds: 50_000_000) // 50ms
 
         // Assert
-        #expect(!client.isConnected)
-        #expect(client.connectionError != nil)
+        #expect(!self.client.isConnected)
+        #expect(self.client.connectionError != nil)
     }
 
     @Test("Parses binary buffer messages", arguments: [
         (cols: 80, rows: 24),
         (cols: 120, rows: 30),
-        (cols: 160, rows: 50)
+        (cols: 160, rows: 50),
     ])
     func binaryMessageParsing(cols: Int, rows: Int) async throws {
         // Arrange
@@ -74,12 +73,12 @@ final class BufferWebSocketClientTests {
         let sessionId = "test-session-123"
 
         // Subscribe to events
-        client.subscribe(to: sessionId) { event in
+        self.client.subscribe(to: sessionId) { event in
             receivedEvent = event
         }
 
         // Connect
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
@@ -97,7 +96,7 @@ final class BufferWebSocketClientTests {
 
         // Assert
         let event = try #require(receivedEvent)
-        guard case .bufferUpdate(let snapshot) = event else {
+        guard case let .bufferUpdate(snapshot) = event else {
             Issue.record("Expected buffer update event, got \(event)")
             return
         }
@@ -108,11 +107,11 @@ final class BufferWebSocketClientTests {
 
     @Test("Handles text messages", arguments: [
         (type: "ping", expectedResponse: "pong"),
-        (type: "error", expectedResponse: nil)
+        (type: "error", expectedResponse: nil),
     ])
     func textMessageHandling(type: String, expectedResponse: String?) async throws {
         // Connect
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
@@ -141,13 +140,13 @@ final class BufferWebSocketClientTests {
         let sessionId = "test-session-456"
 
         // Connect first to ensure WebSocket is available
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
 
         // Act - Subscribe after connection is established
-        client.subscribe(to: sessionId) { _ in
+        self.client.subscribe(to: sessionId) { _ in
             // Event handler
         }
 
@@ -165,11 +164,11 @@ final class BufferWebSocketClientTests {
     @Test("Handles reconnection after disconnection", .timeLimit(.minutes(1)))
     func reconnection() async throws {
         // Connect
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         let firstWebSocket = try #require(mockFactory.lastCreatedWebSocket)
-        #expect(client.isConnected)
+        #expect(self.client.isConnected)
 
         // Act - Simulate disconnection
         firstWebSocket.simulateDisconnection()
@@ -187,7 +186,7 @@ final class BufferWebSocketClientTests {
     @Test("Sends ping messages periodically", .disabled("Ping timing is unpredictable in tests"))
     func pingMessages() async throws {
         // Act
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
@@ -206,10 +205,10 @@ final class BufferWebSocketClientTests {
         let sessionId = "test-session-789"
 
         // Subscribe first
-        client.subscribe(to: sessionId) { _ in }
+        self.client.subscribe(to: sessionId) { _ in }
 
         // Connect
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
@@ -218,7 +217,7 @@ final class BufferWebSocketClientTests {
         mockWebSocket.reset(preserveConnection: true)
 
         // Act - Unsubscribe
-        client.unsubscribe(from: sessionId)
+        self.client.unsubscribe(from: sessionId)
         try await Task.sleep(nanoseconds: 50_000_000) // 50ms
 
         // Assert - Should have sent only the unsubscribe message
@@ -232,20 +231,20 @@ final class BufferWebSocketClientTests {
     @Test("Cleans up on disconnect")
     func cleanup() async throws {
         // Subscribe to a session
-        client.subscribe(to: "test-session") { _ in }
+        self.client.subscribe(to: "test-session") { _ in }
 
         // Connect
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
-        #expect(client.isConnected)
+        #expect(self.client.isConnected)
 
         // Act
-        client.disconnect()
+        self.client.disconnect()
 
         // Assert
-        #expect(!client.isConnected)
+        #expect(!self.client.isConnected)
         #expect(mockWebSocket.disconnectCalled)
         #expect(mockWebSocket.lastDisconnectCode == URLSessionWebSocketTask.CloseCode.goingAway)
     }
@@ -258,11 +257,11 @@ final class BufferWebSocketClientTests {
         var receivedEvent: TerminalWebSocketEvent?
         let sessionId = "test-session"
 
-        client.subscribe(to: sessionId) { event in
+        self.client.subscribe(to: sessionId) { event in
             receivedEvent = event
         }
 
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 100_000_000)
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
@@ -287,11 +286,11 @@ final class BufferWebSocketClientTests {
         var receivedEvent: TerminalWebSocketEvent?
         let sessionId = "test-session"
 
-        client.subscribe(to: sessionId) { event in
+        self.client.subscribe(to: sessionId) { event in
             receivedEvent = event
         }
 
-        client.connect()
+        self.client.connect()
         try await Task.sleep(nanoseconds: 100_000_000)
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
@@ -319,8 +318,7 @@ extension BufferWebSocketClientTests {
     func waitFor(
         _ condition: @escaping () async -> Bool,
         timeout: Duration = .seconds(5),
-        pollingInterval: Duration = .milliseconds(100)
-    )
+        pollingInterval: Duration = .milliseconds(100))
         async throws
     {
         let deadline = ContinuousClock.now.advanced(by: timeout)

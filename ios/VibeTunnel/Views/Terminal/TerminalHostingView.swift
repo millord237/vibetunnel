@@ -20,36 +20,36 @@ struct TerminalHostingView: UIViewRepresentable {
         let terminal = SwiftTerm.TerminalView()
 
         // Configure terminal appearance with theme
-        terminal.backgroundColor = UIColor(theme.background)
-        terminal.nativeForegroundColor = UIColor(theme.foreground)
-        terminal.nativeBackgroundColor = UIColor(theme.background)
+        terminal.backgroundColor = UIColor(self.theme.background)
+        terminal.nativeForegroundColor = UIColor(self.theme.foreground)
+        terminal.nativeBackgroundColor = UIColor(self.theme.background)
 
         // Set ANSI colors from theme
         let ansiColors: [SwiftTerm.Color] = [
-            UIColor(theme.black).toSwiftTermColor(), // 0
-            UIColor(theme.red).toSwiftTermColor(), // 1
-            UIColor(theme.green).toSwiftTermColor(), // 2
-            UIColor(theme.yellow).toSwiftTermColor(), // 3
-            UIColor(theme.blue).toSwiftTermColor(), // 4
-            UIColor(theme.magenta).toSwiftTermColor(), // 5
-            UIColor(theme.cyan).toSwiftTermColor(), // 6
-            UIColor(theme.white).toSwiftTermColor(), // 7
-            UIColor(theme.brightBlack).toSwiftTermColor(), // 8
-            UIColor(theme.brightRed).toSwiftTermColor(), // 9
-            UIColor(theme.brightGreen).toSwiftTermColor(), // 10
-            UIColor(theme.brightYellow).toSwiftTermColor(), // 11
-            UIColor(theme.brightBlue).toSwiftTermColor(), // 12
-            UIColor(theme.brightMagenta).toSwiftTermColor(), // 13
-            UIColor(theme.brightCyan).toSwiftTermColor(), // 14
-            UIColor(theme.brightWhite).toSwiftTermColor() // 15
+            UIColor(self.theme.black).toSwiftTermColor(), // 0
+            UIColor(self.theme.red).toSwiftTermColor(), // 1
+            UIColor(self.theme.green).toSwiftTermColor(), // 2
+            UIColor(self.theme.yellow).toSwiftTermColor(), // 3
+            UIColor(self.theme.blue).toSwiftTermColor(), // 4
+            UIColor(self.theme.magenta).toSwiftTermColor(), // 5
+            UIColor(self.theme.cyan).toSwiftTermColor(), // 6
+            UIColor(self.theme.white).toSwiftTermColor(), // 7
+            UIColor(self.theme.brightBlack).toSwiftTermColor(), // 8
+            UIColor(self.theme.brightRed).toSwiftTermColor(), // 9
+            UIColor(self.theme.brightGreen).toSwiftTermColor(), // 10
+            UIColor(self.theme.brightYellow).toSwiftTermColor(), // 11
+            UIColor(self.theme.brightBlue).toSwiftTermColor(), // 12
+            UIColor(self.theme.brightMagenta).toSwiftTermColor(), // 13
+            UIColor(self.theme.brightCyan).toSwiftTermColor(), // 14
+            UIColor(self.theme.brightWhite).toSwiftTermColor(), // 15
         ]
         terminal.installColors(ansiColors)
 
         // Set cursor color
-        terminal.caretColor = UIColor(theme.cursor)
+        terminal.caretColor = UIColor(self.theme.cursor)
 
         // Set selection color
-        terminal.selectedTextBackgroundColor = UIColor(theme.selection)
+        terminal.selectedTextBackgroundColor = UIColor(self.theme.selection)
 
         // Set up delegates
         // SwiftTerm's TerminalView uses terminalDelegate, not delegate
@@ -62,7 +62,7 @@ struct TerminalHostingView: UIViewRepresentable {
         // URL detection is handled by SwiftTerm automatically
 
         // Configure font
-        updateFont(terminal, size: fontSize)
+        self.updateFont(terminal, size: self.fontSize)
 
         // Start with default size
         let cols = Int(UIScreen.main.bounds.width / 9) // Approximate char width
@@ -73,35 +73,35 @@ struct TerminalHostingView: UIViewRepresentable {
     }
 
     func updateUIView(_ terminal: SwiftTerm.TerminalView, context: Context) {
-        updateFont(terminal, size: fontSize)
+        self.updateFont(terminal, size: self.fontSize)
 
         // URL detection is handled by SwiftTerm automatically
 
         // Update theme colors
-        terminal.backgroundColor = UIColor(theme.background)
-        terminal.nativeForegroundColor = UIColor(theme.foreground)
-        terminal.nativeBackgroundColor = UIColor(theme.background)
-        terminal.caretColor = UIColor(theme.cursor)
-        terminal.selectedTextBackgroundColor = UIColor(theme.selection)
+        terminal.backgroundColor = UIColor(self.theme.background)
+        terminal.nativeForegroundColor = UIColor(self.theme.foreground)
+        terminal.nativeBackgroundColor = UIColor(self.theme.background)
+        terminal.caretColor = UIColor(self.theme.cursor)
+        terminal.selectedTextBackgroundColor = UIColor(self.theme.selection)
 
         // Update ANSI colors
         let ansiColors: [SwiftTerm.Color] = [
-            UIColor(theme.black).toSwiftTermColor(), // 0
-            UIColor(theme.red).toSwiftTermColor(), // 1
-            UIColor(theme.green).toSwiftTermColor(), // 2
-            UIColor(theme.yellow).toSwiftTermColor(), // 3
-            UIColor(theme.blue).toSwiftTermColor(), // 4
-            UIColor(theme.magenta).toSwiftTermColor(), // 5
-            UIColor(theme.cyan).toSwiftTermColor(), // 6
-            UIColor(theme.white).toSwiftTermColor(), // 7
-            UIColor(theme.brightBlack).toSwiftTermColor(), // 8
-            UIColor(theme.brightRed).toSwiftTermColor(), // 9
-            UIColor(theme.brightGreen).toSwiftTermColor(), // 10
-            UIColor(theme.brightYellow).toSwiftTermColor(), // 11
-            UIColor(theme.brightBlue).toSwiftTermColor(), // 12
-            UIColor(theme.brightMagenta).toSwiftTermColor(), // 13
-            UIColor(theme.brightCyan).toSwiftTermColor(), // 14
-            UIColor(theme.brightWhite).toSwiftTermColor() // 15
+            UIColor(self.theme.black).toSwiftTermColor(), // 0
+            UIColor(self.theme.red).toSwiftTermColor(), // 1
+            UIColor(self.theme.green).toSwiftTermColor(), // 2
+            UIColor(self.theme.yellow).toSwiftTermColor(), // 3
+            UIColor(self.theme.blue).toSwiftTermColor(), // 4
+            UIColor(self.theme.magenta).toSwiftTermColor(), // 5
+            UIColor(self.theme.cyan).toSwiftTermColor(), // 6
+            UIColor(self.theme.white).toSwiftTermColor(), // 7
+            UIColor(self.theme.brightBlack).toSwiftTermColor(), // 8
+            UIColor(self.theme.brightRed).toSwiftTermColor(), // 9
+            UIColor(self.theme.brightGreen).toSwiftTermColor(), // 10
+            UIColor(self.theme.brightYellow).toSwiftTermColor(), // 11
+            UIColor(self.theme.brightBlue).toSwiftTermColor(), // 12
+            UIColor(self.theme.brightMagenta).toSwiftTermColor(), // 13
+            UIColor(self.theme.brightCyan).toSwiftTermColor(), // 14
+            UIColor(self.theme.brightWhite).toSwiftTermColor(), // 15
         ]
         terminal.installColors(ansiColors)
 
@@ -111,10 +111,9 @@ struct TerminalHostingView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
-            onInput: onInput,
-            onResize: onResize,
-            viewModel: viewModel
-        )
+            onInput: self.onInput,
+            onResize: self.onResize,
+            viewModel: self.viewModel)
     }
 
     private func updateFont(_ terminal: SwiftTerm.TerminalView, size: CGFloat) {
@@ -164,8 +163,8 @@ struct TerminalHostingView: UIViewRepresentable {
         init(
             onInput: @escaping (String) -> Void,
             onResize: @escaping (Int, Int) -> Void,
-            viewModel: TerminalViewModel
-        ) {
+            viewModel: TerminalViewModel)
+        {
             self.onInput = onInput
             self.onResize = onResize
             self.viewModel = viewModel
@@ -181,10 +180,9 @@ struct TerminalHostingView: UIViewRepresentable {
         func updateBuffer(from snapshot: BufferSnapshot) {
             guard let terminal else { return }
 
-            logger
+            self.logger
                 .verbose(
-                    "updateBuffer called with snapshot: \(snapshot.cols)x\(snapshot.rows), cursor: (\(snapshot.cursorX),\(snapshot.cursorY))"
-                )
+                    "updateBuffer called with snapshot: \(snapshot.cols)x\(snapshot.rows), cursor: (\(snapshot.cursorX),\(snapshot.cursorY))")
 
             // Update terminal dimensions if needed
             let currentCols = terminal.getTerminal().cols
@@ -193,50 +191,50 @@ struct TerminalHostingView: UIViewRepresentable {
             if currentCols != snapshot.cols || currentRows != snapshot.rows {
                 terminal.resize(cols: snapshot.cols, rows: snapshot.rows)
                 // Force full redraw on resize
-                isFirstUpdate = true
+                self.isFirstUpdate = true
             }
 
             // Handle viewport scrolling
-            let viewportChanged = previousSnapshot?.viewportY != snapshot.viewportY
-            if viewportChanged && previousSnapshot != nil {
+            let viewportChanged = self.previousSnapshot?.viewportY != snapshot.viewportY
+            if viewportChanged && self.previousSnapshot != nil {
                 // Calculate scroll delta
-                let scrollDelta = snapshot.viewportY - (previousSnapshot?.viewportY ?? 0)
-                handleViewportScroll(delta: scrollDelta, snapshot: snapshot)
+                let scrollDelta = snapshot.viewportY - (self.previousSnapshot?.viewportY ?? 0)
+                self.handleViewportScroll(delta: scrollDelta, snapshot: snapshot)
             }
 
             // Use incremental updates if possible
             let ansiData: String
-            if isFirstUpdate || previousSnapshot == nil || viewportChanged {
+            if self.isFirstUpdate || self.previousSnapshot == nil || viewportChanged {
                 // Full redraw needed
-                ansiData = convertBufferToOptimizedANSI(snapshot, clearScreen: isFirstUpdate)
-                isFirstUpdate = false
-                logger.verbose("Full redraw performed")
+                ansiData = self.convertBufferToOptimizedANSI(snapshot, clearScreen: self.isFirstUpdate)
+                self.isFirstUpdate = false
+                self.logger.verbose("Full redraw performed")
             } else if let previous = previousSnapshot {
                 // Incremental update
-                ansiData = generateIncrementalUpdate(from: previous, to: snapshot)
-                logger.verbose("Incremental update performed")
+                ansiData = self.generateIncrementalUpdate(from: previous, to: snapshot)
+                self.logger.verbose("Incremental update performed")
             } else {
                 // Fallback to full redraw if somehow previousSnapshot is nil
-                ansiData = convertBufferToOptimizedANSI(snapshot, clearScreen: false)
-                logger.verbose("Fallback full redraw performed")
+                ansiData = self.convertBufferToOptimizedANSI(snapshot, clearScreen: false)
+                self.logger.verbose("Fallback full redraw performed")
             }
 
             // Store current snapshot for next update
-            previousSnapshot = snapshot
+            self.previousSnapshot = snapshot
 
             // Feed the ANSI data to the terminal
             if !ansiData.isEmpty {
-                feedData(ansiData)
+                self.feedData(ansiData)
             }
         }
 
         /// Handle viewport scrolling
         private func handleViewportScroll(delta: Int, snapshot: BufferSnapshot) {
-            guard terminal != nil else { return }
+            guard self.terminal != nil else { return }
 
             // SwiftTerm handles scrolling internally, but we can optimize by
             // using scroll region commands if scrolling by small amounts
-            if abs(delta) < 5 && abs(delta) > 0 {
+            if abs(delta) < 5, abs(delta) > 0 {
                 var scrollCommands = ""
 
                 // Set scroll region to full screen
@@ -253,7 +251,7 @@ struct TerminalHostingView: UIViewRepresentable {
                 // Reset scroll region
                 scrollCommands += "\u{001B}[r"
 
-                feedData(scrollCommands)
+                self.feedData(scrollCommands)
             }
         }
 
@@ -271,7 +269,7 @@ struct TerminalHostingView: UIViewRepresentable {
             // Track current attributes to minimize escape sequences
             var currentFg: Int?
             var currentBg: Int?
-            var currentAttrs: Int = 0
+            var currentAttrs = 0
 
             // Render each row
             for (rowIndex, row) in snapshot.cells.enumerated() {
@@ -381,14 +379,13 @@ struct TerminalHostingView: UIViewRepresentable {
         /// Generate incremental ANSI updates by comparing previous and current snapshots
         private func generateIncrementalUpdate(
             from oldSnapshot: BufferSnapshot,
-            to newSnapshot: BufferSnapshot
-        )
+            to newSnapshot: BufferSnapshot)
             -> String
         {
             var output = ""
             var currentFg: Int?
             var currentBg: Int?
-            var currentAttrs: Int = 0
+            var currentAttrs = 0
 
             // Update cursor if changed
             let cursorChanged = oldSnapshot.cursorX != newSnapshot.cursorX || oldSnapshot.cursorY != newSnapshot.cursorY
@@ -399,7 +396,7 @@ struct TerminalHostingView: UIViewRepresentable {
                 let newRow = rowIndex < newSnapshot.cells.count ? newSnapshot.cells[rowIndex] : []
 
                 // Quick check if rows are identical
-                if rowsAreIdentical(oldRow, newRow) {
+                if self.rowsAreIdentical(oldRow, newRow) {
                     continue
                 }
 
@@ -407,18 +404,18 @@ struct TerminalHostingView: UIViewRepresentable {
                 let oldIsEmpty = oldRow.isEmpty || (oldRow.count == 1 && oldRow[0].width == 0)
                 let newIsEmpty = newRow.isEmpty || (newRow.count == 1 && newRow[0].width == 0)
 
-                if oldIsEmpty && newIsEmpty {
+                if oldIsEmpty, newIsEmpty {
                     continue // Both empty, no change
-                } else if !oldIsEmpty && newIsEmpty {
+                } else if !oldIsEmpty, newIsEmpty {
                     // Row became empty - clear it
                     output += "\u{001B}[\(rowIndex + 1);1H\u{001B}[2K"
                     continue
-                } else if oldIsEmpty && !newIsEmpty {
+                } else if oldIsEmpty, !newIsEmpty {
                     // Empty row now has content - render full row
                     output += "\u{001B}[\(rowIndex + 1);1H"
                     for cell in newRow {
-                        updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
-                        updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
+                        self.updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
+                        self.updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
                         output += cell.char
                     }
                     continue
@@ -433,7 +430,7 @@ struct TerminalHostingView: UIViewRepresentable {
                     let oldCell = colIndex < oldRow.count ? oldRow[colIndex] : nil
                     let newCell = colIndex < newRow.count ? newRow[colIndex] : nil
 
-                    if !cellsAreIdentical(oldCell, newCell) {
+                    if !self.cellsAreIdentical(oldCell, newCell) {
                         if currentSegmentStart == -1 {
                             currentSegmentStart = colIndex
                         }
@@ -493,8 +490,8 @@ struct TerminalHostingView: UIViewRepresentable {
                             }
 
                             // Apply colors
-                            updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
-                            updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
+                            self.updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
+                            self.updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
                         }
 
                         output += cell.char
@@ -511,8 +508,8 @@ struct TerminalHostingView: UIViewRepresentable {
                     let row = newSnapshot.cells[rowIndex]
                     for cell in row {
                         // Apply styles
-                        updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
-                        updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
+                        self.updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
+                        self.updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
                         output += cell.char
                     }
                 }
@@ -529,7 +526,7 @@ struct TerminalHostingView: UIViewRepresentable {
         private func rowsAreIdentical(_ row1: [BufferCell], _ row2: [BufferCell]) -> Bool {
             guard row1.count == row2.count else { return false }
 
-            for i in 0..<row1.count where !cellsAreIdentical(row1[i], row2[i]) {
+            for i in 0..<row1.count where !self.cellsAreIdentical(row1[i], row2[i]) {
                 return false
             }
             return true
@@ -550,8 +547,8 @@ struct TerminalHostingView: UIViewRepresentable {
             _ output: inout String,
             _ current: inout Int?,
             _ new: Int?,
-            isBackground: Bool
-        ) {
+            isBackground: Bool)
+        {
             if new != current {
                 current = new
                 if let color = new {
@@ -575,16 +572,16 @@ struct TerminalHostingView: UIViewRepresentable {
         func feedData(_ data: String) {
             Task { @MainActor in
                 guard let terminal else {
-                    logger.warning("No terminal instance available")
+                    self.logger.warning("No terminal instance available")
                     return
                 }
 
                 // Debug: Log first 100 chars of data
                 let preview = String(data.prefix(100))
-                logger.verbose("Feeding \(data.count) bytes: \(preview)")
+                self.logger.verbose("Feeding \(data.count) bytes: \(preview)")
 
                 // Store current scroll position before feeding data
-                let wasAtBottom = viewModel.isAutoScrollEnabled
+                let wasAtBottom = self.viewModel.isAutoScrollEnabled
 
                 // Feed the output to the terminal
                 terminal.feed(text: data)
@@ -624,12 +621,12 @@ struct TerminalHostingView: UIViewRepresentable {
 
         func send(source: SwiftTerm.TerminalView, data: ArraySlice<UInt8>) {
             if let string = String(bytes: data, encoding: .utf8) {
-                onInput(string)
+                self.onInput(string)
             }
         }
 
         func sizeChanged(source: SwiftTerm.TerminalView, newCols: Int, newRows: Int) {
-            onResize(newCols, newRows)
+            self.onResize(newCols, newRows)
         }
 
         func scrolled(source: SwiftTerm.TerminalView, position: Double) {
@@ -637,7 +634,7 @@ struct TerminalHostingView: UIViewRepresentable {
             Task { @MainActor in
                 // Estimate if at bottom based on position
                 let isAtBottom = position >= 0.95
-                viewModel.updateScrollState(isAtBottom: isAtBottom)
+                self.viewModel.updateScrollState(isAtBottom: isAtBottom)
 
                 // The view model will handle button visibility through its state
             }
@@ -655,7 +652,7 @@ struct TerminalHostingView: UIViewRepresentable {
             // When maxWidth is 0, it means unlimited
             // This could be used to constrain terminal rendering in the future
             // For now, just log the preference
-            logger.info("Max width set to: \(maxWidth == 0 ? "unlimited" : "\(maxWidth) columns")")
+            self.logger.info("Max width set to: \(maxWidth == 0 ? "unlimited" : "\(maxWidth) columns")")
         }
 
         func setTerminalTitle(source: SwiftTerm.TerminalView, title: String) {
@@ -685,9 +682,9 @@ struct TerminalHostingView: UIViewRepresentable {
                 HapticFeedback.notification(.success)
 
                 // If we have buffer data, we can provide additional context
-                if previousSnapshot != nil {
+                if self.previousSnapshot != nil {
                     // Log selection range for debugging
-                    logger.debug("Copied \(string.count) characters")
+                    self.logger.debug("Copied \(string.count) characters")
                 }
             }
         }
@@ -722,9 +719,9 @@ struct TerminalHostingView: UIViewRepresentable {
                     let cellEndX = currentX + cell.width
 
                     // Check if cell is within selection
-                    if y == startY && y == endY {
+                    if y == startY, y == endY {
                         // Single line selection
-                        if cellEndX > startX && cellStartX < endX {
+                        if cellEndX > startX, cellStartX < endX {
                             rowText += cell.char
                         }
                     } else if y == startY {
@@ -779,9 +776,9 @@ extension UIColor {
         getRed(&red, green: &green, blue: &blue, alpha: &alpha)
 
         // Convert from 0.0-1.0 range to 0-65535 range
-        let red16 = UInt16(red * 65_535.0)
-        let green16 = UInt16(green * 65_535.0)
-        let blue16 = UInt16(blue * 65_535.0)
+        let red16 = UInt16(red * 65535.0)
+        let green16 = UInt16(green * 65535.0)
+        let blue16 = UInt16(blue * 65535.0)
 
         return SwiftTerm.Color(red: red16, green: green16, blue: blue16)
     }

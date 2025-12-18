@@ -9,12 +9,12 @@ struct HelpTooltip: View {
         Image(systemName: "questionmark.circle")
             .foregroundColor(.secondary)
             .imageScale(.small)
-            .help(text)
+            .help(self.text)
             .onHover { hovering in
-                isHovering = hovering
+                self.isHovering = hovering
             }
-            .scaleEffect(isHovering ? 1.1 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: isHovering)
+            .scaleEffect(self.isHovering ? 1.1 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: self.isHovering)
     }
 }
 

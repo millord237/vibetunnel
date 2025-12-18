@@ -27,7 +27,7 @@ final class StatusBarIconController {
         guard let button else { return }
 
         // Update icon based on server status
-        updateIcon(isServerRunning: serverManager.isRunning)
+        self.updateIcon(isServerRunning: serverManager.isRunning)
 
         // Update session count display
         let sessions = sessionMonitor.sessions.values.filter(\.isRunning)
@@ -42,7 +42,7 @@ final class StatusBarIconController {
         let totalCount = sessions.count
         let idleCount = totalCount - activeCount
 
-        let indicator = formatSessionIndicator(activeCount: activeCount, idleCount: idleCount)
+        let indicator = self.formatSessionIndicator(activeCount: activeCount, idleCount: idleCount)
         button.title = indicator.isEmpty ? "" : " " + indicator
     }
 

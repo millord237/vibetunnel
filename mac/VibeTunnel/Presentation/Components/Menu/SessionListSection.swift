@@ -13,12 +13,12 @@ struct SessionSectionHeader: View {
 
     var body: some View {
         HStack {
-            Text(title)
+            Text(self.title)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(.secondary)
-            Text("(\(count))")
+            Text("(\(self.count))")
                 .font(.system(size: 11))
-                .foregroundColor(AppColors.Fallback.secondaryText(for: colorScheme).opacity(0.6))
+                .foregroundColor(AppColors.Fallback.secondaryText(for: self.colorScheme).opacity(0.6))
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -41,52 +41,50 @@ struct SessionListSection: View {
 
     var body: some View {
         VStack(spacing: 1) {
-            if activeSessions.isEmpty && idleSessions.isEmpty {
+            if self.activeSessions.isEmpty, self.idleSessions.isEmpty {
                 EmptySessionsView()
                     .padding()
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
             } else {
                 // Active sessions section
-                if !activeSessions.isEmpty {
-                    SessionSectionHeader(title: "Active", count: activeSessions.count)
+                if !self.activeSessions.isEmpty {
+                    SessionSectionHeader(title: "Active", count: self.activeSessions.count)
                         .transition(.opacity)
-                    ForEach(activeSessions, id: \.key) { session in
+                    ForEach(self.activeSessions, id: \.key) { session in
                         SessionRow(
                             session: session,
-                            isHovered: hoveredSessionId == session.key,
+                            isHovered: self.hoveredSessionId == session.key,
                             isActive: true,
-                            isFocused: focusedField == .sessionRow(session.key) && hasStartedKeyboardNavigation
-                        )
-                        .onHover { hovering in
-                            onHover(hovering ? session.key : nil)
-                        }
-                        .focusable()
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .scale)
-                        ))
+                            isFocused: self.focusedField == .sessionRow(session.key) && self
+                                .hasStartedKeyboardNavigation)
+                            .onHover { hovering in
+                                self.onHover(hovering ? session.key : nil)
+                            }
+                            .focusable()
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .scale)))
                     }
                 }
 
                 // Idle sessions section
-                if !idleSessions.isEmpty {
-                    SessionSectionHeader(title: "Idle", count: idleSessions.count)
+                if !self.idleSessions.isEmpty {
+                    SessionSectionHeader(title: "Idle", count: self.idleSessions.count)
                         .transition(.opacity)
-                    ForEach(idleSessions, id: \.key) { session in
+                    ForEach(self.idleSessions, id: \.key) { session in
                         SessionRow(
                             session: session,
-                            isHovered: hoveredSessionId == session.key,
+                            isHovered: self.hoveredSessionId == session.key,
                             isActive: false,
-                            isFocused: focusedField == .sessionRow(session.key) && hasStartedKeyboardNavigation
-                        )
-                        .onHover { hovering in
-                            onHover(hovering ? session.key : nil)
-                        }
-                        .focusable()
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .scale)
-                        ))
+                            isFocused: self.focusedField == .sessionRow(session.key) && self
+                                .hasStartedKeyboardNavigation)
+                            .onHover { hovering in
+                                self.onHover(hovering ? session.key : nil)
+                            }
+                            .focusable()
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .scale)))
                     }
                 }
             }

@@ -27,15 +27,14 @@ struct TerminalRendererTests {
     @Test("Default selection is SwiftTerm", .disabled("UserDefaults direct usage needs dependency injection refactor"))
     func defaultSelection() {
         // Ensure no value is set
-        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: self.userDefaultsKey)
 
         #expect(TerminalRenderer.selected == .swiftTerm)
     }
 
     @Test(
         "Selection persists to UserDefaults",
-        .disabled("UserDefaults direct usage needs dependency injection refactor")
-    )
+        .disabled("UserDefaults direct usage needs dependency injection refactor"))
     func selectionPersistence() {
         // Store original value to restore after test
         let originalRenderer = TerminalRenderer.selected
@@ -48,7 +47,7 @@ struct TerminalRendererTests {
         TerminalRenderer.selected = .xterm
 
         // Verify it was saved
-        let savedValue = UserDefaults.standard.string(forKey: userDefaultsKey)
+        let savedValue = UserDefaults.standard.string(forKey: self.userDefaultsKey)
         #expect(savedValue == "xterm.js")
 
         // Verify getter returns correct value
@@ -58,7 +57,7 @@ struct TerminalRendererTests {
         TerminalRenderer.selected = .swiftTerm
 
         // Verify it was updated
-        let updatedValue = UserDefaults.standard.string(forKey: userDefaultsKey)
+        let updatedValue = UserDefaults.standard.string(forKey: self.userDefaultsKey)
         #expect(updatedValue == "SwiftTerm")
 
         // Verify getter returns updated value
@@ -67,11 +66,10 @@ struct TerminalRendererTests {
 
     @Test(
         "Invalid UserDefaults value returns default",
-        .disabled("UserDefaults direct usage needs dependency injection refactor")
-    )
+        .disabled("UserDefaults direct usage needs dependency injection refactor"))
     func invalidUserDefaultsValue() {
         // Set invalid value directly
-        UserDefaults.standard.set("InvalidRenderer", forKey: userDefaultsKey)
+        UserDefaults.standard.set("InvalidRenderer", forKey: self.userDefaultsKey)
 
         // Should return default
         #expect(TerminalRenderer.selected == .swiftTerm)
@@ -113,7 +111,7 @@ struct TerminalRendererTests {
         // Test each renderer
         for renderer in TerminalRenderer.allCases {
             // Clear UserDefaults
-            UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+            UserDefaults.standard.removeObject(forKey: self.userDefaultsKey)
 
             // Set the renderer
             TerminalRenderer.selected = renderer

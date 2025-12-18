@@ -146,13 +146,13 @@ struct NotificationServiceTests {
         // Test short duration
         await service.sendCommandCompletionNotification(
             command: "ls",
-            duration: 1_000 // 1 second
+            duration: 1000, // 1 second
         )
 
         // Test long duration
         await service.sendCommandCompletionNotification(
             command: "long-running-command",
-            duration: 5_000 // 5 seconds
+            duration: 5000, // 5 seconds
         )
 
         #expect(configManager.notificationsEnabled == true)
@@ -178,8 +178,7 @@ struct NotificationServiceTests {
         // not through direct method calls
         await service.sendCommandCompletionNotification(
             command: "failing-command",
-            duration: 1_000
-        )
+            duration: 1000)
 
         #expect(configManager.notificationsEnabled == true)
         #expect(preferences.commandError == true)
@@ -230,8 +229,7 @@ struct NotificationServiceTests {
         await service.sendSessionExitNotification(sessionName: "Test", exitCode: 0)
         await service.sendCommandCompletionNotification(
             command: "test",
-            duration: 5_000
-        )
+            duration: 5000)
         await service.sendGenericNotification(title: "Bell", body: "Test")
 
         // Master switch should block all notifications
