@@ -28,7 +28,7 @@ This document provides a comprehensive map of the VibeTunnel web application arc
 ### Client Core
 - **Entry Point**: `src/client/app-entry.ts:1-28` - App initialization
 - **Main Component**: `src/client/app.ts:44-1355` - `<vibetunnel-app>`
-- **Terminal**: `src/client/components/terminal.ts:23-1567` - xterm.js wrapper
+- **Terminal**: `src/client/components/terminal.ts:23-1567` - ghostty-web wrapper
 
 ## Server Architecture
 
@@ -109,7 +109,7 @@ The server provides a comprehensive API for terminal session management with sup
 ├── <session-list>                # Session listing
 │   └── <session-card>           # Individual session
 ├── <session-view>               # Full-screen terminal
-│   ├── <vibe-terminal>         # xterm.js wrapper
+│   ├── <vibe-terminal>         # ghostty-web wrapper
 │   └── <vibe-terminal-buffer>  # Binary buffer renderer
 └── <unified-settings>           # Settings panel
 ```

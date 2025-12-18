@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 
 /**
  * Terminal test utilities for the custom terminal implementation
- * that uses headless xterm.js with custom DOM rendering
+ * that uses ghostty-web with custom DOM rendering
  */
 // biome-ignore lint/complexity/noStaticOnlyClass: Utility class pattern for test helpers
 export class TerminalTestUtils {

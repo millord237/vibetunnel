@@ -377,14 +377,16 @@ export async function assertTerminalReady(
         }
       }
 
-      // Fallback: Check if terminal has xterm structure
-      const hasXterm = !!term.querySelector('.xterm');
-      const hasShadowRoot = !!term.shadowRoot;
+      // Fallback: check if terminal has any structure
+      const hasTerminalStructure =
+        !!term.querySelector('vibe-terminal') ||
+        !!term.querySelector('canvas') ||
+        !!term.shadowRoot;
 
       const content = term?.textContent || '';
 
       // If terminal structure exists but no content yet, wait
-      if ((hasXterm || hasShadowRoot) && !content) {
+      if (hasTerminalStructure && !content) {
         return false;
       }
 
@@ -397,7 +399,7 @@ export async function assertTerminalReady(
       }
 
       // If no content after structure exists, consider it ready (blank terminal)
-      if (!content && (hasXterm || hasShadowRoot)) {
+      if (!content && hasTerminalStructure) {
         console.log(
           '[assertTerminalReady] Terminal has structure but no content, considering ready'
         );

@@ -38,9 +38,6 @@ importers:
       '@codemirror/view':
         specifier: ^6.39.4
         version: 6.39.4
-      '@xterm/headless':
-        specifier: ^5.5.0
-        version: 5.5.0
       authenticate-pam:
         specifier: ^1.0.5
         version: 1.0.5
@@ -1221,9 +1218,6 @@ packages:
   '@web/test-runner-core@0.13.4':
     resolution: {integrity: sha512-84E1025aUSjvZU1j17eCTwV7m5Zg3cZHErV3+CaJM9JPCesZwLraIa0ONIQ9w4KLgcDgJFw9UnJ0LbFf42h6tg==}
     engines: {node: '>=18.0.0'}
-
-  '@xterm/headless@5.5.0':
-    resolution: {integrity: sha512-5xXB7kdQlFBP82ViMJTwwEc3gKCLGKR/eoxQm4zge7GPBl86tCdI0IdPJjoKd8mUSFXz5V7i/25sfsEkP4j46g==}
 
   accepts@1.3.8:
     resolution: {integrity: sha512-PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw==}
@@ -4422,8 +4416,6 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
-
-  '@xterm/headless@5.5.0': {}
 
   accepts@1.3.8:
     dependencies:

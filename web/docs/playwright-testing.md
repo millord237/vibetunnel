@@ -67,7 +67,7 @@ await page.waitForFunction(() => {
   return terminal && (
     terminal.textContent?.trim().length > 0 ||
     !!terminal.shadowRoot ||
-    !!terminal.querySelector('.xterm')
+    !!terminal.querySelector('vibe-terminal')
   );
 });
 ```
