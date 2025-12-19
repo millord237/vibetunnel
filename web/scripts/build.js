@@ -116,6 +116,11 @@ async function build() {
     process.exit(1);
   }
 
+  // Build zig forwarder first.
+  // `build-native.js` runs verification in CI which expects the forwarder to exist.
+  console.log('Building zig forwarder...');
+  execSync('node scripts/build-fwd-zig.js', { stdio: 'inherit' });
+
 
   // Build native executable
   console.log('Building native executable...');
@@ -143,10 +148,6 @@ async function build() {
       execSync('node build-native.js', { stdio: 'inherit' });
     }
   }
-
-  // Build zig forwarder
-  console.log('Building zig forwarder...');
-  execSync('node scripts/build-fwd-zig.js', { stdio: 'inherit' });
 
   console.log('Build completed successfully!');
 }
