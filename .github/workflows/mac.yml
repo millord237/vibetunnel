@@ -90,7 +90,7 @@ jobs:
           
           # Install tools without updating Homebrew
           # brew install automatically upgrades if already installed
-          if brew install swiftlint swiftformat xcbeautify jq; then
+          if brew install swiftlint swiftformat xcbeautify jq zig; then
             echo "Successfully installed/upgraded all tools"
             break
           else

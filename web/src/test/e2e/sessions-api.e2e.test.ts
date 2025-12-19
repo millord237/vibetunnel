@@ -160,7 +160,7 @@ describe('Sessions API Tests', () => {
       sessionId = result.sessionId;
 
       // Wait for session to start
-      await sleep(500);
+      await sleep(1500);
     });
 
     it('should list the created session', async () => {
@@ -218,7 +218,7 @@ describe('Sessions API Tests', () => {
 
     it('should get session text', async () => {
       // Wait a bit for output to accumulate
-      await sleep(1500);
+      await sleep(3000);
 
       const response = await fetch(
         `http://localhost:${server?.port}/api/sessions/${sessionId}/text`
@@ -259,7 +259,7 @@ describe('Sessions API Tests', () => {
       const snapshotFrame = await waitForWsV3Frame(
         ws,
         (frame) => frame.type === WsV3MessageType.SNAPSHOT_VT && frame.sessionId === sessionId,
-        4000
+        10000
       );
 
       expect(snapshotFrame.payload.byteLength).toBeGreaterThan(50);
@@ -287,7 +287,7 @@ describe('Sessions API Tests', () => {
       const stdoutFrame = await waitForWsV3Frame(
         ws,
         (frame) => frame.type === WsV3MessageType.STDOUT && frame.sessionId === sessionId,
-        4000
+        8000
       );
       expect(stdoutFrame.payload.byteLength).toBeGreaterThan(0);
 

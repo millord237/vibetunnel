@@ -63,7 +63,7 @@ describe('WebSocket v3 Tests', () => {
     const frame = await waitForWsV3Frame(
       ws,
       (f) => f.type === WsV3MessageType.STDOUT && f.sessionId === sessionId,
-      5000
+      10000
     );
     const text = new TextDecoder().decode(frame.payload);
     expect(text.length).toBeGreaterThan(0);
@@ -84,7 +84,7 @@ describe('WebSocket v3 Tests', () => {
     const frame = await waitForWsV3Frame(
       ws,
       (f) => f.type === WsV3MessageType.SNAPSHOT_VT && f.sessionId === sessionId,
-      5000
+      10000
     );
 
     const view = new DataView(

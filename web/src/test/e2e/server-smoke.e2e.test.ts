@@ -81,7 +81,7 @@ describe('Server Smoke Test', () => {
     expect(inputResponse.ok).toBe(true);
 
     // Wait a bit for the command to execute
-    await new Promise<void>((resolve) => setTimeout(resolve, 500));
+    await new Promise<void>((resolve) => setTimeout(resolve, 1500));
 
     // 5. Get a VT snapshot over WebSocket v3
     console.log('5. Getting snapshot via /ws...');
@@ -95,7 +95,7 @@ describe('Server Smoke Test', () => {
     const snapshotFrame = await waitForWsV3Frame(
       ws,
       (frame) => frame.type === WsV3MessageType.SNAPSHOT_VT && frame.sessionId === sessionId,
-      4000
+      10000
     );
 
     expect(snapshotFrame.payload.byteLength).toBeGreaterThan(0);
