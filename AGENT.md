@@ -2,7 +2,7 @@
 
 ## Build/Test Commands
 - **Web**: `cd web && pnpm run check` (format, lint, typecheck), `pnpm run dev` (port 4020), `pnpm run test` (Vitest)
-- **Mac**: `cd mac && ./scripts/build.sh` (Release), `./scripts/build.sh --configuration Debug`, `./scripts/lint.sh` (SwiftFormat + SwiftLint)
+- **Mac**: `scripts/restart-mac.sh` (rebuild signed Debug + restart), `cd mac && ./scripts/build.sh` (signed Release), `cd mac && ./scripts/lint.sh` (SwiftFormat + SwiftLint)
 - **Single test**: `cd web && pnpm run test path/to/test.spec.ts` or `xcodebuild test -project VibeTunnel-Mac.xcodeproj -scheme VibeTunnel-Mac`
 
 ## Architecture
