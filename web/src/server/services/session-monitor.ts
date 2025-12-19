@@ -88,10 +88,10 @@ export class SessionMonitor extends EventEmitter {
   }
 
   /**
-   * Emit notification event for all clients (browsers and Mac app) via SSE
+   * Emit notification event for all clients (browsers, native apps) via WS v3 global events.
    */
   private emitNotificationEvent(event: SessionMonitorEvent) {
-    // Emit notification for all clients via SSE endpoint
+    // Emitted on the SessionMonitor event bus; the WS v3 hub fans this out to clients.
     this.emit('notification', {
       type: this.mapActionToServerEventType(event.type),
       sessionId: event.sessionId,

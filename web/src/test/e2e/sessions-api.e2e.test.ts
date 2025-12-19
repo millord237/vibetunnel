@@ -242,38 +242,35 @@ describe('Sessions API Tests', () => {
       expect(text).toBeDefined();
     });
 
-    it('should get session buffer', async () => {
+    it('should receive a VT snapshot via WebSocket v3', async () => {
       // Wait a bit after resize to ensure it's processed
       await sleep(200);
 
-      const response = await fetch(
-        `http://localhost:${server?.port}/api/sessions/${sessionId}/buffer`
+      const port = server?.port;
+      if (!port) throw new Error('Server not started');
+      const { ws } = await connectWsV3({ port });
+
+      sendSubscribe({
+        ws,
+        sessionId,
+        flags: WS_V3_FLAGS.Snapshots,
+      });
+
+      const snapshotFrame = await waitForWsV3Frame(
+        ws,
+        (frame) => frame.type === WsV3MessageType.SNAPSHOT_VT && frame.sessionId === sessionId,
+        4000
       );
 
-      expect(response.status).toBe(200);
-      const buffer = await response.arrayBuffer();
+      expect(snapshotFrame.payload.byteLength).toBeGreaterThan(50);
+      expect(snapshotFrame.payload.byteLength).toBeLessThan(100000);
 
-      // Check binary format header
-      const view = new DataView(buffer);
-      // Magic bytes "VT" - server writes in little-endian
-      expect(view.getUint16(0, true)).toBe(0x5654); // "VT" in little-endian
-      expect(view.getUint8(2)).toBe(1); // Version
+      const view = new DataView(snapshotFrame.payload.buffer, snapshotFrame.payload.byteOffset);
+      expect(view.getUint16(0, true)).toBe(0x5654); // "VT"
+      expect(view.getUint8(2)).toBe(1); // snapshot v1
+      expect(view.getUint32(4, true)).toBe(120); // cols (LE)
 
-      // Check dimensions - cols should match terminal size, rows is actual content
-      expect(view.getUint32(4, true)).toBe(120); // Cols (LE) - terminal width
-      const actualRows = view.getUint32(8, true);
-      expect(actualRows).toBeGreaterThan(0); // Rows (LE) - actual content rows
-      expect(actualRows).toBeLessThanOrEqual(40); // Should not exceed terminal height
-
-      // Buffer size check - verify it's reasonable
-      // The size depends heavily on content - empty terminals are very small due to optimization
-      // For a mostly empty terminal, we might see as little as 80-200 bytes
-      // For a terminal with content, it can be 20KB+
-      expect(buffer.byteLength).toBeGreaterThan(50); // At least minimal header + some data
-      expect(buffer.byteLength).toBeLessThan(100000); // Less than 100KB for sanity
-
-      // The buffer uses run-length encoding for empty space, so size varies greatly
-      // based on how much actual content vs empty space there is
+      ws.close();
     });
 
     it('should stream output via WebSocket v3', async () => {

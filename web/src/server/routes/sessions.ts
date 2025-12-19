@@ -726,68 +726,6 @@ export function createSessionRoutes(config: SessionRoutesConfig): Router {
     }
   });
 
-  // Get session buffer
-  router.get('/sessions/:sessionId/buffer', async (req, res) => {
-    const sessionId = req.params.sessionId;
-
-    logger.debug(`client requesting buffer for session ${sessionId}`);
-
-    try {
-      // If in HQ mode, check if this is a remote session
-      if (isHQMode && remoteRegistry) {
-        const remote = remoteRegistry.getRemoteBySessionId(sessionId);
-        if (remote) {
-          // Forward buffer request to remote server
-          try {
-            const response = await fetch(`${remote.url}/api/sessions/${sessionId}/buffer`, {
-              headers: {
-                Authorization: `Bearer ${remote.token}`,
-              },
-              signal: AbortSignal.timeout(5000),
-            });
-
-            if (!response.ok) {
-              return res.status(response.status).json(await response.json());
-            }
-
-            // Forward the binary buffer
-            const buffer = await response.arrayBuffer();
-            res.setHeader('Content-Type', 'application/octet-stream');
-            return res.send(Buffer.from(buffer));
-          } catch (error) {
-            logger.error(`failed to get buffer from remote ${remote.name}:`, error);
-            return res.status(503).json({ error: 'Failed to reach remote server' });
-          }
-        }
-      }
-
-      // Local session handling
-      const session = ptyManager.getSession(sessionId);
-      if (!session) {
-        logger.error(`session ${sessionId} not found`);
-        return res.status(404).json({ error: 'Session not found' });
-      }
-
-      // Get terminal buffer snapshot
-      const snapshot = await terminalManager.getBufferSnapshot(sessionId);
-
-      // Encode as binary buffer
-      const buffer = terminalManager.encodeSnapshot(snapshot);
-
-      logger.debug(
-        `sending buffer for session ${sessionId}: ${buffer.length} bytes, ` +
-          `dimensions: ${snapshot.cols}x${snapshot.rows}, cursor: (${snapshot.cursorX},${snapshot.cursorY})`
-      );
-
-      // Send as binary data
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.send(buffer);
-    } catch (error) {
-      logger.error('error getting buffer:', error);
-      res.status(500).json({ error: 'Failed to get terminal buffer' });
-    }
-  });
-
   // Send input to session
   router.post('/sessions/:sessionId/input', async (req, res) => {
     const sessionId = req.params.sessionId;

@@ -30,11 +30,3 @@ export interface MockWebSocketConstructor {
   CLOSING: number;
   CLOSED: number;
 }
-
-// Type for EventSource mock constructor
-export interface MockEventSourceConstructor {
-  new (url: string, eventSourceInitDict?: EventSourceInit): EventSource;
-  CONNECTING: number;
-  OPEN: number;
-  CLOSED: number;
-}

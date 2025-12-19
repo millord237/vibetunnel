@@ -475,7 +475,7 @@ export class PushNotificationService {
                 body: event.body || 'Test notification received!',
                 icon: '/apple-touch-icon.png',
                 badge: '/favicon-32.png',
-                tag: 'vibetunnel-test-sse',
+                tag: 'vibetunnel-test',
                 requireInteraction: false,
               }
             );
@@ -504,7 +504,7 @@ export class PushNotificationService {
       const result = await response.json();
       logger.log('✅ Server test notification sent successfully:', result);
 
-      // Wait for the SSE notification
+      // Wait for the server event (WS v3 global `EVENT`)
       await notificationPromise;
 
       logger.log('🎉 Test notification complete - notification sent to all connected clients');

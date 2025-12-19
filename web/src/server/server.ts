@@ -18,8 +18,6 @@ import { createAuthMiddleware } from './middleware/auth.js';
 import { PtyManager } from './pty/index.js';
 import { createAuthRoutes } from './routes/auth.js';
 import { createConfigRoutes } from './routes/config.js';
-import { createControlRoutes } from './routes/control.js';
-import { createEventsRouter } from './routes/events.js';
 import { createFileRoutes } from './routes/files.js';
 import { createFilesystemRoutes } from './routes/filesystem.js';
 import { createGitRoutes } from './routes/git.js';
@@ -412,22 +410,13 @@ export async function createApp(): Promise<AppInstance> {
   logger.debug('Configured security headers with helmet');
 
   // Add compression middleware with Brotli support
-  // Skip compression for SSE streams (events + control stream)
   app.use(
     compression({
-      filter: (req, res) => {
-        // Skip compression for Server-Sent Events
-        if (req.path === '/api/events' || req.path === '/api/control/stream') {
-          return false;
-        }
-        // Use default filter for other requests
-        return compression.filter(req, res);
-      },
       // Enable Brotli compression with highest priority
       level: 6, // Balanced compression level
     })
   );
-  logger.debug('Configured compression middleware (with SSE exclusion)');
+  logger.debug('Configured compression middleware');
 
   // Add JSON body parser middleware with size limit
   app.use(express.json({ limit: '10mb' }));
@@ -967,10 +956,6 @@ export async function createApp(): Promise<AppInstance> {
   app.use('/api', createWorktreeRoutes());
   logger.debug('Mounted worktree routes');
 
-  // Mount control routes
-  app.use('/api', createControlRoutes());
-  logger.debug('Mounted control routes');
-
   // Mount tmux routes
   app.use('/api/tmux', createTmuxRoutes({ ptyManager }));
   logger.debug('Mounted tmux routes');
@@ -990,10 +975,6 @@ export async function createApp(): Promise<AppInstance> {
     })
   );
   logger.debug('Mounted push notification routes');
-
-  // Mount events router for SSE streaming
-  app.use('/api', createEventsRouter(sessionMonitor));
-  logger.debug('Mounted events routes');
 
   // Mount test notification router
   app.use('/api', createTestNotificationRouter({ sessionMonitor, pushNotificationService }));

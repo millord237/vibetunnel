@@ -8,11 +8,8 @@ import {
   setViewport,
   waitForAsync,
 } from '@/test/utils/component-helpers';
-import { createMockSession, MockEventSource } from '@/test/utils/lit-test-utils';
+import { createMockSession } from '@/test/utils/lit-test-utils';
 import { resetFactoryCounters } from '@/test/utils/test-factories';
-
-// Mock EventSource globally
-global.EventSource = MockEventSource as unknown as typeof EventSource;
 
 const terminalSocketClientMock = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -136,8 +133,6 @@ describe('SessionView', () => {
   afterEach(() => {
     element.remove();
     fetchMock.clear();
-    // Clear all EventSource instances
-    MockEventSource.instances.clear();
     // Clear all spy/mock calls but don't restore globals
     vi.clearAllMocks();
   });
@@ -870,22 +865,30 @@ describe('SessionView', () => {
 
   describe('cleanup', () => {
     it('should cleanup on disconnect', async () => {
+      const unsubscribeSpy = vi.fn();
+      terminalSocketClientMock.subscribe.mockReturnValueOnce(unsubscribeSpy);
+
       const mockSession = createMockSession();
       element.session = mockSession;
       await element.updateComplete;
 
-      // Create connection
-      await waitForAsync();
-
-      const instancesBefore = MockEventSource.instances.size;
+      // Create a v3 subscription via ConnectionManager
+      const connectionManager = (element as unknown as { connectionManager: unknown })
+        .connectionManager as {
+        setTerminal: (t: unknown) => void;
+        setSession: (s: unknown) => void;
+        setConnected: (c: boolean) => void;
+        connectToStream: () => void;
+      };
+      connectionManager.setTerminal({ write: vi.fn() });
+      connectionManager.setSession(mockSession);
+      connectionManager.setConnected(true);
+      connectionManager.connectToStream();
 
       // Disconnect
       element.disconnectedCallback();
 
-      // EventSource should be cleaned up
-      if (instancesBefore > 0) {
-        expect(MockEventSource.instances.size).toBeLessThan(instancesBefore);
-      }
+      expect(unsubscribeSpy).toHaveBeenCalled();
     });
   });
 

@@ -1,9 +1,8 @@
 /**
  * Git Status Hub
  *
- * Watches git state for sessions and pushes updates to subscribers (non-SSE).
- * This is used by WebSocket v3 to deliver git status updates without relying on
- * the legacy per-session SSE stream.
+ * Watches git state for sessions and pushes updates to subscribers.
+ * This is used by WebSocket v3 to deliver git status updates.
  */
 
 import * as chokidar from 'chokidar';

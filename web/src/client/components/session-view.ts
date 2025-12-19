@@ -2,13 +2,13 @@
  * Session View Component
  *
  * Full-screen terminal view for an active session. Handles terminal I/O,
- * streaming updates via SSE, file browser integration, and mobile overlays.
+ * streaming updates via WebSocket v3, file browser integration, and mobile overlays.
  *
  * @fires navigate-to-list - When navigating back to session list
  * @fires error - When an error occurs (detail: string)
  * @fires warning - When a warning occurs (detail: string)
  *
- * @listens session-exit - From SSE stream when session exits
+ * @listens session-exit - From v3 `EVENT` frames when session exits
  * @listens terminal-ready - From terminal component when ready
  * @listens file-selected - From file browser when file is selected
  * @listens browser-cancel - From file browser when cancelled

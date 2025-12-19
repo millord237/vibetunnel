@@ -35,13 +35,7 @@ export const test = base.extend<TestFixtures>({
     page.on('console', (msg) => {
       const text = msg.text();
       // Suppress known harmless errors
-      if (
-        text.includes('Failed to load resource: net::ERR_FAILED') ||
-        text.includes('Control event stream error') ||
-        text.includes('stream connection error') ||
-        text.includes('EventSource') ||
-        text.includes('WebSocket')
-      ) {
+      if (text.includes('Failed to load resource: net::ERR_FAILED') || text.includes('WebSocket')) {
         return; // Suppress these expected errors
       }
       // Only log actual errors

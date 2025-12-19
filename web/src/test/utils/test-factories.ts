@@ -135,13 +135,6 @@ export function createWebSocketMessage(type: string, data: unknown = {}): string
 }
 
 /**
- * Creates SSE event data
- */
-export function createSSEEvent(event: string, data: unknown): string {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-}
-
-/**
  * Reset factory counters (useful for test isolation)
  */
 export function resetFactoryCounters(): void {

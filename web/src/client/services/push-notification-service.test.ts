@@ -593,7 +593,7 @@ describe('PushNotificationService', () => {
           body: 'Push notifications are working correctly!',
           icon: '/apple-touch-icon.png',
           badge: '/favicon-32.png',
-          tag: 'vibetunnel-test-sse',
+          tag: 'vibetunnel-test',
         })
       );
     });

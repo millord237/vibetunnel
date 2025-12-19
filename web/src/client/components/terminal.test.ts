@@ -125,7 +125,7 @@ describe('Terminal', () => {
       element.firstUpdated();
 
       // Terminal component doesn't have a direct write method
-      // It receives data through SSE/WebSocket connections
+      // It receives data through WebSocket v3
       // Just verify the container exists
       const container = element.querySelector('.terminal-container');
       expect(container).toBeTruthy();

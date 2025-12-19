@@ -8,11 +8,11 @@ const logger = createLogger('notification-status');
 @customElement('notification-status')
 export class NotificationStatus extends LitElement {
   // Disable shadow DOM to use Tailwind
-  createRenderRoot() {
+  createRenderRoot(): HTMLElement {
     return this;
   }
 
-  @state() private isSSEConnected = false;
+  @state() private isWsConnected = false;
 
   private connectionStateUnsubscribe?: () => void;
 
@@ -31,13 +31,13 @@ export class NotificationStatus extends LitElement {
   private initializeComponent(): void {
     // Get initial connection state
     serverEventService.initialize();
-    this.isSSEConnected = serverEventService.getConnectionStatus();
-    logger.debug('Initial WS connection status:', this.isSSEConnected);
+    this.isWsConnected = serverEventService.getConnectionStatus();
+    logger.debug('Initial WS connection status:', this.isWsConnected);
 
     // Listen for connection state changes
     this.connectionStateUnsubscribe = serverEventService.onConnectionStateChange((connected) => {
       logger.log(`WS connection state changed: ${connected ? 'connected' : 'disconnected'}`);
-      this.isSSEConnected = connected;
+      this.isWsConnected = connected;
     });
   }
 
@@ -47,14 +47,14 @@ export class NotificationStatus extends LitElement {
 
   private getStatusConfig() {
     // Green when v3 socket is connected.
-    if (this.isSSEConnected) {
+    if (this.isWsConnected) {
       return {
         color: 'text-status-success',
         tooltip: 'Notifications (Connected)',
       };
     }
 
-    // Default color when SSE is not connected
+    // Default color when WS is not connected
     return {
       color: 'text-muted',
       tooltip: 'Notifications (Disconnected)',

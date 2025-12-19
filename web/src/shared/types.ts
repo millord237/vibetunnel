@@ -16,7 +16,7 @@ export enum HttpMethod {
 }
 
 /**
- * Types of server events that can be received via Server-Sent Events (SSE).
+ * Types of server events delivered over WebSocket v3 `EVENT` frames.
  * Matches the Swift ServerEventType enum for type safety across platforms.
  */
 export enum ServerEventType {
@@ -30,7 +30,7 @@ export enum ServerEventType {
 }
 
 /**
- * Server event received via Server-Sent Events (SSE).
+ * Server event delivered over WebSocket v3 `EVENT` frames.
  * Matches the Swift ServerEvent struct for cross-platform compatibility.
  */
 export interface ServerEvent {
