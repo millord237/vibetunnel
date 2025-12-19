@@ -20,7 +20,6 @@ import { type SessionInfo, TitleMode } from '../shared/types.js';
 import { PtyManager } from './pty/index.js';
 import { SessionManager } from './pty/session-manager.js';
 import { VibeTunnelSocketClient } from './pty/socket-client.js';
-import { ActivityDetector } from './utils/activity-detector.js';
 import { checkAndPatchClaude } from './utils/claude-patcher.js';
 import { detectGitInfo } from './utils/git-info.js';
 import {
@@ -50,7 +49,7 @@ function showUsage() {
   console.log('Options:');
   console.log('  --session-id <id>     Use a pre-generated session ID');
   console.log('  --title-mode <mode>   Terminal title mode: none, filter, static, dynamic');
-  console.log('                        (defaults to none for most commands, dynamic for claude)');
+  console.log('                        (defaults to none)');
   console.log('  --update-title <title> Update session title and exit (requires --session-id)');
   console.log(
     '  --verbosity <level>   Set logging verbosity: silent, error, warn, info, verbose, debug'
@@ -63,7 +62,7 @@ function showUsage() {
   console.log('  none     - No title management (default)');
   console.log('  filter   - Block all title changes from applications');
   console.log('  static   - Show working directory and command');
-  console.log('  dynamic  - Show directory, command, and activity (auto-selected for claude)');
+  console.log('  dynamic  - Show working directory and command');
   console.log('');
   console.log('Verbosity Levels:');
   console.log(`  ${chalk.gray('silent')}   - No output except critical errors`);
@@ -430,11 +429,6 @@ export async function startVibeTunnelForward(args: string[]) {
           process.stdin.destroy();
         }
 
-        // Restore original stdout.write if we hooked it
-        if (cleanupStdout) {
-          cleanupStdout();
-        }
-
         // Clean up file watchers
         if (sessionFileWatcher) {
           sessionFileWatcher.close();
@@ -624,104 +618,6 @@ export async function startVibeTunnelForward(args: string[]) {
 
     // Start setting up the file watcher after a short delay
     setTimeout(() => setupFileWatcher(), 500);
-
-    // Set up activity detector for Claude status updates
-    let activityDetector: ActivityDetector | undefined;
-    let cleanupStdout: (() => void) | undefined;
-
-    if (titleMode === TitleMode.DYNAMIC) {
-      activityDetector = new ActivityDetector(command, sessionId);
-
-      // Hook into stdout to detect Claude status
-      const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-
-      let isProcessingActivity = false;
-
-      // Create a proper override that handles all overloads
-      const _stdoutWriteOverride = function (
-        this: NodeJS.WriteStream,
-        chunk: string | Uint8Array,
-        encodingOrCallback?: BufferEncoding | ((err?: Error | null) => void),
-        callback?: (err?: Error | null) => void
-      ): boolean {
-        // Handle the overload: write(chunk, callback)
-        if (typeof encodingOrCallback === 'function') {
-          callback = encodingOrCallback;
-          encodingOrCallback = undefined;
-        }
-
-        if (isProcessingActivity) {
-          if (callback) {
-            return originalStdoutWrite.call(
-              this,
-              chunk,
-              encodingOrCallback as BufferEncoding | undefined,
-              callback
-            );
-          } else if (encodingOrCallback && typeof encodingOrCallback === 'string') {
-            return originalStdoutWrite.call(this, chunk, encodingOrCallback);
-          } else {
-            return originalStdoutWrite.call(this, chunk);
-          }
-        }
-
-        isProcessingActivity = true;
-        try {
-          // Process output through activity detector
-          if (activityDetector && typeof chunk === 'string') {
-            const { filteredData, activity } = activityDetector.processOutput(chunk);
-
-            // Send status update if detected
-            if (activity.specificStatus) {
-              socketClient.sendStatus(activity.specificStatus.app, activity.specificStatus.status);
-            }
-
-            // Call original with correct arguments
-            if (callback) {
-              return originalStdoutWrite.call(
-                this,
-                filteredData,
-                encodingOrCallback as BufferEncoding | undefined,
-                callback
-              );
-            } else if (encodingOrCallback && typeof encodingOrCallback === 'string') {
-              return originalStdoutWrite.call(this, filteredData, encodingOrCallback);
-            } else {
-              return originalStdoutWrite.call(this, filteredData);
-            }
-          }
-
-          // Pass through as-is if not string or no detector
-          if (callback) {
-            return originalStdoutWrite.call(
-              this,
-              chunk,
-              encodingOrCallback as BufferEncoding | undefined,
-              callback
-            );
-          } else if (encodingOrCallback && typeof encodingOrCallback === 'string') {
-            return originalStdoutWrite.call(this, chunk, encodingOrCallback);
-          } else {
-            return originalStdoutWrite.call(this, chunk);
-          }
-        } finally {
-          isProcessingActivity = false;
-        }
-      };
-
-      // Apply the override
-      process.stdout.write = _stdoutWriteOverride as typeof process.stdout.write;
-
-      // Store reference for cleanup
-      cleanupStdout = () => {
-        process.stdout.write = originalStdoutWrite;
-      };
-
-      // Ensure cleanup happens on process exit
-      process.on('exit', cleanupStdout);
-      process.on('SIGINT', cleanupStdout);
-      process.on('SIGTERM', cleanupStdout);
-    }
 
     // Set up raw mode for terminal input
     if (process.stdin.isTTY) {

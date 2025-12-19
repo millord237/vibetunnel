@@ -13,7 +13,6 @@ struct GeneralSettingsViewTests {
         configManager.notificationCommandCompletion = true
         configManager.notificationCommandError = true
         configManager.notificationBell = true
-        configManager.notificationClaudeTurn = false
         configManager.notificationSoundEnabled = true
         configManager.notificationVibrationEnabled = true
     }
@@ -30,7 +29,6 @@ struct GeneralSettingsViewTests {
         #expect(prefs.commandCompletion == true)
         #expect(prefs.commandError == true)
         #expect(prefs.bell == true)
-        #expect(prefs.claudeTurn == false)
 
         // Verify ConfigManager properties directly
         #expect(configManager.notificationSessionStart == true)
@@ -38,7 +36,6 @@ struct GeneralSettingsViewTests {
         #expect(configManager.notificationCommandCompletion == true)
         #expect(configManager.notificationCommandError == true)
         #expect(configManager.notificationBell == true)
-        #expect(configManager.notificationClaudeTurn == false)
     }
 
     @Test("Notification checkbox toggle updates preferences")
@@ -98,7 +95,6 @@ struct GeneralSettingsViewTests {
         configManager.notificationCommandCompletion = true
         configManager.notificationCommandError = true
         configManager.notificationBell = true
-        configManager.notificationClaudeTurn = false
         configManager.notificationSoundEnabled = true
         configManager.notificationVibrationEnabled = true
     }

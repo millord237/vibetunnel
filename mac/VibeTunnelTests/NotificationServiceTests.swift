@@ -17,7 +17,6 @@ struct NotificationServiceTests {
         #expect(preferences.commandCompletion == configManager.notificationCommandCompletion)
         #expect(preferences.commandError == configManager.notificationCommandError)
         #expect(preferences.bell == configManager.notificationBell)
-        #expect(preferences.claudeTurn == configManager.notificationClaudeTurn)
         #expect(preferences.soundEnabled == configManager.notificationSoundEnabled)
         #expect(preferences.vibrationEnabled == configManager.notificationVibrationEnabled)
     }
@@ -30,7 +29,7 @@ struct NotificationServiceTests {
 
         // Expected defaults based on TypeScript config:
         // - Master switch (notificationsEnabled) should be false
-        // - Individual preferences should be true (except claudeTurn)
+        // - Individual preferences should be true
         // - Sound and vibration should be enabled
 
         // Note: In actual tests, ConfigManager loads from ~/.vibetunnel/config.json
@@ -46,7 +45,6 @@ struct NotificationServiceTests {
         let expectedCommandCompletion = true
         let expectedCommandError = true
         let expectedBell = true
-        let expectedClaudeTurn = false
         let expectedSound = true
         let expectedVibration = true
 
@@ -57,7 +55,6 @@ struct NotificationServiceTests {
         #expect(expectedCommandCompletion == true, "Command completion should be enabled by default")
         #expect(expectedCommandError == true, "Command error should be enabled by default")
         #expect(expectedBell == true, "Bell should be enabled by default")
-        #expect(expectedClaudeTurn == false, "Claude turn should be disabled by default")
         #expect(expectedSound == true, "Sound should be enabled by default")
         #expect(expectedVibration == true, "Vibration should be enabled by default")
     }

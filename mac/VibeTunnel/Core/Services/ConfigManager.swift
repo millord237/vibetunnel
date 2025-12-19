@@ -44,7 +44,6 @@ final class ConfigManager {
     var notificationCommandCompletion: Bool = true
     var notificationCommandError: Bool = true
     var notificationBell: Bool = true
-    var notificationClaudeTurn: Bool = false
     var notificationSoundEnabled: Bool = true
     var notificationVibrationEnabled: Bool = true
     var showInNotificationCenter: Bool = true
@@ -105,7 +104,6 @@ final class ConfigManager {
         var commandCompletion: Bool
         var commandError: Bool
         var bell: Bool
-        var claudeTurn: Bool
         var soundEnabled: Bool
         var vibrationEnabled: Bool
         var showInNotificationCenter: Bool?
@@ -192,7 +190,6 @@ final class ConfigManager {
                         self.notificationCommandCompletion = notif.commandCompletion
                         self.notificationCommandError = notif.commandError
                         self.notificationBell = notif.bell
-                        self.notificationClaudeTurn = notif.claudeTurn
                         self.notificationSoundEnabled = notif.soundEnabled
                         self.notificationVibrationEnabled = notif.vibrationEnabled
                         if let showInCenter = notif.showInNotificationCenter {
@@ -238,7 +235,6 @@ final class ConfigManager {
         self.notificationCommandCompletion = true
         self.notificationCommandError = true
         self.notificationBell = true
-        self.notificationClaudeTurn = false
         self.notificationSoundEnabled = true
         self.notificationVibrationEnabled = true
         self.showInNotificationCenter = true
@@ -282,7 +278,6 @@ final class ConfigManager {
                 commandCompletion: self.notificationCommandCompletion,
                 commandError: self.notificationCommandError,
                 bell: self.notificationBell,
-                claudeTurn: self.notificationClaudeTurn,
                 soundEnabled: self.notificationSoundEnabled,
                 vibrationEnabled: self.notificationVibrationEnabled,
                 showInNotificationCenter: self.showInNotificationCenter))
@@ -439,7 +434,6 @@ final class ConfigManager {
         commandCompletion: Bool? = nil,
         commandError: Bool? = nil,
         bell: Bool? = nil,
-        claudeTurn: Bool? = nil,
         soundEnabled: Bool? = nil,
         vibrationEnabled: Bool? = nil)
     {
@@ -450,7 +444,6 @@ final class ConfigManager {
         if let commandCompletion { self.notificationCommandCompletion = commandCompletion }
         if let commandError { self.notificationCommandError = commandError }
         if let bell { self.notificationBell = bell }
-        if let claudeTurn { self.notificationClaudeTurn = claudeTurn }
         if let soundEnabled { self.notificationSoundEnabled = soundEnabled }
         if let vibrationEnabled { self.notificationVibrationEnabled = vibrationEnabled }
 

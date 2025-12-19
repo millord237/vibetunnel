@@ -29,8 +29,6 @@ enum NotificationHelp {
     static let commandsFail = "Get notified when any command exits with an error (non-zero exit code). Helps you quickly spot and fix problems."
 
     static let terminalBell = "Get notified when programs output the terminal bell character (^G). Common in vim alerts, IRC mentions, and completion notifications."
-
-    static let claudeTurn = "Get notified when Claude AI finishes responding and is waiting for your input. Automatically detects Claude CLI sessions and tracks activity transitions."
 }
 
 #Preview {
@@ -43,11 +41,6 @@ enum NotificationHelp {
         HStack {
             Text("Commands complete (> 3 seconds)")
             HelpTooltip(text: NotificationHelp.commandsComplete)
-        }
-
-        HStack {
-            Text("Claude turn notifications")
-            HelpTooltip(text: NotificationHelp.claudeTurn)
         }
     }
     .padding()

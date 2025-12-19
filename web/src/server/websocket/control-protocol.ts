@@ -58,8 +58,7 @@ export type SessionMonitorAction =
   | 'session-exit'
   | 'command-finished'
   | 'command-error'
-  | 'bell'
-  | 'claude-turn';
+  | 'bell';
 
 export interface SessionMonitorEvent {
   type: SessionMonitorAction;

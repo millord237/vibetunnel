@@ -15,7 +15,6 @@ import Foundation
 /// - ``commandFinished``: Command completion events
 /// - ``commandError``: Command failure events
 /// - ``bell``: Terminal bell notifications
-/// - ``claudeTurn``: AI assistant interaction events
 /// - ``connected``: Connection establishment events
 ///
 /// ### Event Properties
@@ -38,9 +37,6 @@ enum ServerEventType: String, Codable, CaseIterable {
     /// Indicates a terminal bell character was received.
     case bell
 
-    /// Indicates Claude (AI assistant) has finished responding and it's the user's turn.
-    case claudeTurn = "claude-turn"
-
     /// Indicates the SSE connection has been established.
     case connected
 
@@ -60,8 +56,6 @@ enum ServerEventType: String, Codable, CaseIterable {
             "Command Error"
         case .bell:
             "Terminal Bell"
-        case .claudeTurn:
-            "Your Turn"
         case .connected:
             "Connected"
         }
@@ -76,7 +70,7 @@ enum ServerEventType: String, Codable, CaseIterable {
     /// - Returns: `true` if the event should trigger a notification, `false` otherwise.
     var shouldNotify: Bool {
         switch self {
-        case .sessionStart, .sessionExit, .claudeTurn:
+        case .sessionStart, .sessionExit:
             true
         case .commandFinished, .commandError, .bell, .connected:
             false
@@ -107,7 +101,6 @@ enum ServerEventType: String, Codable, CaseIterable {
 /// - ``sessionStart(sessionId:sessionName:command:)``
 /// - ``sessionExit(sessionId:sessionName:exitCode:)``
 /// - ``commandFinished(sessionId:command:duration:exitCode:)``
-/// - ``claudeTurn(sessionId:sessionName:)``
 /// - ``bell(sessionId:)``
 ///
 /// ### Event Properties
@@ -271,23 +264,6 @@ struct ServerEvent: Codable, Identifiable, Equatable {
             command: command,
             exitCode: exitCode,
             duration: duration)
-    }
-
-    /// Creates a Claude turn event.
-    ///
-    /// Use this convenience method when Claude (AI assistant) finishes responding
-    /// and it's the user's turn to interact.
-    ///
-    /// - Parameters:
-    ///   - sessionId: The unique identifier for the session.
-    ///   - sessionName: Optional human-readable name for the session.
-    /// - Returns: A configured `ServerEvent` of type ``ServerEventType/claudeTurn``.
-    static func claudeTurn(sessionId: String, sessionName: String? = nil) -> Self {
-        Self(
-            type: .claudeTurn,
-            sessionId: sessionId,
-            sessionName: sessionName,
-            message: "Claude has finished responding")
     }
 
     /// Creates a bell event.

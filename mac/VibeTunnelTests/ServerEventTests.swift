@@ -84,7 +84,6 @@ struct ServerEventTests {
         #expect(ServerEventType.commandFinished.description == "Command Completed")
         #expect(ServerEventType.commandError.description == "Command Error")
         #expect(ServerEventType.bell.description == "Terminal Bell")
-        #expect(ServerEventType.claudeTurn.description == "Your Turn")
         #expect(ServerEventType.connected.description == "Connected")
     }
 
@@ -93,7 +92,6 @@ struct ServerEventTests {
         // These events should trigger notifications
         #expect(ServerEventType.sessionStart.shouldNotify)
         #expect(ServerEventType.sessionExit.shouldNotify)
-        #expect(ServerEventType.claudeTurn.shouldNotify)
 
         // These events should not trigger notifications
         #expect(!ServerEventType.commandFinished.shouldNotify)
@@ -189,19 +187,6 @@ struct ServerEventTests {
         #expect(event.duration == 15000)
         #expect(event.exitCode == 0)
         #expect(!event.shouldNotify)
-    }
-
-    @Test("claudeTurn convenience initializer includes default message")
-    func claudeTurnInitializer() {
-        let event = ServerEvent.claudeTurn(
-            sessionId: "claude-session",
-            sessionName: "Claude Chat")
-
-        #expect(event.type == .claudeTurn)
-        #expect(event.sessionId == "claude-session")
-        #expect(event.sessionName == "Claude Chat")
-        #expect(event.message == "Claude has finished responding")
-        #expect(event.shouldNotify)
     }
 
     @Test("bell convenience initializer includes default message")

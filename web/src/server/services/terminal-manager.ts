@@ -1150,6 +1150,17 @@ export class TerminalManager {
       );
     }
 
+    // Send an immediate snapshot so new subscribers see a preview without waiting for output
+    try {
+      const snapshot = await this.getBufferSnapshot(sessionId);
+      listener(sessionId, snapshot);
+    } catch (error) {
+      logger.error(
+        `Error getting initial buffer snapshot for ${truncateForLog(sessionId)}:`,
+        error
+      );
+    }
+
     // Return unsubscribe function
     return () => {
       const listeners = this.bufferListeners.get(sessionId);

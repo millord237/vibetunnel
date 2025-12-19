@@ -29,12 +29,10 @@ import type {
 import { TitleMode } from '../../shared/types.js';
 import { ProcessTreeAnalyzer } from '../services/process-tree-analyzer.js';
 import type { SessionMonitor } from '../services/session-monitor.js';
-import { ActivityDetector, type ActivityState } from '../utils/activity-detector.js';
 import { TitleSequenceFilter } from '../utils/ansi-title-filter.js';
 import { createLogger } from '../utils/logger.js';
 import {
   extractCdDirectory,
-  generateDynamicTitle,
   generateTitleSequence,
   shouldInjectTitle,
 } from '../utils/terminal-title.js';
@@ -136,8 +134,6 @@ export class PtyManager extends EventEmitter {
   private sessionEventListeners = new Map<string, Set<(...args: unknown[]) => void>>();
   private sessionExitTimes = new Map<string, number>(); // Track session exit times to avoid false bells
   private processTreeAnalyzer = new ProcessTreeAnalyzer(); // Process tree analysis for bell source identification
-  private activityFileWarningsLogged = new Set<string>(); // Track which sessions we've logged warnings for
-  private lastWrittenActivityState = new Map<string, string>(); // Track last written activity state to avoid unnecessary writes
   private sessionMonitor: SessionMonitor | null = null; // Reference to SessionMonitor for notification tracking
 
   // Command tracking for notifications
@@ -639,84 +635,13 @@ export class PtyManager extends EventEmitter {
     const inputQueue = new WriteQueue();
     session.inputQueue = inputQueue;
 
-    // Setup activity detector for dynamic mode
-    if (session.titleMode === TitleMode.DYNAMIC) {
-      session.activityDetector = new ActivityDetector(session.sessionInfo.command, session.id);
-
-      // Set up Claude turn notification callback
-      session.activityDetector.setOnClaudeTurn((sessionId) => {
-        logger.info(`🔔 NOTIFICATION DEBUG: Claude turn detected for session ${sessionId}`);
-        this.emit(
-          'claudeTurn',
-          sessionId,
-          session.sessionInfo.name || session.sessionInfo.command.join(' ')
-        );
-      });
-    }
-
     // Setup periodic title updates for both static and dynamic modes
     if (
       session.titleMode !== TitleMode.NONE &&
       session.titleMode !== TitleMode.FILTER &&
       forwardToStdout
     ) {
-      // Track last known activity state for change detection
-      let lastKnownActivityState: {
-        isActive: boolean;
-        specificStatus?: string;
-      } | null = null;
-
       session.titleUpdateInterval = setInterval(() => {
-        // For dynamic mode, check for activity state changes
-        if (session.titleMode === TitleMode.DYNAMIC && session.activityDetector) {
-          const activityState = session.activityDetector.getActivityState();
-
-          // Check if activity state has changed
-          const activityChanged =
-            lastKnownActivityState === null ||
-            activityState.isActive !== lastKnownActivityState.isActive ||
-            activityState.specificStatus?.status !== lastKnownActivityState.specificStatus;
-
-          if (activityChanged) {
-            // Update last known state
-            lastKnownActivityState = {
-              isActive: activityState.isActive,
-              specificStatus: activityState.specificStatus?.status,
-            };
-
-            // Mark title for update
-            this.markTitleUpdateNeeded(session);
-
-            logger.debug(
-              `Activity state changed for session ${session.id}: ` +
-                `active=${activityState.isActive}, ` +
-                `status=${activityState.specificStatus?.status || 'none'}`
-            );
-
-            // Send notification when activity becomes inactive (Claude's turn)
-            if (!activityState.isActive && activityState.specificStatus?.status === 'waiting') {
-              logger.info(`🔔 NOTIFICATION DEBUG: Claude turn detected for session ${session.id}`);
-              this.emit(
-                'claudeTurn',
-                session.id,
-                session.sessionInfo.name || session.sessionInfo.command.join(' ')
-              );
-
-              // Send notification to Mac app directly
-              if (controlUnixHandler.isMacAppConnected()) {
-                controlUnixHandler.sendNotification('Your Turn', 'Claude has finished responding', {
-                  type: 'your-turn',
-                  sessionId: session.id,
-                  sessionName: session.sessionInfo.name || session.sessionInfo.command.join(' '),
-                });
-              }
-            }
-          }
-
-          // Always write activity state for external tools
-          this.writeActivityState(session, activityState);
-        }
-
         // Check and update title if needed
         this.checkAndUpdateTitle(session);
       }, TITLE_UPDATE_INTERVAL_MS);
@@ -735,28 +660,6 @@ export class PtyManager extends EventEmitter {
       // have written to the stream.
       if (session.titleMode !== undefined && session.titleMode !== TitleMode.NONE) {
         processedData = session.titleFilter ? session.titleFilter.filter(data) : data;
-      }
-
-      // Handle activity detection for dynamic mode
-      if (session.titleMode === TitleMode.DYNAMIC && session.activityDetector) {
-        const { filteredData, activity } = session.activityDetector.processOutput(processedData);
-        processedData = filteredData;
-
-        // Check if activity status changed
-        if (activity.specificStatus?.status !== session.lastActivityStatus) {
-          session.lastActivityStatus = activity.specificStatus?.status;
-          this.markTitleUpdateNeeded(session);
-
-          // Update SessionMonitor with activity change
-          if (this.sessionMonitor) {
-            const isActive = activity.specificStatus?.status === 'working';
-            this.sessionMonitor.updateSessionActivity(
-              session.id,
-              isActive,
-              activity.specificStatus?.app
-            );
-          }
-        }
       }
 
       // Check for title update triggers
@@ -1772,65 +1675,6 @@ export class PtyManager extends EventEmitter {
         };
       }
 
-      // Then check activity detector for dynamic mode
-      if (activeSession?.activityDetector) {
-        const activityState = activeSession.activityDetector.getActivityState();
-        return {
-          ...session,
-          activityStatus: {
-            isActive: activityState.isActive,
-            specificStatus: activityState.specificStatus,
-          },
-        };
-      }
-
-      // Otherwise, try to read from activity file (for external sessions)
-      try {
-        const sessionPaths = this.sessionManager.getSessionPaths(session.id);
-        if (!sessionPaths) {
-          return session;
-        }
-
-        const activityPath = path.join(sessionPaths.controlDir, 'claude-activity.json');
-
-        if (fs.existsSync(activityPath)) {
-          const activityData = JSON.parse(fs.readFileSync(activityPath, 'utf-8'));
-          // Check if activity is recent (within last 60 seconds)
-          // Use Math.abs to handle future timestamps from system clock issues
-          const timeDiff = Math.abs(Date.now() - new Date(activityData.timestamp).getTime());
-          const isRecent = timeDiff < 60000;
-
-          if (isRecent) {
-            logger.debug(`Found recent activity for external session ${session.id}:`, {
-              isActive: activityData.isActive,
-              specificStatus: activityData.specificStatus,
-            });
-            return {
-              ...session,
-              activityStatus: {
-                isActive: activityData.isActive,
-                specificStatus: activityData.specificStatus,
-              },
-            };
-          } else {
-            logger.debug(
-              `Activity file for session ${session.id} is stale (time diff: ${timeDiff}ms)`
-            );
-          }
-        } else {
-          // Only log once per session to avoid spam
-          if (!this.activityFileWarningsLogged.has(session.id)) {
-            this.activityFileWarningsLogged.add(session.id);
-            logger.debug(
-              `No claude-activity.json found for session ${session.id} at ${activityPath}`
-            );
-          }
-        }
-      } catch (error) {
-        // Ignore errors reading activity file
-        logger.debug(`Failed to read activity file for session ${session.id}:`, error);
-      }
-
       return session;
     });
   }
@@ -1991,39 +1835,6 @@ export class PtyManager extends EventEmitter {
   }
 
   /**
-   * Write activity state only if it has changed
-   */
-  private writeActivityState(session: PtySession, activityState: ActivityState): void {
-    const activityPath = path.join(session.controlDir, 'claude-activity.json');
-    const activityData = {
-      isActive: activityState.isActive,
-      specificStatus: activityState.specificStatus,
-      timestamp: new Date().toISOString(),
-    };
-
-    const stateJson = JSON.stringify(activityData);
-    const lastState = this.lastWrittenActivityState.get(session.id);
-
-    if (lastState !== stateJson) {
-      try {
-        fs.writeFileSync(activityPath, JSON.stringify(activityData, null, 2));
-        this.lastWrittenActivityState.set(session.id, stateJson);
-
-        // Debug log first write
-        if (!session.activityFileWritten) {
-          session.activityFileWritten = true;
-          logger.debug(`Writing activity state to ${activityPath} for session ${session.id}`, {
-            activityState,
-            timestamp: activityData.timestamp,
-          });
-        }
-      } catch (error) {
-        logger.error(`Failed to write activity state for session ${session.id}:`, error);
-      }
-    }
-  }
-
-  /**
    * Track and emit events for proper cleanup
    */
   private trackAndEmit(event: string, sessionId: string, ...args: unknown[]): void {
@@ -2052,12 +1863,6 @@ export class PtyManager extends EventEmitter {
     if (session.titleUpdateInterval) {
       clearInterval(session.titleUpdateInterval);
       session.titleUpdateInterval = undefined;
-    }
-
-    // Clean up activity detector
-    if (session.activityDetector) {
-      session.activityDetector.clearStatus();
-      session.activityDetector = undefined;
     }
 
     // Clean up title filter
@@ -2113,9 +1918,6 @@ export class PtyManager extends EventEmitter {
       });
       this.sessionEventListeners.delete(session.id);
     }
-
-    // Clean up activity state tracking
-    this.lastWrittenActivityState.delete(session.id);
 
     // Clean up title injection timer
     if (session.titleInjectionTimer) {
@@ -2329,30 +2131,13 @@ export class PtyManager extends EventEmitter {
       sessionInfoObjectId: session.sessionInfo,
       currentDir,
       command: session.sessionInfo.command,
-      activityDetectorExists: !!session.activityDetector,
     });
 
-    if (session.titleMode === TitleMode.STATIC) {
+    if (session.titleMode === TitleMode.STATIC || session.titleMode === TitleMode.DYNAMIC) {
       return generateTitleSequence(
         currentDir,
         session.sessionInfo.command,
         session.sessionInfo.name
-      );
-    } else if (session.titleMode === TitleMode.DYNAMIC && session.activityDetector) {
-      const activity = session.activityDetector.getActivityState();
-      logger.debug(`[generateTerminalTitle] Calling generateDynamicTitle with:`, {
-        currentDir,
-        command: session.sessionInfo.command,
-        sessionName: session.sessionInfo.name,
-        activity: activity,
-      });
-      return generateDynamicTitle(
-        currentDir,
-        session.sessionInfo.command,
-        activity,
-        session.sessionInfo.name,
-        session.sessionInfo.gitRepoPath,
-        undefined // Git branch will be fetched dynamically when needed
       );
     }
 

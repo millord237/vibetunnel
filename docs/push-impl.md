@@ -8,7 +8,7 @@ This document outlines the comprehensive plan for improving VibeTunnel's notific
 
 Currently, VibeTunnel has inconsistent notification implementations between the Mac and web clients. The Mac app has its own SessionMonitor while the web relies on server events. This leads to:
 - Different notification behaviors between platforms
-- Missing features (e.g., Claude Turn notifications not shown in web UI)
+- Missing features (e.g., notification settings parity between platforms)
 - Duplicate code and maintenance burden
 - Inconsistent descriptions and thresholds
 
@@ -163,7 +163,6 @@ Use these descriptions consistently across Mac and web:
 | Command Error | Commands fail | When commands fail with non-zero exit codes |
 | Command Completion | Commands complete (> 3 seconds) | When commands taking >3 seconds finish (builds, tests, etc.) |
 | Terminal Bell | Terminal bell (🔔) | Terminal bell (^G) from vim, IRC mentions, completion sounds |
-| Claude Turn | Claude turn notifications | When Claude AI finishes responding and awaits input |
 
 ## Part 2: Server-Side SessionMonitor Migration
 
@@ -212,8 +211,6 @@ export interface SessionState {
 
 export class SessionMonitor {
   private sessions = new Map<string, SessionState>();
-  private claudeIdleNotified = new Set<string>();
-  private lastActivityState = new Map<string, boolean>();
   private commandThresholdMs = 3000; // 3 seconds
   
   constructor(
@@ -221,44 +218,6 @@ export class SessionMonitor {
     private eventBus: EventEmitter
   ) {
     this.setupEventListeners();
-  }
-  
-  private detectClaudeSession(session: SessionState): boolean {
-    const isClaudeCommand = session.command
-      .join(' ')
-      .toLowerCase()
-      .includes('claude');
-    
-    const isClaudeApp = session.activityStatus?.specificStatus?.app
-      .toLowerCase()
-      .includes('claude') ?? false;
-      
-    return isClaudeCommand || isClaudeApp;
-  }
-  
-  private checkClaudeTurnNotification(sessionId: string, newState: SessionState) {
-    if (!this.detectClaudeSession(newState)) return;
-    
-    const currentActive = newState.activityStatus?.isActive ?? false;
-    const previousActive = this.lastActivityState.get(sessionId) ?? false;
-    
-    // Claude went from active to idle
-    if (previousActive && !currentActive && !this.claudeIdleNotified.has(sessionId)) {
-      this.eventBus.emit('notification', {
-        type: ServerEventType.ClaudeTurn,
-        sessionId,
-        sessionName: newState.name,
-        message: 'Claude has finished responding'
-      });
-      this.claudeIdleNotified.add(sessionId);
-    }
-    
-    // Reset when Claude becomes active again
-    if (!previousActive && currentActive) {
-      this.claudeIdleNotified.delete(sessionId);
-    }
-    
-    this.lastActivityState.set(sessionId, currentActive);
   }
   
   // ... other monitoring methods
@@ -276,7 +235,6 @@ export enum ServerEventType {
   CommandFinished = 'command-finished',
   CommandError = 'command-error',  // NEW - separate from finished
   Bell = 'bell',                   // NEW
-  ClaudeTurn = 'claude-turn',
   Connected = 'connected'
 }
 
@@ -391,7 +349,6 @@ class NotificationService {
 ```typescript
 // web/src/client/services/push-notification-service.ts
 
-// Add Claude Turn to notification handling
 private handleServerEvent(event: ServerEvent) {
   if (!this.preferences[this.mapEventTypeToPreference(event.type)]) {
     return;
@@ -407,21 +364,10 @@ private mapEventTypeToPreference(type: ServerEventType): keyof NotificationPrefe
     [ServerEventType.SessionExit]: 'sessionExit',
     [ServerEventType.CommandFinished]: 'commandCompletion',
     [ServerEventType.CommandError]: 'commandError',
-    [ServerEventType.Bell]: 'bell',
-    [ServerEventType.ClaudeTurn]: 'claudeTurn'  // Now properly mapped
+    [ServerEventType.Bell]: 'bell'
   };
   return mapping[type];
 }
-```
-
-#### 7. Add Claude Turn to Web UI
-
-```typescript
-// web/src/client/components/settings.ts
-
-// In notification types section
-${this.renderNotificationToggle('claudeTurn', 'Claude Turn', 
-  'When Claude AI finishes responding and awaits input')}
 ```
 
 ## Migration Strategy
@@ -429,7 +375,6 @@ ${this.renderNotificationToggle('claudeTurn', 'Claude Turn',
 ### Phase 1: Preparation (Non-breaking)
 1. Implement server-side SessionMonitor alongside existing system
 2. Add new event types to shared types
-3. Update web UI to show Claude Turn option
 
 ### Phase 2: Server Enhancement (Non-breaking)
 1. Deploy enhanced server with SessionMonitor
@@ -449,14 +394,12 @@ ${this.renderNotificationToggle('claudeTurn', 'Claude Turn',
 ## Testing Plan
 
 ### Unit Tests
-- SessionMonitor Claude detection logic
 - Event threshold calculations
 - Activity state transitions
 
 ### Integration Tests
 - Server events reach both Mac and web clients
 - Notification preferences are respected
-- Claude Turn notifications work correctly
 - Bell character detection
 
 ### Manual Testing
@@ -468,10 +411,9 @@ ${this.renderNotificationToggle('claudeTurn', 'Claude Turn',
 ## Success Metrics
 
 1. **Consistency**: Same notifications appear on Mac and web for same events
-2. **Feature Parity**: Claude Turn available on both platforms
-3. **Performance**: No noticeable lag in notifications
-4. **Reliability**: No missed notifications
-5. **Maintainability**: Single codebase for monitoring logic
+2. **Performance**: No noticeable lag in notifications
+3. **Reliability**: No missed notifications
+4. **Maintainability**: Single codebase for monitoring logic
 
 ## Timeline Estimate
 

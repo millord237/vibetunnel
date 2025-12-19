@@ -140,14 +140,6 @@ struct NotificationSettingsView: View {
                             .onChange(of: bindableConfig.notificationBell) { _, _ in
                                 self.updateNotificationPreferences()
                             }
-
-                        NotificationToggleRow(
-                            title: "Claude turn notifications",
-                            description: "When Claude AI finishes responding and awaits input",
-                            isOn: $bindableConfig.notificationClaudeTurn)
-                            .onChange(of: bindableConfig.notificationClaudeTurn) { _, _ in
-                                self.updateNotificationPreferences()
-                            }
                     } header: {
                         Text("Notification Types")
                             .font(.headline)

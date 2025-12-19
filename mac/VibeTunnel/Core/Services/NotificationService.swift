@@ -32,7 +32,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         var commandCompletion: Bool
         var commandError: Bool
         var bell: Bool
-        var claudeTurn: Bool
         var soundEnabled: Bool
         var vibrationEnabled: Bool
 
@@ -43,7 +42,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             commandCompletion: Bool,
             commandError: Bool,
             bell: Bool,
-            claudeTurn: Bool,
             soundEnabled: Bool,
             vibrationEnabled: Bool)
         {
@@ -52,7 +50,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             self.commandCompletion = commandCompletion
             self.commandError = commandError
             self.bell = bell
-            self.claudeTurn = claudeTurn
             self.soundEnabled = soundEnabled
             self.vibrationEnabled = vibrationEnabled
         }
@@ -65,7 +62,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             self.commandCompletion = configManager.notificationCommandCompletion
             self.commandError = configManager.notificationCommandError
             self.bell = configManager.notificationBell
-            self.claudeTurn = configManager.notificationClaudeTurn
             self.soundEnabled = configManager.notificationSoundEnabled
             self.vibrationEnabled = configManager.notificationVibrationEnabled
         }
@@ -86,7 +82,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             commandCompletion: true,
             commandError: true,
             bell: true,
-            claudeTurn: false,
             soundEnabled: true,
             vibrationEnabled: true)
 
@@ -261,8 +256,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             guard self.preferences.commandError else { return }
         case .bell:
             guard self.preferences.bell else { return }
-        case .claudeTurn:
-            guard self.preferences.claudeTurn else { return }
         case .connected:
             // Connected events don't trigger notifications
             return
@@ -310,13 +303,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             if let message = event.message {
                 content.subtitle = message
             }
-
-        case .claudeTurn:
-            content.title = event.type.description
-            content.body = event.message ?? "Claude has finished responding"
-            content.subtitle = event.displayName
-            content.categoryIdentifier = "CLAUDE_TURN"
-            content.interruptionLevel = .active
 
         case .connected:
             return // Already handled above
@@ -457,7 +443,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             commandCompletion: prefs.commandCompletion,
             commandError: prefs.commandError,
             bell: prefs.bell,
-            claudeTurn: prefs.claudeTurn,
             soundEnabled: prefs.soundEnabled,
             vibrationEnabled: prefs.vibrationEnabled)
     }
@@ -665,13 +650,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
                 } else {
                     self.logger.debug("Bell notifications disabled")
                 }
-            case "claude-turn":
-                self.logger.info("💬 Processing claude-turn event")
-                if self.configProvider?.notificationsEnabled ?? false, self.preferences.claudeTurn {
-                    self.handleClaudeTurn(json)
-                } else {
-                    self.logger.debug("Claude turn notifications disabled")
-                }
             case "connected":
                 self.logger.info("🔗 Received connected event from server")
             case "test-notification":
@@ -841,27 +819,6 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
 
         self.logger.info("📤 Delivering test notification: \(title) - \(body)")
         self.deliverNotification(content, identifier: "test-\(UUID().uuidString)")
-    }
-
-    private func handleClaudeTurn(_ json: [String: Any]) {
-        guard let sessionId = json["sessionId"] as? String else {
-            self.logger.error("Claude turn event missing sessionId")
-            return
-        }
-
-        let sessionName = json["sessionName"] as? String ?? "Claude"
-        let message = json["message"] as? String ?? "Claude has finished responding"
-
-        let content = UNMutableNotificationContent()
-        content.title = "Your Turn"
-        content.body = message
-        content.subtitle = sessionName
-        content.sound = self.getNotificationSound()
-        content.categoryIdentifier = "CLAUDE_TURN"
-        content.userInfo = ["sessionId": sessionId, "type": "claude-turn"]
-        content.interruptionLevel = .active
-
-        self.deliverNotification(content, identifier: "claude-turn-\(sessionId)-\(Date().timeIntervalSince1970)")
     }
 
     // MARK: - Notification Delivery

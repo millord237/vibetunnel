@@ -236,7 +236,6 @@ describe('PushNotificationService', () => {
       commandError: true,
       commandCompletion: false,
       bell: true,
-      claudeTurn: false,
       soundEnabled: true,
       vibrationEnabled: false,
     });
@@ -356,7 +355,6 @@ describe('PushNotificationService', () => {
         commandError: false,
         commandCompletion: true,
         bell: false,
-        claudeTurn: false,
         soundEnabled: true,
         vibrationEnabled: false,
       };
@@ -527,7 +525,6 @@ describe('PushNotificationService', () => {
         commandError: true,
         commandCompletion: false,
         bell: true,
-        claudeTurn: false,
         soundEnabled: false,
         vibrationEnabled: true,
       };
@@ -545,7 +542,6 @@ describe('PushNotificationService', () => {
         commandError: true,
         commandCompletion: true,
         bell: true,
-        claudeTurn: false,
         soundEnabled: true,
         vibrationEnabled: true,
       };

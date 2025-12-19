@@ -650,7 +650,6 @@ export class Settings extends LitElement {
                           ${this.renderNotificationToggle('commandError', 'Session Errors', 'When commands fail with non-zero exit codes')}
                           ${this.renderNotificationToggle('commandCompletion', 'Command Completion', 'When commands taking >3 seconds finish (builds, tests, etc.)')}
                           ${this.renderNotificationToggle('bell', 'System Alerts', 'Terminal bell (^G) from vim, IRC mentions, completion sounds')}
-                          ${this.renderNotificationToggle('claudeTurn', 'Claude Turn', 'When Claude AI finishes responding and awaits input')}
                         </div>
                       </div>
 

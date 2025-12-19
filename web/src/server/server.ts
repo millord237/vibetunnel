@@ -582,14 +582,6 @@ export async function createApp(): Promise<AppInstance> {
             };
             break;
 
-          case ServerEventType.ClaudeTurn:
-            pushPayload = {
-              type: 'claude-turn',
-              title: '💬 Your Turn',
-              body: event.message || 'Claude has finished responding',
-            };
-            break;
-
           case ServerEventType.TestNotification:
             // Test notifications are already handled by the test endpoint
             return;
@@ -919,37 +911,6 @@ export async function createApp(): Promise<AppInstance> {
     });
     logger.debug('Connected command finished notifications to PTY manager');
 
-    // Connect Claude turn notifications
-    ptyManager.on('claudeTurn', (sessionId: string, sessionName: string) => {
-      logger.info(
-        `🔔 NOTIFICATION DEBUG: Sending push notification for Claude turn - sessionId: ${sessionId}`
-      );
-
-      pushNotificationService
-        .sendNotification({
-          type: 'claude-turn',
-          title: 'Claude Ready',
-          body: `${sessionName} is waiting for your input.`,
-          icon: '/apple-touch-icon.png',
-          badge: '/favicon-32.png',
-          tag: `vibetunnel-claude-turn-${sessionId}`,
-          requireInteraction: true,
-          data: {
-            type: 'claude-turn',
-            sessionId,
-            sessionName,
-            timestamp: new Date().toISOString(),
-          },
-          actions: [
-            { action: 'view-session', title: 'View Session' },
-            { action: 'dismiss', title: 'Dismiss' },
-          ],
-        })
-        .catch((error) => {
-          logger.error('Failed to send Claude turn notification:', error);
-        });
-    });
-    logger.debug('Connected Claude turn notifications to PTY manager');
   }
 
   // Apply auth middleware to all API routes (including auth routes for Tailscale header detection)

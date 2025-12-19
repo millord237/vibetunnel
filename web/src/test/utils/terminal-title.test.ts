@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { describe, expect, it, vi } from 'vitest';
-import type { ActivityState } from '../../server/utils/activity-detector.js';
 import {
+  type ActivityState,
   extractCdDirectory,
   generateDynamicTitle,
   generateTitleSequence,

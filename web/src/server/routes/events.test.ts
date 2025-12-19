@@ -211,7 +211,7 @@ describe('Events Router', () => {
         sessionId: 'session-2',
         command: 'ls',
       });
-      mockSessionMonitor.emit('notification', { type: 'claude-turn', sessionId: 'session-3' });
+      mockSessionMonitor.emit('notification', { type: 'bell', sessionId: 'session-3' });
 
       // Should have written 3 events
       const writeCalls = (mockResponse.write as ReturnType<typeof vi.fn>).mock.calls;
@@ -286,7 +286,7 @@ describe('Events Router', () => {
 
       // Should not throw even if write fails
       expect(() => {
-        mockSessionMonitor.emit('notification', { type: 'claude-turn', sessionId: 'test' });
+        mockSessionMonitor.emit('notification', { type: 'bell', sessionId: 'test' });
       }).not.toThrow();
     });
 
@@ -303,14 +303,14 @@ describe('Events Router', () => {
       vi.clearAllMocks();
 
       // Emit an event
-      mockSessionMonitor.emit('notification', { type: 'claude-turn', sessionId: 'test-123' });
+      mockSessionMonitor.emit('notification', { type: 'bell', sessionId: 'test-123' });
 
       // Verify SSE format includes id
       const writeCalls = (mockResponse.write as ReturnType<typeof vi.fn>).mock.calls;
       const sseData = writeCalls.map((call) => call[0]).join('');
 
       expect(sseData).toMatch(/id: \d+\n/);
-      expect(sseData).toMatch(/event: claude-turn\n/);
+      expect(sseData).toMatch(/event: bell\n/);
       expect(sseData).toMatch(/data: {.*}\n\n/);
     });
 
@@ -377,14 +377,14 @@ describe('Events Router', () => {
       vi.clearAllMocks();
 
       // Emit an event
-      mockSessionMonitor.emit('notification', { type: 'claude-turn', sessionId: 'test-123' });
+      mockSessionMonitor.emit('notification', { type: 'bell', sessionId: 'test-123' });
 
       // Both clients should receive the event
       expect(client1Response.write).toHaveBeenCalledWith(
-        expect.stringContaining('event: claude-turn')
+        expect.stringContaining('event: bell')
       );
       expect(client2Response.write).toHaveBeenCalledWith(
-        expect.stringContaining('event: claude-turn')
+        expect.stringContaining('event: bell')
       );
     });
   });

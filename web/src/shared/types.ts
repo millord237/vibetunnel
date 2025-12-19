@@ -25,7 +25,6 @@ export enum ServerEventType {
   CommandFinished = 'command-finished',
   CommandError = 'command-error',
   Bell = 'bell',
-  ClaudeTurn = 'claude-turn',
   Connected = 'connected',
   TestNotification = 'test-notification',
 }
@@ -237,7 +236,6 @@ export interface PushNotificationPreferences {
   systemAlerts: boolean;
   soundEnabled: boolean;
   vibrationEnabled: boolean;
-  claudeTurn?: boolean;
 }
 
 /**
