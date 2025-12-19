@@ -24,8 +24,8 @@ final class WsV3SocketClient: NSObject {
 
     // MARK: - WS v3 framing
 
-    nonisolated private static let magic: UInt16 = 0x5654 // "VT" LE
-    nonisolated private static let version: UInt8 = 3
+    private nonisolated static let magic: UInt16 = 0x5654 // "VT" LE
+    private nonisolated static let version: UInt8 = 3
 
     enum MessageType: UInt8 {
         case hello = 1

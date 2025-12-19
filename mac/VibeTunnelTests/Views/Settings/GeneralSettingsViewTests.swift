@@ -6,8 +6,10 @@ import Testing
 @MainActor
 struct GeneralSettingsViewTests {
     init() {
-        // Reset ConfigManager to default values before tests
-        let configManager = ConfigManager.shared
+        self.resetNotificationDefaults(ConfigManager.shared)
+    }
+
+    private func resetNotificationDefaults(_ configManager: ConfigManager) {
         configManager.notificationSessionStart = true
         configManager.notificationSessionExit = true
         configManager.notificationCommandCompletion = true
@@ -21,6 +23,7 @@ struct GeneralSettingsViewTests {
     func notificationPreferencesDefaultValues() {
         // Get default preferences from ConfigManager
         let configManager = ConfigManager.shared
+        self.resetNotificationDefaults(configManager)
         let prefs = NotificationService.NotificationPreferences(fromConfig: configManager)
 
         // Check that preferences match ConfigManager defaults
@@ -41,6 +44,7 @@ struct GeneralSettingsViewTests {
     @Test("Notification checkbox toggle updates preferences")
     func notificationCheckboxToggle() {
         let configManager = ConfigManager.shared
+        self.resetNotificationDefaults(configManager)
 
         // Set initial value through ConfigManager
         configManager.notificationSessionStart = false
@@ -66,6 +70,7 @@ struct GeneralSettingsViewTests {
     func notificationPreferencesSave() {
         // Test that ConfigManager properties work correctly
         let configManager = ConfigManager.shared
+        self.resetNotificationDefaults(configManager)
 
         // Update values through ConfigManager
         configManager.notificationSessionStart = false
