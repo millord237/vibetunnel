@@ -52,7 +52,8 @@ The project structure emphasizes modularity with separate build systems for each
 
 **Terminal Views**
 - `VibeTunnel/Views/Terminal/TerminalView.swift` - Main terminal view
-- `VibeTunnel/Views/Terminal/TerminalHostingView.swift` - SwiftTerm hosting
+- `VibeTunnel/Views/Terminal/GhosttyWebView.swift` - Ghostty terminal renderer
+- `VibeTunnel/Views/Terminal/TerminalBufferRenderer.swift` - Buffer snapshot → ANSI conversion
 - `VibeTunnel/Views/Terminal/TerminalToolbar.swift` - Terminal controls
 - `VibeTunnel/Views/Terminal/CastPlayerView.swift` - Recording playback
 
@@ -163,5 +164,5 @@ The project structure emphasizes modularity with separate build systems for each
 
 ### Key Dependencies
 - macOS: SwiftUI, Sparkle (updates), Bun runtime
-- iOS: SwiftUI, SwiftTerm, WebSocket client
-- Web: Express, xterm.js, WebSocket, Vite bundler
+- iOS: SwiftUI, ghostty-web resources, WebSocket client
+- Web: Express, ghostty-web, WebSocket, Vite bundler

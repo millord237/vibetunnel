@@ -179,7 +179,7 @@ VibeTunnel consists of three main components:
 
 1. **macOS Menu Bar App** - Native Swift application that manages the server lifecycle
 2. **Node.js Server** - High-performance TypeScript server handling terminal sessions
-3. **Web Frontend** - Modern web interface using Lit components and xterm.js
+3. **Web Frontend** - Modern web interface using Lit components and ghostty-web
 
 The server runs as a standalone Node.js executable with embedded modules, providing excellent performance and minimal resource usage.
 

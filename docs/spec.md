@@ -48,7 +48,7 @@ VibeTunnel is a macOS application that provides browser-based access to Mac term
 - **iOS App**: Swift 6.0, SwiftUI, iOS 17.0+
 - **Server**: Node.js/TypeScript with Bun runtime
 - **Web Frontend**: TypeScript, Lit Web Components, Tailwind CSS
-- **Terminal Emulation**: xterm.js with custom buffer optimization
+- **Terminal Emulation**: ghostty-web with custom buffer optimization
 - **Build System**: Xcode, Swift Package Manager, npm/Bun
 - **Distribution**: Signed/notarized DMG with Sparkle updates
 
@@ -277,7 +277,7 @@ cd web && node build-native.js
 - TypeScript for type safety
 - Lit Web Components for modern component architecture
 - Tailwind CSS for styling
-- xterm.js for terminal rendering
+- ghostty-web for terminal rendering
 - Custom WebSocket client for binary buffer protocol
 
 ### Component Architecture
@@ -289,7 +289,7 @@ web/src/client/
 │   ├── session-list.ts      - Active session listing
 │   ├── session-card.ts      - Individual session display
 │   ├── session-view.ts      - Terminal container
-│   ├── terminal.ts          - xterm.js wrapper
+│   ├── terminal.ts          - ghostty-web wrapper
 │   └── vibe-terminal-buffer.ts - Binary buffer handler
 ├── services/
 │   └── buffer-subscription-service.ts - WebSocket management
@@ -309,7 +309,7 @@ web/src/client/
 - Responsive grid layout
 
 **Terminal Interface**:
-- Full ANSI color support via xterm.js
+- Full ANSI color support via ghostty-web
 - Binary buffer protocol for efficient updates
 - Copy/paste functionality
 - Responsive terminal sizing
@@ -337,7 +337,8 @@ web/src/client/
 - `VibeTunnelApp.swift` - Main app entry and lifecycle
 - `BufferWebSocketClient.swift` - WebSocket client with binary protocol
 - `TerminalView.swift` - Native terminal rendering
-- `TerminalHostingView.swift` - UIKit bridge for terminal display
+- `GhosttyWebView.swift` - Ghostty web renderer (WKWebView)
+- `TerminalBufferRenderer.swift` - Buffer snapshot → ANSI conversion
 - `SessionService.swift` - Session management API client
 
 ### Features

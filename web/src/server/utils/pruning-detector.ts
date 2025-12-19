@@ -20,7 +20,7 @@ const logger = createLogger('PruningDetector');
  * making previous content unnecessary for playback.
  */
 export const PRUNE_SEQUENCES = [
-  '\x1b[3J', // Clear scrollback buffer (xterm) - most common
+  '\x1b[3J', // Clear scrollback buffer (common)
   '\x1bc', // RIS - Full terminal reset
   '\x1b[2J', // Clear screen (common)
   '\x1b[H\x1b[J', // Home cursor + clear (older pattern)

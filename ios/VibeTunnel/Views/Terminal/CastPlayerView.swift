@@ -1,5 +1,4 @@
 import Observation
-import SwiftTerm
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -185,78 +184,32 @@ struct CastPlayerView: View {
 /// based on the cast file metadata.
 /// UIKit terminal view for rendering cast file playback.
 /// Displays terminal content frame-by-frame during recording playback.
-struct CastTerminalView: UIViewRepresentable {
+struct CastTerminalView: View {
     @Binding var fontSize: CGFloat
     let viewModel: CastPlayerViewModel
 
-    func makeUIView(context: Context) -> SwiftTerm.TerminalView {
-        let terminal = SwiftTerm.TerminalView()
-
-        terminal.backgroundColor = UIColor(Theme.Colors.terminalBackground)
-        terminal.nativeForegroundColor = UIColor(Theme.Colors.terminalForeground)
-        terminal.nativeBackgroundColor = UIColor(Theme.Colors.terminalBackground)
-
-        terminal.allowMouseReporting = false
-        // SwiftTerm doesn't have built-in link detection API
-        // URL detection would need to be implemented manually
-
-        self.updateFont(terminal, size: self.fontSize)
-
-        // Set initial size from cast file if available
-        if let header = viewModel.header {
-            terminal.resize(cols: Int(header.width), rows: Int(header.height))
-        } else {
-            terminal.resize(cols: 80, rows: 24)
-        }
-
-        context.coordinator.terminal = terminal
-        return terminal
+    private var terminalSize: GhosttyWebView.TerminalSize? {
+        guard let header = viewModel.header else { return nil }
+        return GhosttyWebView.TerminalSize(cols: Int(header.width), rows: Int(header.height))
     }
 
-    func updateUIView(_ terminal: SwiftTerm.TerminalView, context: Context) {
-        self.updateFont(terminal, size: self.fontSize)
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: self.viewModel)
-    }
-
-    private func updateFont(_ terminal: SwiftTerm.TerminalView, size: CGFloat) {
-        let font: UIFont = if let customFont = UIFont(name: Theme.Typography.terminalFont, size: size) {
-            customFont
-        } else if let fallbackFont = UIFont(name: Theme.Typography.terminalFontFallback, size: size) {
-            fallbackFont
-        } else {
-            UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
-        }
-        terminal.font = font
-    }
-
-    /// Coordinator for managing terminal state and handling events.
-    @MainActor
-    class Coordinator: NSObject {
-        weak var terminal: SwiftTerm.TerminalView?
-        let viewModel: CastPlayerViewModel
-
-        init(viewModel: CastPlayerViewModel) {
-            self.viewModel = viewModel
-            super.init()
-
-            // Set up terminal output handler
-            viewModel.onTerminalOutput = { [weak self] data in
-                Task { @MainActor in
-                    self?.terminal?.feed(text: data)
+    var body: some View {
+        GhosttyWebView(
+            fontSize: self.$fontSize,
+            theme: TerminalTheme.selected,
+            onInput: nil,
+            onResize: nil,
+            viewModel: nil,
+            disableInput: true,
+            terminalSize: terminalSize,
+            onReady: { coordinator in
+                viewModel.onTerminalOutput = { [weak coordinator] data in
+                    coordinator?.feedData(data)
                 }
-            }
-
-            viewModel.onTerminalClear = { [weak self] in
-                Task { @MainActor in
-                    // SwiftTerm uses standard ANSI escape sequences for clearing
-                    // This is the correct approach for clearing the terminal
-                    self?.terminal?.feed(text: "\u{001B}[2J\u{001B}[H")
+                viewModel.onTerminalClear = { [weak coordinator] in
+                    coordinator?.clear()
                 }
-            }
-        }
+            })
     }
 }
 

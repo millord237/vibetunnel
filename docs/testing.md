@@ -161,9 +161,9 @@ await page.waitForSelector('vibe-terminal', { state: 'visible' });
 await page.waitForFunction(() => {
   const terminal = document.querySelector('vibe-terminal');
   return terminal && (
-    terminal.textContent?.trim().length > 0 ||
-    !!terminal.shadowRoot ||
-    !!terminal.querySelector('.xterm')
+    terminal.getAttribute('data-ready') === 'true' ||
+    typeof terminal.getDebugText === 'function' ||
+    !!terminal.querySelector('canvas')
   );
 });
 ```

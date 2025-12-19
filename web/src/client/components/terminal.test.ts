@@ -80,7 +80,7 @@ describe('Terminal', () => {
       }
     });
 
-    it('should initialize xterm terminal after first update', async () => {
+    it('should initialize ghostty terminal after first update', async () => {
       // Terminal should already be initialized from beforeEach
       const terminal = mockTerminal;
 

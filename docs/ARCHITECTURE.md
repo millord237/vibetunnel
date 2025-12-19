@@ -26,10 +26,10 @@ The system consists of four main components: a native macOS menu bar application
 **iOS Application** - Native iOS app in ios/VibeTunnel/
 - BufferWebSocketClient (ios/VibeTunnel/Services/BufferWebSocketClient.swift) - WebSocket client for terminal streaming
 - TerminalView (ios/VibeTunnel/Views/Terminal/TerminalView.swift) - Terminal rendering UI
-- TerminalHostingView (ios/VibeTunnel/Views/Terminal/TerminalHostingView.swift) - UIKit integration layer
+- GhosttyWebView (ios/VibeTunnel/Views/Terminal/GhosttyWebView.swift) - WKWebView-based terminal renderer
 
 **Web Frontend** - TypeScript/React app in web/src/client/
-- Terminal rendering using xterm.js
+- Terminal rendering using ghostty-web
 - WebSocket client for real-time updates
 - Session management UI
 
@@ -65,7 +65,7 @@ The system consists of four main components: a native macOS menu bar application
 3. PTY process receives input via pty.write()
 4. PTY output → BufferAggregator.handleData()
 5. Binary buffer snapshot or text delta → WebSocket broadcast
-6. Client renders using xterm.js or native terminal view
+6. Client renders using ghostty-web or native terminal view
 
 **Buffer Optimization Protocol**
 - Binary messages use magic byte 0xBF (ios/VibeTunnel/Services/BufferWebSocketClient.swift:50)

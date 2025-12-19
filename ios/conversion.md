@@ -12,7 +12,7 @@ The iOS app already implements most core functionality but lacks several feature
 
 | Feature | Web | iOS | Status | iOS Adaptation Notes |
 |---------|-----|-----|--------|---------------------|
-| Terminal emulation | xterm.js | SwiftTerm + xterm.js | ✅ Complete | Dual renderer approach is excellent |
+| Terminal emulation | ghostty-web | ghostty-web (WASM) | ✅ Complete | Unified renderer across platforms |
 | Copy/paste | Native clipboard | Touch selection | ✅ Complete | iOS implementation is more intuitive |
 | URL highlighting | Clickable URLs | URL detection (configurable) | ✅ Complete | Native iOS text detection |
 | Font size control | 8-32px range | 8-32pt with presets | ✅ Complete | Quick preset buttons are better for mobile |

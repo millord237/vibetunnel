@@ -59,7 +59,7 @@ VibeTunnel consists of three main components working together:
 | Component | File | Purpose |
 |-----------|------|---------|
 | App Shell | `web/src/client/app.ts` | Main application container |
-| Terminal View | `web/src/client/terminal-view.ts` | xterm.js integration |
+| Terminal View | `web/src/client/components/terminal.ts` | ghostty-web integration |
 | Session List | `web/src/client/session-list.ts` | Active sessions UI |
 | WebSocket Client | `web/src/client/services/websocket.ts` | Real-time communication |
 
@@ -76,7 +76,7 @@ User → vt command → TTYForwardManager → HTTP POST /api/sessions
 ```
 User types → WebSocket message → Server PTY write
 PTY output → Buffer aggregation → Binary protocol → WebSocket
-→ Client decode → xterm.js render
+→ Client decode → ghostty-web render
 ```
 
 ### Session Cleanup

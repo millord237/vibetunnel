@@ -1,12 +1,11 @@
 import Observation
-import SwiftTerm
 import SwiftUI
 
 private let logger = Logger(category: "TerminalView")
 
 /// Interactive terminal view for a session.
 ///
-/// Displays a full terminal emulator using SwiftTerm with support for
+/// Displays a full terminal emulator using ghostty-web with support for
 /// input, output, recording, and font size adjustment.
 struct TerminalView: View {
     let session: Session
@@ -23,8 +22,6 @@ struct TerminalView: View {
     @State private var keyboardHeight: CGFloat = 0
     @State private var showScrollToBottom = false
     @State private var showingFileBrowser = false
-    @State private var selectedRenderer = TerminalRenderer.selected
-    @State private var showingDebugMenu = false
     @State private var showingExportSheet = false
     @State private var exportedFileURL: URL?
     @State private var showingWidthSelector = false
@@ -221,14 +218,6 @@ struct TerminalView: View {
             if press.modifiers.contains(.command) {
                 // Change terminal width
                 self.showingTerminalWidthSheet = true
-                return .handled
-            }
-            return .ignored
-        }
-        .onKeyPress(keys: ["d"]) { press in
-            if press.modifiers.contains(.command) {
-                // Toggle debug menu
-                self.showingDebugMenu.toggle()
                 return .handled
             }
             return .ignored
@@ -447,10 +436,6 @@ struct TerminalView: View {
         Divider()
 
         self.recordingMenuItems
-
-        Divider()
-
-        self.debugMenuItems
     }
 
     @ViewBuilder private var recordingMenuItems: some View {
@@ -472,27 +457,6 @@ struct TerminalView: View {
             Label("Export Recording", systemImage: "square.and.arrow.up")
         })
         .disabled(self.viewModel.castRecorder.events.isEmpty)
-    }
-
-    @ViewBuilder private var debugMenuItems: some View {
-        Menu {
-            ForEach(TerminalRenderer.allCases, id: \.self) { renderer in
-                Button(action: {
-                    self.selectedRenderer = renderer
-                    TerminalRenderer.selected = renderer
-                    self.viewModel.terminalViewId = UUID() // Force recreate terminal view
-                }, label: {
-                    HStack {
-                        Text(renderer.displayName)
-                        if renderer == self.selectedRenderer {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                })
-            }
-        } label: {
-            Label("Terminal Renderer", systemImage: "gearshape.2")
-        }
     }
 
     @ViewBuilder private var terminalSizeIndicator: some View {
@@ -563,36 +527,25 @@ struct TerminalView: View {
     }
 
     private var terminalContent: some View {
+        let terminalSize = self.viewModel.terminalCols > 0 && self.viewModel.terminalRows > 0
+            ? GhosttyWebView.TerminalSize(
+                cols: self.viewModel.terminalCols,
+                rows: self.viewModel.terminalRows)
+            : nil
+
         VStack(spacing: 0) {
-            // Terminal view based on selected renderer
-            Group {
-                switch self.selectedRenderer {
-                case .swiftTerm:
-                    TerminalHostingView(
-                        session: self.session,
-                        fontSize: self.$fontSize,
-                        theme: self.selectedTheme,
-                        onInput: { text in
-                            self.viewModel.sendInput(text)
-                        },
-                        onResize: { cols, rows in
-                            self.viewModel.resize(cols: cols, rows: rows)
-                        },
-                        viewModel: self.viewModel)
-                case .xterm:
-                    XtermWebView(
-                        session: self.session,
-                        fontSize: self.$fontSize,
-                        theme: self.selectedTheme,
-                        onInput: { text in
-                            self.viewModel.sendInput(text)
-                        },
-                        onResize: { cols, rows in
-                            self.viewModel.resize(cols: cols, rows: rows)
-                        },
-                        viewModel: self.viewModel)
-                }
-            }
+            GhosttyWebView(
+                fontSize: self.$fontSize,
+                theme: self.selectedTheme,
+                onInput: { text in
+                    self.viewModel.sendInput(text)
+                },
+                onResize: { cols, rows in
+                    self.viewModel.resize(cols: cols, rows: rows)
+                },
+                viewModel: self.viewModel,
+                disableInput: !self.session.isRunning,
+                terminalSize: terminalSize)
             .id(self.viewModel.terminalViewId)
             .background(self.selectedTheme.background)
             .focused(self.$isInputFocused)
@@ -651,7 +604,7 @@ class TerminalViewModel {
     private var resizeDebounceTask: Task<Void, Never>?
     private var hasPerformedInitialResize = false
     private var isPerformingInitialResize = false
-    weak var terminalCoordinator: AnyObject? // Can be TerminalHostingView.Coordinator
+    weak var terminalCoordinator: (any TerminalCoordinating)?
 
     init(session: Session) {
         self.session = session
@@ -661,7 +614,7 @@ class TerminalViewModel {
     }
 
     private func setupTerminal() {
-        // Terminal setup now handled by SimpleTerminalView
+        // Terminal setup handled by GhosttyWebView
     }
 
     func startRecording() {
@@ -742,7 +695,7 @@ class TerminalViewModel {
 
         case let .output(_, data):
             // Feed output data directly to the terminal
-            if let coordinator = terminalCoordinator as? TerminalHostingView.Coordinator {
+            if let coordinator = terminalCoordinator {
                 coordinator.feedData(data)
             } else {
                 // Queue the data to be fed once coordinator is ready
@@ -750,7 +703,7 @@ class TerminalViewModel {
                 Task {
                     // Wait a bit for coordinator to be initialized
                     try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
-                    if let coordinator = self.terminalCoordinator as? TerminalHostingView.Coordinator {
+                    if let coordinator = self.terminalCoordinator {
                         coordinator.feedData(data)
                     }
                 }
@@ -788,23 +741,8 @@ class TerminalViewModel {
 
         case let .bufferUpdate(snapshot):
             // Update terminal buffer directly
-            if let coordinator = terminalCoordinator as? TerminalHostingView.Coordinator {
-                coordinator.updateBuffer(from: TerminalHostingView.BufferSnapshot(
-                    cols: snapshot.cols,
-                    rows: snapshot.rows,
-                    viewportY: snapshot.viewportY,
-                    cursorX: snapshot.cursorX,
-                    cursorY: snapshot.cursorY,
-                    cells: snapshot.cells.map { row in
-                        row.map { cell in
-                            TerminalHostingView.BufferCell(
-                                char: cell.char,
-                                width: cell.width,
-                                fg: cell.fg,
-                                bg: cell.bg,
-                                attributes: cell.attributes)
-                        }
-                    }))
+            if let coordinator = terminalCoordinator {
+                coordinator.updateBuffer(from: snapshot)
             } else {
                 // Fallback: buffer updates not available yet
                 logger.warning("Direct buffer update not available")
@@ -957,16 +895,15 @@ class TerminalViewModel {
     }
 
     func copyBuffer() {
-        // Terminal copy is handled by SwiftTerm's built-in functionality
-        HapticFeedback.notification(.success)
+        if let content = getBufferContent() {
+            UIPasteboard.general.string = content
+            HapticFeedback.notification(.success)
+        }
     }
 
     func getBufferContent() -> String? {
         // Get the current terminal buffer content
-        if let coordinator = terminalCoordinator as? TerminalHostingView.Coordinator {
-            return coordinator.getBufferContent()
-        }
-        return nil
+        terminalCoordinator?.getBufferContent()
     }
 
     @MainActor
@@ -976,7 +913,7 @@ class TerminalViewModel {
 
         // Visual bell - flash the terminal briefly
         withAnimation(.easeInOut(duration: 0.1)) {
-            // SwiftTerm handles visual bell internally
+            // ghostty handles visual bell internally
             // but we can add additional feedback if needed
         }
     }
@@ -996,9 +933,7 @@ class TerminalViewModel {
         self.isAutoScrollEnabled = true
         self.isAtBottom = true
         // The actual scrolling is handled by the terminal coordinator
-        if let coordinator = terminalCoordinator as? TerminalHostingView.Coordinator {
-            coordinator.scrollToBottom()
-        }
+        terminalCoordinator?.scrollToBottom()
     }
 
     func updateScrollState(isAtBottom: Bool) {
@@ -1035,8 +970,15 @@ class TerminalViewModel {
         }
 
         // Update the terminal coordinator if using constrained width
-        if let coordinator = terminalCoordinator as? TerminalHostingView.Coordinator {
-            coordinator.setMaxWidth(maxWidth)
-        }
+        terminalCoordinator?.setMaxWidth(maxWidth)
     }
+}
+
+@MainActor
+protocol TerminalCoordinating: AnyObject {
+    func feedData(_ data: String)
+    func updateBuffer(from snapshot: BufferSnapshot)
+    func scrollToBottom()
+    func setMaxWidth(_ maxWidth: Int)
+    func getBufferContent() -> String?
 }

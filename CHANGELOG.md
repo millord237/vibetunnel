@@ -477,7 +477,7 @@ First-time contributors to VibeTunnel:
 - Configurable prompts to match workflow
 
 #### **Terminal Performance**
-- Fixed critical flow control issue causing xterm.js buffer overflow (#223)
+- Fixed critical flow control issue causing web terminal buffer overflow (#223)
 - Fixed infinite scroll loop that could freeze the browser
 - Fixed race conditions in terminal output handling
 - Improved memory management for long-running sessions

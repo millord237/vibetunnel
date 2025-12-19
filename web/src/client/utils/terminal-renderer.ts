@@ -40,7 +40,7 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * Render a line from IBufferCell array (from xterm.js)
+ * Render a line from terminal buffer cell array
  */
 export function renderLineFromBuffer(
   line: { getCell: (col: number, cell: BufferCellLike) => void; length: number },

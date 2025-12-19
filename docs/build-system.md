@@ -128,7 +128,7 @@ cd mac
 - iOS 18.0+ deployment target
 
 **Dependencies**:
-- SwiftTerm package via SPM
+- ghostty-web resources (JS + WASM) bundled in the iOS app
 
 ## Reference
 

@@ -157,15 +157,16 @@ export class WebSocketClient {
 
 ```typescript
 // services/terminal-service.ts
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
+import { Ghostty, Terminal, FitAddon } from 'ghostty-web';
 
 export class TerminalService {
   private terminal: Terminal;
   private fitAddon: FitAddon;
   
-  initialize(container: HTMLElement): void {
+  async initialize(container: HTMLElement): Promise<void> {
+    const ghostty = await Ghostty.load('/ghostty-vt.wasm');
     this.terminal = new Terminal({
+      ghostty,
       theme: {
         background: '#1e1e1e',
         foreground: '#ffffff'
@@ -253,7 +254,7 @@ test('create and connect to session', async ({ page }) => {
 |-----------|---------------|--------|
 | Buffer aggregation | Batch every 16ms | 90% fewer messages |
 | Binary protocol | Magic byte encoding | 50% smaller payload |
-| Virtual scrolling | xterm.js built-in | Handles 100K+ lines |
+| Virtual scrolling | ghostty-web scrollback | Handles 100K+ lines |
 | Service worker | Cache static assets | Instant load |
 
 ### Benchmarks
@@ -289,8 +290,9 @@ DEBUG=vt:* pnpm dev:server
 ### Client Debugging
 
 ```javascript
-// Enable xterm.js debug mode
-terminal.options.logLevel = 'debug';
+// Terminal debugging
+const terminalEl = document.querySelector('vibe-terminal');
+console.log(terminalEl?.getDebugText?.({ maxLines: 50 }));
 
 // WebSocket debugging
 ws.addEventListener('message', (e) => {

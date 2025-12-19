@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 
 /**
- * Mock Terminal class for xterm.js
+ * Mock Terminal class for ghostty-web
  */
 export class MockTerminal {
   element: HTMLDivElement;
@@ -110,7 +110,7 @@ export class MockTerminal {
   blur = vi.fn();
 
   resize = vi.fn((cols: number, rows: number) => {
-    // xterm.js requires integer values
+    // Ghostty resize expects integer values
     if (!Number.isInteger(cols) || !Number.isInteger(rows)) {
       throw new Error('This API only accepts integers');
     }
@@ -176,7 +176,7 @@ export class MockTerminal {
 }
 
 /**
- * Mock FitAddon for xterm-addon-fit
+ * Mock FitAddon for ghostty-web fit addon
  */
 export class MockFitAddon {
   proposeDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
@@ -185,7 +185,7 @@ export class MockFitAddon {
 }
 
 /**
- * Mock WebLinksAddon for xterm-addon-web-links
+ * Mock WebLinksAddon for legacy tests
  */
 export class MockWebLinksAddon {
   activate = vi.fn();
@@ -193,7 +193,7 @@ export class MockWebLinksAddon {
 }
 
 /**
- * Mock Search addon for xterm-addon-search
+ * Mock Search addon for legacy tests
  */
 export class MockSearchAddon {
   findNext = vi.fn();
