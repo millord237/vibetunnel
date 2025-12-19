@@ -114,7 +114,7 @@ export class SessionList extends LitElement {
   };
 
   private getVisibleSessions() {
-    const running = this.sessions.filter((s) => s.status === 'running');
+    const running = this.sessions.filter((s) => s.status === 'running' || s.status === 'starting');
     const exited = this.sessions.filter((s) => s.status === 'exited');
     return this.hideExited ? running : running.concat(exited);
   }
@@ -347,7 +347,15 @@ export class SessionList extends LitElement {
 
     sessions.forEach((session) => {
       // Use gitMainRepoPath to group worktrees with their main repository
-      const groupKey = session.gitMainRepoPath || session.gitRepoPath || null;
+      const mainRepo =
+        typeof session.gitMainRepoPath === 'string' && session.gitMainRepoPath.length > 0
+          ? session.gitMainRepoPath
+          : null;
+      const repo =
+        typeof session.gitRepoPath === 'string' && session.gitRepoPath.length > 0
+          ? session.gitRepoPath
+          : null;
+      const groupKey = mainRepo || repo || null;
       if (!groups.has(groupKey)) {
         groups.set(groupKey, []);
       }
@@ -369,7 +377,9 @@ export class SessionList extends LitElement {
     }
 
     // Add git sessions sorted by repo name
-    const gitRepos = Array.from(groups.keys()).filter((key): key is string => key !== null);
+    const gitRepos = Array.from(groups.keys()).filter(
+      (key): key is string => typeof key === 'string' && key.length > 0
+    );
     gitRepos.sort((a, b) => {
       const nameA = this.getRepoName(a);
       const nameB = this.getRepoName(b);
@@ -729,7 +739,9 @@ export class SessionList extends LitElement {
 
   render() {
     // Group sessions by status
-    const runningSessions = this.sessions.filter((session) => session.status === 'running');
+    const runningSessions = this.sessions.filter(
+      (session) => session.status === 'running' || session.status === 'starting'
+    );
     const exitedSessions = this.sessions.filter((session) => session.status === 'exited');
 
     const hasRunningSessions = runningSessions.length > 0;

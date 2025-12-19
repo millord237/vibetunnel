@@ -12,7 +12,6 @@ import type { SessionRoutesConfig } from '../../server/routes/sessions.js';
 import { createSessionRoutes } from '../../server/routes/sessions.js';
 import { createWorktreeRoutes } from '../../server/routes/worktrees.js';
 import { RemoteRegistry } from '../../server/services/remote-registry.js';
-import { StreamWatcher } from '../../server/services/stream-watcher.js';
 import { TerminalManager } from '../../server/services/terminal-manager.js';
 
 export interface TestServerOptions {
@@ -30,7 +29,6 @@ export interface TestServerResult {
   app: express.Application;
   ptyManager: PtyManager;
   terminalManager: TerminalManager;
-  streamWatcher: StreamWatcher;
   cleanup: () => Promise<void>;
 }
 
@@ -55,7 +53,6 @@ export async function createTestServer(options: TestServerOptions = {}): Promise
   // Initialize services
   const ptyManager = new PtyManager(controlPath);
   const terminalManager = new TerminalManager();
-  const streamWatcher = new StreamWatcher();
   const remoteRegistry = isHQMode ? new RemoteRegistry() : null;
 
   // Create Express app
@@ -66,7 +63,6 @@ export async function createTestServer(options: TestServerOptions = {}): Promise
   const config: SessionRoutesConfig = {
     ptyManager,
     terminalManager,
-    streamWatcher,
     remoteRegistry,
     isHQMode,
   };
@@ -105,7 +101,6 @@ export async function createTestServer(options: TestServerOptions = {}): Promise
     }
 
     // Stop services
-    // StreamWatcher doesn't have a public stop method - it cleans up internally
     if (remoteRegistry) {
       remoteRegistry.stop();
     }
@@ -115,7 +110,6 @@ export async function createTestServer(options: TestServerOptions = {}): Promise
     app,
     ptyManager,
     terminalManager,
-    streamWatcher,
     cleanup,
   };
 }

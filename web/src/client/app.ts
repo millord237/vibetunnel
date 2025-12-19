@@ -31,14 +31,11 @@ import './components/settings.js';
 import './components/notification-status.js';
 import './components/auth-login.js';
 import './components/ssh-key-manager.js';
-import './components/git-notification-handler.js';
-import type { GitNotificationHandler } from './components/git-notification-handler.js';
 
 import { authClient } from './services/auth-client.js';
-import { bufferSubscriptionService } from './services/buffer-subscription-service.js';
-import { getControlEventService } from './services/control-event-service.js';
-import { notificationEventService } from './services/notification-event-service.js';
 import { pushNotificationService } from './services/push-notification-service.js';
+import { serverEventService } from './services/server-event-service.js';
+import { terminalSocketClient } from './services/terminal-socket-client.js';
 
 const logger = createLogger('app');
 
@@ -91,7 +88,19 @@ export class VibeTunnelApp extends LitElement {
   private responsiveUnsubscribe?: () => void;
   private resizeCleanupFunctions: (() => void)[] = [];
   private sessionLoadingState: 'idle' | 'loading' | 'loaded' | 'not-found' = 'idle';
-  private controlEventService?: ReturnType<typeof getControlEventService>;
+
+  private isTestEnvironment(): boolean {
+    return (
+      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') ||
+      window.location.search.includes('test=true') ||
+      navigator.userAgent.includes('HeadlessChrome') ||
+      navigator.userAgent.includes('Headless') ||
+      (window as unknown as { __playwright?: unknown }).__playwright !== undefined ||
+      navigator.userAgent.includes('Playwright') ||
+      navigator.webdriver === true ||
+      window.location.port === '4022'
+    );
+  }
 
   connectedCallback() {
     super.connectedCallback();
@@ -109,16 +118,6 @@ export class VibeTunnelApp extends LitElement {
   }
 
   firstUpdated() {
-    // Connect control event service to git notification handler
-    if (this.controlEventService) {
-      const gitNotificationHandler = this.querySelector(
-        'git-notification-handler'
-      ) as GitNotificationHandler;
-      if (gitNotificationHandler) {
-        gitNotificationHandler.setControlEventService(this.controlEventService);
-      }
-    }
-
     // Mark initial render as complete after a microtask to ensure DOM is settled
     Promise.resolve().then(() => {
       this.initialRenderComplete = true;
@@ -516,7 +515,8 @@ export class VibeTunnelApp extends LitElement {
     logger.log('🚀 Initializing services...');
     try {
       // Initialize buffer subscription service for WebSocket connections
-      await bufferSubscriptionService.initialize();
+      await terminalSocketClient.initialize();
+      serverEventService.initialize();
 
       // Initialize push notification service always
       // It handles its own permission checks and user preferences
@@ -532,15 +532,6 @@ export class VibeTunnelApp extends LitElement {
         location: window.location.hostname,
         protocol: window.location.protocol,
       });
-
-      // Initialize control event service for real-time notifications
-      this.controlEventService = getControlEventService(authClient);
-      this.controlEventService.connect();
-
-      // Initialize notification event service to monitor /api/events SSE connection
-      // This is used by the Mac app for notifications
-      notificationEventService.setAuthClient(authClient);
-      await notificationEventService.connect();
 
       this.servicesInitialized = true;
       logger.log('✅ Services initialized successfully');
@@ -668,17 +659,12 @@ export class VibeTunnelApp extends LitElement {
             return newSession;
           });
 
-          // Only update sessions if there are actual changes
-          const hasSessionChanges =
-            updatedSessions.length !== this.sessions.length ||
-            updatedSessions.some((session, index) => session !== this.sessions[index]);
-
-          if (hasSessionChanges) {
-            this.sessions = updatedSessions;
-            // Clear session cache when sessions change
-            this._cachedSelectedSession = undefined;
-            this._cachedSelectedSessionId = null;
-          }
+          // Always assign a new array reference so Lit re-renders reliably.
+          // Note: we still preserve per-session object references above when possible.
+          this.sessions = [...updatedSessions];
+          // Clear session cache when sessions update
+          this._cachedSelectedSession = undefined;
+          this._cachedSelectedSessionId = null;
           this.clearError();
 
           // Update page title if we're in list view
@@ -741,6 +727,7 @@ export class VibeTunnelApp extends LitElement {
     // Use view transition for initial load with fade effect
     if (
       !this.initialLoadComplete &&
+      !this.isTestEnvironment() &&
       'startViewTransition' in document &&
       typeof document.startViewTransition === 'function'
     ) {
@@ -1046,7 +1033,7 @@ export class VibeTunnelApp extends LitElement {
 
     // Disable View Transitions when navigating from session detail view
     // to prevent animations when sidebar is involved
-    const skipViewTransition = this.currentView === 'session';
+    const skipViewTransition = this.currentView === 'session' || this.isTestEnvironment();
 
     // Check if View Transitions API is supported and should be used
     if (
@@ -1070,6 +1057,10 @@ export class VibeTunnelApp extends LitElement {
       this.currentView = 'list';
       this.updateUrl();
     }
+
+    // Ensure list view gets a fresh snapshot after leaving a session view.
+    // This avoids stale session state if the PTY exited while we were connected.
+    this.loadSessions();
   }
 
   private async handleKillAll() {
@@ -1450,22 +1441,7 @@ export class VibeTunnelApp extends LitElement {
 
   private setupHotReload(): void {
     // Skip hot reload in test environment
-    const isTestEnvironment =
-      // Check for NODE_ENV=test (set by CI build)
-      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') ||
-      window.location.search.includes('test=true') ||
-      navigator.userAgent.includes('HeadlessChrome') ||
-      navigator.userAgent.includes('Headless') ||
-      // Check if running in Playwright test context
-      (window as unknown as { __playwright?: unknown }).__playwright !== undefined ||
-      // Check for playwright-specific user agent
-      navigator.userAgent.includes('Playwright') ||
-      // Check for common headless indicators
-      navigator.webdriver === true ||
-      // Check if running on test port
-      window.location.port === '4022';
-
-    if (isTestEnvironment) {
+    if (this.isTestEnvironment()) {
       logger.log('Hot reload disabled in test environment');
       return;
     }
@@ -1848,15 +1824,11 @@ export class VibeTunnelApp extends LitElement {
         .visible=${this.showSettings}
         .authClient=${authClient}
         @close=${this.handleCloseSettings}
-        @notifications-enabled=${async () => {
+        @notifications-enabled=${() => {
           this.showSuccess('Notifications enabled');
-          // Reconnect SSE when notifications are enabled
-          await notificationEventService.connect();
         }}
         @notifications-disabled=${() => {
           this.showSuccess('Notifications disabled');
-          // Disconnect SSE when notifications are disabled
-          notificationEventService.disconnect();
         }}
         @success=${(e: CustomEvent) => this.showSuccess(e.detail)}
         @error=${(e: CustomEvent) => this.showError(e.detail)}
@@ -1878,9 +1850,6 @@ export class VibeTunnelApp extends LitElement {
         @cancel=${this.handleCreateModalClose}
         @error=${this.handleError}
       ></session-create-form>
-
-      <!-- Git Notification Handler -->
-      <git-notification-handler></git-notification-handler>
 
       <!-- Multiplexer Modal (tmux/Zellij) -->
       <multiplexer-modal

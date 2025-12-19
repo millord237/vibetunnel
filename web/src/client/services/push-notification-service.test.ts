@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '../../types/config.js';
-import { notificationEventService } from './notification-event-service.js';
 import type { NotificationPreferences } from './push-notification-service.js';
 import { pushNotificationService } from './push-notification-service.js';
 import { serverConfigService } from './server-config-service.js';
+import { serverEventService } from './server-event-service.js';
 
-// Mock notification event service
-vi.mock('./notification-event-service', () => ({
-  notificationEventService: {
+// Mock server event service (WS v3 global events)
+vi.mock('./server-event-service', () => ({
+  serverEventService: {
     on: vi.fn(),
-    off: vi.fn(),
-    connect: vi.fn(),
-    disconnect: vi.fn(),
+    initialize: vi.fn(),
+    dispose: vi.fn(),
     getConnectionStatus: vi.fn(() => true),
+    onConnectionStateChange: vi.fn(),
   },
 }));
 
@@ -567,7 +567,7 @@ describe('PushNotificationService', () => {
 
       // Capture the event handler
       let testNotificationHandler: ((data: unknown) => void) | undefined;
-      (notificationEventService.on as vi.Mock).mockImplementation((event, handler) => {
+      (serverEventService.on as vi.Mock).mockImplementation((event, handler) => {
         if (event === 'test-notification') {
           testNotificationHandler = handler;
         }
@@ -608,7 +608,7 @@ describe('PushNotificationService', () => {
 
       // Capture the event handler
       let testNotificationHandler: ((data: unknown) => void) | undefined;
-      (notificationEventService.on as vi.Mock).mockImplementation((event, handler) => {
+      (serverEventService.on as vi.Mock).mockImplementation((event, handler) => {
         if (event === 'test-notification') {
           testNotificationHandler = handler;
         }

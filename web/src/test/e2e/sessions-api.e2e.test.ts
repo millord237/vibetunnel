@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { WsV3MessageType } from '../../shared/ws-v3.js';
 import type { SessionData } from '../types/test-types';
 import { type ServerInstance, startTestServer, stopServer } from '../utils/server-utils';
 import { testLogger } from '../utils/test-logger';
+import {
+  connectWsV3,
+  sendSubscribe,
+  WS_V3_FLAGS,
+  waitForWsV3Frame,
+} from '../utils/ws-v3-test-utils';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -269,38 +276,25 @@ describe('Sessions API Tests', () => {
       // based on how much actual content vs empty space there is
     });
 
-    it('should handle SSE stream', async () => {
-      const response = await fetch(
-        `http://localhost:${server?.port}/api/sessions/${sessionId}/stream`,
-        {
-          headers: {
-            Accept: 'text/event-stream',
-          },
-        }
+    it('should stream output via WebSocket v3', async () => {
+      const port = server?.port;
+      if (!port) throw new Error('Server not started');
+      const { ws } = await connectWsV3({ port });
+
+      sendSubscribe({
+        ws,
+        sessionId,
+        flags: WS_V3_FLAGS.Stdout,
+      });
+
+      const stdoutFrame = await waitForWsV3Frame(
+        ws,
+        (frame) => frame.type === WsV3MessageType.STDOUT && frame.sessionId === sessionId,
+        4000
       );
+      expect(stdoutFrame.payload.byteLength).toBeGreaterThan(0);
 
-      expect(response.status).toBe(200);
-      expect(response.headers.get('content-type')).toBe('text/event-stream');
-
-      // Read a few events
-      const reader = response.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let eventCount = 0;
-
-        while (eventCount < 3) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const events = buffer.split('\n\n').filter((e) => e.trim());
-          eventCount += events.length;
-        }
-
-        reader.cancel();
-        expect(eventCount).toBeGreaterThan(0);
-      }
+      ws.close();
     });
 
     it('should kill session', async () => {

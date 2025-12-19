@@ -39,10 +39,6 @@ describe('sessions routes', () => {
   let mockTerminalManager: {
     getTerminal: ReturnType<typeof vi.fn>;
   };
-  let mockStreamWatcher: {
-    addListener: ReturnType<typeof vi.fn>;
-    removeListener: ReturnType<typeof vi.fn>;
-  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -96,11 +92,6 @@ describe('sessions routes', () => {
     mockTerminalManager = {
       getTerminal: vi.fn(),
     };
-
-    mockStreamWatcher = {
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-    };
   });
 
   afterEach(() => {
@@ -115,7 +106,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -163,7 +153,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: true,
       });
@@ -208,7 +197,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -269,7 +257,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -328,7 +315,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -389,7 +375,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -448,7 +433,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -503,7 +487,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -568,7 +551,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -621,7 +603,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -679,7 +660,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -729,7 +709,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: null,
         isHQMode: false,
       });
@@ -820,7 +799,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: mockRemoteRegistry,
         isHQMode: true,
       });
@@ -910,7 +888,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: mockRemoteRegistry,
         isHQMode: true,
       });
@@ -978,7 +955,6 @@ describe('sessions routes', () => {
       const router = createSessionRoutes({
         ptyManager: mockPtyManager,
         terminalManager: mockTerminalManager,
-        streamWatcher: mockStreamWatcher,
         remoteRegistry: mockRemoteRegistry,
         isHQMode: true,
       });

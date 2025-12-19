@@ -8,7 +8,7 @@
 import { html, LitElement } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { cellsToText } from '../../shared/terminal-text-formatter.js';
-import { bufferSubscriptionService } from '../services/buffer-subscription-service.js';
+import { terminalSocketClient } from '../services/terminal-socket-client.js';
 import { TERMINAL_IDS } from '../utils/terminal-constants.js';
 import { type BufferCell, TerminalRenderer } from '../utils/terminal-renderer.js';
 import { TERMINAL_THEMES, type TerminalThemeId } from '../utils/terminal-themes.js';
@@ -148,16 +148,23 @@ export class VibeTerminalBuffer extends LitElement {
   private subscribeToBuffer() {
     if (!this.sessionId) return;
 
-    // Subscribe to buffer updates
-    this.unsubscribe = bufferSubscriptionService.subscribe(this.sessionId, (snapshot) => {
-      this.buffer = snapshot;
-      this.error = null;
+    // Subscribe to buffer snapshots over v3 socket
+    this.unsubscribe = terminalSocketClient.subscribe(this.sessionId, {
+      snapshots: true,
+      onSnapshot: (snapshot) => {
+        this.buffer = snapshot;
+        this.error = null;
 
-      // Recalculate dimensions now that we have the actual cols
-      this.calculateDimensions();
+        // Recalculate dimensions now that we have the actual cols
+        this.calculateDimensions();
 
-      // Request update which will trigger updated() lifecycle
-      this.requestUpdate();
+        // Request update which will trigger updated() lifecycle
+        this.requestUpdate();
+      },
+      onError: (message) => {
+        this.error = message;
+        this.requestUpdate();
+      },
     });
   }
 

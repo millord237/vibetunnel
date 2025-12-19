@@ -18,12 +18,10 @@ const logger = createLogger('settings');
 
 export interface AppPreferences {
   useDirectKeyboard: boolean;
-  useBinaryMode: boolean;
 }
 
 const DEFAULT_APP_PREFERENCES: AppPreferences = {
   useDirectKeyboard: true, // Default to modern direct keyboard for new users
-  useBinaryMode: false, // Default to SSE/RSC mode for compatibility
 };
 
 export const STORAGE_KEY = 'vibetunnel_app_preferences';
@@ -445,7 +443,7 @@ export class Settings extends LitElement {
     }
   }
 
-  private handleAppPreferenceChange(key: keyof AppPreferences, value: boolean | string) {
+  private handleAppPreferenceChange(key: keyof AppPreferences, value: boolean) {
     // Update locally
     this.appPreferences = { ...this.appPreferences, [key]: value };
     this.saveAppPreferences();

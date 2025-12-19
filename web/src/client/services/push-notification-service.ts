@@ -7,8 +7,8 @@ import {
 } from '../../types/config.js';
 import { createLogger } from '../utils/logger';
 import { authClient } from './auth-client';
-import { notificationEventService } from './notification-event-service';
 import { serverConfigService } from './server-config-service';
+import { serverEventService } from './server-event-service';
 
 // Re-export types for components
 export type { PushSubscription, NotificationPreferences };
@@ -438,7 +438,7 @@ export class PushNotificationService {
   /**
    * Test notification functionality
    * Sends a test notification through the server to verify the full flow:
-   * Web → Server → SSE → Mac app
+   * Web → Server → WS v3 (global EVENT) → client + push.
    */
   async testNotification(): Promise<void> {
     logger.log('🔔 Testing notification system...');
@@ -448,46 +448,41 @@ export class PushNotificationService {
     }
 
     try {
+      serverEventService.initialize();
       // Promise that resolves when we receive the test notification
       const notificationPromise = new Promise<void>((resolve) => {
         let receivedNotification = false;
 
         const timeout = setTimeout(() => {
           if (!receivedNotification) {
-            logger.warn('⏱️ Timeout waiting for SSE test notification');
+            logger.warn('⏱️ Timeout waiting for test notification');
             unsubscribe();
             resolve();
           }
         }, 5000); // 5 second timeout
 
-        const unsubscribe = notificationEventService.on(
-          'test-notification',
-          async (data: unknown) => {
-            logger.log('📨 Received test notification via SSE:', data);
-            receivedNotification = true;
-            clearTimeout(timeout);
-            unsubscribe();
+        const unsubscribe = serverEventService.on('test-notification', async (event) => {
+          logger.log('📨 Received test notification:', event);
+          receivedNotification = true;
+          clearTimeout(timeout);
+          unsubscribe();
 
-            // Type guard for notification data
-            const notificationData = data as { title?: string; body?: string };
-
-            // Show notification if we have permission
-            if (this.serviceWorkerRegistration && this.getPermission() === 'granted') {
-              await this.serviceWorkerRegistration.showNotification(
-                notificationData.title || 'VibeTunnel Test',
-                {
-                  body: notificationData.body || 'Test notification received via SSE!',
-                  icon: '/apple-touch-icon.png',
-                  badge: '/favicon-32.png',
-                  tag: 'vibetunnel-test-sse',
-                  requireInteraction: false,
-                }
-              );
-              logger.log('✅ Displayed SSE test notification');
-            }
-            resolve();
+          // Show notification if we have permission
+          if (this.serviceWorkerRegistration && this.getPermission() === 'granted') {
+            await this.serviceWorkerRegistration.showNotification(
+              event.title || 'VibeTunnel Test',
+              {
+                body: event.body || 'Test notification received!',
+                icon: '/apple-touch-icon.png',
+                badge: '/favicon-32.png',
+                tag: 'vibetunnel-test-sse',
+                requireInteraction: false,
+              }
+            );
+            logger.log('✅ Displayed test notification');
           }
-        );
+          resolve();
+        });
       });
 
       // Send the test notification request to server

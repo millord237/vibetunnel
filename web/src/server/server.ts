@@ -31,20 +31,20 @@ import { createRepositoryRoutes } from './routes/repositories.js';
 import { createSessionRoutes } from './routes/sessions.js';
 import { createTestNotificationRouter } from './routes/test-notification.js';
 import { createTmuxRoutes } from './routes/tmux.js';
-import { WebSocketInputHandler } from './routes/websocket-input.js';
 import { createWorktreeRoutes } from './routes/worktrees.js';
 import { AuthService } from './services/auth-service.js';
-import { BufferAggregator } from './services/buffer-aggregator.js';
+import { CastOutputHub } from './services/cast-output-hub.js';
 import { ConfigService } from './services/config-service.js';
 import { ControlDirWatcher } from './services/control-dir-watcher.js';
+import { GitStatusHub } from './services/git-status-hub.js';
 import { HQClient } from './services/hq-client.js';
 import { mdnsService } from './services/mdns-service.js';
 import { PushNotificationService } from './services/push-notification-service.js';
 import { RemoteRegistry } from './services/remote-registry.js';
 import { SessionMonitor } from './services/session-monitor.js';
-import { StreamWatcher } from './services/stream-watcher.js';
 import { tailscaleServeService } from './services/tailscale-serve-service.js';
 import { TerminalManager } from './services/terminal-manager.js';
+import { WsV3Hub } from './services/ws-v3-hub.js';
 import { closeLogger, createLogger, initLogger, setDebugMode } from './utils/logger.js';
 import { VapidManager } from './utils/vapid-manager.js';
 import { getVersionInfo, printVersionBanner } from './version.js';
@@ -357,11 +357,9 @@ interface AppInstance {
   configService: ConfigService;
   ptyManager: PtyManager;
   terminalManager: TerminalManager;
-  streamWatcher: StreamWatcher;
   remoteRegistry: RemoteRegistry | null;
   hqClient: HQClient | null;
   controlDirWatcher: ControlDirWatcher | null;
-  bufferAggregator: BufferAggregator | null;
   pushNotificationService: PushNotificationService | null;
 }
 
@@ -414,12 +412,12 @@ export async function createApp(): Promise<AppInstance> {
   logger.debug('Configured security headers with helmet');
 
   // Add compression middleware with Brotli support
-  // Skip compression for SSE streams (asciicast and events)
+  // Skip compression for SSE streams (events + control stream)
   app.use(
     compression({
       filter: (req, res) => {
         // Skip compression for Server-Sent Events
-        if (req.path.match(/\/api\/sessions\/[^/]+\/stream$/) || req.path === '/api/events') {
+        if (req.path === '/api/events' || req.path === '/api/control/stream') {
           return false;
         }
         // Use default filter for other requests
@@ -473,9 +471,10 @@ export async function createApp(): Promise<AppInstance> {
   const terminalManager = new TerminalManager(CONTROL_DIR);
   logger.debug('Initialized terminal manager');
 
-  // Initialize stream watcher for file-based streaming
-  const streamWatcher = new StreamWatcher(sessionManager);
-  logger.debug('Initialized stream watcher');
+  // Initialize cast output hub + git status hub for WebSocket v3
+  const castOutputHub = new CastOutputHub(sessionManager);
+  const gitStatusHub = new GitStatusHub();
+  logger.debug('Initialized v3 cast output + git status hubs');
 
   // Initialize session monitor with PTY manager
   const sessionMonitor = new SessionMonitor(ptyManager);
@@ -624,7 +623,6 @@ export async function createApp(): Promise<AppInstance> {
   let remoteRegistry: RemoteRegistry | null = null;
   let hqClient: HQClient | null = null;
   let controlDirWatcher: ControlDirWatcher | null = null;
-  let bufferAggregator: BufferAggregator | null = null;
   let remoteBearerToken: string | null = null;
 
   if (config.isHQMode) {
@@ -645,23 +643,17 @@ export async function createApp(): Promise<AppInstance> {
   const authService = new AuthService();
   logger.debug('Initialized authentication service');
 
-  // Initialize buffer aggregator
-  bufferAggregator = new BufferAggregator({
-    terminalManager,
-    remoteRegistry,
-    isHQMode: config.isHQMode,
-  });
-  logger.debug('Initialized buffer aggregator');
-
-  // Initialize WebSocket input handler
-  const websocketInputHandler = new WebSocketInputHandler({
+  // Initialize v3 WebSocket hub (single-socket terminal transport)
+  const wsV3Hub = new WsV3Hub({
     ptyManager,
     terminalManager,
+    castOutputHub,
+    gitStatusHub,
+    sessionMonitor,
     remoteRegistry,
-    authService,
     isHQMode: config.isHQMode,
   });
-  logger.debug('Initialized WebSocket input handler');
+  logger.debug('Initialized WebSocket v3 hub');
 
   // Set up authentication
   const authMiddleware = createAuthMiddleware({
@@ -927,7 +919,6 @@ export async function createApp(): Promise<AppInstance> {
     createSessionRoutes({
       ptyManager,
       terminalManager,
-      streamWatcher,
       remoteRegistry,
       isHQMode: config.isHQMode,
     })
@@ -1034,7 +1025,7 @@ export async function createApp(): Promise<AppInstance> {
     const parsedUrl = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
 
     // Handle WebSocket paths
-    if (parsedUrl.pathname !== '/buffers' && parsedUrl.pathname !== '/ws/input') {
+    if (parsedUrl.pathname !== '/ws') {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
       socket.destroy();
       return;
@@ -1157,36 +1148,14 @@ export async function createApp(): Promise<AppInstance> {
   wss.on('connection', (ws, req) => {
     const wsReq = req as WebSocketRequest;
     const pathname = wsReq.pathname;
-    const searchParams = wsReq.searchParams;
 
     logger.log(`🔌 WebSocket connection to path: ${pathname}`);
     logger.log(`👤 User ID: ${wsReq.userId || 'unknown'}`);
     logger.log(`🔐 Auth method: ${wsReq.authMethod || 'unknown'}`);
 
-    if (pathname === '/buffers') {
-      logger.log('📊 Handling buffer WebSocket connection');
-      // Handle buffer updates WebSocket
-      if (bufferAggregator) {
-        bufferAggregator.handleClientConnection(ws);
-      } else {
-        logger.error('BufferAggregator not initialized for WebSocket connection');
-        ws.close();
-      }
-    } else if (pathname === '/ws/input') {
-      logger.log('⌨️ Handling input WebSocket connection');
-      // Handle input WebSocket
-      const sessionId = searchParams?.get('sessionId');
-
-      if (!sessionId) {
-        logger.error('WebSocket input connection missing sessionId parameter');
-        ws.close();
-        return;
-      }
-
-      // Extract user ID from the authenticated request
-      const userId = wsReq.userId || 'unknown';
-
-      websocketInputHandler.handleConnection(ws, sessionId, userId);
+    if (pathname === '/ws') {
+      logger.log('🧩 Handling v3 WebSocket connection');
+      wsV3Hub.handleClientConnection(ws, wsReq);
     } else {
       logger.error(`❌ Unknown WebSocket path: ${pathname}`);
       ws.close();
@@ -1415,11 +1384,9 @@ export async function createApp(): Promise<AppInstance> {
     configService,
     ptyManager,
     terminalManager,
-    streamWatcher,
     remoteRegistry,
     hqClient,
     controlDirWatcher,
-    bufferAggregator,
     pushNotificationService,
   };
 }

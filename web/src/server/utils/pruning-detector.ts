@@ -4,7 +4,7 @@
  * This module provides a single source of truth for detecting terminal sequences
  * that indicate the terminal buffer should be pruned (cleared). It's used by both:
  * - AsciinemaWriter: Real-time detection during recording
- * - StreamWatcher: Retroactive detection during playback
+ * - CastOutputHub: Retroactive detection during playback/tailing
  *
  * Pruning helps prevent session files from growing indefinitely by identifying
  * points where old terminal content can be safely discarded.

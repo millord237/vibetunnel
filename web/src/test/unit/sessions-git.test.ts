@@ -41,10 +41,6 @@ vi.mock('../../server/services/terminal-manager.js', () => ({
   TerminalManager: vi.fn(),
 }));
 
-vi.mock('../../server/services/stream-watcher.js', () => ({
-  StreamWatcher: vi.fn(),
-}));
-
 vi.mock('../../server/services/remote-registry.js', () => ({
   RemoteRegistry: vi.fn(),
 }));
@@ -100,13 +96,11 @@ describe('Session Creation with Git Info', () => {
     app.use(express.json());
 
     const mockTerminalManager = { getTerminalById: vi.fn() };
-    const mockStreamWatcher = {};
     const mockRemoteRegistry = null;
 
     const config = {
       ptyManager: { createSession: mockCreateSession },
       terminalManager: mockTerminalManager,
-      streamWatcher: mockStreamWatcher,
       remoteRegistry: mockRemoteRegistry,
       isHQMode: false,
     };

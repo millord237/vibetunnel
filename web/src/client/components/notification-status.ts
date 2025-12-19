@@ -1,6 +1,6 @@
 import { html, LitElement } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { notificationEventService } from '../services/notification-event-service.js';
+import { serverEventService } from '../services/server-event-service.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('notification-status');
@@ -30,16 +30,15 @@ export class NotificationStatus extends LitElement {
 
   private initializeComponent(): void {
     // Get initial connection state
-    this.isSSEConnected = notificationEventService.getConnectionStatus();
-    logger.debug('Initial SSE connection status:', this.isSSEConnected);
+    serverEventService.initialize();
+    this.isSSEConnected = serverEventService.getConnectionStatus();
+    logger.debug('Initial WS connection status:', this.isSSEConnected);
 
     // Listen for connection state changes
-    this.connectionStateUnsubscribe = notificationEventService.onConnectionStateChange(
-      (connected) => {
-        logger.log(`SSE connection state changed: ${connected ? 'connected' : 'disconnected'}`);
-        this.isSSEConnected = connected;
-      }
-    );
+    this.connectionStateUnsubscribe = serverEventService.onConnectionStateChange((connected) => {
+      logger.log(`WS connection state changed: ${connected ? 'connected' : 'disconnected'}`);
+      this.isSSEConnected = connected;
+    });
   }
 
   private handleClick(): void {
@@ -47,18 +46,18 @@ export class NotificationStatus extends LitElement {
   }
 
   private getStatusConfig() {
-    // Green when SSE is connected (Mac app notifications are working)
+    // Green when v3 socket is connected.
     if (this.isSSEConnected) {
       return {
         color: 'text-status-success',
-        tooltip: 'Settings (Notifications connected)',
+        tooltip: 'Notifications (Connected)',
       };
     }
 
     // Default color when SSE is not connected
     return {
       color: 'text-muted',
-      tooltip: 'Settings (Notifications disconnected)',
+      tooltip: 'Notifications (Disconnected)',
     };
   }
 
