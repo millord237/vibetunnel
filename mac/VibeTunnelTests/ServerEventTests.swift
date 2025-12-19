@@ -70,6 +70,8 @@ struct ServerEventTests {
         #expect(decoded.duration == nil)
         #expect(decoded.processInfo == nil)
         #expect(decoded.message == nil)
+        #expect(decoded.title == nil)
+        #expect(decoded.body == nil)
         #expect(decoded.timestamp == event.timestamp)
     }
 
@@ -85,6 +87,7 @@ struct ServerEventTests {
         #expect(ServerEventType.commandError.description == "Command Error")
         #expect(ServerEventType.bell.description == "Terminal Bell")
         #expect(ServerEventType.connected.description == "Connected")
+        #expect(ServerEventType.testNotification.description == "Test Notification")
     }
 
     @Test("shouldNotify returns correct values for notification logic")
@@ -98,6 +101,7 @@ struct ServerEventTests {
         #expect(!ServerEventType.commandError.shouldNotify)
         #expect(!ServerEventType.bell.shouldNotify)
         #expect(!ServerEventType.connected.shouldNotify)
+        #expect(!ServerEventType.testNotification.shouldNotify)
     }
 
     // MARK: - Edge Cases

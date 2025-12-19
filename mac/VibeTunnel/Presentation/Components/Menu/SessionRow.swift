@@ -223,7 +223,6 @@ struct SessionRow: View {
                     }
                     .frame(width: 30, height: 16)
                 }
-
             }
             .frame(maxWidth: .infinity)
         }

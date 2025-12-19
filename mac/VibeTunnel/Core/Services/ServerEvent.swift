@@ -2,8 +2,8 @@ import Foundation
 
 /// Types of server events that can be received from the VibeTunnel server.
 ///
-/// `ServerEventType` defines all possible event types that flow through the Server-Sent Events (SSE)
-/// connection between the VibeTunnel server and the macOS app. Each event type corresponds to
+/// `ServerEventType` defines all possible event types that flow through the WebSocket v3 `EVENT`
+/// frames between the VibeTunnel server and the macOS app. Each event type corresponds to
 /// a specific terminal session lifecycle event or user interaction.
 ///
 /// ## Topics
@@ -16,6 +16,7 @@ import Foundation
 /// - ``commandError``: Command failure events
 /// - ``bell``: Terminal bell notifications
 /// - ``connected``: Connection establishment events
+/// - ``testNotification``: Test notification events
 ///
 /// ### Event Properties
 ///
@@ -37,8 +38,11 @@ enum ServerEventType: String, Codable, CaseIterable {
     /// Indicates a terminal bell character was received.
     case bell
 
-    /// Indicates the SSE connection has been established.
+    /// Indicates the WS v3 events stream has been established.
     case connected
+
+    /// Indicates a test notification event from the server.
+    case testNotification = "test-notification"
 
     /// Returns a human-readable description of the event type.
     ///
@@ -58,6 +62,8 @@ enum ServerEventType: String, Codable, CaseIterable {
             "Terminal Bell"
         case .connected:
             "Connected"
+        case .testNotification:
+            "Test Notification"
         }
     }
 
@@ -74,11 +80,13 @@ enum ServerEventType: String, Codable, CaseIterable {
             true
         case .commandFinished, .commandError, .bell, .connected:
             false
+        case .testNotification:
+            false
         }
     }
 }
 
-/// Represents a server event received via Server-Sent Events (SSE).
+/// Represents a server event received via WebSocket v3 `EVENT` frames.
 ///
 /// `ServerEvent` encapsulates all the information about terminal session events that flow
 /// from the VibeTunnel server to the macOS app. Each event carries contextual information
@@ -114,6 +122,8 @@ enum ServerEventType: String, Codable, CaseIterable {
 /// - ``processInfo``: Additional process information
 /// - ``message``: Event message
 /// - ``timestamp``: When the event occurred
+/// - ``title``: Optional title (test notifications)
+/// - ``body``: Optional body (test notifications)
 ///
 /// ### Computed Properties
 ///
@@ -149,6 +159,12 @@ struct ServerEvent: Codable, Identifiable, Equatable {
     /// Optional message providing additional context.
     let message: String?
 
+    /// Optional title (test notifications).
+    let title: String?
+
+    /// Optional body (test notifications).
+    let body: String?
+
     /// When the event occurred.
     let timestamp: Date
 
@@ -173,6 +189,8 @@ struct ServerEvent: Codable, Identifiable, Equatable {
         duration: Int? = nil,
         processInfo: String? = nil,
         message: String? = nil,
+        title: String? = nil,
+        body: String? = nil,
         timestamp: Date = Date())
     {
         self.type = type
@@ -183,6 +201,8 @@ struct ServerEvent: Codable, Identifiable, Equatable {
         self.duration = duration
         self.processInfo = processInfo
         self.message = message
+        self.title = title
+        self.body = body
         self.timestamp = timestamp
     }
 
@@ -349,6 +369,8 @@ struct ServerEvent: Codable, Identifiable, Equatable {
         case duration
         case processInfo
         case message
+        case title
+        case body
         case timestamp
     }
 }

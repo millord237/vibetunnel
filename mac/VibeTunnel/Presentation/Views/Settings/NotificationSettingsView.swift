@@ -14,7 +14,7 @@ struct NotificationSettingsView: View {
 
     @State private var isTestingNotification = false
     @State private var showingPermissionAlert = false
-    @State private var sseConnectionStatus = false
+    @State private var eventStreamConnectionStatus = false
 
     private func updateNotificationPreferences() {
         // Load current preferences from ConfigManager and notify the service
@@ -64,27 +64,27 @@ struct NotificationSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        // SSE Connection Status Row
+                        // Event Stream Connection Status Row
                         HStack(spacing: 6) {
                             Circle()
-                                .fill(self.sseConnectionStatus ? Color.green : Color.red)
+                                .fill(self.eventStreamConnectionStatus ? Color.green : Color.red)
                                 .frame(width: 8, height: 8)
                             Text("Event Stream:")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text(self.sseConnectionStatus ? "Connected" : "Disconnected")
+                            Text(self.eventStreamConnectionStatus ? "Connected" : "Disconnected")
                                 .font(.caption)
-                                .foregroundStyle(self.sseConnectionStatus ? .green : .red)
+                                .foregroundStyle(self.eventStreamConnectionStatus ? .green : .red)
                                 .fontWeight(.medium)
                             Spacer()
                         }
                         .help(
-                            self.sseConnectionStatus
+                            self.eventStreamConnectionStatus
                                 ? "Real-time notification stream is connected"
                                 : "Real-time notification stream is disconnected. Check if the server is running.")
 
                         // Show warning when disconnected
-                        if self.showNotifications, !self.sseConnectionStatus {
+                        if self.showNotifications, !self.eventStreamConnectionStatus {
                             HStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundStyle(.yellow)
@@ -212,12 +212,12 @@ struct NotificationSettingsView: View {
                 self.showNotifications = self.configManager.notificationsEnabled
 
                 // Update initial connection status
-                self.sseConnectionStatus = self.notificationService.isSSEConnected
+                self.eventStreamConnectionStatus = self.notificationService.isEventStreamConnected
             }
             .onReceive(NotificationCenter.default.publisher(for: .notificationServiceConnectionChanged)) { _ in
                 // Update connection status when it changes
-                self.sseConnectionStatus = self.notificationService.isSSEConnected
-                logger.debug("SSE connection status changed: \(self.sseConnectionStatus)")
+                self.eventStreamConnectionStatus = self.notificationService.isEventStreamConnected
+                logger.debug("Event stream connection status changed: \(self.eventStreamConnectionStatus)")
             }
         }
         .alert("Notification Permission Required", isPresented: self.$showingPermissionAlert) {

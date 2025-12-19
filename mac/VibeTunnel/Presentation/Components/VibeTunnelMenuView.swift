@@ -120,7 +120,7 @@ struct VibeTunnelMenuView: View {
 
     private var runningSessions: [(key: String, value: ServerSessionInfo)] {
         self.sessionMonitor.sessions
-            .filter { $0.value.isRunning }
+            .filter(\.value.isRunning)
             .sorted { $0.value.startedAt > $1.value.startedAt }
     }
 

@@ -23,5 +23,6 @@ enum APIEndpoints {
     static let cleanupExited = "/api/cleanup-exited"
 
     // MARK: - WebSocket
+
     static let ws = "/ws"
 }

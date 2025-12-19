@@ -17,13 +17,13 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         NotificationService()
 
     private let logger = Logger(subsystem: "sh.vibetunnel.vibetunnel", category: "NotificationService")
-    private var eventSource: EventSource?
+    private let wsClient = WsV3SocketClient.shared
     private var isConnected = false
     private var recentlyNotifiedSessions = Set<String>()
     private var notificationCleanupTimer: Timer?
 
-    /// Public property to check SSE connection status
-    var isSSEConnected: Bool { self.isConnected }
+    /// Public property to check the WS v3 event stream connection status
+    var isEventStreamConnected: Bool { self.isConnected }
 
     /// Notification types that can be enabled/disabled
     struct NotificationPreferences {
@@ -113,7 +113,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         self.logger.info("🔍 Current UNUserNotificationCenter delegate: \(String(describing: currentDelegate))")
         // Check if notifications are enabled in config
         guard let configProvider, configProvider.notificationsEnabled else {
-            self.logger.info("📴 Notifications are disabled in config, skipping SSE connection")
+            self.logger.info("📴 Notifications are disabled in config, skipping event stream connection")
             return
         }
 
@@ -124,7 +124,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
 
         self.logger.info("🔔 Starting notification service - server is running on port \(serverProvider.port)")
 
-        // Wait for Unix socket to be ready before connecting SSE
+        // Wait for Unix socket to be ready before connecting
         // This ensures the server is fully ready to accept connections
         await MainActor.run {
             self.waitForUnixSocketAndConnect()
@@ -137,7 +137,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
 
         // Check if Unix socket is already connected
         if SharedUnixSocketManager.shared.isConnected {
-            self.logger.info("✅ Unix socket already connected, connecting to SSE immediately")
+            self.logger.info("✅ Unix socket already connected, connecting to event stream immediately")
             self.connect()
             return
         }
@@ -149,7 +149,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             queue: .main)
         { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.logger.info("✅ Unix socket ready notification received, connecting to SSE")
+                self?.logger.info("✅ Unix socket ready notification received, connecting to event stream")
                 self?.connect()
 
                 // Remove observer after first notification to prevent duplicate connections
@@ -259,6 +259,8 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         case .connected:
             // Connected events don't trigger notifications
             return
+        case .testNotification:
+            break
         }
 
         let content = UNMutableNotificationContent()
@@ -306,6 +308,12 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
 
         case .connected:
             return // Already handled above
+
+        case .testNotification:
+            content.title = event.title ?? "Test Notification"
+            content.body = event.body ?? "VibeTunnel test notification"
+            content.categoryIdentifier = "TEST"
+            content.interruptionLevel = .active
         }
 
         // Set sound based on event type
@@ -328,78 +336,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         }
     }
 
-    /// Send a session start notification (legacy method for compatibility)
-    func sendSessionStartNotification(sessionName: String) async {
-        guard self.configProvider?.notificationsEnabled ?? false, self.preferences.sessionStart else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = "Session Started"
-        content.body = sessionName
-        content.sound = self.getNotificationSound()
-        content.categoryIdentifier = "SESSION"
-        content.interruptionLevel = .passive
-
-        self.deliverNotificationWithAutoDismiss(
-            content,
-            identifier: "session-start-\(UUID().uuidString)",
-            dismissAfter: 5.0)
-    }
-
-    /// Send a session exit notification (legacy method for compatibility)
-    func sendSessionExitNotification(sessionName: String, exitCode: Int) async {
-        guard self.configProvider?.notificationsEnabled ?? false, self.preferences.sessionExit else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = "Session Ended"
-        content.body = sessionName
-        content.sound = self.getNotificationSound()
-        content.categoryIdentifier = "SESSION"
-
-        if exitCode != 0 {
-            content.subtitle = "Exit code: \(exitCode)"
-        }
-
-        self.deliverNotification(content, identifier: "session-exit-\(UUID().uuidString)")
-    }
-
-    /// Send a command completion notification (legacy method for compatibility)
-    func sendCommandCompletionNotification(command: String, duration: Int) async {
-        guard self.configProvider?.notificationsEnabled ?? false, self.preferences.commandCompletion else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = "Your Turn"
-        content.body = command
-        content.sound = self.getNotificationSound()
-        content.categoryIdentifier = "COMMAND"
-        content.interruptionLevel = .active
-
-        // Format duration if provided
-        if duration > 0 {
-            let seconds = duration / 1000
-            if seconds < 60 {
-                content.subtitle = "\(seconds)s"
-            } else {
-                let minutes = seconds / 60
-                let remainingSeconds = seconds % 60
-                content.subtitle = "\(minutes)m \(remainingSeconds)s"
-            }
-        }
-
-        self.deliverNotification(content, identifier: "command-\(UUID().uuidString)")
-    }
-
-    /// Send a generic notification
-    func sendGenericNotification(title: String, body: String) async {
-        guard self.configProvider?.notificationsEnabled ?? false else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = self.getNotificationSound()
-        content.categoryIdentifier = "GENERAL"
-
-        self.deliverNotification(content, identifier: "generic-\(UUID().uuidString)")
-    }
+    // Keep notification creation centralized via `sendNotification(for:)`.
 
     /// Send a test notification for debugging and verification
     func sendTestNotification(title: String? = nil, message: String? = nil, sessionId: String? = nil) async {
@@ -509,170 +446,80 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             return
         }
 
-        if serverProvider.authMode != "none", serverProvider.localAuthToken == nil {
-            self.logger
-                .error("No auth token available for notification service in auth mode '\(serverProvider.authMode)'")
-            return
+        self.wsClient.onConnectionStateChange = { [weak self] state in
+            guard let self else { return }
+            self.isConnected = (state == .connected)
+            NotificationCenter.default.post(name: .notificationServiceConnectionChanged, object: nil)
         }
 
-        let eventsURL = "http://localhost:\(serverProvider.port)/api/events"
-        // Show full URL for debugging SSE connection issues
-        self.logger.info("📡 Attempting to connect to SSE endpoint: \(eventsURL, privacy: .public)")
-        guard let url = URL(string: eventsURL) else {
-            self.logger.error("Invalid events URL: \(eventsURL)")
-            return
-        }
-
-        // Create headers
-        var headers: [String: String] = [
-            "Accept": "text/event-stream",
-            "Cache-Control": "no-cache",
-        ]
-
-        // Add authorization header if auth token is available.
-        // When auth mode is "none", there's no token, and that's okay.
-        if let authToken = serverProvider.localAuthToken {
-            headers["Authorization"] = "Bearer \(authToken)"
-            // Show token prefix for debugging (first 10 chars only for security)
-            let tokenPrefix = String(authToken.prefix(10))
-            self.logger.info("🔑 Using auth token for SSE connection: \(tokenPrefix, privacy: .public)...")
-        } else {
-            self.logger.info("🔓 Connecting to SSE without an auth token (auth mode: '\(serverProvider.authMode)')")
-        }
-
-        // Add custom header to indicate this is the Mac app
-        headers["X-VibeTunnel-Client"] = "mac-app"
-
-        self.eventSource = EventSource(url: url, headers: headers)
-
-        self.eventSource?.onOpen = { [weak self] in
+        self.wsClient.onServerEvent = { [weak self] event, _ in
+            guard let self else { return }
             Task { @MainActor in
-                guard let self else { return }
-                self.logger.info("✅ Connected to notification event stream")
-                self.isConnected = true
-                // Post notification for UI update
-                NotificationCenter.default.post(name: .notificationServiceConnectionChanged, object: nil)
+                self.handleServerEvent(event)
             }
         }
 
-        self.eventSource?.onError = { [weak self] error in
-            Task { @MainActor in
-                guard let self else { return }
-                if let error {
-                    self.logger.error("❌ EventSource error: \(error)")
-                }
-                self.isConnected = false
-                // Post notification for UI update
-                NotificationCenter.default.post(name: .notificationServiceConnectionChanged, object: nil)
-                // Don't reconnect here - let server state changes trigger reconnection
-            }
-        }
+        self.logger.info("📡 Connecting to WS v3 events stream on port \(serverProvider.port, privacy: .public)")
+        self.wsClient.connect(
+            serverPort: serverProvider.port,
+            authMode: serverProvider.authMode,
+            token: serverProvider.localAuthToken)
 
-        self.eventSource?.onMessage = { [weak self] event in
-            Task { @MainActor in
-                guard let self else { return }
-                self.logger
-                    .info(
-                        "🎯 EventSource onMessage fired! Event type: \(event.event ?? "default", privacy: .public), Has data: \(event.data != nil, privacy: .public)")
-                await self.handleEvent(event)
-            }
-        }
-
-        self.eventSource?.connect()
+        self.wsClient.subscribeGlobalEvents()
     }
 
     private func disconnect() {
-        self.eventSource?.disconnect()
-        self.eventSource = nil
+        self.wsClient.disconnect()
         self.isConnected = false
         self.logger.info("Disconnected from notification service")
         // Post notification for UI update
         NotificationCenter.default.post(name: .notificationServiceConnectionChanged, object: nil)
     }
 
-    private func handleEvent(_ event: Event) async {
-        guard let data = event.data else {
-            self.logger.warning("Received event with no data")
-            return
-        }
-
-        // Log event details for debugging
-        self.logger.debug("📨 Received SSE event - Type: \(event.event ?? "message"), ID: \(event.id ?? "none")")
-        self.logger.debug("📨 Event data: \(data)")
-
-        do {
-            guard let jsonData = data.data(using: .utf8) else {
-                self.logger.error("Failed to convert event data to UTF-8")
-                return
+    private func handleServerEvent(_ event: ServerEvent) {
+        switch event.type {
+        case .sessionStart:
+            self.logger.info("🚀 Processing session-start event")
+            if self.configProvider?.notificationsEnabled ?? false, self.preferences.sessionStart {
+                self.handleSessionStart(event)
             }
-
-            let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] ?? [:]
-
-            guard let type = json["type"] as? String else {
-                self.logger.error("Event missing type field")
-                return
+        case .sessionExit:
+            self.logger.info("🏁 Processing session-exit event")
+            if self.configProvider?.notificationsEnabled ?? false, self.preferences.sessionExit {
+                self.handleSessionExit(event)
             }
-
-            // Process based on event type and user preferences
-            switch type {
-            case "session-start":
-                self.logger.info("🚀 Processing session-start event")
-                if self.configProvider?.notificationsEnabled ?? false, self.preferences.sessionStart {
-                    self.handleSessionStart(json)
-                } else {
-                    self.logger.debug("Session start notifications disabled")
-                }
-            case "session-exit":
-                self.logger.info("🏁 Processing session-exit event")
-                if self.configProvider?.notificationsEnabled ?? false, self.preferences.sessionExit {
-                    self.handleSessionExit(json)
-                } else {
-                    self.logger.debug("Session exit notifications disabled")
-                }
-            case "command-finished":
-                self.logger.info("✅ Processing command-finished event")
-                if self.configProvider?.notificationsEnabled ?? false, self.preferences.commandCompletion {
-                    self.handleCommandFinished(json)
-                } else {
-                    self.logger.debug("Command completion notifications disabled")
-                }
-            case "command-error":
-                self.logger.info("❌ Processing command-error event")
-                if self.configProvider?.notificationsEnabled ?? false, self.preferences.commandError {
-                    self.handleCommandError(json)
-                } else {
-                    self.logger.debug("Command error notifications disabled")
-                }
-            case "bell":
-                self.logger.info("🔔 Processing bell event")
-                if self.configProvider?.notificationsEnabled ?? false, self.preferences.bell {
-                    self.handleBell(json)
-                } else {
-                    self.logger.debug("Bell notifications disabled")
-                }
-            case "connected":
-                self.logger.info("🔗 Received connected event from server")
-            case "test-notification":
-                self.logger.info("🧪 Processing test-notification event")
-                self.handleTestNotification(json)
-            // No notification for connected events
-            default:
-                self.logger.warning("Unknown event type: \(type)")
+        case .commandFinished:
+            self.logger.info("✅ Processing command-finished event")
+            if self.configProvider?.notificationsEnabled ?? false, self.preferences.commandCompletion {
+                self.handleCommandFinished(event)
             }
-        } catch {
-            self.logger.error("Failed to parse legacy event data: \(error)")
+        case .commandError:
+            self.logger.info("❌ Processing command-error event")
+            if self.configProvider?.notificationsEnabled ?? false, self.preferences.commandError {
+                self.handleCommandError(event)
+            }
+        case .bell:
+            self.logger.info("🔔 Processing bell event")
+            if self.configProvider?.notificationsEnabled ?? false, self.preferences.bell {
+                self.handleBell(event)
+            }
+        case .connected:
+            self.logger.info("🔗 Received connected event from server")
+        case .testNotification:
+            self.logger.info("🧪 Processing test-notification event")
+            self.handleTestNotification(event)
         }
     }
 
     // MARK: - Event Handlers
 
-    private func handleSessionStart(_ json: [String: Any]) {
-        guard let sessionId = json["sessionId"] as? String else {
+    private func handleSessionStart(_ event: ServerEvent) {
+        guard let sessionId = event.sessionId else {
             self.logger.error("Session start event missing sessionId")
             return
         }
 
-        let sessionName = json["sessionName"] as? String ?? "Terminal Session"
+        let sessionName = event.sessionName ?? "Terminal Session"
 
         // Prevent duplicate notifications
         if self.recentlyNotifiedSessions.contains("start-\(sessionId)") {
@@ -696,14 +543,14 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         self.scheduleNotificationCleanup(for: "start-\(sessionId)", after: 30)
     }
 
-    private func handleSessionExit(_ json: [String: Any]) {
-        guard let sessionId = json["sessionId"] as? String else {
+    private func handleSessionExit(_ event: ServerEvent) {
+        guard let sessionId = event.sessionId else {
             self.logger.error("Session exit event missing sessionId")
             return
         }
 
-        let sessionName = json["sessionName"] as? String ?? "Terminal Session"
-        let exitCode = json["exitCode"] as? Int ?? 0
+        let sessionName = event.sessionName ?? "Terminal Session"
+        let exitCode = event.exitCode ?? 0
 
         // Prevent duplicate notifications
         if self.recentlyNotifiedSessions.contains("exit-\(sessionId)") {
@@ -730,9 +577,9 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         self.scheduleNotificationCleanup(for: "exit-\(sessionId)", after: 30)
     }
 
-    private func handleCommandFinished(_ json: [String: Any]) {
-        let command = json["command"] as? String ?? "Command"
-        let duration = json["duration"] as? Int ?? 0
+    private func handleCommandFinished(_ event: ServerEvent) {
+        let command = event.command ?? "Command"
+        let duration = event.duration ?? 0
 
         let content = UNMutableNotificationContent()
         content.title = "Your Turn"
@@ -753,16 +600,16 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             }
         }
 
-        if let sessionId = json["sessionId"] as? String {
+        if let sessionId = event.sessionId {
             content.userInfo = ["sessionId": sessionId, "type": "command-finished"]
         }
 
         self.deliverNotification(content, identifier: "command-\(UUID().uuidString)")
     }
 
-    private func handleCommandError(_ json: [String: Any]) {
-        let command = json["command"] as? String ?? "Command"
-        let exitCode = json["exitCode"] as? Int ?? 1
+    private func handleCommandError(_ event: ServerEvent) {
+        let command = event.command ?? "Command"
+        let exitCode = event.exitCode ?? 1
 
         let content = UNMutableNotificationContent()
         content.title = "Command Failed"
@@ -771,20 +618,20 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         content.categoryIdentifier = "COMMAND"
         content.subtitle = "Exit code: \(exitCode)"
 
-        if let sessionId = json["sessionId"] as? String {
+        if let sessionId = event.sessionId {
             content.userInfo = ["sessionId": sessionId, "type": "command-error", "exitCode": exitCode]
         }
 
         self.deliverNotification(content, identifier: "error-\(UUID().uuidString)")
     }
 
-    private func handleBell(_ json: [String: Any]) {
-        guard let sessionId = json["sessionId"] as? String else {
+    private func handleBell(_ event: ServerEvent) {
+        guard let sessionId = event.sessionId else {
             self.logger.error("Bell event missing sessionId")
             return
         }
 
-        let sessionName = json["sessionName"] as? String ?? "Terminal"
+        let sessionName = event.sessionName ?? "Terminal"
 
         let content = UNMutableNotificationContent()
         content.title = "Terminal Bell"
@@ -793,19 +640,17 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         content.categoryIdentifier = "BELL"
         content.userInfo = ["sessionId": sessionId, "type": "bell"]
 
-        if let message = json["message"] as? String {
+        if let message = event.message {
             content.subtitle = message
         }
 
         self.deliverNotification(content, identifier: "bell-\(sessionId)-\(Date().timeIntervalSince1970)")
     }
 
-    private func handleTestNotification(_ json: [String: Any]) {
-        // Debug: Show full test notification data
-        self.logger.info("🧪 Handling test notification from server - JSON: \(json, privacy: .public)")
-        let title = json["title"] as? String ?? "VibeTunnel Test"
-        let body = json["body"] as? String ?? "Server-side notifications are working correctly!"
-        let message = json["message"] as? String
+    private func handleTestNotification(_ event: ServerEvent) {
+        let title = event.title ?? "VibeTunnel Test"
+        let body = event.body ?? "Server-side notifications are working correctly!"
+        let message = event.message
 
         let content = UNMutableNotificationContent()
         content.title = title
@@ -817,7 +662,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         content.categoryIdentifier = "TEST"
         content.userInfo = ["type": "test-notification"]
 
-        self.logger.info("📤 Delivering test notification: \(title) - \(body)")
+        self.logger.info("📤 Delivering test notification: \(title, privacy: .public) - \(body, privacy: .public)")
         self.deliverNotification(content, identifier: "test-\(UUID().uuidString)")
     }
 
@@ -874,9 +719,9 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
             return
         }
 
-        // If not connected to SSE, try to connect first
+        // If not connected to the event stream, try to connect first
         if !self.isConnected {
-            self.logger.warning("⚠️ Not connected to SSE endpoint, attempting to connect...")
+            self.logger.warning("⚠️ Not connected to event stream, attempting to connect...")
             self.connect()
             // Give it a moment to connect
             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
@@ -885,7 +730,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
         // Log server info
         self.logger
             .info(
-                "Server info - Port: \(self.serverProvider?.port ?? "unknown"), Running: \(self.serverProvider?.isRunning ?? false), SSE Connected: \(self.isConnected)")
+                "Server info - Port: \(self.serverProvider?.port ?? "unknown"), Running: \(self.serverProvider?.isRunning ?? false), Event Stream Connected: \(self.isConnected)")
 
         guard let url = serverProvider?.buildURL(endpoint: "/api/test-notification") else {
             self.logger.error("❌ Failed to build test notification URL")
@@ -932,7 +777,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
 
     deinit {
         // Note: We can't call disconnect() here because it's @MainActor isolated
-        // The cleanup will happen when the EventSource is deallocated
+        // Cleanup is handled via stop() / server lifecycle
         // NotificationCenter observers are automatically removed on deinit in modern Swift
     }
 

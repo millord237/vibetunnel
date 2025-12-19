@@ -118,11 +118,11 @@ final class SessionService {
             throw SessionServiceError.serverNotRunning
         }
 
-        let body = ["text": text]
-        try await serverManager.performVoidRequest(
-            endpoint: "\(APIEndpoints.sessions)/\(sessionId)/input",
-            method: "POST",
-            body: body)
+        WsV3SocketClient.shared.connect(
+            serverPort: self.serverManager.port,
+            authMode: self.serverManager.authMode,
+            token: self.serverManager.localAuthToken)
+        WsV3SocketClient.shared.sendInputText(sessionId: sessionId, text: text)
     }
 
     /// Send a key command to a session
@@ -131,11 +131,11 @@ final class SessionService {
             throw SessionServiceError.serverNotRunning
         }
 
-        let body = ["key": key]
-        try await serverManager.performVoidRequest(
-            endpoint: "\(APIEndpoints.sessions)/\(sessionId)/input",
-            method: "POST",
-            body: body)
+        WsV3SocketClient.shared.connect(
+            serverPort: self.serverManager.port,
+            authMode: self.serverManager.authMode,
+            token: self.serverManager.localAuthToken)
+        WsV3SocketClient.shared.sendInputKey(sessionId: sessionId, key: key)
     }
 
     /// Create a new session
