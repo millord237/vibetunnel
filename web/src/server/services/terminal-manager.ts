@@ -221,6 +221,79 @@ export class TerminalManager {
     return sessionTerminal.terminal;
   }
 
+  private async buildFallbackSnapshot(sessionId: string): Promise<BufferSnapshot> {
+    const streamPath = path.join(this.controlDir, sessionId, 'stdout');
+    const emptySnapshot = (): BufferSnapshot => ({
+      cols: 1,
+      rows: 1,
+      viewportY: 0,
+      cursorX: 0,
+      cursorY: 0,
+      cells: [[{ char: ' ', width: 1 }]],
+    });
+
+    if (!fs.existsSync(streamPath)) {
+      return emptySnapshot();
+    }
+
+    let content = '';
+    try {
+      content = await fs.promises.readFile(streamPath, 'utf8');
+    } catch (error) {
+      logger.error(`Failed to read fallback stream for ${truncateForLog(sessionId)}:`, error);
+      return emptySnapshot();
+    }
+
+    if (!content) {
+      return emptySnapshot();
+    }
+
+    const MAX_CHARS = 1024 * 1024;
+    if (content.length > MAX_CHARS) {
+      content = content.slice(-MAX_CHARS);
+    }
+
+    let output = '';
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line);
+        if (Array.isArray(parsed) && parsed.length >= 3 && parsed[1] === 'o') {
+          output += String(parsed[2]);
+        }
+      } catch {
+        // ignore malformed lines
+      }
+    }
+
+    if (!output) {
+      return emptySnapshot();
+    }
+
+    const normalized = output.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const ansiPattern = new RegExp('\\u001b\\[[0-9;?]*[a-zA-Z]', 'g');
+    const stripped = normalized.replace(ansiPattern, '');
+    const lines = stripped.split('\n');
+    const cols = Math.max(1, ...lines.map((line) => Array.from(line).length));
+
+    const cells: BufferCell[][] = lines.map((line) => {
+      const chars = Array.from(line);
+      if (chars.length === 0) {
+        return [{ char: ' ', width: 1 }];
+      }
+      return chars.map((char) => ({ char, width: 1 }));
+    });
+
+    return {
+      cols,
+      rows: cells.length,
+      viewportY: 0,
+      cursorX: 0,
+      cursorY: 0,
+      cells,
+    };
+  }
+
   /**
    * Watch stream file for changes
    */
@@ -606,17 +679,33 @@ export class TerminalManager {
    */
   async getBufferSnapshot(sessionId: string): Promise<BufferSnapshot> {
     const startTime = Date.now();
-    const terminal = await this.getTerminal(sessionId);
+    let terminal: GhosttyTerminal;
+    try {
+      terminal = await this.getTerminal(sessionId);
+    } catch (error) {
+      logger.error(`Failed to init terminal for snapshot ${truncateForLog(sessionId)}:`, error);
+      return this.buildFallbackSnapshot(sessionId);
+    }
 
-    terminal.update();
+    try {
+      terminal.update();
+    } catch (error) {
+      logger.error(`Failed to update terminal for snapshot ${truncateForLog(sessionId)}:`, error);
+      return this.buildFallbackSnapshot(sessionId);
+    }
     const cols = terminal.cols;
     const rows = terminal.rows;
     const viewport = terminal.getViewport();
     const cursor = terminal.getCursor();
-    const colors = terminal.getColors() as unknown as {
-      foreground: { r: number; g: number; b: number };
-      background: { r: number; g: number; b: number };
-    };
+    const colors = terminal.getColors() as
+      | {
+          foreground: { r: number; g: number; b: number };
+          background: { r: number; g: number; b: number };
+        }
+      | undefined;
+    if (!colors?.foreground || !colors?.background) {
+      return this.buildFallbackSnapshot(sessionId);
+    }
 
     const defaultFg =
       (colors.foreground.r << 16) | (colors.foreground.g << 8) | colors.foreground.b;
@@ -1136,7 +1225,11 @@ export class TerminalManager {
     listener: BufferChangeListener
   ): Promise<() => void> {
     // Ensure terminal exists and is watching
-    await this.getTerminal(sessionId);
+    try {
+      await this.getTerminal(sessionId);
+    } catch (error) {
+      logger.error(`Failed to init terminal for subscription ${truncateForLog(sessionId)}:`, error);
+    }
 
     if (!this.bufferListeners.has(sessionId)) {
       this.bufferListeners.set(sessionId, new Set());
