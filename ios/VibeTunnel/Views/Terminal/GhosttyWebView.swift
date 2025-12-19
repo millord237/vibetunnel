@@ -74,9 +74,9 @@ struct GhosttyWebView: UIViewRepresentable {
         func loadTerminal() {
             guard let webView else { return }
 
-            let themeJSON = makeThemeJSON(parent.theme)
-            let fontFamilyJSON = makeFontFamilyJSON()
-            let disableInput = parent.disableInput ? "true" : "false"
+            let themeJSON = self.makeThemeJSON(self.parent.theme)
+            let fontFamilyJSON = self.makeFontFamilyJSON()
+            let disableInput = self.parent.disableInput ? "true" : "false"
 
             let html = """
             <!DOCTYPE html>
@@ -238,7 +238,7 @@ struct GhosttyWebView: UIViewRepresentable {
                 withExtension: "js",
                 subdirectory: "ghostty")
             else {
-                logger.error("ghostty-web.js missing from bundle")
+                self.logger.error("ghostty-web.js missing from bundle")
                 return
             }
 
@@ -254,7 +254,7 @@ struct GhosttyWebView: UIViewRepresentable {
             switch message.name {
             case "terminalInput":
                 if let data = message.body as? String {
-                    parent.onInput?(data)
+                    self.parent.onInput?(data)
                 }
 
             case "terminalResize":
@@ -262,23 +262,22 @@ struct GhosttyWebView: UIViewRepresentable {
                    let cols = dict["cols"] as? Int,
                    let rows = dict["rows"] as? Int
                 {
-                    parent.onResize?(cols, rows)
+                    self.parent.onResize?(cols, rows)
                 }
 
             case "terminalScroll":
                 if let dict = message.body as? [String: Any],
                    let atBottom = dict["atBottom"] as? Bool
                 {
-                    parent.onScroll?(atBottom)
-                    parent.viewModel?.updateScrollState(isAtBottom: atBottom)
+                    self.parent.viewModel?.updateScrollState(isAtBottom: atBottom)
                 }
 
             case "terminalReady":
-                handleTerminalReady()
+                self.handleTerminalReady()
 
             case "terminalLog":
                 if let log = message.body as? String {
-                    logger.debug(log)
+                    self.logger.debug(log)
                 }
 
             default:
@@ -287,76 +286,77 @@ struct GhosttyWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
-            logger.info("Ghostty terminal page loaded")
+            self.logger.info("Ghostty terminal page loaded")
         }
 
         func updateTerminalSize(_ size: TerminalSize?) {
             guard let size else { return }
-            if size == lastTerminalSize { return }
-            lastTerminalSize = size
+            if size == self.lastTerminalSize { return }
+            self.lastTerminalSize = size
 
-            if isReady {
-                setTerminalSize(cols: size.cols, rows: size.rows)
+            if self.isReady {
+                self.setTerminalSize(cols: size.cols, rows: size.rows)
             } else {
-                pendingTerminalSize = size
+                self.pendingTerminalSize = size
             }
         }
 
         func handleTerminalReady() {
-            isReady = true
+            self.isReady = true
             if let size = pendingTerminalSize {
-                setTerminalSize(cols: size.cols, rows: size.rows)
-                pendingTerminalSize = nil
+                self.setTerminalSize(cols: size.cols, rows: size.rows)
+                self.pendingTerminalSize = nil
             }
         }
 
         func updateFontSize(_ size: CGFloat) {
-            webView?.evaluateJavaScript("window.ghosttyAPI.updateFontSize(\(size))")
+            self.webView?.evaluateJavaScript("window.ghosttyAPI.updateFontSize(\(size))")
         }
 
         func updateTheme(_ theme: TerminalTheme) {
-            let themeJSON = makeThemeJSON(theme)
-            webView?.evaluateJavaScript("window.ghosttyAPI.updateTheme(\(themeJSON))")
+            let themeJSON = self.makeThemeJSON(theme)
+            self.webView?.evaluateJavaScript("window.ghosttyAPI.updateTheme(\(themeJSON))")
         }
 
         func requestFit() {
-            webView?.evaluateJavaScript("window.ghosttyAPI.resize()")
+            self.webView?.evaluateJavaScript("window.ghosttyAPI.resize()")
         }
 
         private func setTerminalSize(cols: Int, rows: Int) {
-            webView?.evaluateJavaScript("window.ghosttyAPI.setTerminalSize(\(cols), \(rows))")
+            self.webView?.evaluateJavaScript("window.ghosttyAPI.setTerminalSize(\(cols), \(rows))")
         }
 
         func feedData(_ data: String) {
-            let followCursor = parent.viewModel?.isAutoScrollEnabled ?? true
+            let followCursor = self.parent.viewModel?.isAutoScrollEnabled ?? true
             guard let payload = jsonString(data) else { return }
-            webView?.evaluateJavaScript("window.ghosttyAPI.writeToTerminal(\(payload), \(followCursor ? "true" : "false"))")
+            self.webView?
+                .evaluateJavaScript("window.ghosttyAPI.writeToTerminal(\(payload), \(followCursor ? "true" : "false"))")
         }
 
         func updateBuffer(from snapshot: BufferSnapshot) {
-            let result = bufferRenderer.render(from: snapshot)
+            let result = self.bufferRenderer.render(from: snapshot)
             if result.resized {
-                setTerminalSize(cols: result.cols, rows: result.rows)
+                self.setTerminalSize(cols: result.cols, rows: result.rows)
             }
             if !result.ansi.isEmpty {
-                feedData(result.ansi)
+                self.feedData(result.ansi)
             }
         }
 
         func scrollToBottom() {
-            webView?.evaluateJavaScript("window.ghosttyAPI.scrollToBottom()")
+            self.webView?.evaluateJavaScript("window.ghosttyAPI.scrollToBottom()")
         }
 
         func clear() {
-            webView?.evaluateJavaScript("window.ghosttyAPI.clear()")
+            self.webView?.evaluateJavaScript("window.ghosttyAPI.clear()")
         }
 
         func setMaxWidth(_ maxWidth: Int) {
-            logger.info("Max width set to: \(maxWidth == 0 ? "unlimited" : "\(maxWidth) columns")")
+            self.logger.info("Max width set to: \(maxWidth == 0 ? "unlimited" : "\(maxWidth) columns")")
         }
 
         func getBufferContent() -> String? {
-            bufferRenderer.bufferContent()
+            self.bufferRenderer.bufferContent()
         }
 
         private func makeThemeJSON(_ theme: TerminalTheme) -> String {
@@ -383,12 +383,12 @@ struct GhosttyWebView: UIViewRepresentable {
                 "brightWhite": theme.brightWhite.hex,
             ]
 
-            return jsonString(themeDict) ?? "{}"
+            return self.jsonString(themeDict) ?? "{}"
         }
 
         private func makeFontFamilyJSON() -> String {
             let fontFamily = "\(Theme.Typography.terminalFont), \(Theme.Typography.terminalFontFallback), monospace"
-            return jsonString(fontFamily) ?? "\"monospace\""
+            return self.jsonString(fontFamily) ?? "\"monospace\""
         }
 
         private func jsonString(_ value: Any) -> String? {

@@ -201,12 +201,12 @@ struct CastTerminalView: View {
             onResize: nil,
             viewModel: nil,
             disableInput: true,
-            terminalSize: terminalSize,
+            terminalSize: self.terminalSize,
             onReady: { coordinator in
-                viewModel.onTerminalOutput = { [weak coordinator] data in
+                self.viewModel.onTerminalOutput = { [weak coordinator] data in
                     coordinator?.feedData(data)
                 }
-                viewModel.onTerminalClear = { [weak coordinator] in
+                self.viewModel.onTerminalClear = { [weak coordinator] in
                     coordinator?.clear()
                 }
             })

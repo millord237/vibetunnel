@@ -533,7 +533,7 @@ struct TerminalView: View {
                 rows: self.viewModel.terminalRows)
             : nil
 
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             GhosttyWebView(
                 fontSize: self.$fontSize,
                 theme: self.selectedTheme,
@@ -546,19 +546,19 @@ struct TerminalView: View {
                 viewModel: self.viewModel,
                 disableInput: !self.session.isRunning,
                 terminalSize: terminalSize)
-            .id(self.viewModel.terminalViewId)
-            .background(self.selectedTheme.background)
-            .focused(self.$isInputFocused)
-            .overlay(
-                ScrollToBottomButton(
-                    isVisible: self.showScrollToBottom)
-                {
-                    self.viewModel.scrollToBottom()
-                    self.showScrollToBottom = false
-                }
-                .padding(.bottom, Theme.Spacing.large)
-                .padding(.leading, Theme.Spacing.large),
-                alignment: .bottomLeading)
+                .id(self.viewModel.terminalViewId)
+                .background(self.selectedTheme.background)
+                .focused(self.$isInputFocused)
+                .overlay(
+                    ScrollToBottomButton(
+                        isVisible: self.showScrollToBottom)
+                    {
+                        self.viewModel.scrollToBottom()
+                        self.showScrollToBottom = false
+                    }
+                    .padding(.bottom, Theme.Spacing.large)
+                    .padding(.leading, Theme.Spacing.large),
+                    alignment: .bottomLeading)
 
             // Keyboard toolbar
             if self.keyboardHeight > 0 {
@@ -903,7 +903,7 @@ class TerminalViewModel {
 
     func getBufferContent() -> String? {
         // Get the current terminal buffer content
-        terminalCoordinator?.getBufferContent()
+        self.terminalCoordinator?.getBufferContent()
     }
 
     @MainActor
@@ -933,7 +933,7 @@ class TerminalViewModel {
         self.isAutoScrollEnabled = true
         self.isAtBottom = true
         // The actual scrolling is handled by the terminal coordinator
-        terminalCoordinator?.scrollToBottom()
+        self.terminalCoordinator?.scrollToBottom()
     }
 
     func updateScrollState(isAtBottom: Bool) {
@@ -970,7 +970,7 @@ class TerminalViewModel {
         }
 
         // Update the terminal coordinator if using constrained width
-        terminalCoordinator?.setMaxWidth(maxWidth)
+        self.terminalCoordinator?.setMaxWidth(maxWidth)
     }
 }
 

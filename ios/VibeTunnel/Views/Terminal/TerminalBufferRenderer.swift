@@ -14,11 +14,11 @@ struct TerminalBufferRenderer {
     private var currentRows = 0
 
     mutating func render(from snapshot: BufferSnapshot) -> TerminalBufferRenderOutput {
-        let resized = snapshot.cols != currentCols || snapshot.rows != currentRows
+        let resized = snapshot.cols != self.currentCols || snapshot.rows != self.currentRows
         if resized {
-            currentCols = snapshot.cols
-            currentRows = snapshot.rows
-            isFirstUpdate = true
+            self.currentCols = snapshot.cols
+            self.currentRows = snapshot.rows
+            self.isFirstUpdate = true
         }
 
         let viewportChanged = previousSnapshot?.viewportY != snapshot.viewportY
@@ -26,17 +26,17 @@ struct TerminalBufferRenderer {
 
         if viewportChanged, let previousSnapshot {
             let delta = snapshot.viewportY - previousSnapshot.viewportY
-            output += viewportScrollCommands(delta: delta, rows: snapshot.rows)
+            output += self.viewportScrollCommands(delta: delta, rows: snapshot.rows)
         }
 
         let ansiData: String
-        if isFirstUpdate || previousSnapshot == nil || viewportChanged {
-            ansiData = convertBufferToOptimizedANSI(snapshot, clearScreen: isFirstUpdate)
-            isFirstUpdate = false
+        if self.isFirstUpdate || previousSnapshot == nil || viewportChanged {
+            ansiData = self.convertBufferToOptimizedANSI(snapshot, clearScreen: self.isFirstUpdate)
+            self.isFirstUpdate = false
         } else if let previousSnapshot {
-            ansiData = generateIncrementalUpdate(from: previousSnapshot, to: snapshot)
+            ansiData = self.generateIncrementalUpdate(from: previousSnapshot, to: snapshot)
         } else {
-            ansiData = convertBufferToOptimizedANSI(snapshot, clearScreen: false)
+            ansiData = self.convertBufferToOptimizedANSI(snapshot, clearScreen: false)
         }
 
         output += ansiData
@@ -202,7 +202,7 @@ struct TerminalBufferRenderer {
             let oldRow = rowIndex < oldSnapshot.cells.count ? oldSnapshot.cells[rowIndex] : []
             let newRow = rowIndex < newSnapshot.cells.count ? newSnapshot.cells[rowIndex] : []
 
-            if rowsAreIdentical(oldRow, newRow) {
+            if self.rowsAreIdentical(oldRow, newRow) {
                 continue
             }
 
@@ -217,8 +217,8 @@ struct TerminalBufferRenderer {
             } else if oldIsEmpty, !newIsEmpty {
                 output += "\u{001B}[\(rowIndex + 1);1H"
                 for cell in newRow {
-                    updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
-                    updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
+                    self.updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
+                    self.updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
                     output += cell.char
                 }
                 continue
@@ -232,7 +232,7 @@ struct TerminalBufferRenderer {
                 let oldCell = colIndex < oldRow.count ? oldRow[colIndex] : nil
                 let newCell = colIndex < newRow.count ? newRow[colIndex] : nil
 
-                if !cellsAreIdentical(oldCell, newCell) {
+                if !self.cellsAreIdentical(oldCell, newCell) {
                     if currentSegmentStart == -1 {
                         currentSegmentStart = colIndex
                     }
@@ -282,8 +282,8 @@ struct TerminalBufferRenderer {
                             }
                         }
 
-                        updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
-                        updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
+                        self.updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
+                        self.updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
                     }
 
                     output += cell.char
@@ -298,8 +298,8 @@ struct TerminalBufferRenderer {
 
                 let row = newSnapshot.cells[rowIndex]
                 for cell in row {
-                    updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
-                    updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
+                    self.updateColorIfNeeded(&output, &currentFg, cell.fg, isBackground: false)
+                    self.updateColorIfNeeded(&output, &currentBg, cell.bg, isBackground: true)
                     output += cell.char
                 }
             }
@@ -315,7 +315,7 @@ struct TerminalBufferRenderer {
     private func rowsAreIdentical(_ row1: [BufferCell], _ row2: [BufferCell]) -> Bool {
         guard row1.count == row2.count else { return false }
 
-        for i in 0..<row1.count where !cellsAreIdentical(row1[i], row2[i]) {
+        for i in 0..<row1.count where !self.cellsAreIdentical(row1[i], row2[i]) {
             return false
         }
         return true
