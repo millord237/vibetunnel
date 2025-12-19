@@ -225,7 +225,7 @@ final class AuthenticationService: ObservableObject {
         return ["Authorization": "Bearer \(token)"]
     }
 
-    /// Get token for query parameters (used for SSE)
+    /// Get token for query parameters (used for WebSocket auth)
     func getTokenForQuery() -> String? {
         self.authToken
     }

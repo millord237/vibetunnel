@@ -211,6 +211,73 @@ enum TestFixtures {
         return messageData
     }
 
+    /// Creates a WebSocket v3 frame
+    ///
+    /// Frame:
+    /// u16 magic "VT" LE, u8 version=3, u8 type, u32 sessionIdLen LE, sessionId, u32 payloadLen LE, payload
+    static func wrappedV3Frame(sessionId: String, type: UInt8, payload: Data) -> Data {
+        var out = Data()
+
+        var magic: UInt16 = 0x5654
+        magic = magic.littleEndian
+        out.append(Data(bytes: &magic, count: 2))
+        out.append(0x03)
+        out.append(type)
+
+        let sid = sessionId.data(using: .utf8)!
+        var sidLen = UInt32(sid.count).littleEndian
+        out.append(Data(bytes: &sidLen, count: 4))
+        out.append(sid)
+
+        var payloadLen = UInt32(payload.count).littleEndian
+        out.append(Data(bytes: &payloadLen, count: 4))
+        out.append(payload)
+
+        return out
+    }
+
+    static func wrappedV3SnapshotMessage(sessionId: String, bufferData: Data) -> Data {
+        // v3 type 21 = SNAPSHOT_VT
+        self.wrappedV3Frame(sessionId: sessionId, type: 21, payload: bufferData)
+    }
+
+    static func decodeV3Frame(_ data: Data) -> (type: UInt8, sessionId: String, payload: Data)? {
+        guard data.count >= 2 + 1 + 1 + 4 + 4 else { return nil }
+        var offset = 0
+
+        let magic = data.withUnsafeBytes { bytes in
+            bytes.loadUnaligned(fromByteOffset: offset, as: UInt16.self).littleEndian
+        }
+        offset += 2
+        guard magic == 0x5654 else { return nil }
+
+        let version = data[offset]
+        offset += 1
+        guard version == 0x03 else { return nil }
+
+        let type = data[offset]
+        offset += 1
+
+        let sessionLen = data.withUnsafeBytes { bytes in
+            bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian
+        }
+        offset += 4
+
+        guard data.count >= offset + Int(sessionLen) + 4 else { return nil }
+        let sessionIdData = data.subdata(in: offset..<(offset + Int(sessionLen)))
+        offset += Int(sessionLen)
+        guard let sessionId = String(data: sessionIdData, encoding: .utf8) else { return nil }
+
+        let payloadLen = data.withUnsafeBytes { bytes in
+            bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian
+        }
+        offset += 4
+
+        guard data.count >= offset + Int(payloadLen) else { return nil }
+        let payload = data.subdata(in: offset..<(offset + Int(payloadLen)))
+        return (type: type, sessionId: sessionId, payload: payload)
+    }
+
     // MARK: - Terminal Events
 
     static func terminalEvent(type: String, data: Any? = nil) -> String {

@@ -348,12 +348,7 @@ class APIClient: APIClientProtocol {
         try self.validateResponse(response)
     }
 
-    // MARK: - SSE Stream URL
-
-    func streamURL(for sessionId: String) -> URL? {
-        guard let baseURL else { return nil }
-        return baseURL.appendingPathComponent("api/sessions/\(sessionId)/stream")
-    }
+    // MARK: - Terminal Snapshot
 
     func snapshotURL(for sessionId: String) -> URL? {
         guard let baseURL else { return nil }

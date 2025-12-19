@@ -41,7 +41,7 @@ final class BufferWebSocketClientTests {
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
         #expect(mockWebSocket.isConnected)
-        #expect(mockWebSocket.lastConnectURL?.absoluteString.contains("/buffers") ?? false)
+        #expect(mockWebSocket.lastConnectURL?.absoluteString.contains("/ws") ?? false)
         #expect(self.client.isConnected)
         #expect(self.client.connectionError == nil)
     }
@@ -86,7 +86,7 @@ final class BufferWebSocketClientTests {
 
         // Create test message
         let bufferData = TestFixtures.bufferSnapshot(cols: cols, rows: rows)
-        let messageData = TestFixtures.wrappedBufferMessage(sessionId: sessionId, bufferData: bufferData)
+        let messageData = TestFixtures.wrappedV3SnapshotMessage(sessionId: sessionId, bufferData: bufferData)
 
         // Act - Simulate receiving the message
         mockWebSocket.simulateMessage(WebSocketMessage.data(messageData))
@@ -103,35 +103,6 @@ final class BufferWebSocketClientTests {
 
         #expect(snapshot.cols == cols)
         #expect(snapshot.rows == rows)
-    }
-
-    @Test("Handles text messages", arguments: [
-        (type: "ping", expectedResponse: "pong"),
-        (type: "error", expectedResponse: nil),
-    ])
-    func textMessageHandling(type: String, expectedResponse: String?) async throws {
-        // Connect
-        self.client.connect()
-        try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-
-        let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
-
-        // Act - Simulate message
-        let message = TestFixtures.terminalEvent(type: type)
-        mockWebSocket.simulateMessage(WebSocketMessage.string(message))
-
-        // Wait for processing - increased to allow async response to be sent
-        try await Task.sleep(nanoseconds: 200_000_000) // 200ms
-
-        // Assert
-        let sentMessages = mockWebSocket.sentJSONMessages()
-
-        if let expectedResponse {
-            #expect(sentMessages.contains { $0["type"] as? String == expectedResponse })
-        } else {
-            // For error messages, we expect no response
-            #expect(!sentMessages.contains { $0["type"] as? String == type })
-        }
     }
 
     @Test("Subscribes to sessions correctly")
@@ -153,12 +124,9 @@ final class BufferWebSocketClientTests {
         // Wait longer for subscription message to be sent
         try await Task.sleep(nanoseconds: 200_000_000) // 200ms
 
-        // Assert - Check if subscribe message was sent
-        let sentMessages = mockWebSocket.sentJSONMessages()
-        #expect(sentMessages.contains { msg in
-            msg["type"] as? String == "subscribe" &&
-                msg["sessionId"] as? String == sessionId
-        })
+        // Assert - Check if subscribe frame was sent (v3 type 10)
+        let frames = mockWebSocket.sentDataMessages().compactMap { TestFixtures.decodeV3Frame($0) }
+        #expect(frames.contains { $0.type == 10 && $0.sessionId == sessionId })
     }
 
     @Test("Handles reconnection after disconnection", .timeLimit(.minutes(1)))
@@ -220,12 +188,9 @@ final class BufferWebSocketClientTests {
         self.client.unsubscribe(from: sessionId)
         try await Task.sleep(nanoseconds: 50_000_000) // 50ms
 
-        // Assert - Should have sent only the unsubscribe message
-        let sentMessages = mockWebSocket.sentJSONMessages()
-        #expect(sentMessages.contains { msg in
-            msg["type"] as? String == "unsubscribe" &&
-                msg["sessionId"] as? String == sessionId
-        })
+        // Assert - Should have sent the unsubscribe frame (v3 type 11)
+        let frames = mockWebSocket.sentDataMessages().compactMap { TestFixtures.decodeV3Frame($0) }
+        #expect(frames.contains { $0.type == 11 && $0.sessionId == sessionId })
     }
 
     @Test("Cleans up on disconnect")
@@ -266,11 +231,14 @@ final class BufferWebSocketClientTests {
 
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
 
-        // Create message with wrong magic byte
+        // Create message with wrong magic (v3 expects "VT" + version 3)
         var messageData = Data()
-        messageData.append(0xFF) // Wrong magic byte
-        messageData.append(contentsOf: [0, 0, 0, 4]) // Session ID length
-        messageData.append("test".data(using: .utf8)!)
+        messageData.append(0xFF)
+        messageData.append(0x00)
+        messageData.append(0x03) // version
+        messageData.append(21) // snapshot type
+        messageData.append(contentsOf: [0, 0, 0, 0]) // session id len
+        messageData.append(contentsOf: [0, 0, 0, 0]) // payload len
 
         // Act
         mockWebSocket.simulateMessage(WebSocketMessage.data(messageData))
@@ -300,7 +268,7 @@ final class BufferWebSocketClientTests {
         bufferData.append(contentsOf: [0xFF, 0xFF]) // Invalid magic for buffer
         bufferData.append(contentsOf: [1, 2, 3, 4]) // Random data
 
-        let messageData = TestFixtures.wrappedBufferMessage(sessionId: sessionId, bufferData: bufferData)
+        let messageData = TestFixtures.wrappedV3SnapshotMessage(sessionId: sessionId, bufferData: bufferData)
 
         // Act
         mockWebSocket.simulateMessage(WebSocketMessage.data(messageData))

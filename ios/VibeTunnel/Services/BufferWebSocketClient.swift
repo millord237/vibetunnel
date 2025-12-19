@@ -52,8 +52,43 @@ class BufferWebSocketClient: NSObject {
     static let shared = BufferWebSocketClient()
 
     private let logger = Logger(category: "BufferWebSocket")
-    /// Magic byte for binary messages
-    private static let bufferMagicByte: UInt8 = 0xBF
+    // WebSocket v3 framing
+    private static let v3Magic: UInt16 = 0x5654 // "VT" LE
+    private static let v3Version: UInt8 = 0x03
+
+    private enum V3Type: UInt8 {
+        case hello = 1
+        case welcome = 2
+
+        case subscribe = 10
+        case unsubscribe = 11
+
+        case stdout = 20
+        case snapshotVT = 21
+        case event = 22
+        case error = 23
+
+        case inputText = 30
+        case inputKey = 31
+        case resize = 32
+        case kill = 33
+        case resetSize = 34
+
+        case ping = 40
+        case pong = 41
+    }
+
+    private enum V3SubscribeFlags: UInt32 {
+        case stdout = 1
+        case snapshots = 2
+        case events = 4
+    }
+
+    private struct V3Frame {
+        let type: UInt8
+        let sessionId: String
+        let payload: Data
+    }
 
     private var webSocket: WebSocketProtocol?
     private let webSocketFactory: WebSocketFactory
@@ -107,7 +142,7 @@ class BufferWebSocketClient: NSObject {
         // Convert HTTP URL to WebSocket URL
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         components?.scheme = baseURL.scheme == "https" ? "wss" : "ws"
-        components?.path = "/buffers"
+        components?.path = "/ws"
 
         // Add authentication token as query parameter (not header)
         if let token = authenticationService?.getTokenForQuery() {
@@ -161,81 +196,64 @@ class BufferWebSocketClient: NSObject {
     }
 
     private func handleTextMessage(_ text: String) {
-        guard let data = text.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return
-        }
-
-        if let type = json["type"] as? String {
-            switch type {
-            case "ping":
-                // Respond with pong
-                Task {
-                    try? await self.sendMessage(["type": "pong"])
-                }
-
-            case "error":
-                if let message = json["message"] as? String {
-                    self.logger.warning("Server error: \(message)")
-                }
-
-            default:
-                self.logger.debug("Unknown message type: \(type)")
-            }
-        }
+        // v3 is binary-framed. Keep logging for debugging only.
+        self.logger.debug("Received text WS message (ignored): \(text.prefix(80))")
     }
 
     private func handleBinaryMessage(_ data: Data) {
-        self.logger.verbose("Received binary message: \(data.count) bytes")
-
-        guard data.count > 5 else {
-            self.logger.debug("Binary message too short")
+        guard let frame = self.decodeV3Frame(data) else {
+            self.logger.debug("Failed to decode v3 frame (\(data.count) bytes)")
             return
         }
 
-        var offset = 0
-
-        // Check magic byte
-        let magic = data[offset]
-        offset += 1
-
-        guard magic == Self.bufferMagicByte else {
-            self.logger.warning("Invalid magic byte: \(String(format: "0x%02X", magic))")
+        guard let type = V3Type(rawValue: frame.type) else {
+            self.logger.debug("Unknown v3 message type: \(frame.type)")
             return
         }
 
-        // Read session ID length (4 bytes, little endian)
-        let sessionIdLength = data.withUnsafeBytes { bytes in
-            bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian
-        }
-        offset += 4
+        let sessionId = frame.sessionId
+        let payload = frame.payload
 
-        // Read session ID
-        guard data.count >= offset + Int(sessionIdLength) else {
-            self.logger.debug("Not enough data for session ID")
+        switch type {
+        case .snapshotVT:
+            if let event = decodeTerminalEvent(from: payload),
+               let handler = subscriptions[sessionId]
+            {
+                handler(event)
+            }
+
+        case .event:
+            self.handleV3Event(sessionId: sessionId, payload: payload)
+
+        case .stdout:
+            // Optional: map to output events if needed later.
+            if let text = String(data: payload, encoding: .utf8),
+               let handler = subscriptions[sessionId]
+            {
+                handler(.output(timestamp: Date().timeIntervalSince1970, data: text))
+            }
+
+        case .error:
+            let message = String(data: payload, encoding: .utf8) ?? "Unknown error"
+            self.logger.warning("Server error: \(message)")
+            if let handler = subscriptions[sessionId] {
+                handler(.alert(title: "Server Error", message: message))
+            }
+
+        default:
+            break
+        }
+    }
+
+    private func handleV3Event(sessionId: String, payload: Data) {
+        guard let handler = subscriptions[sessionId] else { return }
+        guard let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] else {
             return
         }
-        let sessionIdData = data.subdata(in: offset..<(offset + Int(sessionIdLength)))
-        guard let sessionId = String(data: sessionIdData, encoding: .utf8) else {
-            self.logger.warning("Failed to decode session ID")
-            return
-        }
-        self.logger.verbose("Session ID: \(sessionId)")
-        offset += Int(sessionIdLength)
 
-        // Remaining data is the message payload
-        let messageData = data.subdata(in: offset..<data.count)
-        self.logger.verbose("Message payload: \(messageData.count) bytes")
-
-        // Decode terminal event
-        if let event = decodeTerminalEvent(from: messageData),
-           let handler = subscriptions[sessionId]
-        {
-            self.logger.verbose("Dispatching event to handler")
-            handler(event)
-        } else {
-            self.logger.debug("No handler for session ID: \(sessionId)")
+        if let kind = obj["kind"] as? String, kind == "exit" {
+            let code = obj["exitCode"] as? Int ?? 0
+            handler(.exit(code: code))
         }
     }
 
@@ -639,13 +657,13 @@ class BufferWebSocketClient: NSObject {
 
             // Send subscription message immediately if connected
             if self.isConnected {
-                try? await self.sendMessage(["type": "subscribe", "sessionId": sessionId])
+                try? await self.sendV3Subscribe(sessionId: sessionId)
             }
         }
     }
 
     private func subscribe(to sessionId: String) async throws {
-        try await self.sendMessage(["type": "subscribe", "sessionId": sessionId])
+        try await self.sendV3Subscribe(sessionId: sessionId)
     }
 
     func unsubscribe(from sessionId: String) {
@@ -657,22 +675,120 @@ class BufferWebSocketClient: NSObject {
 
             // Send unsubscribe message immediately if connected
             if self.isConnected {
-                try? await self.sendMessage(["type": "unsubscribe", "sessionId": sessionId])
+                try? await self.sendV3Unsubscribe(sessionId: sessionId)
             }
         }
     }
 
-    private func sendMessage(_ message: [String: Any]) async throws {
+    private func sendV3Subscribe(sessionId: String) async throws {
+        let flags: UInt32 = V3SubscribeFlags.snapshots.rawValue | V3SubscribeFlags.events.rawValue
+        var payload = Data(count: 12)
+        payload.withUnsafeMutableBytes { bytes in
+            bytes.storeBytes(of: flags.littleEndian, toByteOffset: 0, as: UInt32.self)
+            bytes.storeBytes(of: UInt32(0).littleEndian, toByteOffset: 4, as: UInt32.self)
+            bytes.storeBytes(of: UInt32(0).littleEndian, toByteOffset: 8, as: UInt32.self)
+        }
+        try await self.sendV3Frame(type: .subscribe, sessionId: sessionId, payload: payload)
+    }
+
+    private func sendV3Unsubscribe(sessionId: String) async throws {
+        try await self.sendV3Frame(type: .unsubscribe, sessionId: sessionId, payload: Data())
+    }
+
+    func sendInput(sessionId: String, text: String) async -> Bool {
         guard let webSocket else {
-            throw WebSocketError.connectionFailed
+            return false
         }
 
-        let data = try JSONSerialization.data(withJSONObject: message)
-        guard let string = String(data: data, encoding: .utf8) else {
-            throw WebSocketError.invalidData
+        guard let payload = text.data(using: .utf8) else { return false }
+        do {
+            let frame = try self.encodeV3Frame(type: .inputText, sessionId: sessionId, payload: payload)
+            try await webSocket.send(.data(frame))
+            return true
+        } catch {
+            self.logger.error("Failed to send input over v3 socket: \(error)")
+            return false
         }
+    }
 
-        try await webSocket.send(.string(string))
+    func resize(sessionId: String, cols: Int, rows: Int) async -> Bool {
+        guard let webSocket else { return false }
+        var payload = Data(count: 8)
+        payload.withUnsafeMutableBytes { bytes in
+            bytes.storeBytes(of: UInt32(cols).littleEndian, toByteOffset: 0, as: UInt32.self)
+            bytes.storeBytes(of: UInt32(rows).littleEndian, toByteOffset: 4, as: UInt32.self)
+        }
+        do {
+            let frame = try self.encodeV3Frame(type: .resize, sessionId: sessionId, payload: payload)
+            try await webSocket.send(.data(frame))
+            return true
+        } catch {
+            self.logger.error("Failed to send resize over v3 socket: \(error)")
+            return false
+        }
+    }
+
+    private func sendV3Frame(type: V3Type, sessionId: String, payload: Data) async throws {
+        guard let webSocket else { throw WebSocketError.connectionFailed }
+        let frame = try self.encodeV3Frame(type: type, sessionId: sessionId, payload: payload)
+        try await webSocket.send(.data(frame))
+    }
+
+    private func encodeV3Frame(type: V3Type, sessionId: String, payload: Data) throws -> Data {
+        guard let sessionIdData = sessionId.data(using: .utf8) else { throw WebSocketError.invalidData }
+        var out = Data()
+
+        var magicLE = Self.v3Magic.littleEndian
+        out.append(Data(bytes: &magicLE, count: 2))
+        out.append(Self.v3Version)
+        out.append(type.rawValue)
+
+        var sessionLenLE = UInt32(sessionIdData.count).littleEndian
+        out.append(Data(bytes: &sessionLenLE, count: 4))
+        out.append(sessionIdData)
+
+        var payloadLenLE = UInt32(payload.count).littleEndian
+        out.append(Data(bytes: &payloadLenLE, count: 4))
+        out.append(payload)
+
+        return out
+    }
+
+    private func decodeV3Frame(_ data: Data) -> V3Frame? {
+        guard data.count >= 2 + 1 + 1 + 4 + 4 else { return nil }
+        var offset = 0
+
+        let magic = data.withUnsafeBytes { bytes in
+            bytes.loadUnaligned(fromByteOffset: offset, as: UInt16.self).littleEndian
+        }
+        offset += 2
+        guard magic == Self.v3Magic else { return nil }
+
+        let version = data[offset]
+        offset += 1
+        guard version == Self.v3Version else { return nil }
+
+        let type = data[offset]
+        offset += 1
+
+        let sessionLen = data.withUnsafeBytes { bytes in
+            bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian
+        }
+        offset += 4
+
+        guard data.count >= offset + Int(sessionLen) + 4 else { return nil }
+        let sessionIdData = data.subdata(in: offset..<(offset + Int(sessionLen)))
+        offset += Int(sessionLen)
+        guard let sessionId = String(data: sessionIdData, encoding: .utf8) else { return nil }
+
+        let payloadLen = data.withUnsafeBytes { bytes in
+            bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian
+        }
+        offset += 4
+
+        guard data.count >= offset + Int(payloadLen) else { return nil }
+        let payload = data.subdata(in: offset..<(offset + Int(payloadLen)))
+        return V3Frame(type: type, sessionId: sessionId, payload: payload)
     }
 
     private func sendPing() async throws {
@@ -760,7 +876,7 @@ extension BufferWebSocketClient: WebSocketDelegate {
 
             let sessionIds = Array(self.subscriptions.keys)
             for sessionId in sessionIds {
-                try? await self.sendMessage(["type": "subscribe", "sessionId": sessionId])
+                try? await self.sendV3Subscribe(sessionId: sessionId)
             }
         }
     }

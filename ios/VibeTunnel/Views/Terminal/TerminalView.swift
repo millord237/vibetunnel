@@ -759,7 +759,12 @@ class TerminalViewModel {
     }
 
     func sendInput(_ text: String) {
-        Task {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            let sent = await self.bufferWebSocketClient.sendInput(sessionId: self.session.id, text: text)
+            if sent { return }
+
             do {
                 try await SessionService().sendInput(to: self.session.id, text: text)
             } catch {
@@ -841,7 +846,10 @@ class TerminalViewModel {
         logger.info("Performing initial terminal resize: \(cols)x\(rows)")
 
         do {
-            try await SessionService().resizeTerminal(sessionId: self.session.id, cols: cols, rows: rows)
+            let sent = await self.bufferWebSocketClient.resize(sessionId: self.session.id, cols: cols, rows: rows)
+            if !sent {
+                try await SessionService().resizeTerminal(sessionId: self.session.id, cols: cols, rows: rows)
+            }
             // If resize succeeded, mark initial resize as complete and clear any server blocks
             await MainActor.run {
                 self.hasPerformedInitialResize = true
@@ -871,7 +879,10 @@ class TerminalViewModel {
         logger.info("Resizing terminal: \(cols)x\(rows)")
 
         do {
-            try await SessionService().resizeTerminal(sessionId: self.session.id, cols: cols, rows: rows)
+            let sent = await self.bufferWebSocketClient.resize(sessionId: self.session.id, cols: cols, rows: rows)
+            if !sent {
+                try await SessionService().resizeTerminal(sessionId: self.session.id, cols: cols, rows: rows)
+            }
             // If resize succeeded, ensure the flag is cleared
             await MainActor.run {
                 self.isResizeBlockedByServer = false

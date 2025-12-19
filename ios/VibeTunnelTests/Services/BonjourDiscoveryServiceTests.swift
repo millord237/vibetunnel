@@ -64,7 +64,7 @@ struct BonjourDiscoveryServiceTests {
             // Then - Verify service can manage discovery state
             // Note: In test environment without actual mDNS services,
             // we just verify the service can start discovery mode
-            let initialServerCount = service.discoveredServers.count
+            _ = service.discoveredServers.count
 
             // Cleanup
             service.stopDiscovery()
@@ -80,7 +80,6 @@ struct BonjourDiscoveryServiceTests {
         @MainActor
         func resolveService() async {
             // Given
-            let service = BonjourDiscoveryService.shared
             let testServer = DiscoveredServer(
                 name: "TestServer",
                 host: "192.168.1.100",

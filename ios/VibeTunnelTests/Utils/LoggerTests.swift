@@ -24,7 +24,7 @@ struct LoggerTests {
 
     @Test("Logger initialization")
     func loggerInit() {
-        let logger = Logger(category: "TestCategory")
+        _ = Logger(category: "TestCategory")
 
         // Unfortunately we can't access the private category property
         // but we can verify the logger was created without error

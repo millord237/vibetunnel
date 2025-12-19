@@ -168,7 +168,7 @@ struct WebSocketReconnectionTests {
         }
 
         let config = ConnectionConfig(
-            url: "wss://localhost:8888/buffers",
+            url: "wss://localhost:8888/ws",
             authToken: "test-token",
             sessionId: "session-123")
 

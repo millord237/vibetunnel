@@ -45,22 +45,4 @@ class MockBufferWebSocketClient: BufferWebSocketClient {
     }
 }
 
-/// Mock SSEClient for testing (composition pattern since SSEClient is final)
-@MainActor
-class MockSSEClient {
-    var connectCalled = false
-    var disconnectCalled = false
-    var lastConnectHeaders: [String: String]?
-    var isConnected = false
-
-    func connect(headers: [String: String]? = nil) async {
-        self.connectCalled = true
-        self.lastConnectHeaders = headers
-        self.isConnected = true
-    }
-
-    func disconnect() {
-        self.disconnectCalled = true
-        self.isConnected = false
-    }
-}
+// SSE streaming removed; tests use WebSocket v3.
