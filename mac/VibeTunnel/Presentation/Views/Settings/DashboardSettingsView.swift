@@ -136,6 +136,9 @@ private struct ServerStatusSection: View {
     @State private var portConflict: PortConflict?
     @State private var isCheckingPort = false
     @State private var localIPAddress: String?
+    @State private var isShowingKillPortConflictConfirm = false
+    @State private var isKillingPortConflictProcess = false
+    @State private var killPortConflictErrorMessage: String?
 
     private var isServerRunning: Bool {
         self.serverStatus == .running
@@ -250,7 +253,7 @@ private struct ServerStatusSection: View {
                 // Port conflict warning
                 if let conflict = portConflict {
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(.orange)
                                 .font(.caption)
@@ -258,6 +261,22 @@ private struct ServerStatusSection: View {
                             Text("Port \(conflict.port) is used by \(conflict.process.name)")
                                 .font(.caption)
                                 .foregroundColor(.orange)
+
+                            Spacer(minLength: 8)
+
+                            Button(role: .destructive) {
+                                self.isShowingKillPortConflictConfirm = true
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.caption2.bold())
+                                    .frame(width: 18, height: 18)
+                                    .foregroundStyle(.white)
+                                    .background(Color.red)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(self.isKillingPortConflictProcess)
+                            .help("Kill PID \(conflict.process.pid) (\(conflict.process.name))")
                         }
 
                         if !conflict.alternativePorts.isEmpty {
@@ -279,34 +298,26 @@ private struct ServerStatusSection: View {
                                 }
                             }
                         }
-
-                        // Add kill button for conflicting processes
-                        HStack {
-                            Button("Kill Process") {
-                                Task {
-                                    do {
-                                        try await PortConflictResolver.shared.forceKillProcess(conflict)
-                                        // After killing, clear the conflict and restart the server
-                                        self.portConflict = nil
-                                        await self.serverManager.start()
-                                    } catch {
-                                        // Handle error - in a real implementation, you might show an alert
-                                        self.logger.error("Failed to kill process: \(String(describing: error))")
-                                    }
-                                }
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-
-                            Spacer()
-                        }
-                        .padding(.top, 8)
                     }
                     .padding(.vertical, 8)
                     .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.orange.opacity(0.1))
                     .cornerRadius(6)
+                    .confirmationDialog(
+                        "Kill \(conflict.process.name) (PID \(conflict.process.pid))?",
+                        isPresented: self.$isShowingKillPortConflictConfirm,
+                        titleVisibility: .visible)
+                    {
+                        Button("Kill", role: .destructive) {
+                            Task {
+                                await self.killPortConflictProcess(conflict)
+                            }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This will force-terminate the process currently listening on port \(conflict.port).")
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -319,6 +330,16 @@ private struct ServerStatusSection: View {
             }
             .task(id: self.accessModeString) {
                 await self.updateLocalIPAddress()
+            }
+            .alert(
+                "Failed to kill process",
+                isPresented: Binding(
+                    get: { self.killPortConflictErrorMessage != nil },
+                    set: { if !$0 { self.killPortConflictErrorMessage = nil } }))
+            {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(self.killPortConflictErrorMessage ?? "")
             }
         } header: {
             Text("Server Configuration")
@@ -406,6 +427,25 @@ private struct ServerStatusSection: View {
             }
         } else {
             self.portConflict = nil
+        }
+    }
+
+    private func killPortConflictProcess(_ conflict: PortConflict) async {
+        guard !self.isKillingPortConflictProcess else { return }
+        self.isKillingPortConflictProcess = true
+        defer { self.isKillingPortConflictProcess = false }
+
+        do {
+            try await PortConflictResolver.shared.forceKillProcess(conflict)
+            await self.checkPortAvailability()
+
+            if self.serverStatus == .stopped {
+                await self.serverManager.start()
+            }
+        } catch {
+            self.logger.error("Failed to kill port-conflicting process: \(String(describing: error))")
+            self.killPortConflictErrorMessage = error.localizedDescription.isEmpty ? String(describing: error) : error
+                .localizedDescription
         }
     }
 }
