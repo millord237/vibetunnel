@@ -25,6 +25,7 @@ IDs: `WsV3MessageType` in `web/src/shared/ws-v3.ts`.
 
 Client → Server:
 - `SUBSCRIBE` payload = `encodeWsV3SubscribePayload({ flags, snapshotMinIntervalMs, snapshotMaxIntervalMs })`
+  - `sessionId` may be empty (`""`) to subscribe to global `EVENT` frames (no per-session STDOUT/snapshots).
 - `UNSUBSCRIBE` payload empty
 - `INPUT_TEXT` payload = UTF-8 text bytes (includes escape sequences when needed)
 - `INPUT_KEY` payload = UTF-8 key name (`SpecialKey`)
@@ -37,7 +38,9 @@ Server → Client:
 - `WELCOME` payload = JSON `{ ok: true, version: 3 }`
 - `STDOUT` payload = UTF-8 bytes from PTY (asciinema “o” frames’ data)
 - `SNAPSHOT_VT` payload = VT snapshot bytes (see next section)
-- `EVENT` payload = JSON (currently `exit` + git-status updates)
+- `EVENT` payload = JSON
+  - per-session: `exit`, `git-status-update`, …
+  - global (`sessionId == ""`): `connected`, `test-notification`, …
 - `ERROR` payload = JSON `{ message: string }`
 - `PONG` payload optional
 
