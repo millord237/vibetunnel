@@ -94,8 +94,8 @@ VibeTunnel is a macOS application that provides browser-based access to Mac term
 2. **Server Check**: ServerManager ensures Bun server is running
 3. **Session Creation**: HTTP POST to create new terminal session
 4. **PTY Allocation**: Server allocates pseudo-terminal via node-pty
-5. **WebSocket Upgrade**: Client establishes WebSocket connection
-6. **Binary Buffer Protocol**: Optimized terminal data streaming
+5. **WebSocket Upgrade**: Client establishes `/ws` connection (v3 framing)
+6. **Terminal Transport**: Multiplexed binary frames (`STDOUT` + `SNAPSHOT_VT`)
 7. **Recording**: Session data recorded in asciinema format
 8. **Session Cleanup**: Resources freed on terminal exit
 
@@ -103,7 +103,7 @@ VibeTunnel is a macOS application that provides browser-based access to Mac term
 
 - **Single Server Implementation**: One Node.js/Bun server handles everything
 - **Protocol-Oriented Swift**: Clean interfaces between macOS components
-- **Binary Optimization**: Custom buffer protocol for efficient terminal streaming
+- **Binary Optimization**: WebSocket v3 framing + VT snapshot v1 for previews/resync
 - **Thread Safety**: Swift actors and Node.js event loop for concurrent safety
 - **Minimal Dependencies**: Only essential third-party libraries
 - **User Privacy**: No telemetry or user tracking
@@ -116,15 +116,16 @@ VibeTunnel is a macOS application that provides browser-based access to Mac term
 3. A `POST /api/sessions` request triggers `TerminalManager.createTerminal()` on the server.
 4. `PtyManager.spawn()` allocates a new PTY process and stores session metadata.
 5. The server responds with the session ID and WebSocket URL.
-6. Clients connect to `/api/sessions/:id/ws` and begin streaming using the binary buffer protocol.
+6. Clients connect to `/ws` and `SUBSCRIBE(sessionId, flags)` using WS v3 framing.
 7. Terminal output and input are recorded in asciinema format when recording is enabled.
 8. On process exit, resources are cleaned up and the client is notified.
 
 ### Terminal I/O Flow
-1. Keyboard input from the browser or iOS app is sent as JSON messages over the WebSocket.
-2. `BufferAggregator` forwards the input to the PTY process.
-3. PTY output is captured, aggregated and sent back as binary snapshots or text deltas.
-4. The client updates its terminal display accordingly.
+1. Keyboard input from the browser or iOS app is sent as WS v3 frames (`INPUT_TEXT` / `INPUT_KEY`).
+2. `WsV3Hub` routes input to `PtyManager`.
+3. PTY output is tailed and sent back as `STDOUT` frames.
+4. Server-side VT snapshots (`SNAPSHOT_VT`) are streamed for previews/resync.
+5. The client updates its terminal display accordingly.
 
 ### Server Lifecycle Flow
 1. Starting the macOS app or running `vt` launches `ServerManager`.
@@ -249,7 +250,9 @@ The server is built as a standalone Bun executable that embeds:
 - `pty/pty-manager.ts` - Native PTY process management
 - `pty/session-manager.ts` - Terminal session lifecycle
 - `services/terminal-manager.ts` - High-level terminal operations
-- `services/buffer-aggregator.ts` - Binary buffer optimization
+- `services/ws-v3-hub.ts` - Unified `/ws` WebSocket v3 hub
+- `services/cast-output-hub.ts` - Cast tailing → v3 `STDOUT`
+- `services/git-status-hub.ts` - Git status updates → v3 `EVENT`
 - `routes/sessions.ts` - REST API endpoints
 
 **Server Features**:
@@ -257,7 +260,7 @@ The server is built as a standalone Bun executable that embeds:
 - Zero-copy buffer operations
 - Native PTY handling with proper signal forwarding
 - Asciinema recording for all sessions
-- Binary buffer protocol for efficient streaming
+- WebSocket v3 framing (`/ws`) + VT snapshot v1 for previews/resync
 - Graceful shutdown handling
 
 **Build Process**:
@@ -278,7 +281,7 @@ cd web && node build-native.js
 - Lit Web Components for modern component architecture
 - Tailwind CSS for styling
 - ghostty-web for terminal rendering
-- Custom WebSocket client for binary buffer protocol
+- Unified WebSocket v3 transport (/ws)
 
 ### Component Architecture
 
@@ -292,7 +295,7 @@ web/src/client/
 │   ├── terminal.ts          - ghostty-web wrapper
 │   └── vibe-terminal-buffer.ts - Binary buffer handler
 ├── services/
-│   └── buffer-subscription-service.ts - WebSocket management
+│   └── terminal-socket-client.ts - WebSocket v3 transport
 ├── utils/
 │   ├── terminal-renderer.ts - Terminal rendering utilities
 │   ├── terminal-preferences.ts - User preferences
@@ -317,10 +320,10 @@ web/src/client/
 - Mobile-friendly touch interactions
 
 **Performance Optimizations**:
-- Binary message format with 0xBF magic byte
-- Delta compression for incremental updates
-- Efficient buffer aggregation
-- WebSocket reconnection logic
+- WebSocket v3 framing (`VT` magic, multiplexed sessions)
+- Snapshot cadence control (previews vs interactive)
+- Asciicast tailing with pruning detection
+- WebSocket reconnection and resubscribe logic
 - Lazy loading of terminal sessions
 
 ## iOS Application
@@ -352,11 +355,10 @@ web/src/client/
 
 ### Binary Buffer Protocol Support
 
-The iOS app implements the same binary buffer protocol as the web client:
-- Handles 0xBF magic byte messages
-- Processes buffer snapshots and deltas
-- Maintains terminal state synchronization
-- Optimized for mobile bandwidth
+The iOS app speaks the same terminal transport as the web client:
+- Single `/ws` WebSocket (v3 framing)
+- Multiplexed sessions (`sessionId` in each frame)
+- VT snapshot v1 payloads for previews/resync
 
 ## Security Model
 
@@ -537,21 +539,17 @@ exec /usr/local/bin/vibetunnel fwd "$@"
 ```json
 // Request
 {
-  "command": "/bin/zsh",
-  "args": ["-l"],
-  "cwd": "/Users/username",
-  "env": {},
+  "command": ["/bin/zsh", "-l"],
+  "workingDir": "/Users/username",
+  "name": "optional",
   "cols": 80,
-  "rows": 24,
-  "recordingEnabled": true
+  "rows": 24
 }
 
 // Response
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "pid": 12345,
-  "webUrl": "/sessions/550e8400-e29b-41d4-a716-446655440000",
-  "wsUrl": "/api/sessions/550e8400-e29b-41d4-a716-446655440000/ws"
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "createdAt": "2025-12-19T08:00:00.000Z"
 }
 ```
 
@@ -578,57 +576,44 @@ Send keyboard input to terminal
 
 ### WebSocket Protocol
 
-**Endpoint**: `/api/sessions/:id/ws`
+**Endpoint**: `GET /ws` (WebSocket upgrade)
 
-**Binary Buffer Protocol**: Messages use custom format for efficiency
+Terminal transport uses binary WebSocket v3 framing (multiplexed sessions).
+
+Details: `docs/websocket.md`.
 
 ## Binary Buffer Protocol
 
 ### Overview
 
-The binary buffer protocol optimizes terminal data transmission by sending full buffer snapshots and incremental updates.
+Terminal transport is a binary protocol layered on a single WebSocket (`/ws`).
+It multiplexes sessions and supports both:
+- live PTY output (`STDOUT`)
+- server-rendered previews / hard resync (`SNAPSHOT_VT`, VT snapshot v1)
 
 ### Message Format
 
-**Binary Message (TypedArray)**:
-- First byte: 0xBF (magic byte)
-- Remaining bytes: Terminal buffer data or commands
-
-**Text Message (JSON)**:
-- Input commands
-- Resize events
-- Control messages
+See `docs/websocket.md` (frame layout + message types).
 
 ### Protocol Flow
 
-1. **Initial Connection**: 
-   - Client connects to WebSocket
-   - Server sends binary buffer snapshot
-   
-2. **Incremental Updates**:
-   - Server aggregates terminal output
-   - Sends deltas as text messages
-   - Periodically sends full binary snapshots
-
-3. **Client Input**:
-   - Sent as JSON text messages
-   - Contains 'input' type and data
+1. Client connects to `/ws` (one socket).
+2. Client sends `SUBSCRIBE(sessionId, flags)` for each interested session.
+3. Server streams `STDOUT`/`SNAPSHOT_VT`/`EVENT` frames per subscription.
+4. Client sends `INPUT_TEXT`/`INPUT_KEY`/`RESIZE` frames back.
 
 ### Implementation Details
 
-**Server** (`web/src/server/services/buffer-aggregator.ts`):
-- Maintains terminal buffer state
-- Aggregates small updates
-- Sends snapshots every 5 seconds or on major changes
+**Server**:
+- `web/src/server/services/ws-v3-hub.ts` (frame routing + subscriptions)
+- `web/src/server/services/cast-output-hub.ts` (tails cast → `STDOUT`)
+- `web/src/server/services/terminal-manager.ts` (VT snapshot v1 → `SNAPSHOT_VT`)
 
 **Web Client** (`web/src/client/components/vibe-terminal-buffer.ts`):
-- Handles binary buffer messages
-- Applies incremental updates
-- Manages terminal state
+- Consumes `STDOUT` and `SNAPSHOT_VT` via `web/src/client/services/terminal-socket-client.ts`
 
 **iOS Client** (`ios/VibeTunnel/Services/BufferWebSocketClient.swift`):
-- Same protocol implementation
-- Optimized for mobile performance
+- Same `/ws` v3 framing + VT snapshot v1 decoding
 
 ## User Interface
 

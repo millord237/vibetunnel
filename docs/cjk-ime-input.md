@@ -59,7 +59,7 @@ export function calculateCursorPosition(
 
 #### Terminal Type Support
 - **Ghostty Terminal (`vibe-terminal`)**: Does not expose cursor coordinates yet; IME input falls back to a safe fixed position.
-- **Buffer Terminal (`vibe-terminal-binary`)**: Uses `buffer.cursorX/Y` from WebSocket buffer snapshot data.
+- **Buffer Terminal (`vibe-terminal-buffer`)**: Uses `buffer.cursorX/Y` from VT snapshot data.
 
 #### Key Features
 - **Precise Alignment**: Accounts for exact character width and line height
@@ -310,7 +310,7 @@ OS shows IME candidates → User selects → Text appears in terminal
 ### Supporting Files
 - `cursor-position.ts` - **Shared cursor position calculation utility**
 - `terminal.ts` - Ghostty renderer (no cursor info provider yet; IME uses fallback)
-- `vibe-terminal-binary.ts` - Buffer terminal cursor position API (uses shared utility)
+- `vibe-terminal-buffer.ts` - Buffer terminal cursor position API (uses shared utility)
 - `session-view.ts` - Container element and terminal integration
 - `lifecycle-event-manager.ts` - Event coordination and interception
 - `ime-constants.ts` - IME-related key filtering utilities

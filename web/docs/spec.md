@@ -126,15 +126,10 @@ The server provides a comprehensive API for terminal session management with sup
 - Handles SSH key and password auth
 - Stores tokens in localStorage
 
-**BufferSubscriptionService** (`src/client/services/buffer-subscription-service.ts`):
-- WebSocket connection for binary terminal buffers
-- Automatic reconnection with exponential backoff
-- Multiplexed subscriptions per session
-
-**WebSocketInputClient** (`src/client/services/websocket-input-client.ts`):
-- Low-latency input transmission
-- Fire-and-forget protocol
-- Per-session connections
+**TerminalSocketClient** (`src/client/services/terminal-socket-client.ts`):
+- Single WebSocket to `/ws` (v3 framing)
+- Multiplexed subscriptions per session (stdout/snapshots/events)
+- Input + resize on the same socket
 
 ## API Specification
 
@@ -147,9 +142,8 @@ The server provides a comprehensive API for terminal session management with sup
 - `DELETE /api/sessions/:id` - Kill session
 - `POST /api/sessions/:id/input` - Send input
 - `POST /api/sessions/:id/resize` - Resize terminal
-- `GET /api/sessions/:id/stream` - SSE output stream
 - `GET /api/sessions/:id/text` - Get text output
-- `GET /api/sessions/:id/buffer` - Get binary buffer
+- `GET /api/sessions/:id/buffer` - Get VT snapshot bytes (debug/compat)
 
 #### Authentication
 - `POST /api/auth/challenge` - Request challenge
@@ -172,23 +166,12 @@ The server provides a comprehensive API for terminal session management with sup
 
 ### WebSocket Protocols
 
-#### Binary Buffer Protocol (`/buffers`)
+#### Terminal Transport (`/ws`, v3)
 
-**Connection**: WebSocket with Bearer token authentication
+Single WebSocket. Multiplexed sessions. Binary framing.
+See `docs/websocket.md` for framing and message types.
 
-**Client → Server Messages** (JSON):
-```json
-{ "type": "subscribe", "sessionId": "session_123" }
-{ "type": "unsubscribe", "sessionId": "session_123" }
-{ "type": "ping" }
-```
-
-**Server → Client Messages** (Binary):
-```
-[0xBF][ID Length (4 bytes)][Session ID (UTF-8)][Buffer Data]
-```
-
-**Buffer Data Format** (32-byte header + cells):
+**VT Snapshot v1 Format** (`SNAPSHOT_VT` payload):
 ```
 Header (32 bytes):
 ├── Magic: 0x5654 "VT" (2 bytes)
@@ -213,26 +196,6 @@ Cell Type Byte:
 ├── Bit 3: Is RGB foreground
 ├── Bit 2: Is RGB background
 └── Bits 1-0: Character type (00=space, 01=ASCII, 10=Unicode)
-```
-
-#### Input Protocol (`/ws/input`)
-
-**Connection**: `ws://host/ws/input?sessionId=X&token=Y`
-
-**Message Format**:
-- Regular text: Sent as-is
-- Special keys: `\x00key_name\x00`
-
-### Server-Sent Events (SSE)
-
-**Session Output Stream** (`/api/sessions/:id/stream`)
-
-Uses asciinema cast v2 format:
-```json
-[timestamp, "o", "output text"]      // Terminal output
-[timestamp, "i", "input text"]       // User input
-[timestamp, "r", "80x24"]           // Resize event
-["exit", exitCode, sessionId]       // Process exit
 ```
 
 ## fwd.ts Application

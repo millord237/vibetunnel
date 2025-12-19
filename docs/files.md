@@ -73,7 +73,8 @@ The project structure emphasizes modularity with separate build systems for each
 - `src/server/pty/pty-manager.ts` - PTY process management
 - `src/server/pty/session-manager.ts` - Session lifecycle
 - `src/server/services/terminal-manager.ts` - Terminal service layer
-- `src/server/services/buffer-aggregator.ts` - Terminal buffer aggregation
+- `src/server/services/ws-v3-hub.ts` - WebSocket v3 hub (stdout/snapshots/input)
+- `src/server/services/cast-output-hub.ts` - Asciicast tail + pruning for stdout
 
 **API Routes**
 - `src/server/routes/sessions.ts` - Session API endpoints
@@ -84,7 +85,7 @@ The project structure emphasizes modularity with separate build systems for each
 - `src/client/app.ts` - Main application logic
 - `src/client/components/terminal.ts` - Web terminal component
 - `src/client/components/vibe-terminal-buffer.ts` - Buffer terminal component
-- `src/client/services/buffer-subscription-service.ts` - WebSocket subscriptions
+- `src/client/services/terminal-socket-client.ts` - WebSocket v3 transport (single socket)
 
 ## Platform Implementation
 
