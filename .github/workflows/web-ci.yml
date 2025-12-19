@@ -136,6 +136,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: latest
+
+      - name: Build zig forwarder
+        run: node scripts/build-fwd-zig.js
+
       - name: Run client tests
         run: pnpm run test:client:coverage
 
