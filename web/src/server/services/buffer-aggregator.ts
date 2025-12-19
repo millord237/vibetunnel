@@ -97,18 +97,17 @@ export class BufferAggregator {
     logger.debug('Sent welcome message to client');
 
     // Handle messages from client
-    ws.on('message', async (message: Buffer) => {
+    ws.on('message', async (message: Buffer, isBinary: boolean) => {
+      if (isBinary) {
+        logger.debug('Ignoring binary client message');
+        return;
+      }
+
       try {
         const data = JSON.parse(message.toString());
         await this.handleClientMessage(ws, data);
       } catch (error) {
-        logger.error('Error handling client message:', error);
-        ws.send(
-          JSON.stringify({
-            type: 'error',
-            message: 'Invalid message format',
-          })
-        );
+        logger.warn('Ignoring invalid client message:', error);
       }
     });
 
@@ -203,10 +202,20 @@ export class BufferAggregator {
     const subscriptions = this.clientSubscriptions.get(clientWs);
     if (!subscriptions) return;
 
+    // Add a placeholder so the initial snapshot isn't dropped.
+    if (!subscriptions.has(sessionId)) {
+      subscriptions.set(sessionId, () => {});
+    }
+
     try {
       const unsubscribe = await this.config.terminalManager.subscribeToBufferChanges(
         sessionId,
         (sessionId: string, snapshot: Parameters<TerminalManager['encodeSnapshot']>[0]) => {
+          const subscriptions = this.clientSubscriptions.get(clientWs);
+          if (!subscriptions || !subscriptions.has(sessionId)) {
+            return;
+          }
+
           try {
             const buffer = this.config.terminalManager.encodeSnapshot(snapshot);
             const sessionIdBuffer = Buffer.from(sessionId, 'utf8');
@@ -238,36 +247,9 @@ export class BufferAggregator {
 
       subscriptions.set(sessionId, unsubscribe);
       logger.debug(`Created subscription for local session ${sessionId}`);
-
-      // Send initial buffer
-      logger.debug(`Sending initial buffer for session ${sessionId}`);
-      const initialSnapshot = await this.config.terminalManager.getBufferSnapshot(sessionId);
-      const buffer = this.config.terminalManager.encodeSnapshot(initialSnapshot);
-
-      const sessionIdBuffer = Buffer.from(sessionId, 'utf8');
-      const totalLength = 1 + 4 + sessionIdBuffer.length + buffer.length;
-      const fullBuffer = Buffer.allocUnsafe(totalLength);
-
-      let offset = 0;
-      fullBuffer.writeUInt8(0xbf, offset);
-      offset += 1;
-
-      fullBuffer.writeUInt32LE(sessionIdBuffer.length, offset);
-      offset += 4;
-
-      sessionIdBuffer.copy(fullBuffer, offset);
-      offset += sessionIdBuffer.length;
-
-      buffer.copy(fullBuffer, offset);
-
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(fullBuffer);
-        logger.debug(`Sent initial buffer (${fullBuffer.length} bytes) for session ${sessionId}`);
-      } else {
-        logger.warn(`Cannot send initial buffer - client WebSocket not open`);
-      }
     } catch (error) {
       logger.error(`Error subscribing to local session ${sessionId}:`, error);
+      subscriptions.delete(sessionId);
       clientWs.send(JSON.stringify({ type: 'error', message: 'Failed to subscribe to session' }));
     }
   }

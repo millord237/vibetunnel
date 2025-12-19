@@ -18,3 +18,4 @@
 - **Imports**: System frameworks first (Swift), external libs first (TS), relative paths with `../`, specific imports preferred
 - **Error handling**: Try-catch with logging (TS), custom error enums with `LocalizedError` (Swift)
 - **No backwards compatibility** - Mac app and web server ship together, change both sides simultaneously
+- **File length**: keep code files <~500 LOC; documentation exempt
