@@ -11,7 +11,12 @@ import {
   WsV3MessageType,
   WsV3SubscribeFlags,
 } from '../../shared/ws-v3.js';
-import { WsV3Hub } from './ws-v3-hub.js';
+import type { PtyManager } from '../pty/index.js';
+import type { CastOutputHub, CastOutputHubListener } from './cast-output-hub.js';
+import type { GitStatusHub, GitStatusHubListener } from './git-status-hub.js';
+import type { SessionMonitor } from './session-monitor.js';
+import type { TerminalManager } from './terminal-manager.js';
+import { type WebSocketRequestV3, WsV3Hub } from './ws-v3-hub.js';
 
 vi.mock('../utils/logger.js', () => ({
   createLogger: () => ({
@@ -52,52 +57,66 @@ async function flush() {
 }
 
 describe('WsV3Hub', () => {
-  let ptyManager: any;
-  let terminalManager: any;
-  let castOutputHub: any;
-  let gitStatusHub: any;
+  type BufferChangeListener = Parameters<TerminalManager['subscribeToBufferChanges']>[1];
+
+  let ptyManager: PtyManager;
+  let terminalManager: TerminalManager;
+  let castOutputHub: CastOutputHub;
+  let gitStatusHub: GitStatusHub;
   let sessionMonitor: EventEmitter;
   let hub: WsV3Hub;
 
-  let castListener: any;
-  let snapshotListener: any;
-  let gitListener: any;
+  let castListener: CastOutputHubListener | undefined;
+  let snapshotListener: BufferChangeListener | undefined;
+  let gitListener: GitStatusHubListener | undefined;
 
   beforeEach(() => {
     castListener = undefined;
     snapshotListener = undefined;
     gitListener = undefined;
 
+    type PtySessionStub = { gitRepoPath?: string; workingDir?: string } | null;
+    const getSession = vi.fn<(sessionId: string) => PtySessionStub>(() => null);
+
     ptyManager = {
-      getSession: vi.fn(() => null),
-      sendInput: vi.fn(),
-      resizeSession: vi.fn(),
-      killSession: vi.fn(async () => {}),
-      resetSessionSize: vi.fn(),
-    };
+      getSession,
+      sendInput: vi.fn<PtyManager['sendInput']>(),
+      resizeSession: vi.fn<PtyManager['resizeSession']>(),
+      killSession: vi.fn<PtyManager['killSession']>(async () => {}),
+      resetSessionSize: vi.fn<PtyManager['resetSessionSize']>(),
+    } as unknown as PtyManager;
+
+    type SubscribeToBufferChangesFn = (
+      sessionId: string,
+      listener: BufferChangeListener
+    ) => Promise<() => void>;
 
     terminalManager = {
-      subscribeToBufferChanges: vi.fn(async (_sessionId: string, cb: any) => {
+      subscribeToBufferChanges: vi.fn<SubscribeToBufferChangesFn>(async (_sessionId, cb) => {
         snapshotListener = cb;
         return vi.fn();
       }),
-      encodeSnapshot: vi.fn(() => new Uint8Array([9, 9, 9])),
-    };
+      encodeSnapshot: vi.fn(() => Buffer.from([9, 9, 9])),
+    } as unknown as TerminalManager;
 
+    type CastSubscribeFn = (sessionId: string, listener: CastOutputHubListener) => () => void;
     castOutputHub = {
-      subscribe: vi.fn((_sessionId: string, listener: any) => {
+      subscribe: vi.fn<CastSubscribeFn>((_sessionId, listener) => {
         castListener = listener;
         return vi.fn();
       }),
-    };
+    } as unknown as CastOutputHub;
 
+    type GitStartWatchingFn = GitStatusHub['startWatching'];
+    type GitAddClientFn = GitStatusHub['addClient'];
+    type GitRemoveClientFn = GitStatusHub['removeClient'];
     gitStatusHub = {
-      startWatching: vi.fn(),
-      addClient: vi.fn((_sessionId: string, listener: any) => {
+      startWatching: vi.fn<GitStartWatchingFn>(),
+      addClient: vi.fn<GitAddClientFn>((_sessionId, listener) => {
         gitListener = listener;
       }),
-      removeClient: vi.fn(),
-    };
+      removeClient: vi.fn<GitRemoveClientFn>(),
+    } as unknown as GitStatusHub;
 
     sessionMonitor = new EventEmitter();
 
@@ -106,7 +125,7 @@ describe('WsV3Hub', () => {
       terminalManager,
       castOutputHub,
       gitStatusHub,
-      sessionMonitor: sessionMonitor as any,
+      sessionMonitor: sessionMonitor as unknown as SessionMonitor,
       remoteRegistry: null,
       isHQMode: false,
     });
@@ -118,14 +137,19 @@ describe('WsV3Hub', () => {
 
   it('sends WELCOME on connect', () => {
     const ws = new FakeWebSocket();
-    hub.handleClientConnection(ws as any, { userId: 'u', authMethod: 'token' } as any);
-    const frame = decodeWsV3Frame(ws.sent[0]!);
+    hub.handleClientConnection(
+      ws as unknown as WebSocket,
+      { userId: 'u', authMethod: 'token' } as unknown as WebSocketRequestV3
+    );
+    const first = ws.sent[0];
+    if (!first) throw new Error('expected welcome frame');
+    const frame = decodeWsV3Frame(first);
     expect(frame?.type).toBe(WsV3MessageType.WELCOME);
   });
 
   it('acks global events subscription + broadcasts sessionMonitor events', async () => {
     const ws = new FakeWebSocket();
-    hub.handleClientConnection(ws as any, {} as any);
+    hub.handleClientConnection(ws as unknown as WebSocket, {} as unknown as WebSocketRequestV3);
 
     sendBinaryFrame(
       ws,
@@ -163,7 +187,7 @@ describe('WsV3Hub', () => {
 
   it('forwards stdout events when subscribed', async () => {
     const ws = new FakeWebSocket();
-    hub.handleClientConnection(ws as any, {} as any);
+    hub.handleClientConnection(ws as unknown as WebSocket, {} as unknown as WebSocketRequestV3);
 
     sendBinaryFrame(
       ws,
@@ -178,6 +202,7 @@ describe('WsV3Hub', () => {
     expect(castOutputHub.subscribe).toHaveBeenCalledWith('s1', expect.any(Function));
     expect(castListener).toBeTypeOf('function');
 
+    if (!castListener) throw new Error('expected cast listener');
     castListener({ kind: 'output', data: 'hello' });
     await flush();
     const stdout = decodeLastFrame(ws);
@@ -190,7 +215,10 @@ describe('WsV3Hub', () => {
     const exitEvt = decodeLastFrame(ws);
     expect(exitEvt.type).toBe(WsV3MessageType.EVENT);
     expect(exitEvt.sessionId).toBe('s1');
-    expect(JSON.parse(new TextDecoder().decode(exitEvt.payload))).toEqual({ kind: 'exit', exitCode: 0 });
+    expect(JSON.parse(new TextDecoder().decode(exitEvt.payload))).toEqual({
+      kind: 'exit',
+      exitCode: 0,
+    });
 
     castListener({ kind: 'error', message: 'boom' });
     await flush();
@@ -202,7 +230,7 @@ describe('WsV3Hub', () => {
 
   it('forwards VT snapshots when subscribed', async () => {
     const ws = new FakeWebSocket();
-    hub.handleClientConnection(ws as any, {} as any);
+    hub.handleClientConnection(ws as unknown as WebSocket, {} as unknown as WebSocketRequestV3);
 
     sendBinaryFrame(
       ws,
@@ -214,10 +242,21 @@ describe('WsV3Hub', () => {
     );
     await flush();
 
-    expect(terminalManager.subscribeToBufferChanges).toHaveBeenCalledWith('s1', expect.any(Function));
+    expect(terminalManager.subscribeToBufferChanges).toHaveBeenCalledWith(
+      's1',
+      expect.any(Function)
+    );
     expect(snapshotListener).toBeTypeOf('function');
 
-    snapshotListener('s1', { cells: [] });
+    if (!snapshotListener) throw new Error('expected snapshot listener');
+    snapshotListener('s1', {
+      cols: 80,
+      rows: 24,
+      viewportY: 0,
+      cursorX: 0,
+      cursorY: 0,
+      cells: [],
+    });
     await flush();
 
     const snap = decodeLastFrame(ws);
@@ -228,7 +267,7 @@ describe('WsV3Hub', () => {
 
   it('routes input/resize/kill to PtyManager for local sessions', async () => {
     const ws = new FakeWebSocket();
-    hub.handleClientConnection(ws as any, {} as any);
+    hub.handleClientConnection(ws as unknown as WebSocket, {} as unknown as WebSocketRequestV3);
 
     sendBinaryFrame(
       ws,
@@ -263,7 +302,7 @@ describe('WsV3Hub', () => {
 
   it('sends ERROR for invalid SUBSCRIBE payload', async () => {
     const ws = new FakeWebSocket();
-    hub.handleClientConnection(ws as any, {} as any);
+    hub.handleClientConnection(ws as unknown as WebSocket, {} as unknown as WebSocketRequestV3);
 
     sendBinaryFrame(
       ws,
@@ -278,12 +317,14 @@ describe('WsV3Hub', () => {
     const err = decodeLastFrame(ws);
     expect(err.type).toBe(WsV3MessageType.ERROR);
     expect(err.sessionId).toBe('s1');
-    expect(JSON.parse(new TextDecoder().decode(err.payload)).message).toContain('Invalid SUBSCRIBE payload');
+    expect(JSON.parse(new TextDecoder().decode(err.payload)).message).toContain(
+      'Invalid SUBSCRIBE payload'
+    );
   });
 
   it('unsubscribes old listeners on re-subscribe', async () => {
     const ws = new FakeWebSocket();
-    hub.handleClientConnection(ws as any, {} as any);
+    hub.handleClientConnection(ws as unknown as WebSocket, {} as unknown as WebSocketRequestV3);
 
     sendBinaryFrame(
       ws,
@@ -318,7 +359,7 @@ describe('WsV3Hub', () => {
     });
 
     const ws = new FakeWebSocket();
-    hub.handleClientConnection(ws as any, {} as any);
+    hub.handleClientConnection(ws as unknown as WebSocket, {} as unknown as WebSocketRequestV3);
 
     sendBinaryFrame(
       ws,
@@ -333,6 +374,7 @@ describe('WsV3Hub', () => {
     expect(gitStatusHub.startWatching).toHaveBeenCalledWith('s1', '/repo', '/repo');
     expect(gitListener).toBeTypeOf('function');
 
+    if (!gitListener) throw new Error('expected git listener');
     gitListener({ kind: 'git-status-update', gitBranch: 'main' });
     await flush();
     const evt = decodeLastFrame(ws);
@@ -344,4 +386,3 @@ describe('WsV3Hub', () => {
     });
   });
 });
-

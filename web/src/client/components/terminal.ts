@@ -63,6 +63,8 @@ export class Terminal extends LitElement {
   private resizeObserver: ResizeObserver | null = null;
   private themeObserver: MutationObserver | null = null;
   private pasteInput: HTMLTextAreaElement | null = null;
+  private pendingOutput = '';
+  private pendingFollowCursor = true;
 
   private isMobile = false;
   private mobileWidthResizeComplete = false;
@@ -159,7 +161,11 @@ export class Terminal extends LitElement {
   };
 
   public write(data: string, followCursor = true) {
-    if (!this.terminal) return;
+    if (!this.terminal) {
+      this.pendingOutput += data;
+      this.pendingFollowCursor = this.pendingFollowCursor && followCursor;
+      return;
+    }
 
     this.terminal.write(data, () => {
       if (followCursor && this.followCursorEnabled) {
@@ -426,6 +432,18 @@ export class Terminal extends LitElement {
 
       this.terminal = term;
       this.fitAddon = fitAddon;
+
+      if (this.pendingOutput) {
+        const pending = this.pendingOutput;
+        const followCursor = this.pendingFollowCursor;
+        this.pendingOutput = '';
+        this.pendingFollowCursor = true;
+        this.terminal.write(pending, () => {
+          if (followCursor && this.followCursorEnabled) {
+            this.terminal?.scrollToBottom();
+          }
+        });
+      }
 
       this.setAttribute('data-ready', 'true');
 

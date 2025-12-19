@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { fixture, html } from '@open-wc/testing';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetViewport, waitForElement } from '@/test/utils/component-helpers';
+import { resetViewport, waitForCondition, waitForElement } from '@/test/utils/component-helpers';
 import { MockFitAddon, MockResizeObserver, MockTerminal } from '@/test/utils/terminal-mocks';
 
 // Mock ghostty-web before importing the component
@@ -129,6 +129,31 @@ describe('Terminal', () => {
       // Just verify the container exists
       const container = element.querySelector('.terminal-container');
       expect(container).toBeTruthy();
+    });
+
+    it('buffers output until the terminal is ready', async () => {
+      const pendingElement = document.createElement('vibe-terminal') as Terminal;
+      pendingElement.setAttribute('session-id', 'pending-output');
+      pendingElement.write('Early output');
+      document.body.appendChild(pendingElement);
+
+      await pendingElement.updateComplete;
+      await waitForElement(pendingElement, '#terminal-container');
+      await waitForCondition(() => pendingElement.getAttribute('data-ready') === 'true', {
+        message: 'terminal not ready',
+      });
+
+      const pendingTerminal = (pendingElement as unknown as { terminal: MockTerminal })
+        .terminal as MockTerminal | null;
+      if (!pendingTerminal) {
+        console.warn('Terminal not initialized in test environment');
+        pendingElement.remove();
+        return;
+      }
+
+      const writes = pendingTerminal.write.mock.calls.map((call) => call[0]);
+      expect(writes).toContain('Early output');
+      pendingElement.remove();
     });
 
     it('should clear terminal', async () => {

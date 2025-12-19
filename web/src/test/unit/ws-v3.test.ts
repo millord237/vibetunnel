@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  WS_V3_MAGIC,
-  WS_V3_VERSION,
   decodeWsV3Frame,
   decodeWsV3SubscribePayload,
   encodeWsV3Frame,
   encodeWsV3SubscribePayload,
+  WS_V3_MAGIC,
+  WS_V3_VERSION,
   WsV3MessageType,
 } from '../../shared/ws-v3.js';
 
@@ -19,10 +19,10 @@ describe('ws-v3 framing', () => {
     });
 
     const decoded = decodeWsV3Frame(encoded);
-    expect(decoded).not.toBeNull();
-    expect(decoded!.type).toBe(WsV3MessageType.STDOUT);
-    expect(decoded!.sessionId).toBe('abc');
-    expect(Array.from(decoded!.payload)).toEqual([1, 2, 3]);
+    if (!decoded) throw new Error('expected ws v3 frame');
+    expect(decoded.type).toBe(WsV3MessageType.STDOUT);
+    expect(decoded.sessionId).toBe('abc');
+    expect(Array.from(decoded.payload)).toEqual([1, 2, 3]);
   });
 
   it('rejects wrong magic/version', () => {
@@ -54,4 +54,3 @@ describe('ws-v3 framing', () => {
     expect(decodeWsV3SubscribePayload(new Uint8Array([1, 2]))).toBeNull();
   });
 });
-
