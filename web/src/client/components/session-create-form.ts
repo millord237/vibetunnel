@@ -97,12 +97,12 @@ export class SessionCreateForm extends LitElement {
   @state() private showFollowMode = false;
 
   @state() private quickStartCommands: QuickStartItem[] = [
+    { label: '✨ codex', command: 'codex' },
     { label: '✨ claude', command: 'claude' },
-    { label: '✨ gemini', command: 'gemini' },
+    { label: 'gemini3', command: 'gemini3' },
+    { label: 'opencode 4', command: 'opencode 4' },
     { label: 'zsh', command: 'zsh' },
-    { label: 'python3', command: 'python3' },
     { label: 'node', command: 'node' },
-    { label: '▶️ pnpm run dev', command: 'pnpm run dev' },
   ];
 
   // State properties for UI
