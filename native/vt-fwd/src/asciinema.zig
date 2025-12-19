@@ -134,3 +134,14 @@ fn validUtf8PrefixLen(data: []const u8) usize {
     }
     return 0;
 }
+
+test "validUtf8PrefixLen handles partial sequences" {
+    const full = [_]u8{ 0xE2, 0x82, 0xAC };
+    try std.testing.expectEqual(@as(usize, 3), validUtf8PrefixLen(full[0..]));
+
+    const partial = [_]u8{ 0xE2, 0x82 };
+    try std.testing.expectEqual(@as(usize, 0), validUtf8PrefixLen(partial[0..]));
+
+    const mixed = [_]u8{ 'A', 0xE2, 0x82 };
+    try std.testing.expectEqual(@as(usize, 1), validUtf8PrefixLen(mixed[0..]));
+}

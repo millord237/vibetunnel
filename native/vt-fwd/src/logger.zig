@@ -75,3 +75,10 @@ pub const Logger = struct {
         }
     }
 };
+
+test "parseLevel is case-insensitive" {
+    try std.testing.expect(parseLevel("INFO") == .info);
+    try std.testing.expect(parseLevel("warn") == .warn);
+    try std.testing.expect(parseLevel("DEBUG") == .debug);
+    try std.testing.expect(parseLevel("nope") == null);
+}

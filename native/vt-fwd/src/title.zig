@@ -175,3 +175,43 @@ pub fn sanitizeTitle(allocator: std.mem.Allocator, title: []const u8) ![]u8 {
 
     return list.toOwnedSlice(allocator);
 }
+
+test "abbreviatePath collapses long paths" {
+    const allocator = std.testing.allocator;
+    const result = try abbreviatePath(allocator, "/Users/peter/Development/foo/bar", "/Users/peter");
+    defer allocator.free(result);
+
+    try std.testing.expectEqualStrings(".../foo/bar", result);
+}
+
+test "generateSessionName falls back to command" {
+    const allocator = std.testing.allocator;
+    const command = [_][]const u8{"bash"};
+    const name = try generateSessionName(allocator, &command, "", "");
+    defer allocator.free(name);
+
+    try std.testing.expectEqualStrings("bash", name);
+}
+
+test "generateTitleSequence uses explicit session name" {
+    const allocator = std.testing.allocator;
+    const command = [_][]const u8{"/bin/zsh"};
+    const title = try generateTitleSequence(allocator, "/Users/peter", &command, "My Session", "/Users/peter");
+    defer allocator.free(title);
+
+    try std.testing.expectEqualStrings("\x1b]2;My Session\x07", title);
+}
+
+test "sanitizeTitle strips control chars and limits length" {
+    const allocator = std.testing.allocator;
+    const cleaned = try sanitizeTitle(allocator, "hi\nthere\x1b[");
+    defer allocator.free(cleaned);
+    try std.testing.expectEqualStrings("hithere[", cleaned);
+
+    const long = try allocator.alloc(u8, 300);
+    defer allocator.free(long);
+    @memset(long, 'a');
+    const trimmed = try sanitizeTitle(allocator, long);
+    defer allocator.free(trimmed);
+    try std.testing.expectEqual(@as(usize, 256), trimmed.len);
+}

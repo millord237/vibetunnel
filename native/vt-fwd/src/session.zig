@@ -73,3 +73,35 @@ pub fn updateSessionName(allocator: std.mem.Allocator, path: []const u8, name: [
     info.name = name;
     try writeSessionInfo(path, info, allocator);
 }
+
+test "writeSessionInfo and updateSessionName" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const path = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", tmp.sub_path[0..], "session.json" });
+    defer allocator.free(path);
+
+    const command = [_][]const u8{ "echo", "hi" };
+    const info = SessionInfo{
+        .id = "test-session",
+        .name = "initial name",
+        .command = &command,
+        .workingDir = "/tmp",
+        .status = "running",
+        .startedAt = "2025-01-01T00:00:00Z",
+    };
+
+    try writeSessionInfo(path, info, allocator);
+
+    const name1 = try readSessionName(allocator, path);
+    defer if (name1) |value| allocator.free(value);
+    try std.testing.expect(name1 != null);
+    try std.testing.expectEqualStrings("initial name", name1.?);
+
+    try updateSessionName(allocator, path, "updated name");
+    const name2 = try readSessionName(allocator, path);
+    defer if (name2) |value| allocator.free(value);
+    try std.testing.expect(name2 != null);
+    try std.testing.expectEqualStrings("updated name", name2.?);
+}

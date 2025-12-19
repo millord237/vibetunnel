@@ -85,3 +85,22 @@ pub const TitleFilter = struct {
         }
     }
 };
+
+test "filters OSC title sequence" {
+    var filter = TitleFilter{};
+    var output = std.ArrayList(u8).empty;
+    defer output.deinit(std.testing.allocator);
+
+    try filter.filter(std.testing.allocator, "hello\x1b]0;my title\x07world", &output);
+    try std.testing.expectEqualStrings("helloworld", output.items);
+}
+
+test "filters sequences across chunks" {
+    var filter = TitleFilter{};
+    var output = std.ArrayList(u8).empty;
+    defer output.deinit(std.testing.allocator);
+
+    try filter.filter(std.testing.allocator, "start\x1b]2;chunk", &output);
+    try filter.filter(std.testing.allocator, "ed\x07end", &output);
+    try std.testing.expectEqualStrings("startend", output.items);
+}
