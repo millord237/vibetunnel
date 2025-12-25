@@ -12,8 +12,13 @@ prettify_path() {
     fi
 }
 
+# Default unless a Mac app is detected
+APP_PATH=""
+
 # Only check for Mac app on macOS
 if [[ "$OSTYPE" == "darwin"* ]]; then
+    # Respect explicit overrides (tests/dev setups): don't auto-switch to app bundle.
+    if [ -z "$VIBETUNNEL_BIN" ]; then
     # macOS symlink resolution function using BSD readlink
     resolve_symlink_macos() {
         local target="$1"
@@ -118,6 +123,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
             # Silent operation - no message printed
             true  # No-op command to fix syntax error
         fi
+    fi
     fi
 fi
 
@@ -482,8 +488,16 @@ resolve_command() {
             exec_fwd ${VERBOSITY_ARGS:+$VERBOSITY_ARGS} ${TITLE_MODE_ARGS:+"$TITLE_MODE_ARGS"} "$user_shell" -i -c "$(printf '%q ' "$cmd" "$@")"
             ;;
         bash)
-            # For bash, expand aliases in non-interactive mode
-            exec_fwd ${VERBOSITY_ARGS:+$VERBOSITY_ARGS} ${TITLE_MODE_ARGS:+"$TITLE_MODE_ARGS"} "$user_shell" -c "shopt -s expand_aliases; source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true; $(printf '%q ' "$cmd" "$@")"
+            # For bash, enable alias expansion before parsing the command string.
+            # `shopt -s expand_aliases` inside the same `-c` string is too late.
+            local cmd_string
+            cmd_string="$(printf '%q ' "$cmd" "$@")"
+            local bash_env
+            bash_env=<(printf '%s\n' \
+                'shopt -s expand_aliases' \
+                'source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true' \
+            )
+            exec_fwd ${VERBOSITY_ARGS:+$VERBOSITY_ARGS} ${TITLE_MODE_ARGS:+"$TITLE_MODE_ARGS"} /usr/bin/env BASH_ENV="$bash_env" "$user_shell" -c "$cmd_string"
             ;;
         *)
             # Generic shell handling
