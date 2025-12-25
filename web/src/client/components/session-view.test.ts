@@ -10,6 +10,7 @@ import {
 } from '@/test/utils/component-helpers';
 import { createMockSession } from '@/test/utils/lit-test-utils';
 import { resetFactoryCounters } from '@/test/utils/test-factories';
+import type { Session } from '@/shared/types';
 
 const terminalSocketClientMock = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -290,6 +291,36 @@ describe('SessionView', () => {
       // Component logs the error but may not dispatch error event for 404s
       // Check console logs were called instead
       expect(element.session).toBeTruthy();
+    });
+  });
+
+  describe('session header layout', () => {
+    it('should constrain header content for long path and branch names', async () => {
+      const mockSession = {
+        ...createMockSession({ id: 'header-session-1' }),
+        gitRepoPath: '/tmp/repo',
+        gitBranch: 'feature/super-long-branch-name',
+      } as Session;
+
+      fetchMock.mockResponse('/api/sessions/header-session-1', mockSession);
+      element.session = mockSession;
+      await element.updateComplete;
+      await waitForAsync();
+
+      const header = element.querySelector('session-header');
+      expect(header).toBeTruthy();
+
+      const headerContainer = header?.querySelector('.session-header-container');
+      expect(headerContainer?.classList.contains('max-w-[100vw]')).toBe(true);
+
+      const path = header?.querySelector('clickable-path');
+      expect(path?.classList.contains('min-w-0')).toBe(true);
+      expect(path?.classList.contains('flex-1')).toBe(true);
+
+      const badge = header?.querySelector('git-status-badge');
+      expect(badge).toBeTruthy();
+      expect(badge?.classList.contains('min-w-0')).toBe(true);
+      expect(badge?.classList.contains('max-w-[30%]')).toBe(true);
     });
   });
 

@@ -70,7 +70,7 @@ export class GitStatusBadge extends LitElement {
     const isWorktree = this.session?.gitIsWorktree || false;
 
     return html`
-      <span class="text-muted-foreground truncate" title="${branchDisplay}">
+      <span class="text-muted-foreground truncate min-w-0" title="${branchDisplay}">
         [${branchDisplay}${isWorktree ? ' •' : ''}]
       </span>
     `;
