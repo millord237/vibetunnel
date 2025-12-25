@@ -165,7 +165,7 @@ export class SessionHeader extends LitElement {
     return html`
       <!-- Header content -->
       <div
-        class="flex items-center justify-between border-b border-border text-sm min-w-0 bg-bg-secondary px-4 py-2 session-header-container"
+        class="flex items-center justify-between border-b border-border text-sm min-w-0 max-w-screen bg-bg-secondary px-4 py-2 session-header-container"
         style="padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right));"
       >
         <div class="flex items-center gap-3 min-w-0 flex-1 overflow-hidden flex-shrink">
@@ -301,17 +301,17 @@ export class SessionHeader extends LitElement {
                 }
               </div>
             </div>
-            <div class="text-xs opacity-75 mt-0.5 flex items-center gap-2 min-w-0">
-              <clickable-path 
-                class="truncate"
-                .path=${this.session.workingDir} 
+            <div class="text-xs opacity-75 mt-0.5 flex items-center gap-2 min-w-0 overflow-hidden">
+              <clickable-path
+                class="min-w-0 flex-1 truncate"
+                .path=${this.session.workingDir}
                 .iconSize=${12}
               ></clickable-path>
               ${
                 this.session.gitRepoPath
                   ? html`
                     <git-status-badge
-                      class="flex-shrink-0"
+                      class="flex-shrink-0 max-w-[30%] sm:max-w-none"
                       .session=${this.session}
                       .detailed=${false}
                     ></git-status-badge>
