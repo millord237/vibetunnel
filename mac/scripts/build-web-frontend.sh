@@ -130,6 +130,10 @@ source "${SCRIPT_DIR}/node-path-setup.sh"
 # Export CI to prevent interactive prompts
 export CI=true
 
+# Avoid downloading browsers during Xcode/app builds (CI stability + speed).
+export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+export PUPPETEER_SKIP_DOWNLOAD=1
+
 # Check if pnpm is available (skip in CI when web artifacts are pre-built)
 if [ "${SKIP_NODE_CHECK}" = "true" ] && [ "${CI}" = "true" ]; then
     echo "✓ Skipping pnpm check in CI (web artifacts are pre-built)"
