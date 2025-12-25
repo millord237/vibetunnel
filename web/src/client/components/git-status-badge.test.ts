@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { fixture, html } from '@open-wc/testing';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { createMockSession } from '@/test/utils/lit-test-utils';
 import type { Session } from '@/shared/types';
+import { createMockSession } from '@/test/utils/lit-test-utils';
 import type { GitStatusBadge } from './git-status-badge';
 
 describe('GitStatusBadge', () => {

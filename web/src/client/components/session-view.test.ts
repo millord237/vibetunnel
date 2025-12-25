@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fixture, html } from '@open-wc/testing';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Session } from '@/shared/types';
 import {
   clickElement,
   resetViewport,
@@ -10,7 +11,6 @@ import {
 } from '@/test/utils/component-helpers';
 import { createMockSession } from '@/test/utils/lit-test-utils';
 import { resetFactoryCounters } from '@/test/utils/test-factories';
-import type { Session } from '@/shared/types';
 
 const terminalSocketClientMock = vi.hoisted(() => ({
   initialize: vi.fn(),
