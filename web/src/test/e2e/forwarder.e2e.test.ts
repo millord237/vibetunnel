@@ -396,4 +396,142 @@ describe('Forwarder E2E', () => {
       throw exitError;
     }
   }, 20000);
+
+  it('runs via vibetunnel fwd wrapper (tsx cli.ts)', async () => {
+    const forwarderPath = resolveForwarderPath();
+    const sessionId = `fwd_${Date.now()}`;
+    const marker = `cli-fwd-ok-${Date.now()}`;
+    const command = `printf "${marker}\\n"; sleep 0.2`;
+
+    if (!server) {
+      throw new Error('Server not started');
+    }
+
+    const cliPath = path.join(process.cwd(), 'src', 'cli.ts');
+    const child = spawn(
+      'tsx',
+      [cliPath, 'fwd', '--session-id', sessionId, '/bin/bash', '-lc', command],
+      {
+        env: {
+          ...process.env,
+          HOME: homeDir,
+          VIBETUNNEL_FWD_BIN: forwarderPath,
+        },
+        stdio: 'ignore',
+      }
+    );
+
+    let exitError: Error | null = null;
+    const exitPromise = new Promise<void>((resolve) => {
+      child.on('error', (error) => {
+        exitError = error instanceof Error ? error : new Error(String(error));
+        resolve();
+      });
+      child.on('exit', (code, signal) => {
+        if (code !== 0) {
+          exitError = new Error(
+            `vibetunnel fwd exited with code ${code ?? 'null'} signal ${signal ?? 'null'}`
+          );
+        }
+        resolve();
+      });
+    });
+
+    const text = await waitForSessionText(server.port, sessionId, marker);
+    expect(text).toContain(marker);
+
+    await exitPromise;
+    if (exitError) {
+      throw exitError;
+    }
+  }, 20000);
+
+  it('updates session title via vt wrapper (vt title)', async () => {
+    const forwarderPath = resolveForwarderPath();
+    const sessionId = `fwd_${Date.now()}`;
+    const marker = `vt-title-ok-${Date.now()}`;
+    const expectedTitle = `VT Title ${Date.now()}`;
+    const command = `printf "${marker}\\n"; sleep 5`;
+
+    if (!server) {
+      throw new Error('Server not started');
+    }
+
+    const child = spawn(forwarderPath, ['--session-id', sessionId, '/bin/bash', '-lc', command], {
+      env: {
+        ...process.env,
+        HOME: homeDir,
+      },
+      stdio: 'ignore',
+    });
+
+    const killTimer = setTimeout(() => {
+      child.kill('SIGTERM');
+    }, 10_000);
+
+    let manualKill = false;
+    let exitError: Error | null = null;
+    const exitPromise = new Promise<void>((resolve) => {
+      child.on('error', (error) => {
+        exitError = error instanceof Error ? error : new Error(String(error));
+        resolve();
+      });
+      child.on('exit', (code, signal) => {
+        clearTimeout(killTimer);
+        if (code !== 0 && !manualKill) {
+          exitError = new Error(
+            `forwarder exited with code ${code ?? 'null'} signal ${signal ?? 'null'}`
+          );
+        }
+        resolve();
+      });
+    });
+
+    await waitForSession(server.port, sessionId);
+    await waitForSessionText(server.port, sessionId, marker);
+
+    const vtPath = path.join(process.cwd(), 'bin', 'vt');
+    const updater = spawn(vtPath, ['title', expectedTitle], {
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        VIBETUNNEL_SESSION_ID: sessionId,
+        VIBETUNNEL_FWD_BIN: forwarderPath,
+        // vt requires a file at VIBETUNNEL_BIN even when only using vibetunnel-fwd
+        VIBETUNNEL_BIN: forwarderPath,
+      },
+      stdio: 'ignore',
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      updater.on('error', (error) =>
+        reject(error instanceof Error ? error : new Error(String(error)))
+      );
+      updater.on('exit', (code, signal) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(`vt title exited with code ${code ?? 'null'} signal ${signal ?? 'null'}`));
+      });
+    });
+
+    const sessionDir = path.join(controlDir, sessionId);
+    const sessionJsonPath = path.join(sessionDir, 'session.json');
+    await waitForPathExists(sessionJsonPath);
+
+    const json = JSON.parse(readFileSync(sessionJsonPath, 'utf-8')) as { name?: string };
+    expect(json.name).toBe(expectedTitle);
+
+    const updated = await waitForSessionName(server.port, sessionId, expectedTitle);
+    expect(updated.name).toBe(expectedTitle);
+
+    manualKill = true;
+    child.kill('SIGTERM');
+
+    await exitPromise;
+    if (exitError) {
+      throw exitError;
+    }
+  }, 20000);
 });
