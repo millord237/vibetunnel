@@ -392,7 +392,32 @@ struct GhosttyWebView: UIViewRepresentable {
         }
 
         private func jsonString(_ value: Any) -> String? {
-            guard let data = try? JSONSerialization.data(withJSONObject: value) else { return nil }
+            if JSONSerialization.isValidJSONObject(value),
+               let data = try? JSONSerialization.data(withJSONObject: value)
+            {
+                return String(data: data, encoding: .utf8)
+            }
+
+            switch value {
+            case let string as String:
+                return self.encodeJSONFragment(string)
+            case let bool as Bool:
+                return self.encodeJSONFragment(bool)
+            case let int as Int:
+                return self.encodeJSONFragment(int)
+            case let double as Double:
+                return self.encodeJSONFragment(double)
+            case let float as Float:
+                return self.encodeJSONFragment(float)
+            case let cgFloat as CGFloat:
+                return self.encodeJSONFragment(Double(cgFloat))
+            default:
+                return nil
+            }
+        }
+
+        private func encodeJSONFragment<T: Encodable>(_ fragment: T) -> String? {
+            guard let data = try? JSONEncoder().encode(fragment) else { return nil }
             return String(data: data, encoding: .utf8)
         }
     }
