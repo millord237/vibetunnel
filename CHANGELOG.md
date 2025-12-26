@@ -14,6 +14,8 @@
 - Fix Linux npm builds by removing pnpm-only postcss invocation and skipping SEA by default
 
 ### 🧹 Maintenance
+- Include node-pty tsconfig + node-addon-api in npm bundle (via [@kevinbluer](https://github.com/kevinbluer)) (#521)
+- Update web/mac dependencies; drop stray claude-code dep
 - Remove dynamic title mode; keep none/filter/static only
 - Make PAM auth optional and add Linux bootstrap + docs
 
