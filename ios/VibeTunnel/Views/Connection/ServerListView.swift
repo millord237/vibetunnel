@@ -206,7 +206,7 @@ struct ServerListView: View {
                     }
                 },
                 content: {
-                    SettingsView(initialTab: settingsInitialTab)
+                    SettingsView(selectedTab: $settingsInitialTab)
                 }
             )
             .overlay(alignment: .top) {

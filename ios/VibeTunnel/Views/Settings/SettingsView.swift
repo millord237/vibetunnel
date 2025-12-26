@@ -4,12 +4,20 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss)
     var dismiss
-    @State private var selectedTab: SettingsTab
+    @State private var internalSelectedTab: SettingsTab
+    private let externalSelectedTab: Binding<SettingsTab>?
     private let initialTabValue: SettingsTab
 
     init(initialTab: SettingsTab = .general) {
         self.initialTabValue = initialTab
-        _selectedTab = State(initialValue: initialTab)
+        self.externalSelectedTab = nil
+        _internalSelectedTab = State(initialValue: initialTab)
+    }
+
+    init(selectedTab: Binding<SettingsTab>) {
+        self.initialTabValue = selectedTab.wrappedValue
+        self.externalSelectedTab = selectedTab
+        _internalSelectedTab = State(initialValue: selectedTab.wrappedValue)
     }
 
     enum SettingsTab: String, CaseIterable, Identifiable {
@@ -38,7 +46,7 @@ struct SettingsView: View {
                     ForEach(SettingsTab.allCases, id: \.self) { tab in
                         Button {
                             withAnimation(Theme.Animation.smooth) {
-                                self.selectedTab = tab
+                                self.selectedTab.wrappedValue = tab
                             }
                         } label: {
                             VStack(spacing: Theme.Spacing.small) {
@@ -50,10 +58,10 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, Theme.Spacing.medium)
                             .foregroundColor(
-                                self.selectedTab == tab ? Theme.Colors.primaryAccent : Theme.Colors
+                                self.selectedTab.wrappedValue == tab ? Theme.Colors.primaryAccent : Theme.Colors
                                     .terminalForeground.opacity(0.5))
                             .background(
-                                self.selectedTab == tab ? Theme.Colors.primaryAccent.opacity(0.1) : Color.clear)
+                                self.selectedTab.wrappedValue == tab ? Theme.Colors.primaryAccent.opacity(0.1) : Color.clear)
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
@@ -66,7 +74,7 @@ struct SettingsView: View {
                 // Tab content
                 ScrollView {
                     VStack(spacing: Theme.Spacing.large) {
-                        switch self.selectedTab {
+                        switch self.selectedTab.wrappedValue {
                         case .general:
                             GeneralSettingsView()
                         case .tailscale:
@@ -93,11 +101,23 @@ struct SettingsView: View {
             }
             .onAppear {
                 // Ensure the requested initial tab is respected when presented
-                selectedTab = initialTabValue
+                if self.externalSelectedTab == nil {
+                    self.selectedTab.wrappedValue = self.initialTabValue
+                }
             }
         }
     }
+
+    private var selectedTab: Binding<SettingsTab> {
+        self.externalSelectedTab ?? self.$internalSelectedTab
+    }
 }
+
+#if DEBUG
+extension SettingsView {
+    var test_selectedTab: Binding<SettingsTab> { self.selectedTab }
+}
+#endif
 
 /// General settings tab content.
 /// Provides options for basic app configuration and preferences.
