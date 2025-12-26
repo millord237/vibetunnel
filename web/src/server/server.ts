@@ -776,9 +776,15 @@ export async function createApp(): Promise<AppInstance> {
 
     // Get connection information
     const connections: any = {
-      http: `http://localhost:${config.port}`,
+      http: {
+        port: config.port,
+        url: `http://localhost:${config.port}`,
+      },
+      // Legacy fields for older clients
       port: config.port,
     };
+
+    let responseTailscaleUrl: string | undefined;
 
     // Check if Tailscale is enabled and get status
     if (config.enableTailscaleServe) {
@@ -809,14 +815,19 @@ export async function createApp(): Promise<AppInstance> {
 
         // HTTPS is only available when Funnel (public mode) is enabled
         // In private mode, HTTPS doesn't work from mobile devices due to self-signed certs
-        const httpsActuallyAvailable = tailscaleStatus.isRunning && 
-          !tailscaleStatus.isPermanentlyDisabled && 
+        const httpsActuallyAvailable =
+          tailscaleStatus.isRunning &&
+          !tailscaleStatus.isPermanentlyDisabled &&
           (tailscaleStatus.funnelEnabled || false);
+        const tailscaleAvailable =
+          tailscaleStatus.isRunning && !tailscaleStatus.isPermanentlyDisabled;
         
         connections.tailscale = {
+          available: tailscaleAvailable,
           isRunning: tailscaleStatus.isRunning,
           httpsAvailable: httpsActuallyAvailable,
           isPublic: tailscaleStatus.funnelEnabled || false,
+          funnel: tailscaleStatus.funnelEnabled || false,
           mode: tailscaleStatus.actualMode || 'private',
           hostname: tailscaleHostname,
           httpsUrl: httpsActuallyAvailable ? tailscaleUrl : undefined,
@@ -827,13 +838,16 @@ export async function createApp(): Promise<AppInstance> {
         // Add the HTTPS URL at the top level for easy access only if actually available
         if (httpsActuallyAvailable && tailscaleUrl) {
           connections.tailscaleUrl = tailscaleUrl;
+          responseTailscaleUrl = tailscaleUrl;
         }
       } catch (error) {
         logger.debug('Failed to get Tailscale status for health endpoint:', error);
         connections.tailscale = {
+          available: false,
           isRunning: false,
           httpsAvailable: false,
           isPublic: false,
+          funnel: false,
           mode: 'private',
         };
         connections.sslAvailable = false;
@@ -845,7 +859,7 @@ export async function createApp(): Promise<AppInstance> {
     }
 
     res.json({
-      status: 'ok',
+      status: 'healthy',
       timestamp: new Date().toISOString(),
       mode: config.isHQMode ? 'hq' : 'remote',
       version: versionInfo.version,
@@ -853,6 +867,7 @@ export async function createApp(): Promise<AppInstance> {
       uptime: versionInfo.uptime,
       pid: versionInfo.pid,
       connections,
+      ...(responseTailscaleUrl ? { tailscaleUrl: responseTailscaleUrl } : {}),
     });
   });
 
