@@ -346,10 +346,16 @@ final class TailscaleService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
 
-        // Set form data with client credentials in the body
+        // Set form data with client credentials in the body (percent-encoded)
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        let bodyString = "client_id=\(clientId)&client_secret=\(clientSecret)&grant_type=client_credentials&scope=devices:core:read"
-        request.httpBody = bodyString.data(using: .utf8)
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: clientId),
+            URLQueryItem(name: "client_secret", value: clientSecret),
+            URLQueryItem(name: "grant_type", value: "client_credentials"),
+            URLQueryItem(name: "scope", value: "devices:core:read")
+        ]
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
         request.timeoutInterval = Self.apiTimeoutInterval
 
         do {

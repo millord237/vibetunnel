@@ -20,6 +20,8 @@ struct DiscoveredServer: Identifiable, Equatable {
     let name: String
     let host: String
     let port: Int
+    let type: String
+    let domain: String
     let metadata: [String: String]
 
     var displayName: String {
@@ -28,11 +30,20 @@ struct DiscoveredServer: Identifiable, Equatable {
     }
 
     /// Creates a new DiscoveredServer with a generated UUID
-    init(name: String, host: String, port: Int, metadata: [String: String]) {
+    init(
+        name: String,
+        host: String,
+        port: Int,
+        type: String = "_vibetunnel._tcp",
+        domain: String = "local",
+        metadata: [String: String]
+    ) {
         self.id = UUID()
         self.name = name
         self.host = host
         self.port = port
+        self.type = type
+        self.domain = domain
         self.metadata = metadata
     }
 
@@ -42,6 +53,8 @@ struct DiscoveredServer: Identifiable, Equatable {
         self.name = server.name
         self.host = host ?? server.host
         self.port = port ?? server.port
+        self.type = server.type
+        self.domain = server.domain
         self.metadata = server.metadata
     }
 }
@@ -160,6 +173,8 @@ final class BonjourDiscoveryService: BonjourDiscoveryProtocol {
                         name: name,
                         host: "", // Will be resolved
                         port: 0, // Will be resolved
+                        type: type,
+                        domain: domain,
                         metadata: metadata)
                     newServers.append(newServer)
 
@@ -202,10 +217,11 @@ final class BonjourDiscoveryService: BonjourDiscoveryProtocol {
 
         // Create a connection to resolve the service
         let parameters = NWParameters.tcp
+        let domain = server.domain.isEmpty ? "local" : server.domain
         let endpoint = NWEndpoint.service(
             name: serverName,
-            type: "_vibetunnel._tcp",
-            domain: "local",
+            type: server.type,
+            domain: domain,
             interface: nil)
 
         let connection = NWConnection(to: endpoint, using: parameters)
