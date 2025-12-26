@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { computeActivityStatus, DEFAULT_ACTIVITY_IDLE_TIMEOUT_MS } from '../../server/pty/activity-status';
+import {
+  computeActivityStatus,
+  DEFAULT_ACTIVITY_IDLE_TIMEOUT_MS,
+} from '../../server/pty/activity-status';
 
 describe('computeActivityStatus', () => {
   const now = Date.UTC(2025, 0, 1, 12, 0, 0);
@@ -12,7 +15,9 @@ describe('computeActivityStatus', () => {
     });
 
     expect(result.isActive).toBe(true);
-    expect(result.lastActivityAt).toBe(new Date(now - DEFAULT_ACTIVITY_IDLE_TIMEOUT_MS + 100).toISOString());
+    expect(result.lastActivityAt).toBe(
+      new Date(now - DEFAULT_ACTIVITY_IDLE_TIMEOUT_MS + 100).toISOString()
+    );
   });
 
   it('marks running session idle when output is stale', () => {
@@ -23,7 +28,9 @@ describe('computeActivityStatus', () => {
     });
 
     expect(result.isActive).toBe(false);
-    expect(result.lastActivityAt).toBe(new Date(now - DEFAULT_ACTIVITY_IDLE_TIMEOUT_MS - 1).toISOString());
+    expect(result.lastActivityAt).toBe(
+      new Date(now - DEFAULT_ACTIVITY_IDLE_TIMEOUT_MS - 1).toISOString()
+    );
   });
 
   it('falls back to lastModified when no output timestamp exists', () => {

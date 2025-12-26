@@ -138,7 +138,7 @@ export class SessionService {
    * **Title Modes:**
    * - `none`: No title management, apps control the title
    * - `filter`: Block all title changes from applications
- * - `static`: Fixed title format: "path — command — session"
+   * - `static`: Fixed title format: "path — command — session"
    *
    * @param sessionData - The session configuration
    * @returns Promise resolving to the created session details

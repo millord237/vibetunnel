@@ -1,3 +1,5 @@
+import type { SessionStatus } from '../../shared/types.js';
+
 export const DEFAULT_ACTIVITY_IDLE_TIMEOUT_MS = 5000;
 
 export type ActivityStatus = {
@@ -6,7 +8,7 @@ export type ActivityStatus = {
 };
 
 export type ActivityStatusInput = {
-  status: 'running' | 'exited';
+  status: SessionStatus;
   lastOutputTimestamp?: number;
   lastInputTimestamp?: number;
   lastModified?: string;
