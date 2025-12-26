@@ -236,25 +236,25 @@ final class BunServer {
             self.logger.info("Tailscale Serve integration enabled")
 
             // Store original bind address for fallback
-            originalBindAddress = bindAddress
+            self.originalBindAddress = self.bindAddress
 
             // Only force localhost binding if Tailscale Serve is actually working
             // Don't restrict binding preemptively - let the fallback mechanism handle failures
-            logger.info("Tailscale Serve enabled, keeping original bind address: \(self.bindAddress)")
+            self.logger.info("Tailscale Serve enabled, keeping original bind address: \(self.bindAddress)")
 
             // Check if Public Internet access (Funnel) is enabled
             let tailscaleFunnelEnabled = UserDefaults.standard
                 .bool(forKey: AppConstants.UserDefaultsKeys.tailscaleFunnelEnabled)
             if tailscaleFunnelEnabled {
                 vibetunnelArgs.append("--enable-tailscale-funnel")
-                logger.warning("Tailscale Funnel integration enabled - PUBLIC INTERNET ACCESS (Serve + Funnel)")
+                self.logger.warning("Tailscale Funnel integration enabled - PUBLIC INTERNET ACCESS (Serve + Funnel)")
             } else {
-                logger.info("Tailscale PRIVATE mode - Tailnet-only access (Serve without Funnel)")
+                self.logger.info("Tailscale PRIVATE mode - Tailnet-only access (Serve without Funnel)")
             }
         } else {
             // Clear any stored original address when Tailscale is disabled
-            originalBindAddress = nil
-            logger.info("Tailscale integration disabled")
+            self.originalBindAddress = nil
+            self.logger.info("Tailscale integration disabled")
         }
 
         // Create wrapper to run vibetunnel with parent death monitoring AND crash detection
@@ -446,31 +446,31 @@ final class BunServer {
         let authConfig = AuthConfig.current()
 
         // Build the dev server arguments
-        let effectiveBindAddress = bindAddress
+        let effectiveBindAddress = self.bindAddress
 
         // Check if Tailscale Serve is enabled and force localhost binding
         let tailscaleServeEnabled = UserDefaults.standard
             .bool(forKey: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
         if tailscaleServeEnabled {
             // Store original bind address for potential fallback
-            originalBindAddress = bindAddress
+            self.originalBindAddress = self.bindAddress
 
             // Keep original binding - don't restrict preemptively
             // The fallback mechanism will handle failures
-            logger.info("Tailscale Serve enabled in dev mode, using bind address: \(self.bindAddress)")
+            self.logger.info("Tailscale Serve enabled in dev mode, using bind address: \(self.bindAddress)")
 
             // Check if Public Internet access (Funnel) is enabled
             let tailscaleFunnelEnabled = UserDefaults.standard
                 .bool(forKey: AppConstants.UserDefaultsKeys.tailscaleFunnelEnabled)
             if tailscaleFunnelEnabled {
-                logger.warning("Dev mode: Tailscale Funnel enabled - PUBLIC INTERNET ACCESS (Serve + Funnel)")
+                self.logger.warning("Dev mode: Tailscale Funnel enabled - PUBLIC INTERNET ACCESS (Serve + Funnel)")
             } else {
-                logger.info("Dev mode: Tailscale PRIVATE mode - Tailnet-only access (Serve without Funnel)")
+                self.logger.info("Dev mode: Tailscale PRIVATE mode - Tailnet-only access (Serve without Funnel)")
             }
         } else {
             // Clear any stored original address when Tailscale is disabled
-            originalBindAddress = nil
-            logger.info("Dev mode: Tailscale integration disabled")
+            self.originalBindAddress = nil
+            self.logger.info("Dev mode: Tailscale integration disabled")
         }
 
         let devArgs = devServerManager.buildDevServerArguments(

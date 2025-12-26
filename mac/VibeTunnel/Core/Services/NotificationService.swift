@@ -83,7 +83,7 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
     }
 
     private static func canUseUserNotifications() -> Bool {
-        guard !Self.isRunningTests() else { return false }
+        guard !self.isRunningTests() else { return false }
         return Bundle.main.bundlePath.hasSuffix(".app")
     }
 
@@ -389,7 +389,10 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
     /// Open System Settings to the Notifications pane
     func openNotificationSettings() {
         // Try to open directly to the app's settings
-        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=sh.vibetunnel.vibetunnel") {
+        if let url =
+            URL(
+                string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=sh.vibetunnel.vibetunnel")
+        {
             NSWorkspace.shared.open(url)
         } else if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
             NSWorkspace.shared.open(url)

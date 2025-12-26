@@ -11,7 +11,7 @@ enum TailscaleURLHelper {
         let possiblePaths = [
             "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
             "/opt/homebrew/bin/tailscale",
-            "/usr/local/bin/tailscale"
+            "/usr/local/bin/tailscale",
         ]
 
         var tailscalePath: String?
@@ -47,11 +47,11 @@ enum TailscaleURLHelper {
                     // Check if it looks like an IP address (basic validation)
                     // Valid IP should be like "100.68.180.82"
                     let ipComponents = output.components(separatedBy: ".")
-                    if ipComponents.count == 4 &&
-                        ipComponents.allSatisfy({ 
-                            guard let value = Int($0) else { return false }
-                            return (0...255).contains(value)
-                        })
+                    if ipComponents.count == 4,
+                       ipComponents.allSatisfy({
+                           guard let value = Int($0) else { return false }
+                           return (0...255).contains(value)
+                       })
                     {
                         return output
                     } else {
@@ -83,8 +83,7 @@ enum TailscaleURLHelper {
         port: String,
         isTailscaleServeEnabled: Bool,
         isTailscaleServeRunning: Bool? = nil,
-        isFunnelEnabled: Bool? = nil
-    )
+        isFunnelEnabled: Bool? = nil)
         -> URL?
     {
         // Check if we should use Serve URL
@@ -93,10 +92,10 @@ enum TailscaleURLHelper {
         // Check if Funnel (Public mode) is enabled
         let isPublicMode = isFunnelEnabled ?? false
 
-        if useServeURL && isPublicMode {
+        if useServeURL, isPublicMode {
             // Public mode with Funnel - HTTPS works everywhere
             return URL(string: "https://\(hostname)")
-        } else if useServeURL && !isPublicMode {
+        } else if useServeURL, !isPublicMode {
             // Private mode - HTTPS doesn't work on mobile, use HTTP with IP
             // Try to get Tailscale IP, fallback to hostname if not available
             if let tailscaleIP = getTailscaleIP() {
@@ -138,8 +137,7 @@ enum TailscaleURLHelper {
         port: String,
         isTailscaleServeEnabled: Bool,
         isTailscaleServeRunning: Bool? = nil,
-        isFunnelEnabled: Bool? = nil
-    )
+        isFunnelEnabled: Bool? = nil)
         -> String
     {
         // Check if we should use Serve URL
@@ -148,10 +146,10 @@ enum TailscaleURLHelper {
         // Check if Funnel (Public mode) is enabled
         let isPublicMode = isFunnelEnabled ?? false
 
-        if useServeURL && isPublicMode {
+        if useServeURL, isPublicMode {
             // Public mode - show HTTPS URL without port (port 443 is implicit)
             return "\(hostname)"
-        } else if useServeURL && !isPublicMode {
+        } else if useServeURL, !isPublicMode {
             // Private mode - show hostname:port for HTTP
             // Don't use IP address here as it's less user-friendly
             return "\(hostname):\(port)"

@@ -58,8 +58,7 @@ enum TooltipProvider {
                 if idleCount > 0 {
                     tooltipParts
                         .append(
-                            "\(activeSessions.count) active, \(idleCount) idle session\(sessions.count == 1 ? "" : "s")"
-                        )
+                            "\(activeSessions.count) active, \(idleCount) idle session\(sessions.count == 1 ? "" : "s")")
                 } else {
                     tooltipParts.append("\(activeSessions.count) active session\(activeSessions.count == 1 ? "" : "s")")
                 }

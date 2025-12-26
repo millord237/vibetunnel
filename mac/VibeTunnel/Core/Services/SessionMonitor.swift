@@ -45,7 +45,7 @@ struct ServerSessionInfo: Codable {
     ///
     /// The activity monitor flag is authoritative since Mac app and server ship together.
     var isActivityActive: Bool {
-        activityStatus?.isActive ?? false
+        self.activityStatus?.isActive ?? false
     }
 }
 

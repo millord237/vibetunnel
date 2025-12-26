@@ -224,7 +224,7 @@ final class DevServerManager: ObservableObject {
             .bool(forKey: AppConstants.UserDefaultsKeys.tailscaleFunnelEnabled)
         if tailscaleFunnelEnabled {
             args.append("--enable-tailscale-funnel")
-            logger.warning("Tailscale Funnel integration enabled - PUBLIC INTERNET ACCESS")
+            self.logger.warning("Tailscale Funnel integration enabled - PUBLIC INTERNET ACCESS")
         }
 
         return args

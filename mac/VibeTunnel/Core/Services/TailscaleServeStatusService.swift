@@ -30,26 +30,25 @@ final class TailscaleServeStatusService {
         if tailscaleEnabled {
             Task {
                 // Initial fetch
-                await fetchStatus(silent: false)
+                await self.fetchStatus(silent: false)
                 // Then start regular monitoring
-                startMonitoring()
+                self.startMonitoring()
             }
         }
     }
 
     /// Start polling for status updates
     func startMonitoring() {
-        logger.debug("Starting Tailscale Serve status monitoring")
+        self.logger.debug("Starting Tailscale Serve status monitoring")
         // Check current mode and detect switches
         let currentMode = UserDefaults.standard.bool(forKey: AppConstants.UserDefaultsKeys.tailscaleFunnelEnabled)
-        let modeChanged = lastKnownMode != nil && lastKnownMode != currentMode
-        lastKnownMode = currentMode
+        let modeChanged = self.lastKnownMode != nil && self.lastKnownMode != currentMode
+        self.lastKnownMode = currentMode
 
         if modeChanged {
-            logger
+            self.logger
                 .info(
-                    "[TAILSCALE STATUS] Mode switch detected: \(self.lastKnownMode == true ? "Private->Public" : "Public->Private")"
-                )
+                    "[TAILSCALE STATUS] Mode switch detected: \(self.lastKnownMode == true ? "Private->Public" : "Public->Private")")
         }
 
         // Initial fetch - show spinner for initial load
@@ -58,18 +57,18 @@ final class TailscaleServeStatusService {
             try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
 
             // First fetch shows spinner
-            await fetchStatus(silent: false)
+            await self.fetchStatus(silent: false)
 
             // Do rapid silent checks to catch up quickly (for any mode switch or startup)
-            if lastError != nil || !isRunning {
-                logger.info("[TAILSCALE STATUS] Performing rapid status checks")
+            if self.lastError != nil || !self.isRunning {
+                self.logger.info("[TAILSCALE STATUS] Performing rapid status checks")
                 for i in 1...5 {
                     try? await Task.sleep(nanoseconds: 2_000_000_000) // Check every 2 seconds
-                    logger.info("[TAILSCALE STATUS] Rapid check \(i)/5")
-                    await fetchStatus(silent: true) // Silent background check
+                    self.logger.info("[TAILSCALE STATUS] Rapid check \(i)/5")
+                    await self.fetchStatus(silent: true) // Silent background check
                     // Stop checking if we're now running successfully
-                    if isRunning && lastError == nil {
-                        logger.info("[TAILSCALE STATUS] Tailscale ready!")
+                    if self.isRunning, self.lastError == nil {
+                        self.logger.info("[TAILSCALE STATUS] Tailscale ready!")
                         break
                     }
                 }
@@ -77,7 +76,7 @@ final class TailscaleServeStatusService {
         }
 
         // Set up periodic updates - less aggressive and always silent
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
+        self.updateTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, !self.isCurrentlyFetching, !self.isPermanentlyDisabled else {
                     return
@@ -97,28 +96,28 @@ final class TailscaleServeStatusService {
 
     /// Stop polling for status updates
     func stopMonitoring() {
-        logger.debug("Stopping Tailscale Serve status monitoring")
-        updateTimer?.invalidate()
-        updateTimer = nil
-        isCurrentlyFetching = false
-        isPermanentlyDisabled = false
+        self.logger.debug("Stopping Tailscale Serve status monitoring")
+        self.updateTimer?.invalidate()
+        self.updateTimer = nil
+        self.isCurrentlyFetching = false
+        self.isPermanentlyDisabled = false
     }
 
     /// Force an immediate status update (useful after server operations)
     func refreshStatusImmediately() async {
-        logger.debug("Forcing immediate Tailscale Serve status refresh")
-        await fetchStatus(silent: false) // Show spinner for user-initiated refresh
+        self.logger.debug("Forcing immediate Tailscale Serve status refresh")
+        await self.fetchStatus(silent: false) // Show spinner for user-initiated refresh
     }
 
     /// Handle mode switch by doing rapid checks
     func handleModeSwitch() async {
-        logger.info("[TAILSCALE STATUS] Handling mode switch with rapid checks")
+        self.logger.info("[TAILSCALE STATUS] Handling mode switch with rapid checks")
         // Do rapid silent checks to catch up with new mode
         for i in 1...3 {
             try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
-            await fetchStatus(silent: true)
-            if isRunning && lastError == nil {
-                logger.info("[TAILSCALE STATUS] Mode switch complete")
+            await self.fetchStatus(silent: true)
+            if self.isRunning, self.lastError == nil {
+                self.logger.info("[TAILSCALE STATUS] Mode switch complete")
                 break
             }
         }
@@ -129,15 +128,15 @@ final class TailscaleServeStatusService {
     @MainActor
     func fetchStatus(silent: Bool = false) async {
         // Prevent concurrent fetches
-        guard !isCurrentlyFetching else {
-            logger.debug("Skipping fetch - already in progress")
+        guard !self.isCurrentlyFetching else {
+            self.logger.debug("Skipping fetch - already in progress")
             return
         }
 
-        isCurrentlyFetching = true
+        self.isCurrentlyFetching = true
         // Only show loading spinner for user-initiated actions
         if !silent {
-            isLoading = true
+            self.isLoading = true
         }
         defer {
             if !silent {
@@ -146,8 +145,8 @@ final class TailscaleServeStatusService {
             isCurrentlyFetching = false
         }
 
-        logger.info("🔄 [TAILSCALE STATUS] Starting status fetch at \(Date())")
-        logger.debug("Fetching Tailscale Serve status...")
+        self.logger.info("🔄 [TAILSCALE STATUS] Starting status fetch at \(Date())")
+        self.logger.debug("Fetching Tailscale Serve status...")
 
         // Get server port
         let port = UserDefaults.standard.string(forKey: AppConstants.UserDefaultsKeys.serverPort) ?? "4020"
@@ -200,12 +199,12 @@ final class TailscaleServeStatusService {
 
             let status = try decoder.decode(TailscaleServeStatus.self, from: data)
 
-            logger.info("📊 [TAILSCALE STATUS] Response received:")
-            logger.info("  - isRunning: \(status.isRunning)")
-            logger.info("  - lastError: \(status.lastError ?? "none")")
-            logger.info("  - isPermanentlyDisabled: \(status.isPermanentlyDisabled ?? false)")
-            logger.info("  - funnelEnabled: \(status.funnelEnabled ?? false)")
-            logger.info("  - Previous isPermanentlyDisabled: \(self.isPermanentlyDisabled)")
+            self.logger.info("📊 [TAILSCALE STATUS] Response received:")
+            self.logger.info("  - isRunning: \(status.isRunning)")
+            self.logger.info("  - lastError: \(status.lastError ?? "none")")
+            self.logger.info("  - isPermanentlyDisabled: \(status.isPermanentlyDisabled ?? false)")
+            self.logger.info("  - funnelEnabled: \(status.funnelEnabled ?? false)")
+            self.logger.info("  - Previous isPermanentlyDisabled: \(self.isPermanentlyDisabled)")
 
             // Check if this is a permanent failure (tailnet not configured)
             if let error = status.lastError {
@@ -213,54 +212,53 @@ final class TailscaleServeStatusService {
                     error.contains("Tailscale Serve feature not enabled") ||
                     error.contains("Tailscale Serve is disabled on your tailnet")
                 {
-                    isPermanentlyDisabled = true
-                    logger.info("[TAILSCALE STATUS] Tailscale Serve not enabled on tailnet - using fallback mode")
+                    self.isPermanentlyDisabled = true
+                    self.logger.info("[TAILSCALE STATUS] Tailscale Serve not enabled on tailnet - using fallback mode")
                 } else {
                     // Clear permanent disable if we get a different error
-                    isPermanentlyDisabled = false
-                    logger.info("⚠️ [TAILSCALE STATUS] Error but not permanent: \(error)")
+                    self.isPermanentlyDisabled = false
+                    self.logger.info("⚠️ [TAILSCALE STATUS] Error but not permanent: \(error)")
                 }
             } else if status.isRunning {
                 // Clear permanent disable if it's now running
-                isPermanentlyDisabled = false
-                logger.info("✅ [TAILSCALE STATUS] Tailscale Serve is running")
+                self.isPermanentlyDisabled = false
+                self.logger.info("✅ [TAILSCALE STATUS] Tailscale Serve is running")
             }
 
             // Update published properties
-            let oldRunning = isRunning
-            let oldError = lastError
-            let oldFunnelEnabled = funnelEnabled
-            isRunning = status.isRunning
-            lastError = status.lastError
-            startTime = status.startTime
-            funnelEnabled = status.funnelEnabled ?? false
-            funnelStartTime = status.funnelStartTime
-            desiredMode = status.desiredMode
-            actualMode = status.actualMode
-            funnelError = status.funnelError
+            let oldRunning = self.isRunning
+            let oldError = self.lastError
+            let oldFunnelEnabled = self.funnelEnabled
+            self.isRunning = status.isRunning
+            self.lastError = status.lastError
+            self.startTime = status.startTime
+            self.funnelEnabled = status.funnelEnabled ?? false
+            self.funnelStartTime = status.funnelStartTime
+            self.desiredMode = status.desiredMode
+            self.actualMode = status.actualMode
+            self.funnelError = status.funnelError
 
-            logger.info("📝 [TAILSCALE STATUS] State changed:")
-            logger.info("  - isRunning: \(oldRunning) -> \(self.isRunning)")
-            logger.info("  - lastError: \(oldError ?? "none") -> \(self.lastError ?? "none")")
-            logger.info("  - funnelEnabled: \(oldFunnelEnabled) -> \(self.funnelEnabled)")
-            logger.info("  - desiredMode: \(self.desiredMode ?? "none")")
-            logger.info("  - actualMode: \(self.actualMode ?? "none")")
-            logger.info("  - funnelError: \(self.funnelError ?? "none")")
-            logger.info("  - isPermanentlyDisabled: \(self.isPermanentlyDisabled)")
+            self.logger.info("📝 [TAILSCALE STATUS] State changed:")
+            self.logger.info("  - isRunning: \(oldRunning) -> \(self.isRunning)")
+            self.logger.info("  - lastError: \(oldError ?? "none") -> \(self.lastError ?? "none")")
+            self.logger.info("  - funnelEnabled: \(oldFunnelEnabled) -> \(self.funnelEnabled)")
+            self.logger.info("  - desiredMode: \(self.desiredMode ?? "none")")
+            self.logger.info("  - actualMode: \(self.actualMode ?? "none")")
+            self.logger.info("  - funnelError: \(self.funnelError ?? "none")")
+            self.logger.info("  - isPermanentlyDisabled: \(self.isPermanentlyDisabled)")
 
-            logger
+            self.logger
                 .debug(
-                    "Tailscale Serve status - Running: \(status.isRunning), Error: \(status.lastError ?? "none"), Permanently disabled: \(self.isPermanentlyDisabled)"
-                )
+                    "Tailscale Serve status - Running: \(status.isRunning), Error: \(status.lastError ?? "none"), Permanently disabled: \(self.isPermanentlyDisabled)")
         } catch {
-            logger.error("Failed to fetch Tailscale Serve status: \(error.localizedDescription)")
-            logger.error("Full error details: \(String(describing: error))")
-            logger.error("Attempting to connect to: \(urlString)")
+            self.logger.error("Failed to fetch Tailscale Serve status: \(error.localizedDescription)")
+            self.logger.error("Full error details: \(String(describing: error))")
+            self.logger.error("Attempting to connect to: \(urlString)")
 
             // On error, assume not running
-            isRunning = false
+            self.isRunning = false
             // Provide specific error messages based on the error type
-            lastError = self.parseStatusCheckError(error)
+            self.lastError = self.parseStatusCheckError(error)
         }
     }
 
@@ -274,7 +272,7 @@ final class TailscaleServeStatusService {
             return "Connection to server lost"
         } else if errorDescription.contains("timed out") || errorDescription.contains("timeout") {
             return "Server response timeout"
-        } else if errorDescription.contains("invalid") && errorDescription.contains("url") {
+        } else if errorDescription.contains("invalid"), errorDescription.contains("url") {
             return "Invalid server configuration"
         } else if errorDescription.contains("network") {
             return "Network connectivity issue"

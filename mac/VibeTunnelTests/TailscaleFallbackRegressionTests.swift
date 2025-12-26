@@ -13,12 +13,12 @@ final class TailscaleFallbackRegressionTests {
     private var tailscaleService: TailscaleServeStatusService!
 
     init() async {
-        serverManager = ServerManager.shared
-        tailscaleService = TailscaleServeStatusService.shared
+        self.serverManager = ServerManager.shared
+        self.tailscaleService = TailscaleServeStatusService.shared
 
         // Ensure clean state
-        await serverManager.stop()
-        tailscaleService.stopMonitoring()
+        await self.serverManager.stop()
+        self.tailscaleService.stopMonitoring()
 
         // Reset UserDefaults for testing
         UserDefaults.standard.removeObject(forKey: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
@@ -33,10 +33,9 @@ final class TailscaleFallbackRegressionTests {
     @Test(
         "Tailscale toggle does not auto-disable after 10 seconds",
         .tags(.critical),
-        .timeLimit(.minutes(1))
-    )
+        .timeLimit(.minutes(1)))
     func tailscaleToggleDoesNotAutoDisable() async throws {
-        logger.info("Testing that Tailscale toggle remains enabled in fallback mode")
+        self.logger.info("Testing that Tailscale toggle remains enabled in fallback mode")
 
         // Enable Tailscale Serve in settings
         UserDefaults.standard.set(true, forKey: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
@@ -46,10 +45,10 @@ final class TailscaleFallbackRegressionTests {
         #expect(initialValue == true, "Tailscale should be enabled initially")
 
         // Start the server (which starts monitoring)
-        await serverManager.start()
+        await self.serverManager.start()
 
         // Wait for monitoring to potentially trigger the old bug (it checked every 10 seconds)
-        logger.info("Waiting 15 seconds to ensure toggle doesn't auto-disable...")
+        self.logger.info("Waiting 15 seconds to ensure toggle doesn't auto-disable...")
         try await Task.sleep(for: .seconds(15))
 
         // Check that the toggle is still enabled
@@ -57,39 +56,37 @@ final class TailscaleFallbackRegressionTests {
         #expect(afterWaitValue == true, "Tailscale toggle should remain enabled after 15 seconds")
 
         // Also verify that if isPermanentlyDisabled is set, toggle still stays enabled
-        if tailscaleService.isPermanentlyDisabled {
-            logger.info("Service is in fallback mode (isPermanentlyDisabled = true)")
+        if self.tailscaleService.isPermanentlyDisabled {
+            self.logger.info("Service is in fallback mode (isPermanentlyDisabled = true)")
             let fallbackValue = AppConstants.boolValue(for: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
             #expect(fallbackValue == true, "Toggle should remain enabled even in fallback mode")
         }
 
         // Cleanup
-        await serverManager.stop()
+        await self.serverManager.stop()
     }
 
     // MARK: - Regression Test 2: Forced Localhost Binding Bug
 
     @Test(
         "Server binds to network interface with Tailscale fallback",
-        .tags(.critical)
-    )
+        .tags(.critical))
     func serverBindsToNetworkWithTailscaleFallback() async throws {
-        logger.info("Testing that server doesn't force localhost binding")
+        self.logger.info("Testing that server doesn't force localhost binding")
 
         // Set dashboard access to network mode
         UserDefaults.standard.set(
             AppConstants.DashboardAccessModeRawValues.network,
-            forKey: AppConstants.UserDefaultsKeys.dashboardAccessMode
-        )
+            forKey: AppConstants.UserDefaultsKeys.dashboardAccessMode)
 
         // Enable Tailscale (this used to force localhost in Release 15)
         UserDefaults.standard.set(true, forKey: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
 
         // Verify bind address is 0.0.0.0 (network accessible)
-        #expect(serverManager.bindAddress == "0.0.0.0", "Server should bind to 0.0.0.0 for network access")
+        #expect(self.serverManager.bindAddress == "0.0.0.0", "Server should bind to 0.0.0.0 for network access")
 
         // Start the server
-        await serverManager.start()
+        await self.serverManager.start()
 
         // Wait a moment for server to initialize
         try await Task.sleep(for: .seconds(2))
@@ -98,34 +95,31 @@ final class TailscaleFallbackRegressionTests {
         if let bunServer = serverManager.bunServer {
             #expect(
                 bunServer.bindAddress == "0.0.0.0",
-                "BunServer should maintain 0.0.0.0 binding, not forced to 127.0.0.1"
-            )
+                "BunServer should maintain 0.0.0.0 binding, not forced to 127.0.0.1")
 
             // Verify original bind address is preserved for fallback
             #expect(
                 bunServer.bindAddress != "127.0.0.1",
-                "Server should not be forced to localhost when Tailscale Serve unavailable"
-            )
+                "Server should not be forced to localhost when Tailscale Serve unavailable")
         }
 
         // Cleanup
-        await serverManager.stop()
+        await self.serverManager.stop()
     }
 
     // MARK: - Regression Test 3: Fallback Mode Activation
 
     @Test(
         "Tailscale fallback mode activates without errors",
-        .tags(.critical)
-    )
+        .tags(.critical))
     func tailscaleFallbackModeActivation() async throws {
-        logger.info("Testing fallback mode activation when Tailscale Serve unavailable")
+        self.logger.info("Testing fallback mode activation when Tailscale Serve unavailable")
 
         // Enable Tailscale
         UserDefaults.standard.set(true, forKey: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
 
         // Start monitoring
-        tailscaleService.startMonitoring()
+        self.tailscaleService.startMonitoring()
 
         // Wait for status check to potentially detect Serve unavailable
         try await Task.sleep(for: .seconds(5))
@@ -135,15 +129,14 @@ final class TailscaleFallbackRegressionTests {
         // 2. Server should still be able to start
         // 3. No critical errors should prevent operation
 
-        if tailscaleService.isPermanentlyDisabled {
-            logger.info("Fallback mode activated (isPermanentlyDisabled = true)")
+        if self.tailscaleService.isPermanentlyDisabled {
+            self.logger.info("Fallback mode activated (isPermanentlyDisabled = true)")
 
             // Verify the error message is user-friendly
             if let error = tailscaleService.lastError {
                 #expect(
                     !error.contains("exit") && !error.contains("code 0"),
-                    "Error message should not contain internal details like 'exit code 0'"
-                )
+                    "Error message should not contain internal details like 'exit code 0'")
             }
 
             // Toggle should still be enabled
@@ -152,62 +145,59 @@ final class TailscaleFallbackRegressionTests {
         }
 
         // Server should be able to start regardless
-        await serverManager.start()
+        await self.serverManager.start()
         try await Task.sleep(for: .seconds(2))
 
         // In fallback, server might not be "running" but shouldn't have critical errors
         if let error = serverManager.lastError as? BunServerError {
             if error == .binaryNotFound {
-                logger.warning("Skipping fallback test: bundled server binary not available")
+                self.logger.warning("Skipping fallback test: bundled server binary not available")
                 return
             }
         }
 
         // Cleanup
-        await serverManager.stop()
-        tailscaleService.stopMonitoring()
+        await self.serverManager.stop()
+        self.tailscaleService.stopMonitoring()
     }
 
     // MARK: - Regression Test 4: UI Error Display
 
     @Test(
         "UI shows correct status in fallback mode",
-        .tags(.integration)
-    )
+        .tags(.integration))
     func uIShowsCorrectStatusInFallback() async throws {
-        logger.info("Testing UI status display in fallback mode")
+        self.logger.info("Testing UI status display in fallback mode")
 
         // Enable Tailscale
         UserDefaults.standard.set(true, forKey: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
 
         // Start monitoring to trigger status checks
-        tailscaleService.startMonitoring()
+        self.tailscaleService.startMonitoring()
 
         // Wait for initial status
         try await Task.sleep(for: .seconds(3))
 
         // Check the status that UI would display
-        if tailscaleService.isPermanentlyDisabled {
+        if self.tailscaleService.isPermanentlyDisabled {
             // In fallback mode, UI should show helpful status
-            logger.info("UI should show 'Fallback' status, not error")
+            self.logger.info("UI should show 'Fallback' status, not error")
 
             // The error should be clear about what's happening
             if let error = tailscaleService.lastError {
                 #expect(
                     error.contains("admin") || error.contains("tailnet") || error.contains("Serve"),
-                    "Error should explain why Serve isn't available"
-                )
+                    "Error should explain why Serve isn't available")
 
                 // Should not show confusing technical errors
                 #expect(
                     !error.contains("Process exited with code 0"),
-                    "Should not show 'Process exited with code 0' error"
-                )
+                    "Should not show 'Process exited with code 0' error")
             }
         }
 
         // Cleanup
-        tailscaleService.stopMonitoring()
+        self.tailscaleService.stopMonitoring()
     }
 
     // MARK: - Helper to simulate Tailscale Serve unavailable
@@ -217,20 +207,18 @@ final class TailscaleFallbackRegressionTests {
         .tags(.integration),
         .disabled(
             if: !ProcessInfo.processInfo.environment.keys.contains("TEST_TAILSCALE_HELPERS"),
-            "Helper test only runs with TEST_TAILSCALE_HELPERS=1"
-        )
-    )
+            "Helper test only runs with TEST_TAILSCALE_HELPERS=1"))
     func simulateTailscaleServeUnavailable() async throws {
         // This helper test can be used to manually trigger the fallback scenario
-        logger.info("Simulating Tailscale Serve unavailable scenario")
+        self.logger.info("Simulating Tailscale Serve unavailable scenario")
 
         // Manually set the permanently disabled flag (normally set by status service)
-        tailscaleService.isPermanentlyDisabled = true
-        tailscaleService.lastError = "Serve is not enabled on your tailnet"
+        self.tailscaleService.isPermanentlyDisabled = true
+        self.tailscaleService.lastError = "Serve is not enabled on your tailnet"
 
         // Verify fallback behavior
-        #expect(tailscaleService.isPermanentlyDisabled == true)
-        #expect(tailscaleService.lastError == "Serve is not enabled on your tailnet")
+        #expect(self.tailscaleService.isPermanentlyDisabled == true)
+        #expect(self.tailscaleService.lastError == "Serve is not enabled on your tailnet")
 
         // Enable Tailscale toggle
         UserDefaults.standard.set(true, forKey: AppConstants.UserDefaultsKeys.tailscaleServeEnabled)
@@ -240,7 +228,7 @@ final class TailscaleFallbackRegressionTests {
         #expect(toggleValue == true, "Toggle should stay enabled in simulated fallback")
 
         // Reset
-        tailscaleService.isPermanentlyDisabled = false
-        tailscaleService.lastError = nil
+        self.tailscaleService.isPermanentlyDisabled = false
+        self.tailscaleService.lastError = nil
     }
 }

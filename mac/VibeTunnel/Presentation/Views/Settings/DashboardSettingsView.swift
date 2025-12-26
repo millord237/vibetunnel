@@ -308,11 +308,11 @@ private struct ServerStatusSection: View {
                                     do {
                                         try await PortConflictResolver.shared.forceKillProcess(conflict)
                                         // After killing, clear the conflict and restart the server
-                                        portConflict = nil
-                                        await serverManager.start()
+                                        self.portConflict = nil
+                                        await self.serverManager.start()
                                     } catch {
                                         // Handle error - in a real implementation, you might show an alert
-                                        logger.error("Failed to kill process: \(error)")
+                                        self.logger.error("Failed to kill process: \(error)")
                                     }
                                 }
                             }

@@ -76,24 +76,24 @@ struct ServerInfoHeader: View {
 
                         // Check actual Funnel status from the service
                         let isFunnelActuallyRunning = isFunnelEnabledInSettings &&
-                            tailscaleServeStatus.isRunning &&
-                            tailscaleServeStatus.funnelEnabled
+                            self.tailscaleServeStatus.isRunning &&
+                            self.tailscaleServeStatus.funnelEnabled
 
                         // Determine label based on actual state
-                        let tailscaleLabel: String = if isFunnelEnabledInSettings && !isFunnelActuallyRunning {
+                        let tailscaleLabel = if isFunnelEnabledInSettings, !isFunnelActuallyRunning {
                             // User wants Funnel but it's not working
-                            if tailscaleServeStatus.funnelError != nil {
+                            if self.tailscaleServeStatus.funnelError != nil {
                                 "Tailscale (Error):"
-                            } else if !tailscaleServeStatus.isRunning {
+                            } else if !self.tailscaleServeStatus.isRunning {
                                 "Tailscale (Starting...):"
                             } else {
                                 "Tailscale (Private):" // Fallback to private if Funnel failed
                             }
                         } else if isFunnelActuallyRunning {
                             "Tailscale (Public):"
-                        } else if isTailscaleServeEnabled && tailscaleServeStatus.isRunning {
+                        } else if isTailscaleServeEnabled, self.tailscaleServeStatus.isRunning {
                             "Tailscale (Private):"
-                        } else if isTailscaleServeEnabled && !tailscaleServeStatus.isRunning {
+                        } else if isTailscaleServeEnabled, !self.tailscaleServeStatus.isRunning {
                             "Tailscale (Starting...):"
                         } else {
                             "Tailscale:"
@@ -106,19 +106,16 @@ struct ServerInfoHeader: View {
                             label: tailscaleLabel,
                             address: TailscaleURLHelper.displayAddress(
                                 hostname: hostname,
-                                port: serverManager.port,
+                                port: self.serverManager.port,
                                 isTailscaleServeEnabled: isTailscaleServeEnabled,
-                                isTailscaleServeRunning: tailscaleServeStatus.isRunning,
-                                isFunnelEnabled: isFunnelActuallyRunning
-                            ),
+                                isTailscaleServeRunning: self.tailscaleServeStatus.isRunning,
+                                isFunnelEnabled: isFunnelActuallyRunning),
                             url: TailscaleURLHelper.constructURL(
                                 hostname: hostname,
-                                port: serverManager.port,
+                                port: self.serverManager.port,
                                 isTailscaleServeEnabled: isTailscaleServeEnabled,
-                                isTailscaleServeRunning: tailscaleServeStatus.isRunning,
-                                isFunnelEnabled: isFunnelActuallyRunning
-                            )
-                        )
+                                isTailscaleServeRunning: self.tailscaleServeStatus.isRunning,
+                                isFunnelEnabled: isFunnelActuallyRunning))
                     }
                 }
             }
