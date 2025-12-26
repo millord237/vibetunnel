@@ -2,6 +2,32 @@ import { expect, test } from '@playwright/test';
 
 test.describe('Tailscale WebSocket Authentication', () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      const globalWindow = window as any;
+      globalWindow.__appLogs = [];
+      const levels = ['log', 'warn', 'error', 'debug'];
+      const stringify = (value: unknown) => {
+        if (typeof value === 'string') return value;
+        try {
+          return JSON.stringify(value);
+        } catch {
+          return String(value);
+        }
+      };
+
+      levels.forEach((level) => {
+        const original = console[level as keyof Console].bind(console);
+        console[level as keyof Console] = (...args: unknown[]) => {
+          try {
+            globalWindow.__appLogs.push(args.map(stringify).join(' '));
+          } catch {
+            // Ignore log capture errors
+          }
+          original(...args);
+        };
+      });
+    });
+
     // Mock the fetch calls to simulate Tailscale authentication
     await page.route('**/api/auth/config', (route) => {
       route.fulfill({

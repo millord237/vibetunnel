@@ -452,9 +452,17 @@ export class VibeTunnelApp extends LitElement {
 
             if (tokenResponse.ok) {
               const tokenData = await tokenResponse.json();
-              // Store token for WebSocket connections using the same key as other auth methods
-              localStorage.setItem('vibetunnel_auth_token', tokenData.token);
-              logger.log('✅ WebSocket token stored for Tailscale user');
+              if (tokenData?.token && authConfig.authenticatedUser) {
+                // Store token and user data for WebSocket connections
+                authClient.setCurrentUserFromToken(
+                  authConfig.authenticatedUser,
+                  tokenData.token,
+                  'tailscale'
+                );
+                logger.log('✅ WebSocket token stored for Tailscale user');
+              } else {
+                logger.warn('⚠️ Tailscale token response missing required data');
+              }
             } else {
               logger.warn('⚠️ Failed to fetch WebSocket token, sessions may not load properly');
             }

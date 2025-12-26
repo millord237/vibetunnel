@@ -57,6 +57,14 @@ describe('Auth Routes', () => {
       const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test';
       mockAuthService.generateTokenForUser = vi.fn().mockReturnValue(mockToken);
 
+      const forceLocalhost = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+        Object.defineProperty(req.socket, 'remoteAddress', {
+          value: '127.0.0.1',
+          configurable: true,
+        });
+        next();
+      };
+
       // Mock middleware to simulate Tailscale auth
       const tailscaleAuthMiddleware = (
         req: AuthenticatedRequest,
@@ -73,10 +81,15 @@ describe('Auth Routes', () => {
         next();
       };
 
-      app.use('/api/auth', tailscaleAuthMiddleware);
+      app.use('/api/auth', forceLocalhost, tailscaleAuthMiddleware);
       app.use('/api/auth', createAuthRoutes({ authService: mockAuthService }));
 
-      const response = await request(app).post('/api/auth/tailscale-token');
+      const response = await request(app)
+        .post('/api/auth/tailscale-token')
+        .set('x-forwarded-for', '100.64.0.1')
+        .set('x-forwarded-proto', 'https')
+        .set('x-forwarded-host', 'example.ts.net')
+        .set('tailscale-user-login', 'user@example.com');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -87,6 +100,123 @@ describe('Auth Routes', () => {
         expiresIn: '24h',
       });
       expect(mockAuthService.generateTokenForUser).toHaveBeenCalledWith('user@example.com');
+    });
+
+    it('should reject requests missing proxy headers', async () => {
+      const forceLocalhost = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+        Object.defineProperty(req.socket, 'remoteAddress', {
+          value: '127.0.0.1',
+          configurable: true,
+        });
+        next();
+      };
+
+      const tailscaleAuthMiddleware = (
+        req: AuthenticatedRequest,
+        _res: Response,
+        next: NextFunction
+      ) => {
+        req.authMethod = 'tailscale';
+        req.userId = 'user@example.com';
+        req.tailscaleUser = {
+          login: 'user@example.com',
+          name: 'Test User',
+        };
+        next();
+      };
+
+      app.use('/api/auth', forceLocalhost, tailscaleAuthMiddleware);
+      app.use('/api/auth', createAuthRoutes({ authService: mockAuthService }));
+
+      const response = await request(app)
+        .post('/api/auth/tailscale-token')
+        .set('tailscale-user-login', 'user@example.com');
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({
+        error: 'Invalid proxy configuration',
+      });
+      expect(mockAuthService.generateTokenForUser).not.toHaveBeenCalled();
+    });
+
+    it('should reject requests not from localhost', async () => {
+      const forceRemote = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+        Object.defineProperty(req.socket, 'remoteAddress', {
+          value: '10.0.0.5',
+          configurable: true,
+        });
+        next();
+      };
+
+      const tailscaleAuthMiddleware = (
+        req: AuthenticatedRequest,
+        _res: Response,
+        next: NextFunction
+      ) => {
+        req.authMethod = 'tailscale';
+        req.userId = 'user@example.com';
+        req.tailscaleUser = {
+          login: 'user@example.com',
+          name: 'Test User',
+        };
+        next();
+      };
+
+      app.use('/api/auth', forceRemote, tailscaleAuthMiddleware);
+      app.use('/api/auth', createAuthRoutes({ authService: mockAuthService }));
+
+      const response = await request(app)
+        .post('/api/auth/tailscale-token')
+        .set('x-forwarded-for', '100.64.0.1')
+        .set('x-forwarded-proto', 'https')
+        .set('x-forwarded-host', 'example.ts.net')
+        .set('tailscale-user-login', 'user@example.com');
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({
+        error: 'Invalid request origin',
+      });
+      expect(mockAuthService.generateTokenForUser).not.toHaveBeenCalled();
+    });
+
+    it('should reject when Tailscale login header mismatches userId', async () => {
+      const forceLocalhost = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+        Object.defineProperty(req.socket, 'remoteAddress', {
+          value: '127.0.0.1',
+          configurable: true,
+        });
+        next();
+      };
+
+      const tailscaleAuthMiddleware = (
+        req: AuthenticatedRequest,
+        _res: Response,
+        next: NextFunction
+      ) => {
+        req.authMethod = 'tailscale';
+        req.userId = 'user@example.com';
+        req.tailscaleUser = {
+          login: 'user@example.com',
+          name: 'Test User',
+        };
+        next();
+      };
+
+      app.use('/api/auth', forceLocalhost, tailscaleAuthMiddleware);
+      app.use('/api/auth', createAuthRoutes({ authService: mockAuthService }));
+
+      const response = await request(app)
+        .post('/api/auth/tailscale-token')
+        .set('x-forwarded-for', '100.64.0.1')
+        .set('x-forwarded-proto', 'https')
+        .set('x-forwarded-host', 'example.ts.net')
+        .set('tailscale-user-login', 'other@example.com');
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({
+        error: 'Invalid Tailscale identity headers',
+      });
+      expect(mockAuthService.generateTokenForUser).not.toHaveBeenCalled();
     });
 
     it('should reject non-Tailscale authenticated requests', async () => {
@@ -142,6 +272,14 @@ describe('Auth Routes', () => {
         throw new Error('Token generation failed');
       });
 
+      const forceLocalhost = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+        Object.defineProperty(req.socket, 'remoteAddress', {
+          value: '127.0.0.1',
+          configurable: true,
+        });
+        next();
+      };
+
       // Mock middleware to simulate Tailscale auth
       const tailscaleAuthMiddleware = (
         req: AuthenticatedRequest,
@@ -153,10 +291,15 @@ describe('Auth Routes', () => {
         next();
       };
 
-      app.use('/api/auth', tailscaleAuthMiddleware);
+      app.use('/api/auth', forceLocalhost, tailscaleAuthMiddleware);
       app.use('/api/auth', createAuthRoutes({ authService: mockAuthService }));
 
-      const response = await request(app).post('/api/auth/tailscale-token');
+      const response = await request(app)
+        .post('/api/auth/tailscale-token')
+        .set('x-forwarded-for', '100.64.0.1')
+        .set('x-forwarded-proto', 'https')
+        .set('x-forwarded-host', 'example.ts.net')
+        .set('tailscale-user-login', 'user@example.com');
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({
