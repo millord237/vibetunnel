@@ -258,6 +258,7 @@ final class CLIInstaller {
             if task.terminationStatus == 0 {
                 self.logger.info("CLIInstaller: Installation completed successfully")
                 self.isInstalled = true
+                self.isOutdated = false
                 self.isInstalling = false
                 self.showSuccess()
                 // Refresh installation status
@@ -446,6 +447,7 @@ final class CLIInstaller {
         Task { @MainActor in
             guard let bundledHash = getBundledScriptHash() else {
                 self.logger.error("CLIInstaller: Failed to get bundled script hash")
+                self.isOutdated = false
                 return
             }
 

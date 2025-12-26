@@ -446,4 +446,22 @@ struct CLIInstallerTests {
 
         #expect(installer.isInstalled)
     }
+
+    @Test("Installed script matching bundle is not marked outdated", .tags(.regression))
+    func installedScriptMatchesBundleNotOutdated() async throws {
+        let installer = CLIInstaller(binDirectory: tempDirectory.path)
+
+        let bundledPath = try #require(Bundle.main.path(forResource: "vt", ofType: nil))
+        let targetPath = tempDirectory.appendingPathComponent("vt").path
+        let script = try String(contentsOfFile: bundledPath, encoding: .utf8)
+        try script.write(toFile: targetPath, atomically: true, encoding: .utf8)
+
+        installer.checkInstallationStatus()
+
+        // Wait for the async Task in checkInstallationStatus to complete
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(installer.isInstalled)
+        #expect(!installer.isOutdated)
+    }
 }

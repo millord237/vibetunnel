@@ -13,6 +13,7 @@
 - Fall back to dns-sd for macOS mDNS advertisement when Bonjour fails
 - Replace JSONSerialization usage with JSONEncoder/Decoder to avoid Obj-C JSON crashes
 - Prefer client-resolved binary paths in `vt` to avoid PATH mismatches
+- Reset CLI outdated status after successful install and add regression coverage
 
 ## [1.0.0-beta.15] - 2025-08-02
 
