@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 
 const BonjourLib = require('bonjour-service');
@@ -13,7 +13,7 @@ export class MDNSService {
   private bonjour: any = null;
   private service: Service | null = null;
   private isAdvertising = false;
-  private dnsSdProcess: ChildProcessWithoutNullStreams | null = null;
+  private dnsSdProcess: ChildProcess | null = null;
 
   /**
    * Start advertising the VibeTunnel service via mDNS/Bonjour
