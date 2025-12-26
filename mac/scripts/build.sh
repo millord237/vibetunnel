@@ -237,6 +237,6 @@ if [[ "$PRERELEASE_FLAG" != "not found" ]]; then
     else
         echo "⚠ IS_PRERELEASE_BUILD: '$PRERELEASE_FLAG' (unexpected value)"
     fi
-else
-    echo "⚠ IS_PRERELEASE_BUILD: not set (will use version string fallback)"
+elif [[ "${VERBOSE_BUILD:-false}" == "true" ]]; then
+    echo "IS_PRERELEASE_BUILD not set (Info.plist key missing)"
 fi

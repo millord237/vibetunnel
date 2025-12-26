@@ -191,6 +191,9 @@ filter_build_output() {
         
         # npm/pnpm configuration warnings
         'npm warn Unknown.*config'
+        'deprecated subdependencies found'
+        'Issues with peer dependencies found'
+        'unmet peer'
         
         # Tailwind CSS content configuration warnings
         'warn - Your.*content.*configuration'
