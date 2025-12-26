@@ -61,12 +61,12 @@ struct ProjectFolderPageView: View {
                     .frame(width: 350)
 
                     // Repository count
-                    if !self.selectedPath.isEmpty {
-                        HStack {
-                            Image(systemName: "folder.badge.gearshape")
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
+                    HStack {
+                        Image(systemName: "folder.badge.gearshape")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
 
+                        Group {
                             if self.isScanning {
                                 Text("Scanning...")
                                     .font(.system(size: 12))
@@ -81,15 +81,20 @@ struct ProjectFolderPageView: View {
                                     .font(.system(size: 12))
                                     .foregroundColor(.primary)
                             }
-
-                            Spacer()
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                        .cornerRadius(6)
-                        .frame(width: 350)
+                        .transition(.opacity)
+
+                        Spacer()
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                    .cornerRadius(6)
+                    .frame(width: 350)
+                    .opacity(self.selectedPath.isEmpty ? 0 : 1)
+                    .animation(.easeInOut(duration: 0.2), value: self.selectedPath.isEmpty)
+                    .animation(.easeInOut(duration: 0.2), value: self.isScanning)
+                    .animation(.easeInOut(duration: 0.2), value: self.discoveredRepos.count)
                     // Tip
                     HStack(alignment: .top, spacing: 6) {
                         Text("You can change this later in Settings → Application → Repository")
@@ -182,20 +187,26 @@ struct ProjectFolderPageView: View {
     }
 
     private func performScan() async {
-        self.isScanning = true
-        self.discoveredRepos = []
+        await MainActor.run {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                self.isScanning = true
+                self.discoveredRepos = []
+            }
+        }
 
         let expandedPath = (selectedPath as NSString).expandingTildeInPath
         let repos = await findGitRepositories(in: expandedPath, maxDepth: 3)
 
         await MainActor.run {
-            // Always update isScanning to false when done, regardless of cancellation
-            if !Task.isCancelled {
-                self.discoveredRepos = repos.map { path in
-                    RepositoryInfo(name: URL(fileURLWithPath: path).lastPathComponent, path: path)
+            withAnimation(.easeInOut(duration: 0.2)) {
+                // Always update isScanning to false when done, regardless of cancellation
+                if !Task.isCancelled {
+                    self.discoveredRepos = repos.map { path in
+                        RepositoryInfo(name: URL(fileURLWithPath: path).lastPathComponent, path: path)
+                    }
                 }
+                self.isScanning = false
             }
-            self.isScanning = false
         }
     }
 
