@@ -73,6 +73,15 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
     private weak var serverProvider: ServerManager?
     private weak var configProvider: ConfigManager?
 
+    private static func isRunningTests() -> Bool {
+        let processInfo = ProcessInfo.processInfo
+        return processInfo.environment[EnvironmentKeys.xcTestConfigurationFilePath] != nil ||
+            processInfo.environment["XCTestBundlePath"] != nil ||
+            processInfo.environment["XCTestSessionIdentifier"] != nil ||
+            processInfo.arguments.contains("-XCTest") ||
+            NSClassFromString("XCTestCase") != nil
+    }
+
     @MainActor
     override private init() {
         // Initialize with default preferences first
@@ -89,8 +98,12 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
 
         // Set delegate immediately on initialization
         // This ensures it's set before the app finishes launching, which is required for proper notification handling
-        UNUserNotificationCenter.current().delegate = self
-        self.logger.info("✅ NotificationService set as UNUserNotificationCenter delegate in init()")
+        if !Self.isRunningTests() {
+            UNUserNotificationCenter.current().delegate = self
+            self.logger.info("✅ NotificationService set as UNUserNotificationCenter delegate in init()")
+        } else {
+            self.logger.info("🧪 Skipping UNUserNotificationCenter delegate setup in tests")
+        }
 
         // Defer dependency setup to avoid circular initialization
         Task { @MainActor in
@@ -108,6 +121,11 @@ final class NotificationService: NSObject, @preconcurrency UNUserNotificationCen
     /// Start monitoring server events
     func start() async {
         self.logger.info("🚀 NotificationService.start() called")
+
+        if Self.isRunningTests() {
+            self.logger.info("🧪 Skipping notification service start in tests")
+            return
+        }
 
         // Delegate is already set in init(), but we can log it for debugging
         let currentDelegate = UNUserNotificationCenter.current().delegate

@@ -12,7 +12,7 @@ struct WsV3SocketClientRequestTests {
         #expect(request != nil)
         #expect(request?.value(forHTTPHeaderField: NetworkConstants.localAuthHeader) == token)
         #expect(request?.value(forHTTPHeaderField: NetworkConstants.authorizationHeader) == nil)
-        #expect(request?.url?.query?.contains("token=") == false)
+        #expect(!(request?.url?.query?.contains("token=") ?? false))
     }
 
     @Test("JWT tokens use Bearer auth + query token")
