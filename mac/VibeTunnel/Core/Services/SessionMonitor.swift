@@ -30,7 +30,7 @@ struct ServerSessionInfo: Codable {
     // Additional fields from Session (not SessionInfo)
     let lastModified: String
     let active: Bool?
-    let activityStatus: SessionActivityStatus? = nil
+    let activityStatus: SessionActivityStatus?
     let source: String?
     let remoteId: String?
     let remoteName: String?

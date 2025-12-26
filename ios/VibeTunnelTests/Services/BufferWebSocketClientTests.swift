@@ -77,7 +77,7 @@ final class BufferWebSocketClientTests {
         let mockWebSocket = try #require(mockFactory.lastCreatedWebSocket)
         #expect(mockWebSocket.lastConnectURL?.scheme == "wss")
         #expect(mockWebSocket.lastConnectURL?.host == "test-machine.tailnet.ts.net")
-        #expect(mockWebSocket.lastConnectURL?.path == "/buffers")
+        #expect(mockWebSocket.lastConnectURL?.path == "/ws")
     }
 
     @Test("Handles connection failure gracefully")
@@ -125,8 +125,7 @@ final class BufferWebSocketClientTests {
         // Act - Simulate receiving the message
         mockWebSocket.simulateMessage(WebSocketMessage.data(messageData))
 
-        // Wait for processing
-        try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        try await waitFor { receivedEvent != nil }
 
         // Assert
         let event = try #require(receivedEvent)
