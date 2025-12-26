@@ -8,6 +8,7 @@
 ### 🐛 Bug Fixes
 - Fix session creation "data couldn't be read" error on Mac app (#500)
 - Add Nix per-user profile path for cloudflared discovery (via [@bkase](https://github.com/bkase)) (#533)
+- Fall back to dns-sd for macOS mDNS advertisement when Bonjour fails
 
 ## [1.0.0-beta.15] - 2025-08-02
 
