@@ -469,6 +469,19 @@ pnpm add -g vibetunnel
 
 **Requirements**: Node.js 22.12.0 or higher
 
+### One-shot (no install)
+
+```bash
+# Start local server (no auth)
+npx -y vibetunnel --no-auth
+
+# Quick remote share (ngrok)
+npx -y vibetunnel --no-auth --ngrok
+
+# One-shot vt wrapper
+npx -y --package vibetunnel vt npm test
+```
+
 ### Running the VibeTunnel Server
 
 #### Basic Usage
