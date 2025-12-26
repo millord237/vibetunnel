@@ -1,3 +1,4 @@
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import os from 'node:os';
 
 const BonjourLib = require('bonjour-service');
@@ -12,6 +13,7 @@ export class MDNSService {
   private bonjour: any = null;
   private service: Service | null = null;
   private isAdvertising = false;
+  private dnsSdProcess: ChildProcessWithoutNullStreams | null = null;
 
   /**
    * Start advertising the VibeTunnel service via mDNS/Bonjour
@@ -22,11 +24,10 @@ export class MDNSService {
       return;
     }
 
+    const name = instanceName || os.hostname() || 'VibeTunnel Server';
+
     try {
       this.bonjour = new BonjourLib();
-
-      // Use hostname or custom name as the instance name
-      const name = instanceName || os.hostname() || 'VibeTunnel Server';
 
       // Advertise the service
       if (!this.bonjour) {
@@ -57,6 +58,25 @@ export class MDNSService {
       }
     } catch (error) {
       log.warn('Failed to start mDNS advertisement:', error);
+
+      if (this.bonjour) {
+        try {
+          this.bonjour.destroy();
+        } catch {
+          // Ignore cleanup errors
+        }
+        this.bonjour = null;
+      }
+      this.service = null;
+
+      if (process.platform === 'darwin') {
+        const startedFallback = await this.startDnsSdFallback(name, port);
+        if (startedFallback) {
+          this.isAdvertising = true;
+          return;
+        }
+      }
+
       throw error;
     }
   }
@@ -70,6 +90,8 @@ export class MDNSService {
     }
 
     try {
+      await this.stopDnsSdFallback();
+
       if (this.service) {
         await new Promise<void>((resolve) => {
           if (this.service && typeof this.service.stop === 'function') {
@@ -94,6 +116,58 @@ export class MDNSService {
     } catch (error) {
       log.warn('Error stopping mDNS advertisement:', error);
     }
+  }
+
+  private async startDnsSdFallback(name: string, port: number): Promise<boolean> {
+    if (this.dnsSdProcess) {
+      return true;
+    }
+
+    try {
+      const dnsSdProcess = spawn('dns-sd', ['-R', name, '_vibetunnel._tcp', 'local.', `${port}`], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      dnsSdProcess.on('error', (error) => {
+        log.warn('dns-sd process error:', error);
+      });
+
+      dnsSdProcess.stdout.on('data', (data) => {
+        const message = data.toString().trim();
+        if (message.length) {
+          log.debug(`dns-sd: ${message}`);
+        }
+      });
+
+      dnsSdProcess.stderr.on('data', (data) => {
+        const message = data.toString().trim();
+        if (message.length) {
+          log.warn(`dns-sd: ${message}`);
+        }
+      });
+
+      this.dnsSdProcess = dnsSdProcess;
+      log.log(`Started mDNS advertisement via dns-sd: ${name} on port ${port}`);
+      return true;
+    } catch (error) {
+      log.warn('Failed to start dns-sd fallback:', error);
+      return false;
+    }
+  }
+
+  private async stopDnsSdFallback(): Promise<void> {
+    const dnsSdProcess = this.dnsSdProcess;
+    if (!dnsSdProcess) {
+      return;
+    }
+
+    this.dnsSdProcess = null;
+
+    await new Promise<void>((resolve) => {
+      dnsSdProcess.once('exit', () => resolve());
+      dnsSdProcess.kill();
+      setTimeout(() => resolve(), 1000);
+    });
   }
 
   /**
