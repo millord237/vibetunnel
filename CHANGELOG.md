@@ -4,13 +4,15 @@
 
 ### 🐛 Bug Fixes
 - Fix session creation "data couldn't be read" error on Mac app (#500)
-- Fix mobile session header overflow for long paths/branch names (#561)
-- Restore active/idle UI state using activityStatus derived from recent input/output (#549)
+- Fix mobile session header overflow for long paths/branch names (via [@ndraiman](https://github.com/ndraiman)) (#561)
+- Add JIT entitlements for Node.js SEA binary codesign (via [@ndraiman](https://github.com/ndraiman)) (#563)
+- Restore active/idle UI state using activityStatus derived from recent input/output (via [@mrshu](https://github.com/mrshu)) (#549)
+- Fix notification service local auth headers for local notification delivery (via [@rothnic](https://github.com/rothnic)) (#558)
 - Fix follow mode 404 when enabling follow mode from worktree UI
-- Harden Tailscale WebSocket token issuance with proxy/origin validation
-- Normalize health endpoint response shape and status for Tailscale clients
-- Fix iOS Tailscale OAuth token requests to use proper form encoding
-- Fix iOS Bonjour discovery to resolve services using the reported domain
+- Harden Tailscale WebSocket token issuance with proxy/origin validation (via [@chrisvanbuskirk](https://github.com/chrisvanbuskirk)) (#542)
+- Normalize health endpoint response shape and status for Tailscale clients (via [@chrisvanbuskirk](https://github.com/chrisvanbuskirk)) (#542)
+- Fix iOS Tailscale OAuth token requests to use proper form encoding (via [@chrisvanbuskirk](https://github.com/chrisvanbuskirk)) (#542)
+- Fix iOS Bonjour discovery to resolve services using the reported domain (via [@chrisvanbuskirk](https://github.com/chrisvanbuskirk)) (#542)
 - Fix Linux npm builds by removing pnpm-only postcss invocation and skipping SEA by default
 
 ### 🧹 Maintenance
@@ -18,6 +20,9 @@
 - Update web/mac dependencies; drop stray claude-code dep
 - Remove dynamic title mode; keep none/filter/static only
 - Make PAM auth optional and add Linux bootstrap + docs
+- Avoid building filtered log messages to reduce overhead (via [@plx](https://github.com/plx)) (#527)
+- Document Tailscale Serve enablement requirement in setup guide (via [@wtberry](https://github.com/wtberry)) (#547)
+- Fix Poltergeist link in README (via [@fourplusone](https://github.com/fourplusone)) (#548)
 
 ## [1.0.0-beta.15] - 2025-08-02
 
