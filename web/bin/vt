@@ -471,6 +471,26 @@ exec_fwd() {
     fi
 }
 
+# Resolve a command to an absolute executable path (only for real binaries)
+resolve_binary_path() {
+    local cmd="$1"
+    local cmd_type
+
+    cmd_type=$(type -t "$cmd" 2>/dev/null || true)
+    if [[ "$cmd_type" != "file" ]]; then
+        return 1
+    fi
+
+    local resolved
+    resolved=$(command -v "$cmd" 2>/dev/null || true)
+    if [[ -n "$resolved" && -x "$resolved" ]]; then
+        printf '%s\n' "$resolved"
+        return 0
+    fi
+
+    return 1
+}
+
 # Function to resolve command through user's shell
 resolve_command() {
     local user_shell="${SHELL:-/bin/bash}"
@@ -685,13 +705,21 @@ if [ $# -gt 0 ] && [[ "$1" != -* ]]; then
         # Execute directly without shell wrapper
         exec_fwd ${VERBOSITY_ARGS:+$VERBOSITY_ARGS} ${TITLE_MODE_ARGS:+"$TITLE_MODE_ARGS"} "$@"
     else
-        # Check if the first argument is a real binary
-        if which "$1" >/dev/null 2>&1; then
-            # It's a real binary, execute directly
-            exec_fwd ${VERBOSITY_ARGS:+$VERBOSITY_ARGS} ${TITLE_MODE_ARGS:+"$TITLE_MODE_ARGS"} "$@"
+        # Resolve binaries to absolute paths so the server uses the same executable
+        cmd="$1"
+        shift
+        cmd_args=("$@")
+
+        if [[ "$cmd" == */* ]]; then
+            exec_fwd ${VERBOSITY_ARGS:+$VERBOSITY_ARGS} ${TITLE_MODE_ARGS:+"$TITLE_MODE_ARGS"} "$cmd" "${cmd_args[@]}"
         else
-            # Not a real binary, try alias resolution
-            resolve_command "$@"
+            resolved_path="$(resolve_binary_path "$cmd" || true)"
+            if [[ -n "$resolved_path" ]]; then
+                exec_fwd ${VERBOSITY_ARGS:+$VERBOSITY_ARGS} ${TITLE_MODE_ARGS:+"$TITLE_MODE_ARGS"} "$resolved_path" "${cmd_args[@]}"
+            else
+                # Not a real binary, try alias resolution
+                resolve_command "$cmd" "${cmd_args[@]}"
+            fi
         fi
     fi
 else

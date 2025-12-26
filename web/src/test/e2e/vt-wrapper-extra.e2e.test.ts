@@ -168,6 +168,56 @@ describe('vt wrapper extra flows', () => {
     await waitForSessionText(server.port, sessionId, marker);
   }, 20000);
 
+  it('prefers client-resolved binary paths over server PATH', async () => {
+    const forwarderPath = resolveForwarderPath();
+    const marker = `vt-path-ok-${Date.now()}`;
+    const vtPath = path.join(process.cwd(), 'bin', 'vt');
+    const binDir = path.join(homeDir, 'bin-extra');
+    const ccPath = path.join(binDir, 'cc');
+
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(ccPath, `#!/usr/bin/env bash\nprintf "${marker}\\n"\n`, 'utf-8');
+    chmodSync(ccPath, 0o755);
+
+    const before = new Set(listSessionDirs(controlDir));
+
+    const child = spawn(vtPath, ['cc'], {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH || ''}`,
+        HOME: homeDir,
+        SHELL: '/bin/bash',
+        VIBETUNNEL_CONTROL_DIR: controlDir,
+        VIBETUNNEL_FWD_BIN: forwarderPath,
+        VIBETUNNEL_BIN: vibetunnelBin,
+      },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+
+    const stderr: string[] = [];
+    child.stderr?.on('data', (data) => stderr.push(data.toString()));
+
+    await new Promise<void>((resolve, reject) => {
+      child.on('error', (error) =>
+        reject(error instanceof Error ? error : new Error(String(error)))
+      );
+      child.on('exit', (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(`vt path resolution exited with code ${code ?? 'null'}:\n${stderr.join('')}`));
+      });
+    });
+
+    if (!server) {
+      throw new Error('Server not started');
+    }
+
+    const sessionId = await waitForNewSessionDir(controlDir, before);
+    await waitForSessionText(server.port, sessionId, marker);
+  }, 20000);
+
   it('returns status via vt wrapper (vt status)', () => {
     const vtPath = path.join(process.cwd(), 'bin', 'vt');
 
