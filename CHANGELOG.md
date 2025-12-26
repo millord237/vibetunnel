@@ -4,6 +4,7 @@
 
 ### ✨ Improvements
 - Improve mobile session UI with action bar, clipboard manager, and quick keys (via [@Jerome2332](https://github.com/Jerome2332)) (#518)
+- Tighten macOS app icon padding to remove white edge
 
 ### 🐛 Bug Fixes
 - Fix session creation "data couldn't be read" error on Mac app (#500)
