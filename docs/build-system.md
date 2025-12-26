@@ -120,6 +120,21 @@ cd mac
   - `spawn-helper` - Process spawning helper
   - `vibetunnel` - Bun executable
 
+### Linux (Ubuntu) Requirements
+
+**Packages**:
+- `curl`, `ca-certificates`, `xz-utils`, `python3`, `make`, `g++`, `git`
+- `libpam0g-dev` (authenticate-pam native module)
+
+**Tooling**:
+- Node.js 22.12+ (NodeSource 24.x OK)
+- Zig (latest stable)
+
+**Bootstrap**:
+```bash
+web/scripts/linux-bootstrap.sh
+```
+
 ### iOS Requirements
 
 **Tools**:

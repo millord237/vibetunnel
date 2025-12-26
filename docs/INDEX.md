@@ -16,6 +16,7 @@
 - [macOS App](platform/macos.md) - Native app development
 - [iOS Companion](platform/ios.md) - Mobile app guide
 - [Web Frontend](platform/web.md) - TypeScript/Lit development
+- [Linux](linux.md) - Linux dev + npm usage
 
 ### Features
 - [Authentication](features/authentication.md) - Security, tokens
