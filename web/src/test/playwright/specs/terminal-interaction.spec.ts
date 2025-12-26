@@ -85,56 +85,13 @@ test.describe('Terminal Interaction', () => {
   });
 
   test('should execute multiple commands in sequence', async ({ page }) => {
-    // Execute first command and wait for it to complete
-    await page.keyboard.type('echo "Test 1"');
-    await page.keyboard.press('Enter');
-
-    // Wait for the output and prompt
-    await page.waitForFunction(
-      () => {
-        const terminal = document.querySelector('vibe-terminal') as unknown as {
-          getDebugText?: () => string;
-          textContent?: string | null;
-        } | null;
-        const content =
-          terminal && typeof terminal.getDebugText === 'function'
-            ? terminal.getDebugText()
-            : terminal?.textContent || '';
-        return content.includes('Test 1') && content.match(/[$>#%❯]\s*$/);
-      },
-      undefined,
-      { timeout: 5000 }
-    );
-
-    // Small delay to ensure terminal is ready for next command
-    await page.waitForTimeout(500);
-
-    // Execute second command
-    await page.keyboard.type('echo "Test 2"');
-    await page.keyboard.press('Enter');
-
-    // Wait for the second output
-    await page.waitForFunction(
-      () => {
-        const terminal = document.querySelector('vibe-terminal') as unknown as {
-          getDebugText?: () => string;
-          textContent?: string | null;
-        } | null;
-        const content =
-          terminal && typeof terminal.getDebugText === 'function'
-            ? terminal.getDebugText()
-            : terminal?.textContent || '';
-        return content.includes('Test 2');
-      },
-      undefined,
-      { timeout: 5000 }
-    );
+    await executeAndVerifyCommand(page, 'echo "Test 1"', 'Test 1', 5000);
+    await executeAndVerifyCommand(page, 'echo "Test 2"', 'Test 2', 5000);
 
     // Verify both outputs are present
     const finalContent = await getTerminalContent(page);
-    if (!finalContent.includes('Test 1') || !finalContent.includes('Test 2')) {
-      throw new Error(`Missing expected output. Terminal content: ${finalContent}`);
-    }
+    expect(finalContent).toContain('Test 1');
+    expect(finalContent).toContain('Test 2');
   });
 
   test('should handle long-running commands', async ({ page }) => {
