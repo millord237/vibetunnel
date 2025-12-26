@@ -375,7 +375,8 @@ class ServerManager {
         // Stop Tailscale monitoring
         stopTailscaleMonitoring()
 
-        // Notification service connection is now handled explicitly via start() method
+        // Stop notification service connection when server stops
+        NotificationService.shared.stop()
 
         // Clear the auth token from SessionMonitor
         SessionMonitor.shared.setLocalAuthToken(nil)

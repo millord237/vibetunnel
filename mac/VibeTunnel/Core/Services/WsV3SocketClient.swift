@@ -180,14 +180,16 @@ final class WsV3SocketClient: NSObject {
 
     // MARK: - Internals
 
-    private func makeRequest(serverPort: String, token: String?) -> URLRequest? {
+    func makeRequest(serverPort: String, token: String?) -> URLRequest? {
         var components = URLComponents()
         components.scheme = "ws"
         components.host = "localhost"
         components.port = Int(serverPort)
         components.path = APIEndpoints.ws
 
-        if let token, !token.isEmpty {
+        let isJwtToken = token?.contains(".") ?? false
+
+        if let token, !token.isEmpty, isJwtToken {
             components.queryItems = [URLQueryItem(name: "token", value: token)]
         }
 
@@ -197,7 +199,11 @@ final class WsV3SocketClient: NSObject {
         request.setValue("mac-app", forHTTPHeaderField: "X-VibeTunnel-Client")
 
         if let token, !token.isEmpty {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            if isJwtToken {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: NetworkConstants.authorizationHeader)
+            } else {
+                request.setValue(token, forHTTPHeaderField: NetworkConstants.localAuthHeader)
+            }
         }
 
         return request
