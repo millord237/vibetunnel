@@ -11,7 +11,6 @@ import {
 import { RepositoryService } from '../services/repository-service.js';
 import { ServerConfigService } from '../services/server-config-service.js';
 import { createLogger } from '../utils/logger.js';
-import { type MediaQueryState, responsiveObserver } from '../utils/responsive-utils.js';
 import { VERSION } from '../version.js';
 
 const logger = createLogger('settings');
@@ -36,13 +35,11 @@ export class Settings extends LitElement {
 
   // App settings state
   @state() private repositoryBasePath = DEFAULT_REPOSITORY_BASE_PATH;
-  @state() private mediaState: MediaQueryState = responsiveObserver.getCurrentState();
   @state() private repositoryCount = 0;
   @state() private isDiscoveringRepositories = false;
 
   private permissionChangeUnsubscribe?: () => void;
   private subscriptionChangeUnsubscribe?: () => void;
-  private unsubscribeResponsive?: () => void;
   private repositoryService?: RepositoryService;
   private serverConfigService?: ServerConfigService;
 
@@ -58,11 +55,6 @@ export class Settings extends LitElement {
     if (this.authClient) {
       this.repositoryService = new RepositoryService(this.authClient, this.serverConfigService);
     }
-
-    // Subscribe to responsive changes
-    this.unsubscribeResponsive = responsiveObserver.subscribe((state) => {
-      this.mediaState = state;
-    });
   }
 
   disconnectedCallback() {
@@ -72,9 +64,6 @@ export class Settings extends LitElement {
     }
     if (this.subscriptionChangeUnsubscribe) {
       this.subscriptionChangeUnsubscribe();
-    }
-    if (this.unsubscribeResponsive) {
-      this.unsubscribeResponsive();
     }
     // Clean up keyboard listener
     document.removeEventListener('keydown', this.handleKeyDown);

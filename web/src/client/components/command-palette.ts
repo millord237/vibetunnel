@@ -18,7 +18,6 @@
 import { html, LitElement, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from '../../shared/types.js';
-import { Z_INDEX } from '../utils/constants.js';
 import { createLogger } from '../utils/logger.js';
 import { detectMobile } from '../utils/mobile-utils.js';
 import './modal-wrapper.js';
@@ -307,7 +306,7 @@ export class CommandPalette extends LitElement {
           cmd.title.toLowerCase().includes(query) ||
           cmd.description.toLowerCase().includes(query) ||
           cmd.category.toLowerCase().includes(query) ||
-          (cmd.shortcut && cmd.shortcut.toLowerCase().includes(query))
+          cmd.shortcut?.toLowerCase().includes(query)
       );
     }
 
@@ -366,7 +365,7 @@ export class CommandPalette extends LitElement {
     this.searchQuery = input.value;
   }
 
-  private handleCommandClick(command: CommandItem, index: number) {
+  private handleCommandClick(_command: CommandItem, index: number) {
     this.selectedIndex = index;
     this.executeSelectedCommand();
   }

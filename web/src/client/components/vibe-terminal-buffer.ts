@@ -46,7 +46,6 @@ export class VibeTerminalBuffer extends LitElement {
 
   // Adaptive debouncing properties
   private updateTimeout: ReturnType<typeof setTimeout> | null = null;
-  private pendingBuffer: BufferSnapshot | null = null;
   private lastTouchTime = 0;
   private isMobileDevice = 'ontouchstart' in window;
 
@@ -251,12 +250,6 @@ export class VibeTerminalBuffer extends LitElement {
       this.updateTimeout = null;
     }
 
-    // Clear any pending buffer to avoid stale updates
-    this.pendingBuffer = null;
-
-    // Store the latest buffer data
-    this.pendingBuffer = this.buffer;
-
     // Calculate adaptive delay based on recent touch activity
     const now = Date.now();
     const timeSinceLastTouch = now - this.lastTouchTime;
@@ -277,14 +270,12 @@ export class VibeTerminalBuffer extends LitElement {
     this.updateTimeout = setTimeout(() => {
       this.updateTimeout = null;
       this.isUpdating = true;
-      
+
       // Use the current buffer state directly
       if (this.buffer) {
         this.updateBufferContentImmediate();
       }
-      
-      // Clear pending buffer after update
-      this.pendingBuffer = null;
+
       this.isUpdating = false;
     }, delay);
   }

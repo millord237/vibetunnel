@@ -966,7 +966,7 @@ export class SessionView extends LitElement {
 
   private async handleClipboardPaste() {
     try {
-      if (navigator.clipboard && navigator.clipboard.readText) {
+      if (navigator.clipboard?.readText) {
         const text = await navigator.clipboard.readText();
         if (text && this.inputManager) {
           await this.inputManager.sendInputText(text);
@@ -1342,43 +1342,43 @@ export class SessionView extends LitElement {
             .currentMode=${'normal'}
             .callbacks=${(() => {
               const callbacks = {
-              // Command palette callbacks
-              onTogglePlanMode: () => this.handleClaudeModeToggle('plan'),
-              onToggleAutoAccept: () => this.handleClaudeModeToggle('auto-accept'),
-              onToggleNormalMode: () => this.handleClaudeModeToggle('normal'),
+                // Command palette callbacks
+                onTogglePlanMode: () => this.handleClaudeModeToggle('plan'),
+                onToggleAutoAccept: () => this.handleClaudeModeToggle('auto-accept'),
+                onToggleNormalMode: () => this.handleClaudeModeToggle('normal'),
 
-              // Clipboard callbacks
-              onPasteFromClipboard: () => this.handleClipboardPaste(),
-              onShowClipboardHistory: () => this.handleShowClipboardHistory(),
+                // Clipboard callbacks
+                onPasteFromClipboard: () => this.handleClipboardPaste(),
+                onShowClipboardHistory: () => this.handleShowClipboardHistory(),
 
-              // Slash commands callbacks
-              onShowSlashCommands: () => this.handleShowSlashCommands(),
-              onExecuteSlashCommand: (command: string) => this.handleExecuteSlashCommand(command),
+                // Slash commands callbacks
+                onShowSlashCommands: () => this.handleShowSlashCommands(),
+                onExecuteSlashCommand: (command: string) => this.handleExecuteSlashCommand(command),
 
-              // Session management callbacks
-              onCreateSession: () => this.dispatchEvent(new CustomEvent('navigate-to-list')), // Navigate back to create new session
-              onTerminateSession: () => this.sessionActionsHandler.handleTerminateSession(),
-              onClearSession: () => this.sessionActionsHandler.handleClearSession(),
+                // Session management callbacks
+                onCreateSession: () => this.dispatchEvent(new CustomEvent('navigate-to-list')), // Navigate back to create new session
+                onTerminateSession: () => this.sessionActionsHandler.handleTerminateSession(),
+                onClearSession: () => this.sessionActionsHandler.handleClearSession(),
 
-              // File operations callbacks
-              onOpenFileBrowser: () => this.fileOperationsManager.openFileBrowser(),
-              onUploadFile: () => this.fileOperationsManager.openFilePicker(),
-              onUploadImage: () => this.fileOperationsManager.selectImage(),
+                // File operations callbacks
+                onOpenFileBrowser: () => this.fileOperationsManager.openFileBrowser(),
+                onUploadFile: () => this.fileOperationsManager.openFilePicker(),
+                onUploadImage: () => this.fileOperationsManager.selectImage(),
 
-              // Terminal settings callbacks
-              onOpenTerminalSettings: () => this.terminalSettingsManager.handleMaxWidthToggle(), // Open width selector as settings
-              onToggleTheme: () => this.handleThemeToggle(),
+                // Terminal settings callbacks
+                onOpenTerminalSettings: () => this.terminalSettingsManager.handleMaxWidthToggle(), // Open width selector as settings
+                onToggleTheme: () => this.handleThemeToggle(),
 
-              // Navigation callbacks
-              onNavigateBack: () => this.handleBack(),
-              onToggleSidebar: () => this.handleSidebarToggle(),
+                // Navigation callbacks
+                onNavigateBack: () => this.handleBack(),
+                onToggleSidebar: () => this.handleSidebarToggle(),
 
-              // Mobile-specific callbacks
-              onShowKeyboard: () => this.handleKeyboardButtonClick(),
-              onHideKeyboard: () => this.handleHideKeyboard(),
-              onSendInput: (text: string) => this.handleSendInput(text),
-              onTriggerHaptic: (type: 'light' | 'medium' | 'heavy') =>
-                this.handleHapticFeedback(type),
+                // Mobile-specific callbacks
+                onShowKeyboard: () => this.handleKeyboardButtonClick(),
+                onHideKeyboard: () => this.handleHideKeyboard(),
+                onSendInput: (text: string) => this.handleSendInput(text),
+                onTriggerHaptic: (type: 'light' | 'medium' | 'heavy') =>
+                  this.handleHapticFeedback(type),
               };
               return callbacks;
             })()}

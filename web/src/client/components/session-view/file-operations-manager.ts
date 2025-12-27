@@ -397,7 +397,7 @@ export class FileOperationsManager {
     const showFileBrowser = this.callbacks.getShowFileBrowser();
     const showImagePicker = this.callbacks.getShowImagePicker();
 
-    if (!this.shouldHandlePaste(showFileBrowser, showImagePicker, false)) {
+    if (!this.shouldHandlePaste(showFileBrowser, showImagePicker)) {
       return; // Don't handle paste when modals are open
     }
 
@@ -447,11 +447,7 @@ export class FileOperationsManager {
   }
 
   // Check if paste handling should be enabled
-  shouldHandlePaste(
-    showFileBrowser: boolean,
-    showImagePicker: boolean,
-    showMobileInput: boolean
-  ): boolean {
-    return !showFileBrowser && !showImagePicker && !showMobileInput;
+  shouldHandlePaste(showFileBrowser: boolean, showImagePicker: boolean): boolean {
+    return !showFileBrowser && !showImagePicker;
   }
 }

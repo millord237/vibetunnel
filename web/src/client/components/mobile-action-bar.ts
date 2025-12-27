@@ -16,10 +16,9 @@
  * - Haptic feedback
  * - Adaptive layout based on screen size
  */
-import { html, LitElement, type PropertyValues } from 'lit';
+import { html, LitElement } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Session } from '../../shared/types.js';
-import { Z_INDEX } from '../utils/constants.js';
 import { createLogger } from '../utils/logger.js';
 import { detectMobile } from '../utils/mobile-utils.js';
 import type { ClipboardManagerCallbacks } from './clipboard-manager.js';
@@ -278,7 +277,7 @@ export class MobileActionBar extends LitElement {
     // Execute callback if available (only for actual callback actions)
     if (typeof action === 'string' && action.startsWith('on')) {
       const callback = this.callbacks?.[action as keyof MobileActionBarCallbacks];
-      
+
       if (callback && typeof callback === 'function') {
         // Handle callbacks that require parameters
         if (action === 'onTriggerHaptic') {
@@ -286,27 +285,7 @@ export class MobileActionBar extends LitElement {
         } else {
           (callback as () => void)();
         }
-      } else {
       }
-    }
-  }
-
-  private handleSwipeGesture(direction: 'left' | 'right' | 'up' | 'down') {
-    this.triggerHaptic('light');
-
-    switch (direction) {
-      case 'up':
-        this.isExpanded = true;
-        break;
-      case 'down':
-        this.isExpanded = false;
-        break;
-      case 'left':
-        // Could implement action switching
-        break;
-      case 'right':
-        // Could implement action switching
-        break;
     }
   }
 

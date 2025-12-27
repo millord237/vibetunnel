@@ -85,7 +85,7 @@ export class ClipboardManager extends LitElement {
       // Try to read text first
       try {
         const text = await navigator.clipboard.readText();
-        if (text && text.trim()) {
+        if (text?.trim()) {
           this.currentClipboard = text;
           this.addToHistory(text, 'text');
         }
@@ -138,7 +138,7 @@ export class ClipboardManager extends LitElement {
       preview:
         preview ||
         (content.length > this.MAX_PREVIEW_LENGTH
-          ? content.substring(0, this.MAX_PREVIEW_LENGTH) + '...'
+          ? `${content.substring(0, this.MAX_PREVIEW_LENGTH)}...`
           : content),
       size,
     };
@@ -343,7 +343,7 @@ export class ClipboardManager extends LitElement {
                     this.currentClipboard
                       ? html`
                     <div class="bg-bg-secondary border border-border rounded-lg p-3 mb-3">
-                      <pre class="text-sm text-text whitespace-pre-wrap break-all font-mono">${this.currentClipboard.length > 300 ? this.currentClipboard.substring(0, 300) + '...' : this.currentClipboard}</pre>
+                      <pre class="text-sm text-text whitespace-pre-wrap break-all font-mono">${this.currentClipboard.length > 300 ? `${this.currentClipboard.substring(0, 300)}...` : this.currentClipboard}</pre>
                     </div>
                     
                     <button

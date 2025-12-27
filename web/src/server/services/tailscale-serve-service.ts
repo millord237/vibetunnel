@@ -782,7 +782,19 @@ export class TailscaleServeServiceImpl implements TailscaleServeService {
   /**
    * Parse JSON output from 'tailscale serve status --json' to check if our port is configured
    */
-  private parseServeStatusJson(status: any, port: number): boolean {
+  private parseServeStatusJson(status: unknown, port: number): boolean {
+    const statusData = status as {
+      Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }>;
+      Foreground?: Record<
+        string,
+        {
+          Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }>;
+          AllowFunnel?: Record<string, boolean>;
+        }
+      >;
+      AllowFunnel?: Record<string, boolean>;
+    };
+
     try {
       logger.debug(`Parsing Tailscale serve JSON status for port ${port}:`);
       logger.debug(`JSON status: ${JSON.stringify(status, null, 2)}`);
@@ -791,14 +803,14 @@ export class TailscaleServeServiceImpl implements TailscaleServeService {
       const webConfigs = [];
 
       // Direct Web config (older format)
-      if (status.Web) {
-        webConfigs.push(status.Web);
+      if (statusData.Web) {
+        webConfigs.push(statusData.Web);
       }
 
       // Foreground config (newer format)
-      if (status.Foreground) {
-        for (const nodeId in status.Foreground) {
-          const nodeConfig = status.Foreground[nodeId];
+      if (statusData.Foreground) {
+        for (const nodeId in statusData.Foreground) {
+          const nodeConfig = statusData.Foreground[nodeId];
           if (nodeConfig.Web) {
             webConfigs.push(nodeConfig.Web);
           }
@@ -826,14 +838,14 @@ export class TailscaleServeServiceImpl implements TailscaleServeService {
 
                   // Check for Funnel status in multiple possible locations
                   let funnelEnabled = false;
-                  if (status.AllowFunnel && status.AllowFunnel[host]) {
+                  if (statusData.AllowFunnel?.[host]) {
                     funnelEnabled = true;
                     logger.info(`🌍 Funnel is enabled for ${host}`);
-                  } else if (status.Foreground) {
+                  } else if (statusData.Foreground) {
                     // Check if any foreground config allows Funnel
-                    for (const nodeId in status.Foreground) {
-                      const nodeConfig = status.Foreground[nodeId];
-                      if (nodeConfig.AllowFunnel && nodeConfig.AllowFunnel[host]) {
+                    for (const nodeId in statusData.Foreground) {
+                      const nodeConfig = statusData.Foreground[nodeId];
+                      if (nodeConfig.AllowFunnel?.[host]) {
                         funnelEnabled = true;
                         logger.info(`🌍 Funnel is enabled for ${host} (node ${nodeId})`);
                         break;

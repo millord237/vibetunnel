@@ -345,7 +345,7 @@ export class SlashCommands extends LitElement {
 
     let fullCommand = this.selectedCommand.command;
     if (this.commandInput.trim()) {
-      fullCommand += ' ' + this.commandInput.trim();
+      fullCommand += ` ${this.commandInput.trim()}`;
     }
 
     this.executeCommand(fullCommand);
