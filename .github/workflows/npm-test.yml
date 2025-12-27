@@ -151,7 +151,7 @@ jobs:
         run: scripts/linux-bootstrap.sh
 
       - name: Install dependencies (npm)
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build (npm)
         run: npm run build
