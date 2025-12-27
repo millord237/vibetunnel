@@ -16,6 +16,9 @@
 - Prefer client-resolved binary paths in `vt` to avoid PATH mismatches
 - Reset CLI outdated status after successful install and add regression coverage
 
+### 👥 Contributors
+- Thanks [@rothnic](https://github.com/rothnic) for defaulting to universal macOS binaries.
+
 ## [1.0.0-beta.15] - 2025-08-02
 
 ### ✨ Major Features
