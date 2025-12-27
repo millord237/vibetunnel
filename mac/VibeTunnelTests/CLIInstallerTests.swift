@@ -451,10 +451,13 @@ struct CLIInstallerTests {
     func installedScriptMatchesBundleNotOutdated() async throws {
         let installer = CLIInstaller(binDirectory: tempDirectory.path)
 
-        let bundledPath = try #require(Bundle.main.path(forResource: "vt", ofType: nil))
+        guard let bundledPath = Bundle.main.path(forResource: "vt", ofType: nil) else {
+            // SwiftPM tests don't have the app bundle resources.
+            return
+        }
         let targetPath = tempDirectory.appendingPathComponent("vt").path
-        let script = try String(contentsOfFile: bundledPath, encoding: .utf8)
-        try script.write(toFile: targetPath, atomically: true, encoding: .utf8)
+        let scriptData = try Data(contentsOf: URL(fileURLWithPath: bundledPath))
+        try scriptData.write(to: URL(fileURLWithPath: targetPath), options: .atomic)
 
         installer.checkInstallationStatus()
 
