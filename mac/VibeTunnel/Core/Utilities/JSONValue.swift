@@ -34,15 +34,15 @@ enum JSONValue: Codable, Equatable {
         var container = encoder.singleValueContainer()
 
         switch self {
-        case let .string(value):
+        case .string(let value):
             try container.encode(value)
-        case let .number(value):
+        case .number(let value):
             try container.encode(value)
-        case let .bool(value):
+        case .bool(let value):
             try container.encode(value)
-        case let .array(value):
+        case .array(let value):
             try container.encode(value)
-        case let .object(value):
+        case .object(let value):
             try container.encode(value)
         case .null:
             try container.encodeNil()
